@@ -1,0 +1,8 @@
+[package]
+name = "nfmt"
+version = "0.1.2"
+edition = "2021"
+authors = ["N M Sheldon"]
+
+[dependencies]
+clap = { version = "4.3.11", features = ["derive"] }
