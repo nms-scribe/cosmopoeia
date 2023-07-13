@@ -2,12 +2,13 @@ use clap::Parser;
 
 mod errors;
 mod commands;
+#[cfg(test)] mod test;
 
 pub use errors::ArgumentError;
 pub use errors::CommandError;
 pub use errors::ProgramError;
 
-pub use commands::Tool;
+pub use commands::Task;
 pub use commands::Command;
 
 #[macro_export]
@@ -19,10 +20,11 @@ macro_rules! command_help_template {
 
 #[macro_export]
 macro_rules! subcommand_def {
-    (#[doc = $about: literal] pub struct $name: ident $body: tt) => {
+    (#[doc = $about: literal] $(#[$attr:meta])* pub struct $name: ident $body: tt) => {
         #[derive(Args)]
         #[command(author,help_template = crate::command_help_template!())] 
         #[doc = $about]
+        $(#[$attr])*
         pub struct $name $body
                 
     };

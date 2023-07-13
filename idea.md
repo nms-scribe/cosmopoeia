@@ -95,7 +95,7 @@ Some configuration options include:
 
 There may be numerous other options, including some numbers set under `Options` and `Units` in AFMG. However, as the algorithms I'm using may differ, and some of those values are used for the UI, I can't be certain until I develop the algorithms what parameters I'll actually need.
 
-# Algorithms
+# Algorithm Improvements
 
 For the most part, AFMG is open source, and I can use some of the same algorithms as a basis for my code. However, there are a few things I know I will change:
 
@@ -125,6 +125,106 @@ I don't know the details of AFMG's algorithms for generating political features.
 
 One thing I will change, are the "types" of cultures. I will also add the ability to filter out types depending on an epoch or world type. AFMG has "generic", "river", "lake", "naval", "nomadic", "hunting", and "highland". I'm surprised there is no "agricultural" or "industrial" culture type, and I'm not sure what a "highland" culture would be, short of men in kilts. In addition, "naval" cultures in the 19th century are much different from naval cultures in the 1st century, and in earlier ages those cultures shouldn't even be generated. Finally, I feel like a "wildlands" culture is unlikely -- it should be filled in with all sorts of nomadic and hunting cultures instead -- at best there might be a frontier culture of sorts which combines two or more cultures together. There should also be some fantasy cultures: Elves who actually prefer to live in forests, and Dwarves who actually want to build cities in mountains. And creatures whose real homes are underground, or underwater.
 
+# AFMG Algorithms
+
+## Generating Voronoi
+
+`generateGrid`:
+```
+function generateGrid() {
+  Math.random = aleaPRNG(seed); // reset PRNG // NMS: Appears to be a random number generator
+  const {spacing, cellsDesired, boundary, points, cellsX, cellsY} = placePoints();
+  const {cells, vertices} = calculateVoronoi(points, boundary);
+  return {spacing, cellsDesired, boundary, points, cellsX, cellsY, cells, vertices, seed};
+}
+```
+
+`placePoints`: `graphWidth` and `graphHeight` appear to be the width and height of the canvas
+```
+function placePoints() {
+  TIME && console.time("placePoints");
+  const cellsDesired = +byId("pointsInput").dataset.cells; // NMS: This is `Options` > `Points Number`
+  const spacing = rn(Math.sqrt((graphWidth * graphHeight) / cellsDesired), 2); // spacing between points before jirrering
+
+  const boundary = getBoundaryPoints(graphWidth, graphHeight, spacing);
+  const points = getJitteredGrid(graphWidth, graphHeight, spacing); // points of jittered square grid
+  const cellsX = Math.floor((graphWidth + 0.5 * spacing - 1e-10) / spacing);
+  const cellsY = Math.floor((graphHeight + 0.5 * spacing - 1e-10) / spacing);
+  TIME && console.timeEnd("placePoints");
+
+  return {spacing, cellsDesired, boundary, points, cellsX, cellsY};
+}
+```
+
+`getBoundaryPoints`
+```
+function getBoundaryPoints(width, height, spacing) {
+  const offset = rn(-1 * spacing);
+  const bSpacing = spacing * 2;
+  const w = width - offset * 2;
+  const h = height - offset * 2;
+  const numberX = Math.ceil(w / bSpacing) - 1;
+  const numberY = Math.ceil(h / bSpacing) - 1;
+  const points = [];
+
+  for (let i = 0.5; i < numberX; i++) {
+    let x = Math.ceil((w * i) / numberX + offset);
+    points.push([x, offset], [x, h + offset]);
+  }
+
+  for (let i = 0.5; i < numberY; i++) {
+    let y = Math.ceil((h * i) / numberY + offset);
+    points.push([offset, y], [w + offset, y]);
+  }
+
+  return points;
+}
+```
+
+`getJitteredGrid`
+```
+function getJitteredGrid(width, height, spacing) {
+  const radius = spacing / 2; // square radius
+  const jittering = radius * 0.9; // max deviation
+  const doubleJittering = jittering * 2;
+  const jitter = () => Math.random() * doubleJittering - jittering;
+
+  let points = [];
+  for (let y = radius; y < height; y += spacing) {
+    for (let x = radius; x < width; x += spacing) {
+      const xj = Math.min(rn(x + jitter(), 2), width);
+      const yj = Math.min(rn(y + jitter(), 2), height);
+      points.push([xj, yj]);
+    }
+  }
+  return points;
+}
+```
+
+`calculateVoronoi`
+```
+function calculateVoronoi(points, boundary) {
+  TIME && console.time("calculateDelaunay");
+  const allPoints = points.concat(boundary);
+  const delaunay = Delaunator.from(allPoints);
+  TIME && console.timeEnd("calculateDelaunay");
+
+  TIME && console.time("calculateVoronoi");
+  const voronoi = new Voronoi(delaunay, allPoints, points.length);
+
+  const cells = voronoi.cells;
+  cells.i = createTypedArray({maxValue: points.length, length: points.length}).map((_, i) => i); // array of indexes
+  const vertices = voronoi.vertices;
+  TIME && console.timeEnd("calculateVoronoi");
+
+  return {cells, vertices};
+}
+```
+
+`Delaunator`: https://github.com/mapbox/delaunator/, https://github.com/mapbox/delaunator/blob/main/index.js
+
+`Voronoi`: https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/voronoi.js
+
 # Tasks
 
 To proceed on this, I can break it down into the following steps:
@@ -132,6 +232,9 @@ To proceed on this, I can break it down into the following steps:
 [X] Command line application that handles commands and configuration (start with "version" and "help"). 
 [X] Need Usage/Documentation as well..
 [ ] `convert-heightmap` command -- Doing this first allows me to play with pre-existing terrains for the rest of it.
+    [ ] Create Points
+    [ ] Delaunay Regions
+    [ ] Voronoi Regions
     [ ] GDAL import, or something else?
     [ ] Terrain files
     [ ] World configuration

@@ -3,20 +3,18 @@ use clap::Subcommand;
 
 use crate::errors::CommandError;
 
-// NOTE: Further 'mod' and 'use' statements in the command macro below
+mod dev;
 
-pub trait Tool {
+// NOTE: Further 'use' statements in the command macro below
+
+pub trait Task {
 
     fn run(self) -> Result<(),CommandError>;
 
 }
 
 macro_rules! command {
-    ($($command_mod: ident::$command_name: ident);*) => {
-
-        $(
-            mod $command_mod;
-        )*
+    ($($command_mod: ident::$command_name: ident;)*) => {
 
         $(
             pub use $command_mod::$command_name;
@@ -29,7 +27,7 @@ macro_rules! command {
             ),*
         }
 
-        impl Tool for Command {
+        impl Task for Command {
 
             fn run(self) -> Result<(),CommandError> {
                 match self {
@@ -42,7 +40,10 @@ macro_rules! command {
 }
 
 command!{
-    hello::Hello
+    dev::DevGdalVersion;
+    dev::DevGdalInfo;
+    dev::DevGdalDrivers;
+    dev::DevPointsFromHeightmap;
 }
 
 

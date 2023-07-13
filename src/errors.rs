@@ -1,11 +1,13 @@
 use std::error::Error;
 use std::fmt::Display;
 
+pub use gdal::errors::GdalError;
+
 pub use clap::error::Error as ArgumentError;
 
 #[derive(Debug)]
-pub struct CommandError {
-
+pub enum CommandError {
+    GdalError(GdalError)
 }
 
 impl Error for CommandError {
@@ -15,11 +17,17 @@ impl Error for CommandError {
 impl Display for CommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self{} => write!(f,"")
+            Self::GdalError(a) => write!(f,"gdal: {}",a),
         }
     }
 }
 
+impl From<GdalError> for CommandError {
+
+    fn from(value: GdalError) -> Self {
+        Self::GdalError(value)
+    }
+}
 
 #[derive(Debug)]
 pub enum ProgramError {

@@ -6,3 +6,4 @@ authors = ["N M Sheldon"]
 
 [dependencies]
 clap = { version = "4.3.11", features = ["derive"] }
+gdal = "0.15.0"
