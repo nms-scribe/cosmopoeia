@@ -144,7 +144,7 @@ function generateGrid() {
 function placePoints() {
   TIME && console.time("placePoints");
   const cellsDesired = +byId("pointsInput").dataset.cells; // NMS: This is `Options` > `Points Number`
-  const spacing = rn(Math.sqrt((graphWidth * graphHeight) / cellsDesired), 2); // spacing between points before jirrering
+  const spacing = round(Math.sqrt((graphWidth * graphHeight) / cellsDesired), 2); // spacing between points before jirrering
 
   const boundary = getBoundaryPoints(graphWidth, graphHeight, spacing);
   const points = getJitteredGrid(graphWidth, graphHeight, spacing); // points of jittered square grid

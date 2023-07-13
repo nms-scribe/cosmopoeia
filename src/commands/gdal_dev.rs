@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-// "Dev" commands are generally hidden, intended for testing during development. While they should be usable by users, they rarely are, and are hidden to keep the UI clean.
 
 use clap::Args;
 use gdal::Dataset;
@@ -85,33 +84,4 @@ impl Task for DevGdalDrivers {
     }
 }
 
-
-subcommand_def!{
-    /// Creates a random points vector layer from a raster heightmap
-    #[command(hide=true)]
-    pub struct DevPointsFromHeightmap {
-        source: PathBuf,
-
-        target: PathBuf,
-
-        #[arg(long)]
-        target_driver: String,
-        #[arg(long)]
-        density: Option<usize>
-    }
-}
-
-impl Task for DevPointsFromHeightmap {
-
-    fn run(self) -> Result<(),CommandError> {
-        let source = Dataset::open(self.source)?;
-        let target_driver = DriverManager::get_driver_by_name(&self.target_driver)?;
-        let target = target_driver.create_vector_only(self.target)?;
-
-
-
-        println!("{}",VersionInfo::version_report());
-        Ok(())
-    }
-}
 

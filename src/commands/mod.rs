@@ -3,7 +3,8 @@ use clap::Subcommand;
 
 use crate::errors::CommandError;
 
-mod dev;
+mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
+mod points;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -39,11 +40,13 @@ macro_rules! command {
     };
 }
 
+// "Dev" commands are generally hidden, intended for testing during development. While they should be usable by users, they rarely are, and are hidden to keep the UI clean.
+
 command!{
-    dev::DevGdalVersion;
-    dev::DevGdalInfo;
-    dev::DevGdalDrivers;
-    dev::DevPointsFromHeightmap;
+    gdal_dev::DevGdalVersion;
+    gdal_dev::DevGdalInfo;
+    gdal_dev::DevGdalDrivers;
+    points::DevPointsFromHeightmap;
 }
 
 

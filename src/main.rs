@@ -1,15 +1,15 @@
 use clap::Parser;
 
-mod errors;
-mod commands;
+pub mod errors;
+pub mod commands;
+pub mod terrain;
+pub mod utils;
 #[cfg(test)] mod test;
 
-pub use errors::ArgumentError;
-pub use errors::CommandError;
-pub use errors::ProgramError;
+use errors::ProgramError;
 
-pub use commands::Task;
-pub use commands::Command;
+use commands::Task;
+use commands::Command;
 
 #[macro_export]
 macro_rules! command_help_template {
