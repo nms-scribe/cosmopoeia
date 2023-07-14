@@ -7,4 +7,5 @@ authors = ["N M Sheldon"]
 [dependencies]
 clap = { version = "4.3.11", features = ["derive"] }
 gdal = { version = "0.15.0", features = ["array"] }
+indicatif = "0.17.5"
 rand = "0.8.5"

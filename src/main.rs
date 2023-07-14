@@ -2,8 +2,11 @@ use clap::Parser;
 
 pub mod errors;
 pub mod commands;
-pub mod terrain;
+pub mod raster;
+pub mod world_map;
 pub mod utils;
+pub mod progress;
+pub mod algorithms;
 #[cfg(test)] mod test;
 
 use errors::ProgramError;

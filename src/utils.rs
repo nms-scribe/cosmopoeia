@@ -24,3 +24,20 @@ impl RoundHundredths for f64 {
         (self * 100.0).round() / 100.0
     }
 }
+
+pub struct Size<DataType> {
+    pub height: DataType,
+    pub width: DataType
+}
+
+impl Size<f64> {
+
+    pub fn from_usize(source: Size<usize>) -> Self {
+        let width = source.width as f64;
+        let height = source.height as f64;
+        Self {
+            width,
+            height
+        }
+    }
+}
