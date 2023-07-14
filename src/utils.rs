@@ -13,3 +13,14 @@ pub fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
     }
 }
 
+pub trait RoundHundredths {
+
+    fn round_hundredths(&self) -> Self;
+}
+
+impl RoundHundredths for f64 {
+
+    fn round_hundredths(&self) -> Self {
+        (self * 100.0).round() / 100.0
+    }
+}

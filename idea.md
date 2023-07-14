@@ -232,11 +232,12 @@ To proceed on this, I can break it down into the following steps:
 [X] Command line application that handles commands and configuration (start with "version" and "help"). 
 [X] Need Usage/Documentation as well..
 [ ] `convert-heightmap` command -- Doing this first allows me to play with pre-existing terrains for the rest of it.
-    [ ] Create Points
+    [X] Create Points
     [ ] Delaunay Regions
     [ ] Voronoi Regions
     [ ] GDAL import, or something else?
     [ ] Terrain files
+    [ ] add Ocean Mask option 
     [ ] World configuration
     [ ] Review AFMG voronoization algorithms and add them to the command -- don't do the improved equal-area algorithms until I have some generation tools to play with
 [ ] `gen-climate` command

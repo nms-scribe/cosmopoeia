@@ -9,7 +9,7 @@ pub use clap::error::Error as ArgumentError;
 #[derive(Debug)]
 pub enum CommandError {
     GdalError(GdalError),
-    RasterSourceRequired,
+    RasterDatasetRequired,
     UnsupportedRasterSourceBand(GdalDataType)
 }
 
@@ -21,7 +21,7 @@ impl Display for CommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::GdalError(a) => write!(f,"gdal: {}",a),
-            Self::RasterSourceRequired => write!(f,"a raster source is required"),
+            Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a)
         }
     }
