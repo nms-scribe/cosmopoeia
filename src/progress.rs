@@ -6,7 +6,9 @@ use indicatif::ProgressStyle;
 pub trait ProgressObserver {
 
     // the parameters are passed as callbacks in case the progress implementation doesn't care (such as if its Option<ProgressObserver>::None)
-    fn start<Message: AsRef<str>, Callback: Fn() -> (Message,Option<usize>)>(&mut self, callback: Callback);
+    fn start_known_endpoint<Message: AsRef<str>, Callback: Fn() -> (Message,usize)>(&mut self, callback: Callback);
+
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback);
 
     fn update<Callback: Fn() -> usize>(&self, callback: Callback);
 
@@ -18,9 +20,15 @@ pub trait ProgressObserver {
 
 impl<OtherProgressObserver: ProgressObserver> ProgressObserver for Option<&mut OtherProgressObserver> {
 
-    fn start<Message: AsRef<str>, Callback: Fn() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
+    fn start_known_endpoint<Message: AsRef<str>, Callback: Fn() -> (Message,usize)>(&mut self, callback: Callback) {
         if let Some(me) = self {
-            me.start(callback)
+            me.start_known_endpoint(callback)
+        }
+    }
+
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
+        if let Some(me) = self {
+            me.start_unknown_endpoint(callback)
         }
     }
 
@@ -84,12 +92,7 @@ impl ConsoleProgressBar {
 
     }
 
-}
-
-impl ProgressObserver for ConsoleProgressBar {
-
-    fn start<Message: AsRef<str>, Callback: Fn() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
-        let (message,step_count) = callback();
+    fn start<Message: AsRef<str>>(&mut self, message: Message, step_count: Option<usize>) {
         if let Some(bar) = &mut self.bar {
             bar.reset();
             if let Some(step_count) = step_count {
@@ -116,6 +119,22 @@ impl ProgressObserver for ConsoleProgressBar {
 
     }
 
+
+
+}
+
+impl ProgressObserver for ConsoleProgressBar {
+
+    fn start_known_endpoint<Message: AsRef<str>, Callback: Fn() -> (Message,usize)>(&mut self, callback: Callback) {
+        let (message,step_count) = callback();
+        self.start(message, Some(step_count))
+    }
+
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
+        self.start(callback(), None)
+    }
+
+
     fn update<Callback: Fn() -> usize>(&self, callback: Callback) {
         if let Some(bar) = &self.bar {
             bar.set_position(callback() as u64);
@@ -135,6 +154,7 @@ impl ProgressObserver for ConsoleProgressBar {
             self.bar = None;
         }
     }
+
 }
 
 

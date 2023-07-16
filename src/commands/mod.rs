@@ -5,6 +5,7 @@ use crate::errors::CommandError;
 
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod points;
+mod triangles;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -47,6 +48,7 @@ command!{
     gdal_dev::DevGdalInfo;
     gdal_dev::DevGdalDrivers;
     points::DevPointsFromHeightmap;
+    triangles::DevTrianglesFromPoints;
 }
 
 
