@@ -57,34 +57,59 @@ impl ConsoleProgressBar {
         }
     }
 
+    fn style_as_spinner(bar: &mut ProgressBar) {
+        bar.enable_steady_tick(Duration::new(0,500));
+        bar.set_style(ProgressStyle::with_template("({elapsed_precise}) {msg} {spinner}")
+            .unwrap()
+            //.tick_strings(SPINNER_STRINGS)
+            //.tick_chars(SPINNER_CHARS)
+        );
+
+    }
+
+    fn style_as_progress(bar: &mut ProgressBar) {
+        bar.disable_steady_tick();
+        bar.set_style(ProgressStyle::with_template("({elapsed_precise}) [{bar:40}] [ETA: {eta_precise}] {msg} {spinner}")
+            .unwrap()
+            //.tick_strings(SPINNER_STRINGS)
+            //.tick_chars(SPINNER_CHARS)
+            .progress_chars("=> ")
+        );
+
+    }
+
+    fn style_as_finished(bar: &mut ProgressBar) {
+        bar.set_style(ProgressStyle::with_template("({elapsed_precise}) {msg}")
+            .unwrap());
+
+    }
+
 }
 
 impl ProgressObserver for ConsoleProgressBar {
 
     fn start<Message: AsRef<str>, Callback: Fn() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
         let (message,step_count) = callback();
-        if let Some(bar) = &self.bar {
+        if let Some(bar) = &mut self.bar {
             bar.reset();
             if let Some(step_count) = step_count {
                 bar.set_length(step_count as u64);
-                bar.disable_steady_tick();
+                Self::style_as_progress(bar)
             } else {
-                bar.enable_steady_tick(Duration::new(1,0));
+                Self::style_as_spinner(bar);
             }
             bar.set_message(message.as_ref().to_owned());
-            bar.set_position(0);
         } else {
             let bar = if let Some(step_count) = step_count {
-                ProgressBar::new(step_count as u64)
+                let mut bar = ProgressBar::new(step_count as u64);
+                Self::style_as_progress(&mut bar);
+                bar
             } else {
-                let bar = ProgressBar::new_spinner();
-                bar.enable_steady_tick(Duration::new(1,0)); // allows the spinner to update even though progress isn't happening.
+                let mut bar = ProgressBar::new_spinner();
+                Self::style_as_spinner(&mut bar);
                 bar
             };
             // FUTURE: I should make this look different when it's a spinner...
-            bar.set_style(ProgressStyle::with_template("({elapsed_precise}) [{bar:40}] [ETA: {eta_precise}] {msg} {spinner}")
-                .unwrap()
-                .progress_chars("=>-"));
             bar.set_message(message.as_ref().to_owned());
             self.bar = Some(bar);
         }
@@ -104,7 +129,8 @@ impl ProgressObserver for ConsoleProgressBar {
     }
 
     fn finish<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
-        if let Some(bar) = &self.bar {
+        if let Some(bar) = &mut self.bar {
+            Self::style_as_finished(bar);
             bar.finish_with_message(callback().as_ref().to_owned());
             self.bar = None;
         }
