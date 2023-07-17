@@ -25,6 +25,7 @@ impl RoundHundredths for f64 {
     }
 }
 
+#[derive(Clone)]
 pub struct Size<DataType> {
     pub height: DataType,
     pub width: DataType

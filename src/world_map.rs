@@ -16,8 +16,7 @@ use gdal::vector::FeatureIterator;
 use gdal::Transaction;
 
 use crate::errors::CommandError;
-use crate::raster::RasterCoordTransformer;
-use crate::raster::RasterBandBuffer;
+use crate::progress::ProgressObserver;
 
 pub const ELEVATION_FIELD_NAME: &str = "elevation";
 pub const POINTS_LAYER_NAME: &str = "points";
@@ -50,30 +49,26 @@ impl<'lifetime> PointsLayer<'lifetime> {
         // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
         // really isn't much choice, just three numeric types (int, int64, and real)
 
-        points.create_defn_fields(&[(ELEVATION_FIELD_NAME,OGRFieldType::OFTReal)])?;
         Ok(Self {
             points
         })
     }
 
-    fn add_point(&mut self, lon: f64, lat: f64, elevation: Option<&f64>) -> Result<(),CommandError> {
-        let mut point = Geometry::empty(wkbPoint)?;
-        point.add_point_2d((lon,lat));
+    pub fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
-        if let Some(value) = elevation {
-            self.points.create_feature_fields(point,&[ELEVATION_FIELD_NAME],&[FieldValue::RealValue(*value)])?
-        } else {
-            self.points.create_feature_fields(point,&[],&[])?
-        }
+        self.points.create_feature_fields(point,&[],&[])?;
         Ok(())
 
     }
 
+/* TODO: I'm going to need something like this eventually for sampling the tiles, so don't delete this yet.
     pub fn sample_point_from_raster(&mut self, x: f64, y: f64, transformer: &RasterCoordTransformer, buffer: &RasterBandBuffer<f64>) -> Result<(),CommandError> {
         let (lon,lat) = transformer.pixels_to_coords(x, y);
-        self.add_point(lon, lat, buffer.get_value(x, y))
+        let mut point = Geometry::empty(wkbPoint)?;
+        point.add_point_2d((lon,lat));
+        self.add_point(point, buffer.get_value(x, y))
     }
-
+ */
     pub fn get_feature_count(&self) -> u64 {
         self.points.feature_count()
     }
@@ -170,7 +165,7 @@ impl WorldMap {
 
     }
 
-    pub fn with_transaction<Callback: FnMut(&mut WorldMapTransaction) -> Result<(),CommandError>>(&mut self, mut callback: Callback) -> Result<(),CommandError> {
+    pub fn with_transaction<Callback: FnOnce(&mut WorldMapTransaction) -> Result<(),CommandError>>(&mut self, callback: Callback) -> Result<(),CommandError> {
         let transaction = self.dataset.start_transaction()?;
         let mut transaction = WorldMapTransaction::new(transaction);
         callback(&mut transaction)?;
@@ -186,6 +181,35 @@ impl WorldMap {
 
     pub fn points_layer(&self) -> Result<PointsLayer,CommandError> {
         PointsLayer::open_from_dataset(&self.dataset)
+    }
+
+    pub fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut target_points = target.create_points_layer(overwrite_layer)?;
+        
+            // boundary points    
+    
+            progress.start(|| ("Generating points.",generator.size_hint().1));
+    
+            for (i,point) in generator.enumerate() {
+                target_points.add_point(point?)?;
+                progress.update(|| i);
+            }
+    
+            progress.finish(|| "Points Generated.");
+    
+            Ok(())
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+    
     }
 
 }

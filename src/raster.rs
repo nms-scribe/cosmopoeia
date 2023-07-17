@@ -24,6 +24,15 @@ impl RasterCoordTransformer {
         let lat = y * self.trans_y_size + self.trans_y_min;
         (lon,lat)
     }
+
+    pub fn coords_to_pixels(&self, lon: f64, lat: f64) -> (f64,f64) {
+        // this is just the reverse of the other
+        let x = (lon - self.trans_x_min)/self.trans_x_size;
+        let y = (lat - self.trans_y_min)/self.trans_y_size;
+        (x,y)
+
+    }
+
 }
 
 pub struct RasterBandBuffer<DataType: GdalType> {

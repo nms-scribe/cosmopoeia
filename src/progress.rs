@@ -6,45 +6,55 @@ use indicatif::ProgressStyle;
 pub trait ProgressObserver {
 
     // the parameters are passed as callbacks in case the progress implementation doesn't care (such as if its Option<ProgressObserver>::None)
-    fn start_known_endpoint<Message: AsRef<str>, Callback: Fn() -> (Message,usize)>(&mut self, callback: Callback);
+    fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback);
 
-    fn start_unknown_endpoint<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback);
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback);
 
-    fn update<Callback: Fn() -> usize>(&self, callback: Callback);
+    fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, callback: Callback);
 
-    fn message<Message: AsRef<str>, Callback: Fn() -> Message>(&self, callback: Callback);
+    fn update<Callback: FnOnce() -> usize>(&self, callback: Callback);
 
-    fn finish<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback);
+    fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback);
+
+    fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback);
 
 }
 
 impl<OtherProgressObserver: ProgressObserver> ProgressObserver for Option<&mut OtherProgressObserver> {
 
-    fn start_known_endpoint<Message: AsRef<str>, Callback: Fn() -> (Message,usize)>(&mut self, callback: Callback) {
+    fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback) {
         if let Some(me) = self {
             me.start_known_endpoint(callback)
         }
     }
 
-    fn start_unknown_endpoint<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
         if let Some(me) = self {
             me.start_unknown_endpoint(callback)
         }
     }
 
-    fn update<Callback: Fn() -> usize>(&self, callback: Callback) {
+    fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
+        if let Some(me) = self {
+            me.start(callback)
+        }
+    }
+
+
+
+    fn update<Callback: FnOnce() -> usize>(&self, callback: Callback) {
         if let Some(me) = self {
             me.update(callback)
         }
     }
 
-    fn message<Message: AsRef<str>, Callback: Fn() -> Message>(&self, callback: Callback) {
+    fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
         if let Some(me) = self {
             me.message(callback)
         }
     }
 
-    fn finish<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
+    fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
         if let Some(me) = self {
             me.finish(callback)
         }
@@ -125,29 +135,34 @@ impl ConsoleProgressBar {
 
 impl ProgressObserver for ConsoleProgressBar {
 
-    fn start_known_endpoint<Message: AsRef<str>, Callback: Fn() -> (Message,usize)>(&mut self, callback: Callback) {
+    fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback) {
         let (message,step_count) = callback();
         self.start(message, Some(step_count))
     }
 
-    fn start_unknown_endpoint<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
         self.start(callback(), None)
     }
 
+    fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
+        let (message,step_count) = callback();
+        self.start(message, step_count)
+    }
 
-    fn update<Callback: Fn() -> usize>(&self, callback: Callback) {
+
+    fn update<Callback: FnOnce() -> usize>(&self, callback: Callback) {
         if let Some(bar) = &self.bar {
             bar.set_position(callback() as u64);
         }
     }
 
-    fn message<Message: AsRef<str>, Callback: Fn() -> Message>(&self, callback: Callback) {
+    fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
         if let Some(bar) = &self.bar {
             bar.set_message(callback().as_ref().to_owned())
         }
     }
 
-    fn finish<Message: AsRef<str>, Callback: Fn() -> Message>(&mut self, callback: Callback) {
+    fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
         if let Some(bar) = &mut self.bar {
             Self::style_as_finished(bar);
             bar.finish_with_message(callback().as_ref().to_owned());
