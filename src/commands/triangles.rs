@@ -12,7 +12,7 @@ use crate::progress::ConsoleProgressBar;
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
-    pub struct DevTrianglesFromPoints {
+    pub(crate) struct DevTrianglesFromPoints {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,

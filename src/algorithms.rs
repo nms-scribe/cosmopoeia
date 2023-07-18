@@ -5,13 +5,11 @@ use gdal::vector::OGRwkbGeometryType::wkbPoint;
 
 use crate::errors::CommandError;
 use crate::utils::RoundHundredths;
-use crate::utils::Size;
-use crate::raster::RasterCoordTransformer;
-use crate::raster::RasterMap;
+use crate::utils::Extent;
 use crate::world_map::WorldMap;
 use crate::progress::ProgressObserver;
 
-pub const DEFAULT_POINT_COUNT: f64 = 10_000.0;
+pub(crate) const DEFAULT_POINT_COUNT: f64 = 10_000.0;
 
 enum PointGeneratorPhase {
     Top(f64),
@@ -23,63 +21,66 @@ enum PointGeneratorPhase {
 }
 
 /// FUTURE: This one would be so much easier to read if I had real Function Generators.
-struct PointGenerator<Random: Rng> {
-    phase: PointGeneratorPhase,
+pub(crate) struct PointGenerator<Random: Rng> {
+    random: Random,
+    extent: Extent,
     spacing: f64,
-    size: Size<f64>,
     offset: f64,
     boundary_width: f64,
     boundary_height: f64,
-    number_x: f64,
-    number_y: f64,
+    boundary_count_x: f64,
+    boundary_count_y: f64,
     radius: f64,
     jittering: f64,
     double_jittering: f64,
-    random: Random,
-    coord_transformer: RasterCoordTransformer
+    phase: PointGeneratorPhase,
+    
 }
 
 impl<Random: Rng> PointGenerator<Random> {
 
     const INITIAL_INDEX: f64 = 0.5;
 
-    fn new(random: Random, coord_transformer: RasterCoordTransformer, spacing: f64, size: Size<f64>) -> Self {
-        let offset = -1.0 * spacing; // -10.0
-        let boundary_spacing: f64 = spacing * 2.0; // 20.0
-        let boundary_width = size.width - offset * 2.0; // 532
-        let boundary_height = size.height - offset * 2.0; // 532
-        let number_x = (boundary_width/boundary_spacing).ceil() - 1.0; // 26
-        let number_y = (boundary_height/boundary_spacing).ceil() - 1.0; // 26
-        let radius = spacing / 2.0;
+    pub(crate) fn default_spacing(extent: &Extent) -> f64 {
+        ((extent.width * extent.height)/DEFAULT_POINT_COUNT).sqrt().round_hundredths()
+    }
+
+    pub(crate) fn new(random: Random, extent: Extent, spacing: f64) -> Self {
+        let offset = -1.0 * spacing; 
+        let boundary_spacing: f64 = spacing * 2.0; 
+        let boundary_width = extent.width - offset * 2.0; 
+        let boundary_height = extent.height - offset * 2.0; 
+        let boundary_count_x = (boundary_width/boundary_spacing).ceil() - 1.0; 
+        let boundary_count_y = (boundary_height/boundary_spacing).ceil() - 1.0; 
+        let radius = spacing / 2.0; // FUTURE: Why is this called 'radius'?
         let jittering = radius * 0.9; // FUTURE: Customizable factor?
         let double_jittering = jittering * 2.0;
+        let phase = PointGeneratorPhase::Top(Self::INITIAL_INDEX); 
 
         Self {
-            phase: PointGeneratorPhase::Top(Self::INITIAL_INDEX),
+            random,
+            extent,
             spacing,
-            size,
             offset,
             boundary_width,
             boundary_height,
-            number_x,
-            number_y,
+            boundary_count_x,
+            boundary_count_y,
             radius,
             jittering,
             double_jittering,
-            random,
-            coord_transformer
+            phase
         }
 
     }
 
     fn estimate_points(&self) -> usize {
-        (self.number_x.floor() as usize * 2) + (self.number_y.floor() as usize * 2) + (self.size.width * self.size.height).floor() as usize
+        (self.boundary_count_x.floor() as usize * 2) + (self.boundary_count_y.floor() as usize * 2) + ((self.extent.width/self.spacing).floor() as usize * (self.extent.height/self.spacing).floor() as usize)
     }
 
     fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
-        let (lon,lat) = self.coord_transformer.pixels_to_coords(x, y);
         let mut point = Geometry::empty(wkbPoint)?;
-        point.add_point_2d((lon,lat));
+        point.add_point_2d((self.extent.west + x,self.extent.south + y));
         Ok(point)
     }
 
@@ -92,8 +93,8 @@ impl<Random: Rng> PointGenerator<Random> {
 
         macro_rules! horizontal {
             ($index: ident, $this_phase: ident, $next_phase: ident, $y: expr) => {
-                if $index < self.number_x {
-                    let x = ((self.boundary_width * $index)/self.number_x + self.offset).ceil(); 
+                if $index < self.boundary_count_x {
+                    let x = ((self.boundary_width * $index)/self.boundary_count_x + self.offset).ceil(); 
                     self.phase = PointGeneratorPhase::$this_phase($index + 1.0);
                     Some(self.make_point(x,$y)) 
                 } else {
@@ -105,8 +106,8 @@ impl<Random: Rng> PointGenerator<Random> {
 
         macro_rules! vertical {
             ($index: ident, $this_phase: ident, $next_phase: expr, $x: expr) => {
-                if $index < self.number_y {
-                    let y = ((self.boundary_height * $index)/self.number_y + self.offset).ceil(); 
+                if $index < self.boundary_count_y {
+                    let y = ((self.boundary_height * $index)/self.boundary_count_y + self.offset).ceil(); 
                     self.phase = PointGeneratorPhase::$this_phase($index + 1.0);
                     Some(self.make_point($x,y))
                 } else {
@@ -128,10 +129,10 @@ impl<Random: Rng> PointGenerator<Random> {
             PointGeneratorPhase::Bottom(index) => horizontal!(index,Bottom,Left,self.boundary_height + self.offset),
             PointGeneratorPhase::Left(index) => vertical!(index,Left,PointGeneratorPhase::Right(Self::INITIAL_INDEX),self.offset),
             PointGeneratorPhase::Right(index) => vertical!(index,Right,PointGeneratorPhase::Random(self.radius,self.radius),self.boundary_width+ self.offset),
-            PointGeneratorPhase::Random(x, y) => if y < self.size.height {
-                if x < self.size.width {
-                    let x_j = (x + jitter!()).round_hundredths().min(self.size.width);
-                    let y_j = (y + jitter!()).round_hundredths().min(self.size.height);
+            PointGeneratorPhase::Random(x, y) => if y < self.extent.height {
+                if x < self.extent.width {
+                    let x_j = (x + jitter!()).round_hundredths().min(self.extent.width);
+                    let y_j = (y + jitter!()).round_hundredths().min(self.extent.height);
                     self.phase = PointGeneratorPhase::Random(x + self.spacing, y);
                     Some(self.make_point(x_j,y_j))
                 } else {
@@ -165,35 +166,9 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
 }
 
 
-// TODO: I don't need the heightmap to sample from now, that's coming later. Which means I don't really need the
-// map itself, I just need the size and the transformer.
-// -- Actually, I could design this so I only need the extent of the target layer in lat/lon. It would require reworking
-// what "spacing" means, and a few other things. I might not want to be rounding anymore. I would no longer need the transformer object at that point.
-pub fn generate_points_from_heightmap<Random: Rng, Progress: ProgressObserver>(source: RasterMap, target: &mut WorldMap, overwrite_layer: bool, spacing: Option<f64>, random: &mut Random, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
-
-    progress.start_unknown_endpoint(|| "Loading raster source.");
-
-    let source_transformer = source.transformer()?;
-    let source_size = Size::<f64>::from_usize(source.size());
-
-    // round spacing for simplicity FUTURE: Do I really need to do this?
-    let spacing = if let Some(spacing) = spacing {
-        spacing.round_hundredths()
-    } else {
-        ((source_size.width * source_size.height)/DEFAULT_POINT_COUNT).sqrt().round_hundredths()
-    };
-
-    let generator = PointGenerator::new(random, source_transformer, spacing, source_size);
-
-    progress.finish(|| "Raster Loaded.");
-
-    target.load_points_layer(overwrite_layer, generator, progress)
-
-}
-
 // TODO: I'm leaning more and more into keeping everything in a single gpkg file as standard, as those can support multiple layers. I might
 // even be able to store the non-geographic lookup tables with wkbNone geometries. I'm just not certain what to do with those.
-pub fn generate_delaunary_triangles_from_points<Progress: ProgressObserver>(target: &mut WorldMap, overwrite_layer: bool, tolerance: Option<f64>, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
+pub(crate) fn generate_delaunary_triangles_from_points<Progress: ProgressObserver>(target: &mut WorldMap, overwrite_layer: bool, tolerance: Option<f64>, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
 
     let mut points = target.points_layer()?;
 

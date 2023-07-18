@@ -18,11 +18,11 @@ use gdal::Transaction;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 
-pub const ELEVATION_FIELD_NAME: &str = "elevation";
-pub const POINTS_LAYER_NAME: &str = "points";
-pub const TRIANGLES_LAYER_NAME: &str = "triangles";
+pub(crate) const ELEVATION_FIELD_NAME: &str = "elevation";
+pub(crate) const POINTS_LAYER_NAME: &str = "points";
+pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
 
-pub struct PointsLayer<'lifetime> {
+pub(crate) struct PointsLayer<'lifetime> {
     points: Layer<'lifetime>
 }
 
@@ -54,7 +54,7 @@ impl<'lifetime> PointsLayer<'lifetime> {
         })
     }
 
-    pub fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
+    pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
         self.points.create_feature_fields(point,&[],&[])?;
         Ok(())
@@ -62,25 +62,25 @@ impl<'lifetime> PointsLayer<'lifetime> {
     }
 
 /* TODO: I'm going to need something like this eventually for sampling the tiles, so don't delete this yet.
-    pub fn sample_point_from_raster(&mut self, x: f64, y: f64, transformer: &RasterCoordTransformer, buffer: &RasterBandBuffer<f64>) -> Result<(),CommandError> {
+    pub(crate) fn sample_point_from_raster(&mut self, x: f64, y: f64, transformer: &RasterCoordTransformer, buffer: &RasterBandBuffer<f64>) -> Result<(),CommandError> {
         let (lon,lat) = transformer.pixels_to_coords(x, y);
         let mut point = Geometry::empty(wkbPoint)?;
         point.add_point_2d((lon,lat));
         self.add_point(point, buffer.get_value(x, y))
     }
  */
-    pub fn get_feature_count(&self) -> u64 {
+    pub(crate) fn get_feature_count(&self) -> u64 {
         self.points.feature_count()
     }
 
-    pub fn get_points(&mut self) -> FeatureIterator {
+    pub(crate) fn get_points(&mut self) -> FeatureIterator {
         self.points.features()
     }
 
 }
 
 
-pub struct TrianglesLayer<'lifetime> {
+pub(crate) struct TrianglesLayer<'lifetime> {
     tiles: Layer<'lifetime>
 }
 
@@ -113,7 +113,7 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
         })
     }
 
-    pub fn add_triangle(&mut self, geo: Geometry, elevation: Option<&f64>) -> Result<(),CommandError> {
+    pub(crate) fn add_triangle(&mut self, geo: Geometry, elevation: Option<&f64>) -> Result<(),CommandError> {
 
         if let Some(value) = elevation {
             self.tiles.create_feature_fields(geo,&[ELEVATION_FIELD_NAME],&[FieldValue::RealValue(*value)])?
@@ -127,7 +127,7 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 }
 
-pub struct WorldMap {
+pub(crate) struct WorldMap {
     dataset: Dataset
 }
 
@@ -141,20 +141,20 @@ impl WorldMap {
         }
     }
 
-    pub fn open<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
+    #[allow(dead_code)] pub(crate) fn open<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
         let dataset = Dataset::open(path)?;
         Ok(Self::new(dataset))
     }
 
 
-    pub fn edit<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
+    pub(crate) fn edit<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
         Ok(Self::new(Dataset::open_ex(path, DatasetOptions { 
             open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
             ..Default::default()
         })?))
     }
 
-    pub fn create_or_edit<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
+    pub(crate) fn create_or_edit<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
         if path.as_ref().exists() {
             Self::edit(path)
         } else {
@@ -165,7 +165,7 @@ impl WorldMap {
 
     }
 
-    pub fn with_transaction<Callback: FnOnce(&mut WorldMapTransaction) -> Result<(),CommandError>>(&mut self, callback: Callback) -> Result<(),CommandError> {
+    pub(crate) fn with_transaction<Callback: FnOnce(&mut WorldMapTransaction) -> Result<(),CommandError>>(&mut self, callback: Callback) -> Result<(),CommandError> {
         let transaction = self.dataset.start_transaction()?;
         let mut transaction = WorldMapTransaction::new(transaction);
         callback(&mut transaction)?;
@@ -174,16 +174,16 @@ impl WorldMap {
 
     }
 
-    pub fn save(&mut self) -> Result<(),CommandError> {
+    pub(crate) fn save(&mut self) -> Result<(),CommandError> {
         self.dataset.flush_cache()?;
         Ok(())
     }
 
-    pub fn points_layer(&self) -> Result<PointsLayer,CommandError> {
+    pub(crate) fn points_layer(&self) -> Result<PointsLayer,CommandError> {
         PointsLayer::open_from_dataset(&self.dataset)
     }
 
-    pub fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
+    pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut target_points = target.create_points_layer(overwrite_layer)?;
@@ -214,7 +214,7 @@ impl WorldMap {
 
 }
 
-pub struct WorldMapTransaction<'lifetime> {
+pub(crate) struct WorldMapTransaction<'lifetime> {
     dataset: Transaction<'lifetime>
 }
 
@@ -226,12 +226,12 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
         }
     }
 
-    pub fn create_points_layer(&mut self, overwrite: bool) -> Result<PointsLayer,CommandError> {
+    pub(crate) fn create_points_layer(&mut self, overwrite: bool) -> Result<PointsLayer,CommandError> {
         Ok(PointsLayer::create_from_dataset(&mut self.dataset, overwrite)?)       
 
     }
 
-    pub fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TrianglesLayer,CommandError> {
+    pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TrianglesLayer,CommandError> {
         Ok(TrianglesLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }

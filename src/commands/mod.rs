@@ -9,7 +9,7 @@ mod triangles;
 
 // NOTE: Further 'use' statements in the command macro below
 
-pub trait Task {
+pub(crate) trait Task {
 
     fn run(self) -> Result<(),CommandError>;
 
@@ -19,11 +19,11 @@ macro_rules! command {
     ($($command_mod: ident::$command_name: ident;)*) => {
 
         $(
-            pub use $command_mod::$command_name;
+            pub(crate) use $command_mod::$command_name;
         )*
 
         #[derive(Subcommand)]
-        pub enum Command {
+        pub(crate) enum Command {
             $(
                 $command_name($command_name)
             ),*
@@ -47,7 +47,7 @@ command!{
     gdal_dev::DevGdalVersion;
     gdal_dev::DevGdalInfo;
     gdal_dev::DevGdalDrivers;
-    points::DevPointsFromHeightmap;
+    points::DevPointsFromExtent;
     triangles::DevTrianglesFromPoints;
 }
 

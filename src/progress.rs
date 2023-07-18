@@ -3,7 +3,7 @@ use std::time::Duration;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 
-pub trait ProgressObserver {
+pub(crate) trait ProgressObserver {
 
     // the parameters are passed as callbacks in case the progress implementation doesn't care (such as if its Option<ProgressObserver>::None)
     fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback);
@@ -61,7 +61,7 @@ impl<OtherProgressObserver: ProgressObserver> ProgressObserver for Option<&mut O
     }
 }
 
-pub struct ConsoleProgressBar {
+pub(crate) struct ConsoleProgressBar {
 
     bar: Option<ProgressBar>
 
@@ -69,7 +69,7 @@ pub struct ConsoleProgressBar {
 
 impl ConsoleProgressBar {
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             bar: None
         }

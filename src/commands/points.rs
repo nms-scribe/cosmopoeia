@@ -1,22 +1,27 @@
 use std::path::PathBuf;
 
 use clap::Args;
+use rand::rngs::StdRng;
 
 use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
-use crate::algorithms::generate_points_from_heightmap;
 use crate::utils::random_number_generator;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
+use crate::algorithms::PointGenerator;
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
-    pub struct DevPointsFromHeightmap {
-        // Path to the source height map
+    pub(crate) struct DevPointsFromExtent {
+        #[arg(group="source")]
+        // Path to the source height map to get extents from
         source: PathBuf,
+
+        //#[arg(long,group="source")]
+        //extent: (f64,f64,f64,f64),
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -35,12 +40,23 @@ subcommand_def!{
     }
 }
 
-impl Task for DevPointsFromHeightmap {
+impl Task for DevPointsFromExtent {
 
     fn run(self) -> Result<(),CommandError> {
         let source = RasterMap::open(self.source)?;
+        let extent = source.bounds()?.extent();
         let mut target = WorldMap::create_or_edit(self.target)?;
-        generate_points_from_heightmap(source,&mut target,self.overwrite,self.spacing,&mut random_number_generator(self.seed),&mut Some(&mut ConsoleProgressBar::new()))?;
+        let random = random_number_generator(self.seed);
+        let mut progress = ConsoleProgressBar::new();
+        let spacing = if let Some(spacing) = self.spacing {
+            spacing
+        } else {
+            PointGenerator::<StdRng>::default_spacing(&extent)
+        };
+        let generator = PointGenerator::new(random, extent, spacing);
+        
+        target.load_points_layer(self.overwrite, generator, &mut Some(&mut progress))?;
+
         Ok(())
     }
 }

@@ -1,16 +1,16 @@
 use std::error::Error;
 use std::fmt::Display;
 
-pub use gdal::errors::GdalError;
+pub(crate) use gdal::errors::GdalError;
 use gdal::raster::GdalDataType;
 
-pub use clap::error::Error as ArgumentError;
+pub(crate) use clap::error::Error as ArgumentError;
 
 #[derive(Debug)]
-pub enum CommandError {
+pub(crate) enum CommandError {
     GdalError(GdalError),
-    RasterDatasetRequired,
-    UnsupportedRasterSourceBand(GdalDataType)
+    #[allow(dead_code)] RasterDatasetRequired,
+    #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType)
 }
 
 impl Error for CommandError {
@@ -35,7 +35,7 @@ impl From<GdalError> for CommandError {
 }
 
 #[derive(Debug)]
-pub enum ProgramError {
+pub(crate) enum ProgramError {
     ArgumentError(ArgumentError),
     CommandError(CommandError)
 }

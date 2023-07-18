@@ -15,7 +15,7 @@ use crate::subcommand_def;
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
     #[command(hide=true)]
-    pub struct DevGdalInfo {
+    pub(crate) struct DevGdalInfo {
         /// Name of user to greet.
         source: PathBuf
     }
@@ -49,7 +49,7 @@ impl Task for DevGdalInfo {
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
     #[command(hide=true)]
-    pub struct DevGdalVersion {
+    pub(crate) struct DevGdalVersion {
     }
 }
 
@@ -64,7 +64,7 @@ impl Task for DevGdalVersion {
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
     #[command(hide=true)]
-    pub struct DevGdalDrivers {
+    pub(crate) struct DevGdalDrivers {
     }
 }
 

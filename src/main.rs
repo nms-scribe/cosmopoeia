@@ -1,12 +1,12 @@
 use clap::Parser;
 
-pub mod errors;
-pub mod commands;
-pub mod raster;
-pub mod world_map;
-pub mod utils;
-pub mod progress;
-pub mod algorithms;
+pub(crate) mod errors;
+pub(crate) mod commands;
+pub(crate) mod raster;
+pub(crate) mod world_map;
+pub(crate) mod utils;
+pub(crate) mod progress;
+pub(crate) mod algorithms;
 #[cfg(test)] mod test;
 
 use errors::ProgramError;
@@ -23,12 +23,12 @@ macro_rules! command_help_template {
 
 #[macro_export]
 macro_rules! subcommand_def {
-    (#[doc = $about: literal] $(#[$attr:meta])* pub struct $name: ident $body: tt) => {
+    (#[doc = $about: literal] $(#[$attr:meta])* pub(crate) struct $name: ident $body: tt) => {
         #[derive(Args)]
         #[command(author,help_template = crate::command_help_template!())] 
         #[doc = $about]
         $(#[$attr])*
-        pub struct $name $body
+        pub(crate) struct $name $body
                 
     };
 }
@@ -37,10 +37,10 @@ macro_rules! subcommand_def {
 #[command(author, version, long_about = None, help_template = command_help_template!())]
 #[command(propagate_version = true)]
 /// N M Sheldon's Fantasy Mapping Tools
-pub struct CommandLine {
+pub(crate) struct CommandLine {
 
     #[command(subcommand)]
-    pub command: Command
+    pub(crate) command: Command
 
 }
 

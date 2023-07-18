@@ -1,7 +1,7 @@
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
-pub fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
+pub(crate) fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
     if seed_vec.len() > 0 {
         let mut seeds = [0u8; 32];
         for (&x, p) in seed_vec.iter().zip(seeds.iter_mut()) {
@@ -13,7 +13,7 @@ pub fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
     }
 }
 
-pub trait RoundHundredths {
+pub(crate) trait RoundHundredths {
 
     fn round_hundredths(&self) -> Self;
 }
@@ -25,20 +25,13 @@ impl RoundHundredths for f64 {
     }
 }
 
-#[derive(Clone)]
-pub struct Size<DataType> {
-    pub height: DataType,
-    pub width: DataType
+pub(crate) struct Extent {
+    pub(crate) height: f64,
+    pub(crate) width: f64,
+    pub(crate) south: f64,
+    pub(crate) west: f64,
 }
 
-impl Size<f64> {
+impl Extent {
 
-    pub fn from_usize(source: Size<usize>) -> Self {
-        let width = source.width as f64;
-        let height = source.height as f64;
-        Self {
-            width,
-            height
-        }
-    }
 }
