@@ -9,16 +9,13 @@ use gdal::vector::LayerAccess;
 use gdal::vector::OGRwkbGeometryType::wkbPoint;
 use gdal::vector::OGRwkbGeometryType::wkbPolygon;
 use gdal::vector::Geometry;
-use gdal::vector::OGRFieldType;
-use gdal::vector::FieldValue;
 use gdal::vector::Layer;
-use gdal::vector::FeatureIterator;
 use gdal::Transaction;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
+use crate::utils::LayerGeometryIterator;
 
-pub(crate) const ELEVATION_FIELD_NAME: &str = "elevation";
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
 
@@ -69,15 +66,15 @@ impl<'lifetime> PointsLayer<'lifetime> {
         self.add_point(point, buffer.get_value(x, y))
     }
  */
-    pub(crate) fn get_feature_count(&self) -> u64 {
-        self.points.feature_count()
+
+    pub(crate) fn read_points(&mut self) -> LayerGeometryIterator {
+        LayerGeometryIterator::new(&mut self.points)
+
     }
 
-    pub(crate) fn get_points(&mut self) -> FeatureIterator {
-        self.points.features()
-    }
 
 }
+
 
 
 pub(crate) struct TrianglesLayer<'lifetime> {
@@ -107,19 +104,14 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
         // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
         // really isn't much choice, just three numeric types (int, int64, and real)
 
-        tiles.create_defn_fields(&[(ELEVATION_FIELD_NAME,OGRFieldType::OFTReal)])?;
         Ok(Self {
             tiles
         })
     }
 
-    pub(crate) fn add_triangle(&mut self, geo: Geometry, elevation: Option<&f64>) -> Result<(),CommandError> {
+    pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
 
-        if let Some(value) = elevation {
-            self.tiles.create_feature_fields(geo,&[ELEVATION_FIELD_NAME],&[FieldValue::RealValue(*value)])?
-        } else {
-            self.tiles.create_feature_fields(geo,&[],&[])?
-        }
+        self.tiles.create_feature_fields(geo,&[],&[])?;
         Ok(())
 
     }
@@ -190,14 +182,43 @@ impl WorldMap {
         
             // boundary points    
     
-            progress.start(|| ("Generating points.",generator.size_hint().1));
+            progress.start(|| ("Writing points.",generator.size_hint().1));
     
             for (i,point) in generator.enumerate() {
                 target_points.add_point(point?)?;
                 progress.update(|| i);
             }
     
-            progress.finish(|| "Points Generated.");
+            progress.finish(|| "Points written.");
+    
+            Ok(())
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving layer."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer saved.");
+    
+        Ok(())
+    
+    }
+
+    pub(crate) fn load_triangles_layer<'lifetime, Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut target_points = target.create_triangles_layer(overwrite_layer)?;
+        
+            // boundary points    
+    
+            progress.start(|| ("Writing triangles.",generator.size_hint().1));
+    
+            for (i,triangle) in generator.enumerate() {
+                target_points.add_triangle(triangle?.to_owned())?;
+                progress.update(|| i);
+            }
+    
+            progress.finish(|| "Triangles written.");
     
             Ok(())
         })?;
@@ -209,8 +230,26 @@ impl WorldMap {
         progress.finish(|| "Layer Saved.");
     
         Ok(())
-    
+
+/*
+    progress.start_known_endpoint(|| ("Writing triangles.",triangles.geometry_count()));
+    target.with_transaction(|target| {
+
+        let mut tiles = target.create_triangles_layer(overwrite_layer)?;
+
+        for i in 0..triangles.geometry_count() {
+            let geometry = triangles.get_geometry(i); // these are wkbPolygon
+            tiles.add_triangle(geometry.clone(), None)?;
+        }
+
+        progress.finish(|| "Triangles written.");
+
+        Ok(())
+    })?;
+ */        
+
     }
+
 
 }
 

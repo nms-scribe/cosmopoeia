@@ -1,13 +1,11 @@
 use rand::Rng;
 use gdal::vector::Geometry;
-use gdal::vector::OGRwkbGeometryType::wkbGeometryCollection;
 use gdal::vector::OGRwkbGeometryType::wkbPoint;
 
 use crate::errors::CommandError;
 use crate::utils::RoundHundredths;
 use crate::utils::Extent;
-use crate::world_map::WorldMap;
-use crate::progress::ProgressObserver;
+use crate::utils::GeometryGeometryIterator;
 
 pub(crate) const DEFAULT_POINT_COUNT: f64 = 10_000.0;
 
@@ -41,8 +39,13 @@ impl<Random: Rng> PointGenerator<Random> {
 
     const INITIAL_INDEX: f64 = 0.5;
 
-    pub(crate) fn default_spacing(extent: &Extent) -> f64 {
-        ((extent.width * extent.height)/DEFAULT_POINT_COUNT).sqrt().round_hundredths()
+    pub(crate) fn default_spacing_for_extent(spacing: Option<f64>, extent: &Extent) -> f64 {
+        if let Some(spacing) = spacing {
+            spacing
+        } else {
+            ((extent.width * extent.height)/DEFAULT_POINT_COUNT).sqrt().round_hundredths()
+        }
+        
     }
 
     pub(crate) fn new(random: Random, extent: Extent, spacing: f64) -> Self {
@@ -84,7 +87,14 @@ impl<Random: Rng> PointGenerator<Random> {
         Ok(point)
     }
 
-    fn next_point(&mut self) -> Option<Result<Geometry,CommandError>> {
+
+}
+
+impl<Random: Rng> Iterator for PointGenerator<Random> {
+
+    type Item = Result<Geometry,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         // TODO: The points laying beyond the edge of the heightmap looks weird. Once I get to the voronoi, see if those are absolutely necessary.
         // TODO: Those boundary points should also be jittered, at least along the line.
 
@@ -99,7 +109,7 @@ impl<Random: Rng> PointGenerator<Random> {
                     Some(self.make_point(x,$y)) 
                 } else {
                     self.phase = PointGeneratorPhase::$next_phase(Self::INITIAL_INDEX);
-                    self.next_point()
+                    self.next()
                 }
             };
         }
@@ -112,7 +122,7 @@ impl<Random: Rng> PointGenerator<Random> {
                     Some(self.make_point($x,y))
                 } else {
                     self.phase = $next_phase;
-                    self.next_point()
+                    self.next()
                 }                
             };
         }
@@ -137,27 +147,16 @@ impl<Random: Rng> PointGenerator<Random> {
                     Some(self.make_point(x_j,y_j))
                 } else {
                     self.phase = PointGeneratorPhase::Random(self.radius, y + self.spacing);
-                    self.next_point()
+                    self.next()
                 }
                 
             } else {
                 self.phase = PointGeneratorPhase::Done;
-                self.next_point()
+                self.next()
             },
             PointGeneratorPhase::Done => None,
         }
 
-    }
-
-
-}
-
-impl<Random: Rng> Iterator for PointGenerator<Random> {
-
-    type Item = Result<Geometry,CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next_point()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -165,93 +164,64 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
     }
 }
 
+enum DelaunayGeneratorPhase {
+    Unstarted(Geometry),
+    Started(GeometryGeometryIterator),
+    Done
+}
 
-// TODO: I'm leaning more and more into keeping everything in a single gpkg file as standard, as those can support multiple layers. I might
-// even be able to store the non-geographic lookup tables with wkbNone geometries. I'm just not certain what to do with those.
-pub(crate) fn generate_delaunary_triangles_from_points<Progress: ProgressObserver>(target: &mut WorldMap, overwrite_layer: bool, tolerance: Option<f64>, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
-
-    let mut points = target.points_layer()?;
-
-    // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
-    progress.start_known_endpoint(|| ("Reading points.",points.get_feature_count() as usize));
-    let mut all_points = Geometry::empty(wkbGeometryCollection)?;
-    for (i,point) in points.get_points().enumerate() {
-        if let Some(geometry) = point.geometry() {
-            all_points.add_geometry(geometry.clone())?;
-        }
-        progress.update(|| i);
-    }
-    progress.finish(|| "Points read.");
-
-    progress.start_unknown_endpoint(|| "Generating triangles.");
-    
-    let triangles = all_points.delaunay_triangulation(tolerance)?; // TODO: Include snapping tolerance as a configuration.
-
-    progress.finish(|| "Triangles generated.");
-
-    progress.start_known_endpoint(|| ("Writing triangles.",triangles.geometry_count()));
-    target.with_transaction(|target| {
-
-        let mut tiles = target.create_triangles_layer(overwrite_layer)?;
-
-        for i in 0..triangles.geometry_count() {
-            let geometry = triangles.get_geometry(i); // these are wkbPolygon
-            tiles.add_triangle(geometry.clone(), None)?;
-        }
-
-        progress.finish(|| "Triangles written.");
-
-        Ok(())
-    })?;
-
-
-    progress.start_unknown_endpoint(|| "Saving Layer..."); // FUTURE: The progress bar can't update during this part, we should change the appearance somehow.
-    
-    target.save()?;
-
-    progress.finish(|| "Layer Saved.");
-
-    Ok(())
-
-    // TODO: You can also find the dual (ie. Voronoi diagram) just by computing the circumcentres of all the triangles, and connecting any two circumcentres whose triangles share an edge.
-    // - Given a list of (delaunay) triangles where each vertice is one of the sites
-    // - Calculate a map (A) of triangle data with its circumcenter TODO: How?
-    // - Calculate a map (B) of sites with a list of triangle circumcenters TODO: How?
-    // - for each site and list in B
-    //   - if list.len < 2: continue (This is a *true* edge case, see below) TODO: How to deal with these?
-    //   - vertices = list.clone()
-    //   - sort vertices in clockwise order TODO: How? (See below)
-    //   - vertices.append(vertices[0].clone()) // to close the polygon
-    //   - create new polygon D(vertices)
-    //   - sample the elevation from the heightmap given the site coordinates
-    //   - add polygon D to layer with site elevation attribute
-
-    // TODO: Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
-
-    // TODO: Finding the map of sites to triangle circumcenters:
-    // - create the map
-    // - for each triangle in the list of triangles
-    //   - for each vertex:
-    //     - if the map has the site, then add this triangle's circumcenter to the list
-    //     - if the map does not have the site, then add the map with a single item list containing this triangle's circumcenter
-
-    // TODO: Actually, we can simplify this: when creating the map, just add the circumcenter vertex
-
-    // TODO: Sorting points clockwise:
-    // - https://stackoverflow.com/a/6989383/300213 -- this is relatively simple, although it does take work.
-    // - Alternatively, there is a concave hull in gdal which would work, except it's not included in the rust bindings.
-
-
-    // TODO: I think I'm going to rethink this, since I'm having to store things in memory anyway, and the originally generated points aren't
-    // necessarily the ones I get from the database, the algorithms should deal with the types themselves and only occasionally the data files.
-    // Basically:
-    // - generate_random_points(extent NOT the layer) -> Points
-    // - calculate_delaunay(points) -> triangles
-    // - calculate_voronoi(triangles) -> voronois (polygons with "sites")
-    // - create_tiles(voronois,heightmap) -> create layer with the voronoi polygons, sampling the elevations from the heightmap
-    // - however, if I'm using the gdal types (until I can get better support for the geo_types), I can have stuff that will write the data to layers for visualization
-
+pub(crate) struct DelaunayGenerator {
+    phase: DelaunayGeneratorPhase
 
 }
+
+impl DelaunayGenerator {
+
+    pub(crate) fn new(source: Geometry) -> Self {
+        let phase = DelaunayGeneratorPhase::Unstarted(source);
+        Self {
+            phase
+        }
+    }
+
+    // this function is optional to call, it will automatically be called by the iterator.
+    // However, that will cause a delay to the initial return.
+    pub(crate) fn start(&mut self) -> Result<(),CommandError> {
+        // NOTE: the delaunay thingie can only work if all of the points are known, so we can't work with an iterator here.
+        // I'm not certain if some future algorithm might allow us to return an iterator, however.
+        if let DelaunayGeneratorPhase::Unstarted(source) = &mut self.phase {
+            // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
+            // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
+            let triangles = source.delaunay_triangulation(None)?; // FUTURE: Should this be configurable?
+            self.phase = DelaunayGeneratorPhase::Started(GeometryGeometryIterator::new(triangles))
+        }
+        Ok(())
+    }
+
+}
+
+impl Iterator for DelaunayGenerator {
+
+    type Item = Result<Geometry,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.phase {
+            DelaunayGeneratorPhase::Unstarted(_) => {
+                match self.start() {
+                    Ok(_) => self.next(),
+                    Err(e) => Some(Err(e)),
+                }
+            },
+            DelaunayGeneratorPhase::Started(iter) => if let Some(value) = iter.next() {
+                Some(Ok(value))
+            } else {
+                self.phase = DelaunayGeneratorPhase::Done;
+                None
+            },
+            DelaunayGeneratorPhase::Done => None,
+        }
+    }
+}
+
 
 

@@ -5,9 +5,11 @@ use clap::Args;
 use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
-use crate::algorithms::generate_delaunary_triangles_from_points;
 use crate::world_map::WorldMap;
+use crate::progress::ProgressObserver;
 use crate::progress::ConsoleProgressBar;
+use crate::algorithms::DelaunayGenerator;
+use crate::utils::ToGeometryCollection;
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
@@ -30,9 +32,24 @@ subcommand_def!{
 impl Task for DevTrianglesFromPoints {
 
     fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
         let mut target = WorldMap::edit(self.target)?;
-        generate_delaunary_triangles_from_points(&mut target,self.overwrite,self.tolerance,&mut Some(&mut ConsoleProgressBar::new()))?;
-        Ok(())
+
+        let mut points = target.points_layer()?;
+    
+        let mut generator = DelaunayGenerator::new(points.read_points().to_geometry_collection(&mut progress)?);
+    
+        progress.start_unknown_endpoint(|| "Generating triangles.");
+        
+        generator.start()?;
+    
+        progress.finish(|| "Triangles generated.");
+    
+        target.load_triangles_layer(self.overwrite, generator, &mut progress)
+    
+    
     }
 }
 

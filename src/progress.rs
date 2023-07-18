@@ -20,6 +20,30 @@ pub(crate) trait ProgressObserver {
 
 }
 
+
+
+impl ProgressObserver for Option<()> {
+
+    fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, _: Callback) {
+    }
+
+    fn start_unknown_endpoint<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, _: Callback) {
+    }
+
+    fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, _: Callback) {
+    }
+
+    fn update<Callback: FnOnce() -> usize>(&self, _: Callback) {
+    }
+
+    fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, _: Callback) {
+    }
+
+    fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, _: Callback) {
+    }
+}
+
+
 impl<OtherProgressObserver: ProgressObserver> ProgressObserver for Option<&mut OtherProgressObserver> {
 
     fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback) {
