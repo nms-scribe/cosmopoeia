@@ -51,6 +51,7 @@ command!{
     points::DevPointsFromHeightmap;
     points::DevPointsFromExtent;
     triangles::DevTrianglesFromPoints;
+    voronoi::DevVoronoiFromTriangles;
 }
 
 

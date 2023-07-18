@@ -18,6 +18,7 @@ use crate::utils::LayerGeometryIterator;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
+pub(crate) const TILES_LAYER_NAME: &str = "tiles";
 
 pub(crate) struct PointsLayer<'lifetime> {
     points: Layer<'lifetime>
@@ -83,12 +84,13 @@ pub(crate) struct TrianglesLayer<'lifetime> {
 
 impl<'lifetime> TrianglesLayer<'lifetime> {
 
-    fn _open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
         let tiles = dataset.layer_by_name(TRIANGLES_LAYER_NAME)?;
         Ok(Self {
             tiles
         })
     }
+    
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
         let tiles = dataset.create_layer(LayerOptions {
@@ -115,6 +117,64 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
         Ok(())
 
     }
+
+
+    pub(crate) fn read_triangles(&mut self) -> LayerGeometryIterator {
+        LayerGeometryIterator::new(&mut self.tiles)
+
+    }
+
+
+
+}
+
+
+pub(crate) struct TilesLayer<'lifetime> {
+    tiles: Layer<'lifetime>
+}
+
+impl<'lifetime> TilesLayer<'lifetime> {
+
+    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+        let tiles = dataset.layer_by_name(TILES_LAYER_NAME)?;
+        Ok(Self {
+            tiles
+        })
+    }
+    
+
+    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+        let tiles = dataset.create_layer(LayerOptions {
+            name: TILES_LAYER_NAME,
+            ty: wkbPolygon,
+            options: if overwrite {
+                Some(&["OVERWRITE=YES"])
+            } else {
+                None
+            },
+            ..Default::default()
+        })?;
+        // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
+        // really isn't much choice, just three numeric types (int, int64, and real)
+
+        Ok(Self {
+            tiles
+        })
+    }
+
+    pub(crate) fn add_tile(&mut self, geo: Geometry) -> Result<(),CommandError> {
+
+        self.tiles.create_feature_fields(geo,&[],&[])?;
+        Ok(())
+
+    }
+
+
+    pub(crate) fn read_tiles(&mut self) -> LayerGeometryIterator {
+        LayerGeometryIterator::new(&mut self.tiles)
+
+    }
+
 
 
 }
@@ -175,6 +235,10 @@ impl WorldMap {
         PointsLayer::open_from_dataset(&self.dataset)
     }
 
+    pub(crate) fn triangles_layer(&self) -> Result<TrianglesLayer,CommandError> {
+        TrianglesLayer::open_from_dataset(&self.dataset)
+    }
+
     pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
@@ -207,14 +271,14 @@ impl WorldMap {
     pub(crate) fn load_triangles_layer<'lifetime, Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
-            let mut target_points = target.create_triangles_layer(overwrite_layer)?;
+            let mut target = target.create_triangles_layer(overwrite_layer)?;
         
             // boundary points    
     
             progress.start(|| ("Writing triangles.",generator.size_hint().1));
     
             for (i,triangle) in generator.enumerate() {
-                target_points.add_triangle(triangle?.to_owned())?;
+                target.add_triangle(triangle?.to_owned())?;
                 progress.update(|| i);
             }
     
@@ -231,24 +295,38 @@ impl WorldMap {
     
         Ok(())
 
-/*
-    progress.start_known_endpoint(|| ("Writing triangles.",triangles.geometry_count()));
-    target.with_transaction(|target| {
+    }
 
-        let mut tiles = target.create_triangles_layer(overwrite_layer)?;
+    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
-        for i in 0..triangles.geometry_count() {
-            let geometry = triangles.get_geometry(i); // these are wkbPolygon
-            tiles.add_triangle(geometry.clone(), None)?;
-        }
-
-        progress.finish(|| "Triangles written.");
-
+        self.with_transaction(|target| {
+            let mut target = target.create_tile_layer(overwrite_layer)?;
+        
+            // boundary points    
+    
+            progress.start(|| ("Writing tiles.",generator.size_hint().1));
+    
+            for (i,tile) in generator.enumerate() {
+                target.add_tile(tile?.to_owned())?;
+                progress.update(|| i);
+            }
+    
+            progress.finish(|| "Tiles written.");
+    
+            Ok(())
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
         Ok(())
-    })?;
- */        
 
     }
+
+
 
 
 }
@@ -272,6 +350,11 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
 
     pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TrianglesLayer,CommandError> {
         Ok(TrianglesLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+
+    }
+
+    pub(crate) fn create_tile_layer(&mut self, overwrite: bool) -> Result<TilesLayer,CommandError> {
+        Ok(TilesLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }
 

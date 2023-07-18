@@ -19,10 +19,6 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
-        /// Optional snapping tolerance to pass to delaunay algorithm
-        #[arg(long)]
-        tolerance: Option<f64>,
-
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
         overwrite: bool
