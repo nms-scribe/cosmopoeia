@@ -6,8 +6,9 @@ use gdal::DatasetOptions;
 use gdal::GdalOpenFlags;
 use gdal::LayerOptions;
 use gdal::vector::LayerAccess;
-use gdal::vector::OGRwkbGeometryType::wkbPoint;
-use gdal::vector::OGRwkbGeometryType::wkbPolygon;
+use gdal::vector::OGRwkbGeometryType;
+use gdal::vector::OGRFieldType;
+use gdal::vector::FieldValue;
 use gdal::vector::Geometry;
 use gdal::vector::Layer;
 use gdal::Transaction;
@@ -15,28 +16,30 @@ use gdal::Transaction;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::utils::LayerGeometryIterator;
+use crate::utils::Point;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
 pub(crate) const TILES_LAYER_NAME: &str = "tiles";
 
-pub(crate) struct PointsLayer<'lifetime> {
-    points: Layer<'lifetime>
+pub(crate) struct WorldLayer<'lifetime> {
+    layer: Layer<'lifetime>
 }
 
-impl<'lifetime> PointsLayer<'lifetime> {
+impl<'lifetime> WorldLayer<'lifetime> {
 
-    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let points = dataset.layer_by_name(POINTS_LAYER_NAME)?;
+    fn open_from_dataset(dataset: &'lifetime Dataset, name: &str) -> Result<Self,CommandError> {
+        let layer = dataset.layer_by_name(name)?;
         Ok(Self {
-            points
+            layer
         })
     }
+    
 
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let points = dataset.create_layer(LayerOptions {
-            name: POINTS_LAYER_NAME,
-            ty: wkbPoint,
+    fn create_from_dataset(dataset: &'lifetime mut Dataset, name: &str, geometry_type: OGRwkbGeometryType::Type, field_defs: Option<&[(&str, OGRFieldType::Type)]>, overwrite: bool) -> Result<Self,CommandError> {
+        let layer = dataset.create_layer(LayerOptions {
+            name,
+            ty: geometry_type,
             options: if overwrite {
                 Some(&["OVERWRITE=YES"])
             } else {
@@ -44,8 +47,48 @@ impl<'lifetime> PointsLayer<'lifetime> {
             },
             ..Default::default()
         })?;
+        if let Some(field_defs) = field_defs {
+            layer.create_defn_fields(field_defs)?;
+        }
         // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
         // really isn't much choice, just three numeric types (int, int64, and real)
+
+        Ok(Self {
+            layer
+        })
+    }
+
+    fn add(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
+
+        self.layer.create_feature_fields(geometry,field_names,field_values)?;
+        Ok(())
+    }
+
+
+    fn read_geometries(&mut self) -> LayerGeometryIterator {
+        LayerGeometryIterator::new(&mut self.layer)
+
+    }
+
+
+
+}
+
+pub(crate) struct PointsLayer<'lifetime> {
+    points: WorldLayer<'lifetime>
+}
+
+impl<'lifetime> PointsLayer<'lifetime> {
+
+    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+        let points = WorldLayer::open_from_dataset(dataset, POINTS_LAYER_NAME)?;
+        Ok(Self {
+            points
+        })
+    }
+
+    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+        let points = WorldLayer::create_from_dataset(dataset, POINTS_LAYER_NAME, OGRwkbGeometryType::wkbPoint, None, overwrite)?;
 
         Ok(Self {
             points
@@ -54,8 +97,7 @@ impl<'lifetime> PointsLayer<'lifetime> {
 
     pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
-        self.points.create_feature_fields(point,&[],&[])?;
-        Ok(())
+        self.points.add(point,&[],&[])
 
     }
 
@@ -69,7 +111,7 @@ impl<'lifetime> PointsLayer<'lifetime> {
  */
 
     pub(crate) fn read_points(&mut self) -> LayerGeometryIterator {
-        LayerGeometryIterator::new(&mut self.points)
+        self.points.read_geometries()
 
     }
 
@@ -79,13 +121,13 @@ impl<'lifetime> PointsLayer<'lifetime> {
 
 
 pub(crate) struct TrianglesLayer<'lifetime> {
-    tiles: Layer<'lifetime>
+    tiles: WorldLayer<'lifetime>
 }
 
 impl<'lifetime> TrianglesLayer<'lifetime> {
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let tiles = dataset.layer_by_name(TRIANGLES_LAYER_NAME)?;
+        let tiles = WorldLayer::open_from_dataset(dataset, TRIANGLES_LAYER_NAME)?;
         Ok(Self {
             tiles
         })
@@ -93,18 +135,7 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let tiles = dataset.create_layer(LayerOptions {
-            name: TRIANGLES_LAYER_NAME,
-            ty: wkbPolygon,
-            options: if overwrite {
-                Some(&["OVERWRITE=YES"])
-            } else {
-                None
-            },
-            ..Default::default()
-        })?;
-        // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
-        // really isn't much choice, just three numeric types (int, int64, and real)
+        let tiles = WorldLayer::create_from_dataset(dataset, TRIANGLES_LAYER_NAME, OGRwkbGeometryType::wkbPolygon, None, overwrite)?;
 
         Ok(Self {
             tiles
@@ -113,14 +144,13 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
     pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
 
-        self.tiles.create_feature_fields(geo,&[],&[])?;
-        Ok(())
+        self.tiles.add(geo,&[],&[])
 
     }
 
 
     pub(crate) fn read_triangles(&mut self) -> LayerGeometryIterator {
-        LayerGeometryIterator::new(&mut self.tiles)
+        self.tiles.read_geometries()
 
     }
 
@@ -128,15 +158,32 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 }
 
+pub(crate) struct VoronoiTile {
+    geometry: Geometry,
+    site: Point
+}
+
+impl VoronoiTile {
+
+    pub(crate) fn new(geometry: Geometry, site: Point) -> Self {
+        Self {
+            geometry,
+            site
+        }
+    }
+}
+
 
 pub(crate) struct TilesLayer<'lifetime> {
-    tiles: Layer<'lifetime>
+    tiles: WorldLayer<'lifetime>
 }
 
 impl<'lifetime> TilesLayer<'lifetime> {
 
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 2] = [("site_x",OGRFieldType::OFTReal),("site_y",OGRFieldType::OFTReal)];
+
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let tiles = dataset.layer_by_name(TILES_LAYER_NAME)?;
+        let tiles = WorldLayer::open_from_dataset(dataset, TILES_LAYER_NAME)?;
         Ok(Self {
             tiles
         })
@@ -144,34 +191,24 @@ impl<'lifetime> TilesLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let tiles = dataset.create_layer(LayerOptions {
-            name: TILES_LAYER_NAME,
-            ty: wkbPolygon,
-            options: if overwrite {
-                Some(&["OVERWRITE=YES"])
-            } else {
-                None
-            },
-            ..Default::default()
-        })?;
-        // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
-        // really isn't much choice, just three numeric types (int, int64, and real)
+        let tiles = WorldLayer::create_from_dataset(dataset, TILES_LAYER_NAME, OGRwkbGeometryType::wkbPolygon, Some(&Self::FIELD_DEFS), overwrite)?;
 
         Ok(Self {
             tiles
         })
     }
 
-    pub(crate) fn add_tile(&mut self, geo: Geometry) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, tile: VoronoiTile) -> Result<(),CommandError> {
 
-        self.tiles.create_feature_fields(geo,&[],&[])?;
+        let (x,y) = tile.site.to_tuple();
+        self.tiles.add(tile.geometry,&["site_x","site_y"],&[FieldValue::RealValue(x),FieldValue::RealValue(y)])?;
         Ok(())
 
     }
 
 
     pub(crate) fn read_tiles(&mut self) -> LayerGeometryIterator {
-        LayerGeometryIterator::new(&mut self.tiles)
+        self.tiles.read_geometries()
 
     }
 
@@ -297,7 +334,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<VoronoiTile,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut target = target.create_tile_layer(overwrite_layer)?;
@@ -307,7 +344,7 @@ impl WorldMap {
             progress.start(|| ("Writing tiles.",generator.size_hint().1));
     
             for (i,tile) in generator.enumerate() {
-                target.add_tile(tile?.to_owned())?;
+                target.add_tile(tile?)?;
                 progress.update(|| i);
             }
     

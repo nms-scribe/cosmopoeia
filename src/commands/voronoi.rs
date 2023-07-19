@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use gdal::vector::Geometry;
 
 use super::Task;
 use crate::errors::CommandError;
@@ -10,6 +9,7 @@ use crate::world_map::WorldMap;
 use crate::progress::ProgressObserver;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::VoronoiGenerator;
+use crate::world_map::VoronoiTile;
 
 
     
@@ -38,15 +38,19 @@ impl Task for DevVoronoiFromTriangles {
 
         let mut triangles = target.triangles_layer()?;
     
-        let mut generator = VoronoiGenerator::new(triangles.read_triangles().collect::<Result<Vec<Geometry>,CommandError>>()?);
+        let mut generator = VoronoiGenerator::new(triangles.read_triangles());
     
         progress.start_unknown_endpoint(|| "Generating voronoi.");
         
         generator.start()?;
     
-        progress.finish(|| "Triangles voronoi.");
+        progress.finish(|| "Voronoi generated.");
+
+        progress.start(|| ("Copying voronoi.",generator.size_hint().1));
+        
+        let voronoi: Vec<Result<VoronoiTile,CommandError>> = generator.collect();
     
-        target.load_tile_layer(self.overwrite, generator, &mut progress)
+        target.load_tile_layer(self.overwrite, voronoi.into_iter(), &mut progress)
     
     
     }

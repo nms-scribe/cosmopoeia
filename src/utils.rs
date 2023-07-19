@@ -1,3 +1,7 @@
+use std::hash::Hash;
+
+use ordered_float::NotNan;
+use ordered_float::FloatIsNan;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use gdal::vector::Geometry;
@@ -148,4 +152,63 @@ impl<Iter: Iterator<Item=Result<Geometry,CommandError>>> ToGeometryCollection fo
     }
 
 
+}
+
+#[derive(Hash,Eq,PartialEq,Clone)]
+pub(crate) struct Point {
+    pub(crate) x: NotNan<f64>,
+    pub(crate) y: NotNan<f64>
+}
+
+impl Point {
+
+    pub(crate) fn to_tuple(&self) -> (f64,f64) {
+        (*self.x,*self.y)
+    }
+}
+
+impl TryFrom<(f64,f64,f64)> for Point {
+
+    type Error = FloatIsNan;
+
+    fn try_from(value: (f64,f64,f64)) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: NotNan::new(value.0)?,
+            y: NotNan::new(value.1)?
+        })
+    }
+}
+
+impl TryFrom<(NotNan<f64>,NotNan<f64>)> for Point {
+
+    type Error = FloatIsNan;
+
+    fn try_from(value: (NotNan<f64>,NotNan<f64>)) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: value.0,
+            y: value.1
+        })
+    }
+}
+
+impl std::ops::Sub for &Point {
+    type Output = Point;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl std::ops::Add for &Point {
+    type Output = Point;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::Output {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
 }

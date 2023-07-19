@@ -3,12 +3,16 @@ use std::fmt::Display;
 
 pub(crate) use gdal::errors::GdalError;
 use gdal::raster::GdalDataType;
+use ordered_float::FloatIsNan;
 
 pub(crate) use clap::error::Error as ArgumentError;
 
 #[derive(Debug)]
 pub(crate) enum CommandError {
     GdalError(GdalError),
+    VoronoiExpectsPolygons,
+    VoronoiExpectsTriangles,
+    FloatIsNan,
     #[allow(dead_code)] RasterDatasetRequired,
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType)
 }
@@ -21,6 +25,9 @@ impl Display for CommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::GdalError(a) => write!(f,"gdal: {}",a),
+            Self::VoronoiExpectsPolygons => write!(f,"Voronoi input data should be polygons."),
+            Self::VoronoiExpectsTriangles => write!(f,"Voronoi input polygons should be triangles."),
+            Self::FloatIsNan => write!(f,"A float was not a number."),
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a)
         }
@@ -32,6 +39,14 @@ impl From<GdalError> for CommandError {
     fn from(value: GdalError) -> Self {
         Self::GdalError(value)
     }
+}
+
+impl From<FloatIsNan> for CommandError {
+
+    fn from(_: FloatIsNan) -> Self {
+        Self::FloatIsNan
+    }
+
 }
 
 #[derive(Debug)]
