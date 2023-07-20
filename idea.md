@@ -233,13 +233,30 @@ To proceed on this, I can break it down into the following steps:
 [X] Need Usage/Documentation as well..
 [ ] `convert-heightmap` command -- Doing this first allows me to play with pre-existing terrains for the rest of it.
     [X] Create Points
-    [ ] Delaunay Regions
-    [ ] Voronoi Regions
-    [ ] GDAL import, or something else?
-    [ ] Terrain files
-    [ ] add Ocean Mask option 
-    [ ] World configuration
-    [ ] Review AFMG voronoization algorithms and add them to the command -- don't do the improved equal-area algorithms until I have some generation tools to play with
+    [X] Delaunay Regions
+    [X] Voronoi Regions
+    [X] validate the output
+    [ ] compare to QGIS voronoi functions
+        [X] One option that might work: 
+            [X] Make sure there are four "infinity" points (when generating the delaunay) at (-width,-height),(-width,2*height),(2*width,2*height),(2*width,-height)
+            [X] Clamp the random points to within the extents.
+            [X] When we get to the voronoi
+                [X] check if site is outside the extent, and don't generate a voronoi for that.
+                [X] Otherwise, check if any vertices of the voronoi are outside the extent, and if so clip them (create an extent geography and use an intersection, perhaps? Or, just find the intersection and do it?)
+    [X] Need density instead of spacing. Right now, spacing doesn't increment across the map, especially if you specify it. There are other problems with that, but that's at least one of them. 
+    [X] Trim voronoi to within the extent (will require an extent on the voronoi dev command).
+        [X] Okay, I need to move the border points along the border instead of outside it, otherwise, I can't sample for voronoi on the edge.
+        This broke the voronoi, I'm not certain why. I don't guarantee it's not a problem with my voronoi code, however. I'm going to revisit this tomorrow.
+        What if I got rid of the borders, and just spread the points across and clamped them within the extents? -- See the thing about trimming below
+        [X] If the boundary dots are all outside extent, and regulated, but the random are all inside, I believe we should be able to easily identify sites that don't belong. Then, if circumcenter is outside, we can just find an intersection between the line and the extent edge.
+    [ ] Figure out neighbors. The idea of tracking triangles doesn't work, at least partly because the circumcenter of a triangle may not be inside the triangle. So, I'm going to have to do a separate process for getting the neighbors.
+        * I believe this is a close enough answer, and as it is probably using gdal, it works: https://www.qgistutorials.com/en/docs/find_neighbor_polygons.html
+        * Essentially, you iterate through each feature, create a bounding box around it, then look for features that fit inside the bounding box, and check
+          each of those if they are not disjoint.
+        * There's a function called set_spatial_feature on the layer that can help.
+        * As this works closely with GDAL (I'm not going to implement it using my own types), it might be a function on the tile layer.
+    [ ] Sample heights from heightmap
+    [ ] add Ocean Mask option vs ocean elevation.
 [ ] `gen-climate` command
     [ ] Review AFMG climate generation algorithms and add them -- we'll wait on improved algorithms until later
     [ ] Figure out whether we're overwriting or creating new processed Terrain files, and if the latter, come up with a default naming scheme so the `genesis` command can leave the working files, and it is easy to "find" files when working with the other tools. Maybe there's a "project" file which is automatically updated? Or, maybe the required layers are required parameters, and can be specified with a configuration file, with an option to update that file after running commands.

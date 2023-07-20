@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use rand::rngs::StdRng;
 
 use super::Task;
 use crate::errors::CommandError;
@@ -27,6 +26,10 @@ subcommand_def!{
         /// The rough number of pixels horizontally separating each point [Default: a value that places about 10k points]
         spacing: Option<f64>,
 
+        #[arg(long,default_value="10000")]
+        /// The rough number of pixels to generate for the image
+        points: usize,
+
         #[arg(long)]
         /// Seeds for the random number generator (up to 32), note that this might not reproduce the same over different versions and configurations of nfmt.
         seed: Vec<u8>,
@@ -45,8 +48,7 @@ impl Task for DevPointsFromHeightmap {
         let mut target = WorldMap::create_or_edit(self.target)?;
         let random = random_number_generator(self.seed);
         let mut progress = ConsoleProgressBar::new();
-        let spacing = PointGenerator::<StdRng>::default_spacing_for_extent(self.spacing,&extent);
-        let generator = PointGenerator::new(random, extent, spacing);
+        let generator = PointGenerator::new(random, extent, self.points);
         
         target.load_points_layer(self.overwrite, generator, &mut Some(&mut progress))?;
 
@@ -77,6 +79,10 @@ subcommand_def!{
         /// The rough number of pixels horizontally separating each point [Default: a value that places about 10k points]
         spacing: Option<f64>,
 
+        #[arg(long,default_value="10000")]
+        /// The rough number of pixels to generate for the image
+        points: usize,
+
         #[arg(long)]
         /// Seeds for the random number generator (up to 32), note that this might not reproduce the same over different versions and configurations of nfmt.
         seed: Vec<u8>,
@@ -94,8 +100,7 @@ impl Task for DevPointsFromExtent {
         let mut target = WorldMap::create_or_edit(self.target)?;
         let random = random_number_generator(self.seed);
         let mut progress = ConsoleProgressBar::new();
-        let spacing = PointGenerator::<StdRng>::default_spacing_for_extent(self.spacing,&extent);
-        let generator = PointGenerator::new(random, extent, spacing);
+        let generator = PointGenerator::new(random, extent, self.points);
         
         target.load_points_layer(self.overwrite, generator, &mut Some(&mut progress))?;
 

@@ -160,15 +160,19 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 pub(crate) struct VoronoiTile {
     geometry: Geometry,
-    site: Point
+    site: Point,
+    tile_id: i64,
+    neighbor_tiles: Vec<i64>,
 }
 
 impl VoronoiTile {
 
-    pub(crate) fn new(geometry: Geometry, site: Point) -> Self {
+    pub(crate) fn new(geometry: Geometry, site: Point, tile_id: i64, neighbor_tiles: Vec<i64>) -> Self {
         Self {
             geometry,
-            site
+            site,
+            tile_id,
+            neighbor_tiles
         }
     }
 }
@@ -180,9 +184,19 @@ pub(crate) struct TilesLayer<'lifetime> {
 
 impl<'lifetime> TilesLayer<'lifetime> {
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 2] = [("site_x",OGRFieldType::OFTReal),("site_y",OGRFieldType::OFTReal)];
+    const FIELD_SITE_X: &str = "site_x";
+    const FIELD_SITE_Y: &str = "site_y";
+    const FIELD_TILE_ID: &str = "tile_id";
+    const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
 
-    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 4] = [
+        (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
+        (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
+        (Self::FIELD_TILE_ID,OGRFieldType::OFTInteger64),
+        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTInteger64List)
+    ];
+
+    #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
         let tiles = WorldLayer::open_from_dataset(dataset, TILES_LAYER_NAME)?;
         Ok(Self {
             tiles
@@ -201,13 +215,23 @@ impl<'lifetime> TilesLayer<'lifetime> {
     pub(crate) fn add_tile(&mut self, tile: VoronoiTile) -> Result<(),CommandError> {
 
         let (x,y) = tile.site.to_tuple();
-        self.tiles.add(tile.geometry,&["site_x","site_y"],&[FieldValue::RealValue(x),FieldValue::RealValue(y)])?;
+        self.tiles.add(tile.geometry,&[
+                Self::FIELD_SITE_X,
+                Self::FIELD_SITE_Y,
+                Self::FIELD_TILE_ID,
+                Self::FIELD_NEIGHBOR_TILES
+            ],&[
+                FieldValue::RealValue(x),
+                FieldValue::RealValue(y),
+                FieldValue::Integer64Value(tile.tile_id),
+                FieldValue::Integer64ListValue(tile.neighbor_tiles)
+            ])?;
         Ok(())
 
     }
 
 
-    pub(crate) fn read_tiles(&mut self) -> LayerGeometryIterator {
+    #[allow(dead_code)] pub(crate) fn read_tiles(&mut self) -> LayerGeometryIterator {
         self.tiles.read_geometries()
 
     }

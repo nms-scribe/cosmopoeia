@@ -7,23 +7,20 @@ use rand::Rng;
 use gdal::vector::Geometry;
 use gdal::vector::OGRwkbGeometryType::wkbPoint;
 use gdal::vector::OGRwkbGeometryType::wkbPolygon;
-use gdal::vector::OGRwkbGeometryType::wkbLinearRing;
 use ordered_float::NotNan;
 
 use crate::errors::CommandError;
-use crate::utils::RoundHundredths;
 use crate::utils::Extent;
 use crate::utils::Point;
 use crate::utils::GeometryGeometryIterator;
+use crate::utils::create_polygon;
 use crate::world_map::VoronoiTile;
 
-pub(crate) const DEFAULT_POINT_COUNT: f64 = 10_000.0;
-
 enum PointGeneratorPhase {
-    Top(f64),
-    Bottom(f64),
-    Left(f64),
-    Right(f64),
+    NortheastInfinity,
+    SoutheastInfinity,
+    SouthwestInfinity,
+    NorthwestInfinity,
     Random(f64,f64),
     Done
 }
@@ -33,12 +30,6 @@ pub(crate) struct PointGenerator<Random: Rng> {
     random: Random,
     extent: Extent,
     spacing: f64,
-    offset: f64,
-    boundary_width: f64,
-    boundary_height: f64,
-    boundary_count_x: f64,
-    boundary_count_y: f64,
-    radius: f64,
     jittering: f64,
     double_jittering: f64,
     phase: PointGeneratorPhase,
@@ -47,39 +38,19 @@ pub(crate) struct PointGenerator<Random: Rng> {
 
 impl<Random: Rng> PointGenerator<Random> {
 
-    const INITIAL_INDEX: f64 = 0.5;
-
-    pub(crate) fn default_spacing_for_extent(spacing: Option<f64>, extent: &Extent) -> f64 {
-        if let Some(spacing) = spacing {
-            spacing
-        } else {
-            ((extent.width * extent.height)/DEFAULT_POINT_COUNT).sqrt().round_hundredths()
-        }
-        
-    }
-
-    pub(crate) fn new(random: Random, extent: Extent, spacing: f64) -> Self {
-        let offset = -1.0 * spacing; 
-        let boundary_spacing: f64 = spacing * 2.0; 
-        let boundary_width = extent.width - offset * 2.0; 
-        let boundary_height = extent.height - offset * 2.0; 
-        let boundary_count_x = (boundary_width/boundary_spacing).ceil() - 1.0; 
-        let boundary_count_y = (boundary_height/boundary_spacing).ceil() - 1.0; 
+    pub(crate) fn new(random: Random, extent: Extent, est_point_count: usize) -> Self {
+        let density = est_point_count as f64/(extent.width*extent.height); // number of points per unit square
+        let unit_point_count = density.sqrt(); // number of points along a line of unit length
+        let spacing = 1.0/unit_point_count; // if there are x points along a unit, then it divides it into x spaces.
         let radius = spacing / 2.0; // FUTURE: Why is this called 'radius'?
         let jittering = radius * 0.9; // FUTURE: Customizable factor?
         let double_jittering = jittering * 2.0;
-        let phase = PointGeneratorPhase::Top(Self::INITIAL_INDEX); 
+        let phase = PointGeneratorPhase::NortheastInfinity;// Top(Self::INITIAL_INDEX); 
 
         Self {
             random,
             extent,
             spacing,
-            offset,
-            boundary_width,
-            boundary_height,
-            boundary_count_x,
-            boundary_count_y,
-            radius,
             jittering,
             double_jittering,
             phase
@@ -88,7 +59,7 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     fn estimate_points(&self) -> usize {
-        (self.boundary_count_x.floor() as usize * 2) + (self.boundary_count_y.floor() as usize * 2) + ((self.extent.width/self.spacing).floor() as usize * (self.extent.height/self.spacing).floor() as usize)
+        ((self.extent.width/self.spacing).floor() as usize * (self.extent.height/self.spacing).floor() as usize) + 4
     }
 
     fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
@@ -111,32 +82,6 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
         // Randomizing algorithms borrowed from AFMG with many modifications
 
 
-        macro_rules! horizontal {
-            ($index: ident, $this_phase: ident, $next_phase: ident, $y: expr) => {
-                if $index < self.boundary_count_x {
-                    let x = ((self.boundary_width * $index)/self.boundary_count_x + self.offset).ceil(); 
-                    self.phase = PointGeneratorPhase::$this_phase($index + 1.0);
-                    Some(self.make_point(x,$y)) 
-                } else {
-                    self.phase = PointGeneratorPhase::$next_phase(Self::INITIAL_INDEX);
-                    self.next()
-                }
-            };
-        }
-
-        macro_rules! vertical {
-            ($index: ident, $this_phase: ident, $next_phase: expr, $x: expr) => {
-                if $index < self.boundary_count_y {
-                    let y = ((self.boundary_height * $index)/self.boundary_count_y + self.offset).ceil(); 
-                    self.phase = PointGeneratorPhase::$this_phase($index + 1.0);
-                    Some(self.make_point($x,y))
-                } else {
-                    self.phase = $next_phase;
-                    self.next()
-                }                
-            };
-        }
-
         macro_rules! jitter {
             () => {
                 // gen creates random number between >= 0.0, < 1.0
@@ -144,19 +89,31 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
             };
         }
 
-        match self.phase {
-            PointGeneratorPhase::Top(index) => horizontal!(index,Top,Bottom,self.offset),
-            PointGeneratorPhase::Bottom(index) => horizontal!(index,Bottom,Left,self.boundary_height + self.offset),
-            PointGeneratorPhase::Left(index) => vertical!(index,Left,PointGeneratorPhase::Right(Self::INITIAL_INDEX),self.offset),
-            PointGeneratorPhase::Right(index) => vertical!(index,Right,PointGeneratorPhase::Random(self.radius,self.radius),self.boundary_width+ self.offset),
-            PointGeneratorPhase::Random(x, y) => if y < self.extent.height {
-                if x < self.extent.width {
-                    let x_j = (x + jitter!()).round_hundredths().min(self.extent.width);
-                    let y_j = (y + jitter!()).round_hundredths().min(self.extent.height);
-                    self.phase = PointGeneratorPhase::Random(x + self.spacing, y);
+        match &self.phase { // TODO: Do I need a reference here?
+            PointGeneratorPhase::NortheastInfinity => {
+                self.phase = PointGeneratorPhase::SoutheastInfinity;
+                Some(self.make_point(self.extent.width*2.0, self.extent.height*2.0))
+            },
+            PointGeneratorPhase::SoutheastInfinity => {
+                self.phase = PointGeneratorPhase::SouthwestInfinity;
+                Some(self.make_point(self.extent.width*2.0, -self.extent.height))
+            },
+            PointGeneratorPhase::SouthwestInfinity => {
+                self.phase = PointGeneratorPhase::NorthwestInfinity;
+                Some(self.make_point(-self.extent.width, -self.extent.height))
+            },
+            PointGeneratorPhase::NorthwestInfinity => {
+                self.phase = PointGeneratorPhase::Random(0.0,0.0);
+                Some(self.make_point(-self.extent.width, self.extent.height*2.0))
+            },
+            PointGeneratorPhase::Random(x, y) => if y < &self.extent.height {
+                if x < &self.extent.width {
+                    let x_j = (x + jitter!()).clamp(0.0,self.extent.width);
+                    let y_j = (y + jitter!()).clamp(0.0,self.extent.height);
+                    self.phase = PointGeneratorPhase::Random(x + self.spacing, *y);
                     Some(self.make_point(x_j,y_j))
                 } else {
-                    self.phase = PointGeneratorPhase::Random(self.radius, y + self.spacing);
+                    self.phase = PointGeneratorPhase::Random(0.0, y + self.spacing);
                     self.next()
                 }
                 
@@ -237,22 +194,31 @@ impl Iterator for DelaunayGenerator {
 
 enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> {
     Unstarted(GeometryIterator),
-    Started(IntoIter<Point,Vec<Point>>),
-    Done
+    Started(IntoIter<Point,VoronoiInfo>)
 }
 
 pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> {
-    phase: VoronoiGeneratorPhase<GeometryIterator>
+    phase: VoronoiGeneratorPhase<GeometryIterator>,
+    extent: Extent,
+    extent_geo: Geometry
 
+}
+
+struct VoronoiInfo {
+    id: i64, // can't be usize because of constraints of database
+    vertices: Vec<Point>,
 }
 
 impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGenerator<GeometryIterator> {
 
-    pub(crate) fn new(source: GeometryIterator) -> Self {
+    pub(crate) fn new(source: GeometryIterator, extent: Extent) -> Result<Self,CommandError> {
         let phase = VoronoiGeneratorPhase::Unstarted(source);
-        Self {
-            phase
-        }
+        let extent_geo = extent.create_geometry()?;
+        Ok(Self {
+            phase,
+            extent,
+            extent_geo
+        })
     }
 
     fn circumcenter(points: (&Point,&Point,&Point)) -> Result<Point,CommandError> {
@@ -273,7 +239,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
     
     }
 
-    fn sort_clockwise(center: &Point, points: &mut Vec<Point>)  {
+    fn sort_clockwise(center: &Point, points: &mut Vec<Point>, extent: &Extent, needs_a_trim: &mut bool)  {
         // TODO: Test this stuff...
         // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
         // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
@@ -283,6 +249,9 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
         points.sort_by(|a: &Point, b: &Point| -> Ordering
         {
+            if !*needs_a_trim {
+                *needs_a_trim = (!extent.contains(a)) || (!extent.contains(b))
+            }
             let a_run = a.x - center.x;
             let b_run = b.x - center.x;
 
@@ -360,25 +329,37 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    fn create_voronoi(site: Point, vertices: Vec<Point>) -> Result<VoronoiTile,CommandError> {
-        let mut vertices = vertices;
-        Self::sort_clockwise(&site,&mut vertices);
-        vertices.push(vertices[0].clone());
-        let mut line = Geometry::empty(wkbLinearRing)?;
-        for point in vertices {
-            line.add_point_2d(point.to_tuple())
+    fn create_voronoi(site: Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<VoronoiTile>,CommandError> {
+        if (voronoi.vertices.len() >= 3) && extent.contains(&site) {
+            // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
+            // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
+            // to clip the edges.
+            let mut vertices = voronoi.vertices;
+            // sort the vertices clockwise to make sure it's a real polygon.
+            let mut needs_a_trim = false;
+            Self::sort_clockwise(&site,&mut vertices,extent,&mut needs_a_trim);
+            vertices.push(vertices[0].clone());
+            let polygon = create_polygon(vertices)?;
+            let polygon = if needs_a_trim {
+                // intersection code is not trivial, just let someone else do it.
+                polygon.intersection(extent_geo)
+            } else {
+                Some(polygon)
+            };
+            Ok(polygon.map(|a| VoronoiTile::new(a,site,voronoi.id,Vec::new())))
+        } else {
+            // In any case, these would result in either a line or a point, not even a sliver.
+            Ok(None)
         }
-        let mut polygon = Geometry::empty(wkbPolygon)?;
-        polygon.add_geometry(line)?;
-        Ok(VoronoiTile::new(polygon,site))
 
     }
 
-    fn generate_voronoi(source: &mut GeometryIterator) -> Result<IntoIter<Point,Vec<Point>>,CommandError> {
+    fn generate_voronoi(source: &mut GeometryIterator) -> Result<IntoIter<Point,VoronoiInfo>,CommandError> {
 
         // Calculate a map of sites with a list of triangle circumcenters
-        let mut sites: HashMap<Point, Vec<Point>> = HashMap::new(); // site,triangle_circumcenter
+        let mut sites: HashMap<Point, VoronoiInfo> = HashMap::new(); // site, voronoi info
 
+        let mut voronoi_id: i64 = 0;
         for geometry in source {
             let geometry = geometry?;
             
@@ -401,30 +382,27 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {
+                voronoi_id += 1;
+
                 match sites.entry(point) {
-                    Entry::Occupied(mut entry) => entry.get_mut().push(circumcenter.clone()),
+                    Entry::Occupied(mut entry) => {
+                        let entry = entry.get_mut();
+                        entry.vertices.push(circumcenter.clone());
+                    },
                     Entry::Vacant(entry) => {
-                        entry.insert(vec![circumcenter.clone()]);
+                        entry.insert(VoronoiInfo {
+                            id: voronoi_id,
+                            vertices: vec![circumcenter.clone()]
+                        });
                     },
                 }
+
             }
 
         }
 
         Ok(sites.into_iter())
 
-        // TODO: Actually, this is where we can stop and return the map iterator.
-        // the generator can call the "create_voronoi" on each item.
-        /*
-
-
-        let polygons = Vec::new();
-
-        let geometries = sites.map(Self::create_voronoi).collect()?;
-
-
-        Ok(geometries)
-        */
     }
 
     // this function is optional to call, it will automatically be called by the iterator.
@@ -456,13 +434,18 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
                     Err(e) => Some(Err(e)),
                 }
             },
-            VoronoiGeneratorPhase::Started(iter) => if let Some(value) = iter.next() {
-                Some(Self::create_voronoi(value.0, value.1))
-            } else {
-                self.phase = VoronoiGeneratorPhase::Done;
-                None
-            },
-            VoronoiGeneratorPhase::Done => None,
+            VoronoiGeneratorPhase::Started(iter) => {
+                let mut result = None;
+                while let Some(value) = iter.next() {
+                    // create_voronoi returns none for various reasons if the polygon shouldn't be written. 
+                    // If it does that, I have to keep trying. 
+                    result = Self::create_voronoi(value.0, value.1,&self.extent,&self.extent_geo).transpose();
+                    if let Some(_) = result {
+                        break;
+                    }
+                }
+                result
+            }
         }
     }
 }

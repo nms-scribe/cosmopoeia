@@ -10,6 +10,8 @@ use gdal::vector::LayerAccess;
 use gdal::vector::FeatureIterator;
 use gdal::vector::OGRwkbGeometryType::wkbNone;
 use gdal::vector::OGRwkbGeometryType::wkbGeometryCollection;
+use gdal::vector::OGRwkbGeometryType::wkbPolygon;
+use gdal::vector::OGRwkbGeometryType::wkbLinearRing;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -56,6 +58,25 @@ impl Extent {
             width,
             height
         }
+    }
+
+    pub(crate) fn contains(&self,point: &Point) -> bool {
+        let x = point.x.into_inner();
+        let y = point.y.into_inner();
+        (x >= self.west) &&
+           (x <= (self.west + self.width)) &&
+           (y >= self.south) &&
+           (y <= (self.south + self.height))
+
+    }
+
+    pub(crate) fn create_geometry(&self) -> Result<Geometry,CommandError> {
+        let mut vertices = Vec::new();
+        vertices.push((self.west,self.south).try_into()?);
+        vertices.push((self.west,self.south+self.height).try_into()?);
+        vertices.push((self.west+self.width,self.south+self.height).try_into()?);
+        vertices.push((self.west+self.width,self.south).try_into()?);
+        create_polygon(vertices)
     }
 
 }
@@ -191,6 +212,18 @@ impl TryFrom<(NotNan<f64>,NotNan<f64>)> for Point {
     }
 }
 
+impl TryFrom<(f64,f64)> for Point {
+
+    type Error = FloatIsNan;
+
+    fn try_from(value: (f64,f64)) -> Result<Self, Self::Error> {
+        Ok(Self {
+            x: value.0.try_into()?,
+            y: value.1.try_into()?
+        })
+    }
+}
+
 impl std::ops::Sub for &Point {
     type Output = Point;
 
@@ -211,4 +244,20 @@ impl std::ops::Add for &Point {
             y: self.y + rhs.y,
         }
     }
+}
+
+pub(crate) fn create_polygon(vertices: Vec<Point>) -> Result<Geometry,CommandError> {
+    // close the polygon if necessary
+    let mut vertices = vertices;
+    if vertices.get(0) != vertices.last() {
+        vertices.push(vertices[0].clone())
+    }
+    let mut line = Geometry::empty(wkbLinearRing)?;
+    for point in vertices {
+        line.add_point_2d(point.to_tuple())
+    }
+    let mut polygon = Geometry::empty(wkbPolygon)?;
+    polygon.add_geometry(line)?;
+    Ok(polygon)
+
 }

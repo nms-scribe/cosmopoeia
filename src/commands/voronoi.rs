@@ -10,6 +10,7 @@ use crate::progress::ProgressObserver;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::VoronoiGenerator;
 use crate::world_map::VoronoiTile;
+use crate::raster::RasterMap;
 
 
     
@@ -23,6 +24,9 @@ subcommand_def!{
         target: PathBuf,
 
         #[arg(long)]
+        extents: PathBuf,
+
+        #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
         overwrite: bool
     }
@@ -34,11 +38,16 @@ impl Task for DevVoronoiFromTriangles {
 
         let mut progress = ConsoleProgressBar::new();
 
+        let extent = {
+            let source = RasterMap::open(self.extents)?;
+            source.bounds()?.extent()
+        };
+
         let mut target = WorldMap::edit(self.target)?;
 
         let mut triangles = target.triangles_layer()?;
     
-        let mut generator = VoronoiGenerator::new(triangles.read_triangles());
+        let mut generator = VoronoiGenerator::new(triangles.read_triangles(),extent)?;
     
         progress.start_unknown_endpoint(|| "Generating voronoi.");
         
