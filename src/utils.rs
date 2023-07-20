@@ -28,18 +28,8 @@ pub(crate) fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
     }
 }
 
-pub(crate) trait RoundHundredths {
 
-    fn round_hundredths(&self) -> Self;
-}
-
-impl RoundHundredths for f64 {
-
-    fn round_hundredths(&self) -> Self {
-        (self * 100.0).round() / 100.0
-    }
-}
-
+#[derive(Clone)]
 pub(crate) struct Extent {
     pub(crate) height: f64,
     pub(crate) width: f64,

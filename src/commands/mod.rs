@@ -5,6 +5,7 @@ use crate::errors::CommandError;
 
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod dev;
+mod convert_heightmap;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -51,6 +52,8 @@ command!{
     dev::DevTrianglesFromPoints;
     dev::DevVoronoiFromTriangles;
     dev::DevVoronoiNeighbors;
+    dev::DevSampleHeightsToVoronoi;
+    convert_heightmap::ConvertHeightmap;
 }
 
 

@@ -17,6 +17,7 @@ use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
+use crate::raster::RasterMap;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
@@ -183,11 +184,15 @@ impl<'lifetime> TilesLayer<'lifetime> {
     const FIELD_SITE_X: &str = "site_x";
     const FIELD_SITE_Y: &str = "site_y";
     const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
+    const FIELD_ELEVATION: &str = "elevation";
+    const FIELD_OCEAN: &str = "is_ocean";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 3] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 5] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
-        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString)
+        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString),
+        (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
+        (Self::FIELD_OCEAN,OGRFieldType::OFTInteger)
     ];
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
@@ -275,6 +280,68 @@ impl<'lifetime> TilesLayer<'lifetime> {
         }
 
         progress.finish(|| "Neighbors calculated.");
+
+        Ok(())
+    }
+
+
+    pub(crate) fn sample_elevations<Progress: ProgressObserver>(&mut self, raster: RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
+
+        let layer = &mut self.tiles.layer;
+
+        progress.start_unknown_endpoint(|| "Reading raster");
+
+        let band = raster.read_band::<f64>(1)?;
+        let bounds = raster.bounds()?;
+
+        progress.finish(|| "Raster read.");
+
+        progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
+
+        let mut features = Vec::new();
+
+        for (i,feature) in layer.features().enumerate() {
+            features.push((i,
+                           feature.fid(),
+                           feature.field_as_double_by_name(Self::FIELD_SITE_X)?,
+                           feature.field_as_double_by_name(Self::FIELD_SITE_Y)?
+            ))
+
+        }
+
+        progress.finish(|| "Tiles read.");
+
+        progress.start_known_endpoint(|| ("Sampling elevations.",layer.feature_count() as usize));
+
+        for (i,fid,site_lon,site_lat) in features {
+
+
+            if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
+
+                let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
+
+                if let Some(elevation) = band.get_value(x, y) {
+
+                    if let Some(feature) = layer.feature(fid) {
+                        feature.set_field_double(Self::FIELD_ELEVATION, *elevation)?;
+
+                        layer.set_feature(feature)?;
+        
+                    }
+
+                }
+
+    
+            }
+
+            progress.update(|| i);
+
+
+
+
+        }
+
+        progress.finish(|| "Elevation sampled.");
 
         Ok(())
     }
@@ -441,6 +508,29 @@ impl WorldMap {
 
 
             tiles.calculate_neighbors(progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
+
+    pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(&mut self, raster: RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            tiles.sample_elevations(raster,progress)?;
 
             Ok(())
     

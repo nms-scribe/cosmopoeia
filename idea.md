@@ -236,7 +236,7 @@ To proceed on this, I can break it down into the following steps:
     [X] Delaunay Regions
     [X] Voronoi Regions
     [X] validate the output
-    [ ] compare to QGIS voronoi functions
+    [X] compare to QGIS voronoi functions
         [X] One option that might work: 
             [X] Make sure there are four "infinity" points (when generating the delaunay) at (-width,-height),(-width,2*height),(2*width,2*height),(2*width,-height)
             [X] Clamp the random points to within the extents.
@@ -255,7 +255,7 @@ To proceed on this, I can break it down into the following steps:
           each of those if they are not disjoint.
         * There's a function called set_spatial_feature on the layer that can help.
         * As this works closely with GDAL (I'm not going to implement it using my own types), it might be a function on the tile layer.
-    [ ] Sample heights from heightmap
+    [X] Sample heights from heightmap
     [ ] add Ocean Mask option vs ocean elevation.
 [ ] `gen-climate` command
     [ ] Review AFMG climate generation algorithms and add them -- we'll wait on improved algorithms until later

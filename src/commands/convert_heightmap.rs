@@ -28,6 +28,10 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
+        #[arg(long)]
+        /// The rough number of pixels horizontally separating each point [Default: a value that places about 10k points]
+        spacing: Option<f64>,
+
         #[arg(long,default_value="10000")]
         /// The rough number of pixels to generate for the image
         points: usize,
@@ -59,7 +63,7 @@ impl Task for DevPointsFromHeightmap {
 }
 
 subcommand_def!{
-    /// Creates a random points vector layer given an extent
+    /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
     pub(crate) struct DevPointsFromExtent {
         #[arg(allow_hyphen_values=true)]
@@ -111,7 +115,7 @@ impl Task for DevPointsFromExtent {
 }
 
 subcommand_def!{
-    /// Creates delaunay triangles from a points layer
+    /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
     pub(crate) struct DevTrianglesFromPoints {
 
@@ -149,7 +153,7 @@ impl Task for DevTrianglesFromPoints {
 }
 
 subcommand_def!{
-    /// Creates voronoi tiles out of a delaunay triangles layer
+    /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
     pub(crate) struct DevVoronoiFromTriangles {
 
@@ -200,7 +204,7 @@ impl Task for DevVoronoiFromTriangles {
 
 
 subcommand_def!{
-    /// Calculates neighbors for a voronoi tile layer
+    /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
     pub(crate) struct DevVoronoiNeighbors {
 
@@ -224,9 +228,9 @@ impl Task for DevVoronoiNeighbors {
 }
 
 subcommand_def!{
-    /// Samples heights from an elevation map onto a voronoi tiles layer
+    /// Creates a random points vector layer from a raster heightmap
     #[command(hide=true)]
-    pub(crate) struct DevSampleHeightsToVoronoi {
+    pub(crate) struct ConvertHeightmap {
 
         /// The path to the heightmap containing the elevation data
         source: PathBuf,
@@ -234,10 +238,23 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
+        #[arg(long,default_value="10000")]
+        /// The rough number of tiles to generate for the image
+        tiles: usize,
+
+        #[arg(long)]
+        /// Seeds for the random number generator (up to 32), note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Vec<u8>,
+
+        #[arg(long)]
+        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite: bool
+
+
     }
 }
 
-impl Task for DevSampleHeightsToVoronoi {
+impl Task for ConvertHeightmap {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -245,9 +262,48 @@ impl Task for DevSampleHeightsToVoronoi {
 
         let source = RasterMap::open(self.source)?;
 
-        let mut target = WorldMap::edit(self.target)?;
+        let extent = source.bounds()?.extent();
 
-        target.sample_elevations_on_tiles(source,&mut progress)
+        let mut target = WorldMap::create_or_edit(self.target)?;
+
+        let random = random_number_generator(self.seed);
+
+        // point generator
+
+        let mut points = PointGenerator::new(random, extent.clone(), self.tiles);
+        
+        // triangle calculator
+
+        let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(&mut progress)?);
+    
+        progress.start_unknown_endpoint(|| "Generating triangles.");
+        
+        triangles.start()?;
+    
+        progress.finish(|| "Triangles generated.");
+    
+        // voronoi calculator
+
+        let mut voronois = VoronoiGenerator::new(triangles,extent)?;
+    
+        progress.start_unknown_endpoint(|| "Generating voronoi.");
+        
+        voronois.start()?;
+    
+        progress.finish(|| "Voronoi generated.");
+
+        target.load_tile_layer(self.overwrite, voronois, &mut progress)?;
+
+        // sample elevations
+        target.sample_elevations_on_tiles(source,&mut progress)?;
+
+        // ocean layer
+        // TODO: Need to sample ocean layers.
+
+        // calculate neighbors
+
+        target.calculate_tile_neighbors(&mut progress)
+
     
     }
 }

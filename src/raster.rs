@@ -12,8 +12,8 @@ pub(crate) struct RasterBounds {
     transform_x_factor: f64,
     coord_min_y: f64,
     transform_y_factor: f64,
-    pub(crate) pixel_width: usize, // TODO: Should be usize
-    pub(crate) pixel_height: usize, // TODO: Should be usize
+    pixel_width: usize, // TODO: Should be usize
+    pixel_height: usize, // TODO: Should be usize
 }
 
 impl RasterBounds {
@@ -107,7 +107,7 @@ impl RasterMap {
         Ok(Self::new(Dataset::open(path)?))
     }
 
-    #[allow(dead_code)] pub(crate) fn read_band<DataType: GdalType + Copy>(&self,index: isize) -> Result<RasterBandBuffer<DataType>,CommandError> {
+    pub(crate) fn read_band<DataType: GdalType + Copy>(&self,index: isize) -> Result<RasterBandBuffer<DataType>,CommandError> {
         let band = if self.dataset.raster_count() > (index - 1) {
             self.dataset.rasterband(index)? // 1-based array
         } else {
