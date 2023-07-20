@@ -205,7 +205,6 @@ pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Geomet
 }
 
 struct VoronoiInfo {
-    id: i64, // can't be usize because of constraints of database
     vertices: Vec<Point>,
 }
 
@@ -346,7 +345,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             } else {
                 Some(polygon)
             };
-            Ok(polygon.map(|a| VoronoiTile::new(a,site,voronoi.id,Vec::new())))
+            Ok(polygon.map(|a| VoronoiTile::new(a,site)))
         } else {
             // In any case, these would result in either a line or a point, not even a sliver.
             Ok(None)
@@ -359,7 +358,6 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         // Calculate a map of sites with a list of triangle circumcenters
         let mut sites: HashMap<Point, VoronoiInfo> = HashMap::new(); // site, voronoi info
 
-        let mut voronoi_id: i64 = 0;
         for geometry in source {
             let geometry = geometry?;
             
@@ -382,7 +380,6 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {
-                voronoi_id += 1;
 
                 match sites.entry(point) {
                     Entry::Occupied(mut entry) => {
@@ -391,7 +388,6 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
                     },
                     Entry::Vacant(entry) => {
                         entry.insert(VoronoiInfo {
-                            id: voronoi_id,
                             vertices: vec![circumcenter.clone()]
                         });
                     },

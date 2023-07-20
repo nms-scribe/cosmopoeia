@@ -160,19 +160,15 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 pub(crate) struct VoronoiTile {
     geometry: Geometry,
-    site: Point,
-    tile_id: i64,
-    neighbor_tiles: Vec<i64>,
+    site: Point
 }
 
 impl VoronoiTile {
 
-    pub(crate) fn new(geometry: Geometry, site: Point, tile_id: i64, neighbor_tiles: Vec<i64>) -> Self {
+    pub(crate) fn new(geometry: Geometry, site: Point) -> Self {
         Self {
             geometry,
-            site,
-            tile_id,
-            neighbor_tiles
+            site
         }
     }
 }
@@ -186,17 +182,15 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     const FIELD_SITE_X: &str = "site_x";
     const FIELD_SITE_Y: &str = "site_y";
-    const FIELD_TILE_ID: &str = "tile_id";
     const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 4] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 3] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
-        (Self::FIELD_TILE_ID,OGRFieldType::OFTInteger64),
-        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTInteger64List)
+        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString)
     ];
 
-    #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
         let tiles = WorldLayer::open_from_dataset(dataset, TILES_LAYER_NAME)?;
         Ok(Self {
             tiles
@@ -218,13 +212,9 @@ impl<'lifetime> TilesLayer<'lifetime> {
         self.tiles.add(tile.geometry,&[
                 Self::FIELD_SITE_X,
                 Self::FIELD_SITE_Y,
-                Self::FIELD_TILE_ID,
-                Self::FIELD_NEIGHBOR_TILES
             ],&[
                 FieldValue::RealValue(x),
                 FieldValue::RealValue(y),
-                FieldValue::Integer64Value(tile.tile_id),
-                FieldValue::Integer64ListValue(tile.neighbor_tiles)
             ])?;
         Ok(())
 
@@ -236,6 +226,58 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     }
 
+    pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
+
+        let layer = &mut self.tiles.layer;
+
+        progress.start_known_endpoint(|| ("Calculating neighbors.",layer.feature_count() as usize));
+
+        let features: Vec<(Option<u64>,Option<Geometry>)> = layer.features().map(|feature| (feature.fid(),feature.geometry().cloned())).collect();
+
+        // # Loop through all features and find features that touch each feature
+        // for f in feature_dict.values():
+        for (i,(working_fid,working_geometry)) in features.iter().enumerate() {
+
+            if let Some(working_fid) = working_fid {
+                if let Some(working_geometry) = working_geometry {
+
+                    let envelope = working_geometry.envelope();
+                    layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
+        
+        
+                    let mut neighbors = Vec::new();
+        
+                    for intersecting_feature in layer.features() {
+        
+                        let intersecting_fid = intersecting_feature.fid().unwrap(); // TODO: unwrap?
+        
+                        if (working_fid != &intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+                            
+                            neighbors.push(intersecting_fid.to_string()) // It's annoying that I have to do this typecast
+                        }
+                    }
+                    
+                    layer.clear_spatial_filter();
+
+                    if let Some(working_feature) = layer.feature(*working_fid) {
+                        working_feature.set_field_string(Self::FIELD_NEIGHBOR_TILES, &neighbors.join(","))?;
+        
+                        layer.set_feature(working_feature)?;
+    
+                    }
+        
+    
+                }
+            }
+
+            progress.update(|| i);
+
+        }
+
+        progress.finish(|| "Neighbors calculated.");
+
+        Ok(())
+    }
 
 
 
@@ -299,6 +341,10 @@ impl WorldMap {
 
     pub(crate) fn triangles_layer(&self) -> Result<TrianglesLayer,CommandError> {
         TrianglesLayer::open_from_dataset(&self.dataset)
+    }
+
+    #[allow(dead_code)] pub(crate) fn tiles_layer(&self) -> Result<TilesLayer,CommandError> {
+        TilesLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
@@ -388,6 +434,28 @@ impl WorldMap {
 
     }
 
+    pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            tiles.calculate_neighbors(progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
 
 
 
@@ -417,6 +485,11 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
 
     pub(crate) fn create_tile_layer(&mut self, overwrite: bool) -> Result<TilesLayer,CommandError> {
         Ok(TilesLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+
+    }
+
+    pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {
+        Ok(TilesLayer::open_from_dataset(&mut self.dataset)?)
 
     }
 

@@ -50,6 +50,7 @@ command!{
     dev::DevPointsFromExtent;
     dev::DevTrianglesFromPoints;
     dev::DevVoronoiFromTriangles;
+    dev::DevVoronoiNeighbors;
 }
 
 
