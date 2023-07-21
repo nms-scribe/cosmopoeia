@@ -174,6 +174,12 @@ impl VoronoiTile {
     }
 }
 
+pub(crate) enum OceanSamplingMethod {
+    Below(f64), // any elevation below the specified value is ocean
+    AllData, // any elevation that is not nodata is ocean
+    NoData, // any elevation that is nodata is ocean
+    NoDataAndBelow(f64), // any elevation that is no data or below the specified value is ocean.
+}
 
 pub(crate) struct TilesLayer<'lifetime> {
     tiles: WorldLayer<'lifetime>
@@ -285,7 +291,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
     }
 
 
-    pub(crate) fn sample_elevations<Progress: ProgressObserver>(&mut self, raster: RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn sample_elevations<Progress: ProgressObserver>(&mut self, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
 
         let layer = &mut self.tiles.layer;
 
@@ -346,6 +352,93 @@ impl<'lifetime> TilesLayer<'lifetime> {
         Ok(())
     }
 
+    pub(crate) fn sample_ocean<Progress: ProgressObserver>(&mut self, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
+
+        let layer = &mut self.tiles.layer;
+
+        progress.start_unknown_endpoint(|| "Reading raster");
+
+        let band = raster.read_band::<f64>(1)?;
+        let bounds = raster.bounds()?;
+        let no_data_value = band.no_data_value();
+
+        progress.finish(|| "Raster read.");
+
+        progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
+
+        let mut features = Vec::new();
+
+        for (i,feature) in layer.features().enumerate() {
+            features.push((i,
+                           feature.fid(),
+                           feature.field_as_double_by_name(Self::FIELD_SITE_X)?,
+                           feature.field_as_double_by_name(Self::FIELD_SITE_Y)?
+            ))
+
+        }
+
+        progress.finish(|| "Tiles read.");
+
+        progress.start_known_endpoint(|| ("Sampling oceans.",layer.feature_count() as usize));
+
+        for (i,fid,site_lon,site_lat) in features {
+
+
+            if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
+
+                let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
+
+                if let Some(feature) = layer.feature(fid) {
+
+                    let is_ocean = if let Some(elevation) = band.get_value(x, y) {
+                        let is_no_data = match no_data_value {
+                            Some(no_data_value) if no_data_value.is_nan() => elevation.is_nan(),
+                            Some(no_data_value) => elevation == no_data_value,
+                            None => false,
+                        };
+
+                        match method {
+                            OceanSamplingMethod::Below(_) if is_no_data => false,
+                            OceanSamplingMethod::Below(below) => elevation < &below,
+                            OceanSamplingMethod::AllData => !is_no_data,
+                            OceanSamplingMethod::NoData => is_no_data,
+                            OceanSamplingMethod::NoDataAndBelow(below) => is_no_data || (elevation < &below),
+                        }
+
+                    } else {
+
+                        match method {
+                            OceanSamplingMethod::Below(_) => false,
+                            OceanSamplingMethod::AllData => false,
+                            OceanSamplingMethod::NoData => true,
+                            OceanSamplingMethod::NoDataAndBelow(_) => true,
+                        }
+
+                    };
+
+                    let is_ocean = if is_ocean { 1 } else { 0 };
+
+                    feature.set_field_integer(Self::FIELD_OCEAN, is_ocean)?;
+
+                    layer.set_feature(feature)?;
+    
+                }
+
+
+    
+            }
+
+            progress.update(|| i);
+
+
+
+
+        }
+
+        progress.finish(|| "Oceans sampled.");
+
+        Ok(())
+    }
 
 
 }
@@ -524,13 +617,36 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(&mut self, raster: RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(&mut self, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut tiles = target.edit_tile_layer()?;
 
 
             tiles.sample_elevations(raster,progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
+
+    pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(&mut self, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            tiles.sample_ocean(raster,method,progress)?;
 
             Ok(())
     

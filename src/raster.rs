@@ -65,15 +65,16 @@ impl RasterBounds {
 
 
 
-#[allow(dead_code)] pub(crate) struct RasterBandBuffer<DataType: GdalType> {
+pub(crate) struct RasterBandBuffer<DataType: GdalType> {
     width: usize,
-    buffer: Buffer<DataType>
+    buffer: Buffer<DataType>,
+    no_data: Option<f64>
 }
 
 
 impl<DataType: GdalType> RasterBandBuffer<DataType> {
 
-    #[allow(dead_code)] pub(crate) fn get_value(&self, x: f64, y: f64) -> Option<&DataType> {
+    pub(crate) fn get_value(&self, x: f64, y: f64) -> Option<&DataType> {
         if y.is_sign_positive() && x.is_sign_positive() {
             let idx = ((y.floor() as usize) * self.width) + (x.floor() as usize);
             if idx < self.buffer.data.len() {
@@ -85,6 +86,10 @@ impl<DataType: GdalType> RasterBandBuffer<DataType> {
             None
         }
 
+    }
+
+    pub(crate) fn no_data_value(&self) -> &Option<f64> {
+        &self.no_data
     }
     
 } 
@@ -116,9 +121,11 @@ impl RasterMap {
 
         let buffer = band.read_band_as::<DataType>()?;
         let width = self.dataset.raster_size().0;
+        let no_data = band.no_data_value();
         Ok(RasterBandBuffer { 
             buffer,
-            width
+            width,
+            no_data
         })
     }
 
@@ -135,5 +142,6 @@ impl RasterMap {
         })
 
     }
+
 }
 

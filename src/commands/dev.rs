@@ -16,6 +16,7 @@ use crate::algorithms::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::algorithms::VoronoiGenerator;
 use crate::world_map::VoronoiTile;
+use crate::world_map::OceanSamplingMethod;
 
 
 subcommand_def!{
@@ -247,8 +248,54 @@ impl Task for DevSampleHeightsToVoronoi {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.sample_elevations_on_tiles(source,&mut progress)
+        target.sample_elevations_on_tiles(&source,&mut progress)
     
     }
 }
+
+subcommand_def!{
+    /// Samples heights from an elevation map onto a voronoi tiles layer
+    #[command(hide=true)]
+    pub(crate) struct DevSampleOceanToVoronoi {
+
+        /// The path to the heightmap containing the elevation data
+        source: PathBuf,
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        /// If there is no data at the specified location, it is considered ocean
+        #[arg(long)]
+        no_data: bool,
+
+        // If the value is below this value, it is considered ocean. If not specified, all data will be ocean.
+        #[arg(long)]
+        below: Option<f64>,
+
+    }
+}
+
+impl Task for DevSampleOceanToVoronoi {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let source = RasterMap::open(self.source)?;
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        let ocean_method = match (self.no_data,self.below) {
+            (true, None) => OceanSamplingMethod::NoData,
+            (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
+            (false, None) => OceanSamplingMethod::AllData,
+            (false, Some(a)) => OceanSamplingMethod::Below(a),
+        };
+
+
+        target.sample_ocean_on_tiles(&source,ocean_method,&mut progress)
+    
+    }
+}
+
 

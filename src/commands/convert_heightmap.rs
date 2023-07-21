@@ -16,7 +16,7 @@ use crate::algorithms::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::algorithms::VoronoiGenerator;
 use crate::world_map::VoronoiTile;
-
+use crate::world_map::OceanSamplingMethod;
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
@@ -238,6 +238,18 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
+        /// specifies a layer to sample ocean status from, if specified, all data cells on the layer will be considered ocean, unless you specify another ocean option. If not specified only non-data cells will be considered ocean unless you specify another option.
+        #[arg(long)]
+        ocean: Option<PathBuf>,
+
+        /// if specified, tiles which have no elevation data are considered ocean.
+        #[arg(long)]
+        ocean_no_data: bool,
+
+        /// if specified, tiles below the specified value are considered ocean.
+        #[arg(long)]
+        ocean_below: Option<f64>,
+
         #[arg(long,default_value="10000")]
         /// The rough number of tiles to generate for the image
         tiles: usize,
@@ -295,10 +307,29 @@ impl Task for ConvertHeightmap {
         target.load_tile_layer(self.overwrite, voronois, &mut progress)?;
 
         // sample elevations
-        target.sample_elevations_on_tiles(source,&mut progress)?;
+        target.sample_elevations_on_tiles(&source,&mut progress)?;
 
         // ocean layer
-        // TODO: Need to sample ocean layers.
+        let (ocean,ocean_method) = if let Some(ocean) = self.ocean {
+            (RasterMap::open(ocean)?,
+            match (self.ocean_no_data,self.ocean_below) {
+                (true, None) => OceanSamplingMethod::NoData,
+                (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
+                (false, None) => OceanSamplingMethod::AllData,
+                (false, Some(a)) => OceanSamplingMethod::Below(a),
+            })
+        } else {
+            (source,match (self.ocean_no_data,self.ocean_below) {
+                (true, None) => OceanSamplingMethod::NoData,
+                (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
+                (false, None) => OceanSamplingMethod::NoData,
+                (false, Some(a)) => OceanSamplingMethod::Below(a),
+            })
+        };
+
+
+        target.sample_ocean_on_tiles(&ocean,ocean_method,&mut progress)?;
+    
 
         // calculate neighbors
 

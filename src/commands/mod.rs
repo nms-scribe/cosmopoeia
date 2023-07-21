@@ -53,6 +53,7 @@ command!{
     dev::DevVoronoiFromTriangles;
     dev::DevVoronoiNeighbors;
     dev::DevSampleHeightsToVoronoi;
+    dev::DevSampleOceanToVoronoi;
     convert_heightmap::ConvertHeightmap;
 }
 
