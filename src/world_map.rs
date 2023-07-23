@@ -23,6 +23,11 @@ pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
 pub(crate) const TILES_LAYER_NAME: &str = "tiles";
 
+// FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
+// The solution to this would probably require rewriting the gdal crate, so I'm not going to bother with this at this time, I'll just have to be more careful. 
+// A fairly easy solution is to present a struct Geometry<Type>, where Type is an empty struct or a const numeric type parameter. Then, impl Geometry<Polygon> or Geometry<Point>, etc. This is actually an improvement over the geo_types crate as well. When creating new values of the type, the geometry_type of the inner pointer would have to be validated, possibly causing an error. But it would happen early in the program, and wouldn't have to be checked again.
+
+
 pub(crate) struct WorldLayer<'lifetime> {
     layer: Layer<'lifetime>
 }
@@ -243,11 +248,17 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
         progress.start_known_endpoint(|| ("Calculating neighbors.",layer.feature_count() as usize));
 
-        let features: Vec<(Option<u64>,Option<Geometry>)> = layer.features().map(|feature| (feature.fid(),feature.geometry().cloned())).collect();
+        let features: Result<Vec<(Option<u64>,Option<Geometry>,Option<f64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
+            feature.fid(),
+            feature.geometry().cloned(),
+            feature.field_as_double_by_name(Self::FIELD_SITE_X)?,
+            feature.field_as_double_by_name(Self::FIELD_SITE_Y)?,
+        ))).collect();
+        let features = features?;
 
         // # Loop through all features and find features that touch each feature
         // for f in feature_dict.values():
-        for (i,(working_fid,working_geometry)) in features.iter().enumerate() {
+        for (i,(working_fid,working_geometry,site_x,site_y)) in features.iter().enumerate() {
 
             if let Some(working_fid) = working_fid {
                 if let Some(working_geometry) = working_geometry {
@@ -260,12 +271,30 @@ impl<'lifetime> TilesLayer<'lifetime> {
         
                     for intersecting_feature in layer.features() {
         
-                        let intersecting_fid = intersecting_feature.fid().unwrap(); // TODO: unwrap?
-        
-                        if (working_fid != &intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+                        if let Some(intersecting_fid) = intersecting_feature.fid() {
+                            if (working_fid != &intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+
+                                let neighbor_site_x = intersecting_feature.field_as_double_by_name(Self::FIELD_SITE_X)?;
+                                let neighbor_site_y = intersecting_feature.field_as_double_by_name(Self::FIELD_SITE_Y)?;
+                                let neighbor_angle = if let (Some(site_x),Some(site_y),Some(neighbor_site_x),Some(neighbor_site_y)) = (site_x,site_y,neighbor_site_x,neighbor_site_y) {
+                                    // needs to be clockwise, from the north, with a value from 0..360
+                                    // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+                                    let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                                    // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+                                    let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
+                                    // And then, to get the values in the range from 0..360, mod it.
+                                    let clamped = clockwise_from_north % 360.0;
+                                    clamped
+                                } else {
+                                    // in the off chance that we actually are missing data, this marks an appropriate angle.
+                                    -360.0 
+                                };
                             
-                            neighbors.push(intersecting_fid.to_string()) // It's annoying that I have to do this typecast
+                                neighbors.push(format!("{}:{}",intersecting_fid,neighbor_angle)) 
+                            }
+    
                         }
+        
                     }
                     
                     layer.clear_spatial_filter();

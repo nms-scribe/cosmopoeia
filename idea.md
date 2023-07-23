@@ -119,6 +119,8 @@ Land below sea level exists. NFMG does not define its ocean based on a specific 
 
 The climate model used by AFMG is simplistic. Although I could play around with it more, one noticeable problem is the lack of distinct climates from west and east coast. I think at first I will use the algorithm as straight as I can get it from AFMG. Eventually, however, I want something that at least looks at air pressure for generating winds. I'm just not going to go as for as using a real climate model tool. However, the tools as above should be enough to be able to pull in that kind of data if available.
 
+A second problem is that there doesn't seem to be any accounting for the Earth's tilt. Although the width of the temperate zone vs polar can be modified, based on changes to the curve, I feel there might be improvements to the climate calculations if I can get temperature averages for each of the four seasons at least. At the least I can have "cold winters" and "hot summers".
+
 ## People Models
 
 I don't know the details of AFMG's algorithms for generating political features. I don't know if there's something I can improve. I just know that it outputs results that seem odd sometimes. I have to play around with the assumptions for these, maybe what AFMG has are more sufficient than I'm seeing.
@@ -127,103 +129,317 @@ One thing I will change, are the "types" of cultures. I will also add the abilit
 
 # AFMG Algorithms
 
-## Generating Voronoi
+## Temperature
 
-`generateGrid`:
-```
-function generateGrid() {
-  Math.random = aleaPRNG(seed); // reset PRNG // NMS: Appears to be a random number generator
-  const {spacing, cellsDesired, boundary, points, cellsX, cellsY} = placePoints();
-  const {cells, vertices} = calculateVoronoi(points, boundary);
-  return {spacing, cellsDesired, boundary, points, cellsX, cellsY, cells, vertices, seed};
-}
-```
+```js
+function calculateTemperatures() {
+  TIME && console.time("calculateTemperatures");
+  const cells = grid.cells;
+  cells.temp = new Int8Array(cells.i.length); // temperature array
 
-`placePoints`: `graphWidth` and `graphHeight` appear to be the width and height of the canvas
-```
-function placePoints() {
-  TIME && console.time("placePoints");
-  const cellsDesired = +byId("pointsInput").dataset.cells; // NMS: This is `Options` > `Points Number`
-  const spacing = round(Math.sqrt((graphWidth * graphHeight) / cellsDesired), 2); // spacing between points before jirrering
+  const tEq = +temperatureEquatorInput.value;
+  const tPole = +temperaturePoleInput.value;
+  const tDelta = tEq - tPole;
+  const int = d3.easePolyInOut.exponent(0.5); // interpolation function
 
-  const boundary = getBoundaryPoints(graphWidth, graphHeight, spacing);
-  const points = getJitteredGrid(graphWidth, graphHeight, spacing); // points of jittered square grid
-  const cellsX = Math.floor((graphWidth + 0.5 * spacing - 1e-10) / spacing);
-  const cellsY = Math.floor((graphHeight + 0.5 * spacing - 1e-10) / spacing);
-  TIME && console.timeEnd("placePoints");
+  d3.range(0, cells.i.length, grid.cellsX).forEach(function (r) {
+    const y = grid.points[r][1];
+    const lat = Math.abs(mapCoordinates.latN - (y / graphHeight) * mapCoordinates.latT); // [0; 90]
+    const initTemp = tEq - int(lat / 90) * tDelta;
+    for (let i = r; i < r + grid.cellsX; i++) {
+      cells.temp[i] = minmax(initTemp - convertToFriendly(cells.h[i]), -128, 127);
+    }
+  });
 
-  return {spacing, cellsDesired, boundary, points, cellsX, cellsY};
-}
-```
-
-`getBoundaryPoints`
-```
-function getBoundaryPoints(width, height, spacing) {
-  const offset = rn(-1 * spacing);
-  const bSpacing = spacing * 2;
-  const w = width - offset * 2;
-  const h = height - offset * 2;
-  const numberX = Math.ceil(w / bSpacing) - 1;
-  const numberY = Math.ceil(h / bSpacing) - 1;
-  const points = [];
-
-  for (let i = 0.5; i < numberX; i++) {
-    let x = Math.ceil((w * i) / numberX + offset);
-    points.push([x, offset], [x, h + offset]);
+  // temperature decreases by 6.5 degree C per 1km
+  function convertToFriendly(h) {
+    if (h < 20) return 0;
+    const exponent = +heightExponentInput.value;
+    const height = Math.pow(h - 18, exponent);
+    return rn((height / 1000) * 6.5);
   }
 
-  for (let i = 0.5; i < numberY; i++) {
-    let y = Math.ceil((h * i) / numberY + offset);
-    points.push([offset, y], [w + offset, y]);
-  }
-
-  return points;
+  TIME && console.timeEnd("calculateTemperatures");
 }
 ```
 
-`getJitteredGrid`
-```
-function getJitteredGrid(width, height, spacing) {
-  const radius = spacing / 2; // square radius
-  const jittering = radius * 0.9; // max deviation
-  const doubleJittering = jittering * 2;
-  const jitter = () => Math.random() * doubleJittering - jittering;
+Analysis:
 
-  let points = [];
-  for (let y = radius; y < height; y += spacing) {
-    for (let x = radius; x < width; x += spacing) {
-      const xj = Math.min(rn(x + jitter(), 2), width);
-      const yj = Math.min(rn(y + jitter(), 2), height);
-      points.push([xj, yj]);
+* temp_equator = input (default 26, degrees in celsius, no noticeable limits)
+* temp_pole = input (default -29)
+* temp_delta = temp_equator - temp_pole
+* int = `d3.easePolyInOut.exponent(0.5)` -- comments say interpolation function. But the docs talk about easing. It returns a function "which takes a normalized time t and returns the corresponding “eased” time tʹ". Further exploration indicates it is used to change the "speed" of animation over the time that the animation is taking place. So, in effect, it creates a "curve" function. The 0.5 is the exponent. 
+  * This is the function returned from that, where e = 0.5 from the argument:
+    ```js
+    function polyInOut(t) {
+      return ((t *= 2) <= 1 ? Math.pow(t, e) : 2 - Math.pow(2 - t, e)) / 2;
+    }
+    ```
+  * `t` is supposed to be a value from 0 to 1. If t <= 0.5 (`(t *= 2) <= 1`) then the function above is `y = ((2x)^(1/2))/2`. If t is greater, then the function is `y = (2 - (2-x)^(1/2))/2`. The two functions both create a sort of parabola. The first one starts curving up steep at 0 (the pole) and then flattens out to almost diagonal at 0.5. The second one continues the diagonal that curves more steeply up towards 1 (the equator). I'm not sure whey this curve was chosen, I would have expected a flatter curve at the equator.
+* for each tile (I'm assuming that's what the "range" function is doing here)
+  * lat = latitude of cell
+  * init_temp = temp_equator - int(lat/90) * temp_delta;
+  * tile.temperature = clamp(init_temp - convertToFriendly(tile.elevation),-128,127)
+* convertToFriendly(elevation) -- this is really just an adabiatic temperature reduction.
+  * if elevation < 20 return 0;
+  * exponent = input (value from 1.5 to 2.2, configured in the Units dialog)
+  * height = (elevation-18)^exponent;
+  * return round((height/1000)*6.5,2);
+
+This algorithm is fairly straightforward, even if I might disagree with some of it.
+
+## Precipitation
+
+```js
+function generatePrecipitation() {
+  TIME && console.time("generatePrecipitation");
+  prec.selectAll("*").remove();
+  const {cells, cellsX, cellsY} = grid;
+  cells.prec = new Uint8Array(cells.i.length); // precipitation array
+
+  const cellsNumberModifier = (pointsInput.dataset.cells / 10000) ** 0.25;
+  const precInputModifier = precInput.value / 100;
+  const modifier = cellsNumberModifier * precInputModifier;
+
+  const westerly = [];
+  const easterly = [];
+  let southerly = 0;
+  let northerly = 0;
+
+  // precipitation modifier per latitude band
+  // x4 = 0-5 latitude: wet through the year (rising zone)
+  // x2 = 5-20 latitude: wet summer (rising zone), dry winter (sinking zone)
+  // x1 = 20-30 latitude: dry all year (sinking zone)
+  // x2 = 30-50 latitude: wet winter (rising zone), dry summer (sinking zone)
+  // x3 = 50-60 latitude: wet all year (rising zone)
+  // x2 = 60-70 latitude: wet summer (rising zone), dry winter (sinking zone)
+  // x1 = 70-85 latitude: dry all year (sinking zone)
+  // x0.5 = 85-90 latitude: dry all year (sinking zone)
+  const latitudeModifier = [4, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0.5];
+  const MAX_PASSABLE_ELEVATION = 85;
+
+  // define wind directions based on cells latitude and prevailing winds there
+  d3.range(0, cells.i.length, cellsX).forEach(function (c, i) {
+    const lat = mapCoordinates.latN - (i / cellsY) * mapCoordinates.latT;
+    const latBand = ((Math.abs(lat) - 1) / 5) | 0;
+    const latMod = latitudeModifier[latBand];
+    const windTier = (Math.abs(lat - 89) / 30) | 0; // 30d tiers from 0 to 5 from N to S
+    const {isWest, isEast, isNorth, isSouth} = getWindDirections(windTier);
+
+    if (isWest) westerly.push([c, latMod, windTier]);
+    if (isEast) easterly.push([c + cellsX - 1, latMod, windTier]);
+    if (isNorth) northerly++;
+    if (isSouth) southerly++;
+  });
+
+  // distribute winds by direction
+  if (westerly.length) passWind(westerly, 120 * modifier, 1, cellsX);
+  if (easterly.length) passWind(easterly, 120 * modifier, -1, cellsX);
+
+  const vertT = southerly + northerly;
+  if (northerly) {
+    const bandN = ((Math.abs(mapCoordinates.latN) - 1) / 5) | 0;
+    const latModN = mapCoordinates.latT > 60 ? d3.mean(latitudeModifier) : latitudeModifier[bandN];
+    const maxPrecN = (northerly / vertT) * 60 * modifier * latModN;
+    passWind(d3.range(0, cellsX, 1), maxPrecN, cellsX, cellsY);
+  }
+
+  if (southerly) {
+    const bandS = ((Math.abs(mapCoordinates.latS) - 1) / 5) | 0;
+    const latModS = mapCoordinates.latT > 60 ? d3.mean(latitudeModifier) : latitudeModifier[bandS];
+    const maxPrecS = (southerly / vertT) * 60 * modifier * latModS;
+    passWind(d3.range(cells.i.length - cellsX, cells.i.length, 1), maxPrecS, -cellsX, cellsY);
+  }
+
+  function getWindDirections(tier) {
+    const angle = options.winds[tier];
+
+    const isWest = angle > 40 && angle < 140;
+    const isEast = angle > 220 && angle < 320;
+    const isNorth = angle > 100 && angle < 260;
+    const isSouth = angle > 280 || angle < 80;
+
+    return {isWest, isEast, isNorth, isSouth};
+  }
+
+  function passWind(source, maxPrec, next, steps) {
+    const maxPrecInit = maxPrec;
+
+    for (let first of source) {
+      if (first[0]) {
+        maxPrec = Math.min(maxPrecInit * first[1], 255);
+        first = first[0];
+      }
+
+      let humidity = maxPrec - cells.h[first]; // initial water amount
+      if (humidity <= 0) continue; // if first cell in row is too elevated consider wind dry
+
+      for (let s = 0, current = first; s < steps; s++, current += next) {
+        if (cells.temp[current] < -5) continue; // no flux in permafrost
+
+        if (cells.h[current] < 20) {
+          // water cell
+          if (cells.h[current + next] >= 20) {
+            cells.prec[current + next] += Math.max(humidity / rand(10, 20), 1); // coastal precipitation
+          } else {
+            humidity = Math.min(humidity + 5 * modifier, maxPrec); // wind gets more humidity passing water cell
+            cells.prec[current] += 5 * modifier; // water cells precipitation (need to correctly pour water through lakes)
+          }
+          continue;
+        }
+
+        // land cell
+        const isPassable = cells.h[current + next] <= MAX_PASSABLE_ELEVATION;
+        const precipitation = isPassable ? getPrecipitation(humidity, current, next) : humidity;
+        cells.prec[current] += precipitation;
+        const evaporation = precipitation > 1.5 ? 1 : 0; // some humidity evaporates back to the atmosphere
+        humidity = isPassable ? minmax(humidity - precipitation + evaporation, 0, maxPrec) : 0;
+      }
     }
   }
-  return points;
+
+  function getPrecipitation(humidity, i, n) {
+    const normalLoss = Math.max(humidity / (10 * modifier), 1); // precipitation in normal conditions
+    const diff = Math.max(cells.h[i + n] - cells.h[i], 0); // difference in height
+    const mod = (cells.h[i + n] / 70) ** 2; // 50 stands for hills, 70 for mountains
+    return minmax(normalLoss + diff * mod, 1, humidity);
+  }
+
+  void (function drawWindDirection() {
+    const wind = prec.append("g").attr("id", "wind");
+
+    d3.range(0, 6).forEach(function (t) {
+      if (westerly.length > 1) {
+        const west = westerly.filter(w => w[2] === t);
+        if (west && west.length > 3) {
+          const from = west[0][0],
+            to = west[west.length - 1][0];
+          const y = (grid.points[from][1] + grid.points[to][1]) / 2;
+          wind.append("text").attr("x", 20).attr("y", y).text("\u21C9");
+        }
+      }
+      if (easterly.length > 1) {
+        const east = easterly.filter(w => w[2] === t);
+        if (east && east.length > 3) {
+          const from = east[0][0],
+            to = east[east.length - 1][0];
+          const y = (grid.points[from][1] + grid.points[to][1]) / 2;
+          wind
+            .append("text")
+            .attr("x", graphWidth - 52)
+            .attr("y", y)
+            .text("\u21C7");
+        }
+      }
+    });
+
+    if (northerly)
+      wind
+        .append("text")
+        .attr("x", graphWidth / 2)
+        .attr("y", 42)
+        .text("\u21CA");
+    if (southerly)
+      wind
+        .append("text")
+        .attr("x", graphWidth / 2)
+        .attr("y", graphHeight - 20)
+        .text("\u21C8");
+  })();
+
+  TIME && console.timeEnd("generatePrecipitation");
 }
 ```
 
-`calculateVoronoi`
-```
-function calculateVoronoi(points, boundary) {
-  TIME && console.time("calculateDelaunay");
-  const allPoints = points.concat(boundary);
-  const delaunay = Delaunator.from(allPoints);
-  TIME && console.timeEnd("calculateDelaunay");
+Analysis:
 
-  TIME && console.time("calculateVoronoi");
-  const voronoi = new Voronoi(delaunay, allPoints, points.length);
+NOTE: I think a lot of this depends on the cells being arranged in a grid form, but I'm not certain.
 
-  const cells = voronoi.cells;
-  cells.i = createTypedArray({maxValue: points.length, length: points.length}).map((_, i) => i); // array of indexes
-  const vertices = voronoi.vertices;
-  TIME && console.timeEnd("calculateVoronoi");
+* let cells_number_modifier = (initial number of points/10000)^0.25 TODO: What is this for?
+* let prec_input_modifier = (input value "Precipidation" 0-100)/100
+* let modifier = cells_number_modifier * prec_input_modifier
+  * Okay, there are two things this might be doing: making sure the precipitation scales for the number of points, or determine how many cells will have "precipitation". I'm guessing at the first one.
+* let westerly = []
+* let easterly = []
+* let southerly = 0
+* let northerly = 0
+* let latitude_modifier = [4, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0.5]
+  * This bases itself on "bands" of rain. See the comments on this one above. Basically, represents things like ITCZ.
+* let max_passable_elevation =  85
+  * TODO: Now I'm wondering if the AFMG elevation scales aren't in meters.
+* for each tile:
+  * lat = tile.lat
+  * lat_band = ((lat.abs() - 1) / 5).floor()
+  * lat_mod = latitude_modifier[lat_band]
+  * wind_tier = ((lat - 89).abs() / 30).floor(); 
+    * Basically, like the lat_bnad, but the division is into five degrees
+  * (is_west, is_east, is_north, is_south) = get_wind_directions(wind_tier); 
+  * if is_west: westerly.push((tile.fid(),lat_mod,wind_tier))
+  * if is_east: easterly.push((tile.fid(),lat_mod,wind_tier)) 
+  * if is_north: northerly += 1
+  * if is_south: southerly += 1
+* if westerly.len > 0: pass_wind(westerly, 120 * modifier, 1, tile_count_x) 
+* if easterly.len > 0: pass_wind(easterly, 120 * modifier, -1, tile_count_x) 
+* let vert_t = southerly + northerly;
+* if northerly > 0:
+  * let band_north = ((northernmost_latitude.abs() - 1)/5).floor()
+  * let lat_mod_north = (latitude_range > 60) ? mean(latitude_modifier) : latitude_modifier[band_north]
+    * I don't know why they average it for wider worlds
+  * let max_prec_n = (northerly / vert_t) * 60 * modifier * lat_mod_north;
+  * pass_wind(cells,max_prec_n,tile_count_x,tile_count_y) 
+* if southerly > 0:
+  * let band_south = ((southernmost_latitude.abs() - 1)/5).floor()
+  * let lat_mod_south = (latitude_range > 60) ? mean(latitude_modifier) : latitude_modifier[band_south]
+    * I don't know why they average it for wider worlds
+  * let max_prec_s = (southerly / vert_t) * 60 * modifier * lat_mod_south;
+  * pass_wind(cells,max_prec_s,-tile_count_x,tile_count_y) 
 
-  return {cells, vertices};
-}
-```
+* get_wind_direction(tier):
+  * let angle = options.winds[tier] // This is part of the input
+  * let is_west = angle > 40 && angle < 140;
+  * let is_east = angle > 220 && angle < 320;
+  * let is_north = angle > 100 && angle < 260;
+  * let is_south = angle > 280 || angle < 80;
+  * return (is_west,is_east,is_north,is_south)
 
-`Delaunator`: https://github.com/mapbox/delaunator/, https://github.com/mapbox/delaunator/blob/main/index.js
+* pass_wind(source,max_prec,next,steps)
+  * let max_prec_init = max_prec
+  * for first of source
+    * if first[0] -- I think this is what happens if we've been given an array of arrays instead of just an array.
+      * max_prec = (max_prec_init * first[1],255);
+      * first = first[0];
+    * let humidity = max_prec - tiles[first].elevation
+    * if humidity <= 0 continue;
+    * current = first
+    * for s in 0..steps
+      * if cells[current].temp < -5 continue;  // permafrost, no humidity change?
+      * if cells[current].is_ocean // water cell
+        * if cells[curren+next].is_ocean == false
+          * cells[current+next].precipitation += Math.max(humidity / rand(10, 20), 1); // coastal precipitation
+        * else
+          * humidity = Math.min(humidity + 5 * modifier, maxPrec); // wind gets more humidity passing water cell
+          * cells[current].precipitation += 5 * modifier; // water cells precipitation (need to correctly pour water through lakes)
+        * continue
+      * is_passable = cells[current + next].height < MAX_PASSABLE_ELEVATION
+      * precipitation = is_passable ? get_precipitation(humidity,current,next) : humidity
+      * cells[current].precipitation = precipitation;
+      * evaporation = precipitation > 1.5 ? 1 : 0;
+      * humidity = is_passable ? clamp(humidity - precipitation + evaporation, 0, max_prec) : 0
+      * current += next;
 
-`Voronoi`: https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/voronoi.js
+* get_precipitation(humidity,i,n)
+  * normal_loss = Math.max(humidity / (10 * modifier), 1); // precipitation in normal conditions
+  * diff_height = Math.max(cells.height[i + n] - cells.height[i], 0); // difference in height
+  * mod = (cells.height[i + n] / 70) ** 2; // 50 stands for hills, 70 for mountains
+  * return clamp(normal_loss + diff * mod, 1, humidity))
+
+The huge problem with this algorithm is that AFMG seems to be able to keep the tiles in a grid. I don't have that luxury. I do think splitting between north, south, east and west winds is a good idea, and might help me, but I'd still have to sort them into rows and columns.
+
+Okay, in re-thinking this: I don't need to worry about the grid if I do have the "directions". For westerly and easterly winds, every tile that has an appropriate wind is added to an array. So, the process is run on each of these tiles, extending their humidity based on the directions. The main issue is only that their algorithms use the location on the grid to find the "next" cell. If I can have the angles to the neighbors, then I can use that to find the appropriate neighbor for a cell. So, basically:
+* Any cell with wind gets added to a vector of cells to check.
+* We do the calculations as above, but when looking for the next cell, we need to look in that cell's neighbor IDs, not just going along the array. We continue following that chain of cells until all of the humidity is used up. 
+* We may also want to keep a list of "visited" tiles so that I don't revisit a tile in the path along the way. This prevents circles, just as a check.
+
 
 # Tasks
 
@@ -231,7 +447,7 @@ To proceed on this, I can break it down into the following steps:
 
 [X] Command line application that handles commands and configuration (start with "version" and "help"). 
 [X] Need Usage/Documentation as well..
-[ ] `convert-heightmap` command -- Doing this first allows me to play with pre-existing terrains for the rest of it.
+[X] `convert-heightmap` command -- Doing this first allows me to play with pre-existing terrains for the rest of it.
     [X] Create Points
     [X] Delaunay Regions
     [X] Voronoi Regions
@@ -256,7 +472,7 @@ To proceed on this, I can break it down into the following steps:
         * There's a function called set_spatial_feature on the layer that can help.
         * As this works closely with GDAL (I'm not going to implement it using my own types), it might be a function on the tile layer.
     [X] Sample heights from heightmap
-    [ ] add Ocean Mask option vs ocean elevation.
+    [X] add Ocean Mask option vs ocean elevation.
 [ ] `gen-climate` command
     [ ] Review AFMG climate generation algorithms and add them -- we'll wait on improved algorithms until later
     [ ] Figure out whether we're overwriting or creating new processed Terrain files, and if the latter, come up with a default naming scheme so the `genesis` command can leave the working files, and it is easy to "find" files when working with the other tools. Maybe there's a "project" file which is automatically updated? Or, maybe the required layers are required parameters, and can be specified with a configuration file, with an option to update that file after running commands.
