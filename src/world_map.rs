@@ -24,6 +24,7 @@ use crate::algorithms::sample_ocean;
 use crate::algorithms::calculate_neighbors;
 use crate::algorithms::generate_temperatures;
 use crate::algorithms::generate_winds;
+use crate::algorithms::generate_precipitation;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
@@ -195,18 +196,24 @@ impl<'lifetime> TilesLayer<'lifetime> {
     pub(crate) const FIELD_SITE_Y: &str = "site_y";
     pub(crate) const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
     pub(crate) const FIELD_ELEVATION: &str = "elevation";
+    // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
+    // If I ever get rid of those algorithms, this field can go away.
+    pub(crate) const FIELD_ELEVATION_SCALED: &str = "elevation_scaled";
     pub(crate) const FIELD_OCEAN: &str = "is_ocean";
     pub(crate) const FIELD_TEMPERATURE: &str = "temperature";
     pub(crate) const FIELD_WIND: &str = "wind_dir";
+    pub(crate) const FIELD_PRECIPITATION: &str = "precipitation";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 7] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 9] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
         (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString),
         (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
+        (Self::FIELD_ELEVATION_SCALED,OGRFieldType::OFTInteger),
         (Self::FIELD_OCEAN,OGRFieldType::OFTInteger),
         (Self::FIELD_TEMPERATURE,OGRFieldType::OFTReal),
-        (Self::FIELD_WIND,OGRFieldType::OFTReal)
+        (Self::FIELD_WIND,OGRFieldType::OFTReal),
+        (Self::FIELD_PRECIPITATION,OGRFieldType::OFTReal)
     ];
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
@@ -518,6 +525,28 @@ impl WorldMap {
     }
 
 
+    pub(crate) fn generate_precipitation<Progress: ProgressObserver>(&mut self, moisture: u16, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            generate_precipitation(&mut tiles.tiles.layer, moisture, progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
 
 }
 

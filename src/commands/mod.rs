@@ -6,6 +6,7 @@ use crate::errors::CommandError;
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod dev;
 mod convert_heightmap;
+mod gen_climate;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -54,9 +55,11 @@ command!{
     dev::DevVoronoiNeighbors;
     dev::DevSampleHeightsToVoronoi;
     dev::DevSampleOceanToVoronoi;
-    dev::DevGenerateTemperatures;
-    dev::DevGenerateWind;
     convert_heightmap::ConvertHeightmap;
+    gen_climate::GenClimate;
+    gen_climate::GenClimateTemperature;
+    gen_climate::GenClimateWind;
+    gen_climate::GenClimatePrecipitation;
 }
 
 

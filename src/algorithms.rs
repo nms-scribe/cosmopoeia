@@ -457,8 +457,20 @@ pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut Layer, r
 
     progress.start_unknown_endpoint(|| "Reading raster");
 
+    let (min_elevation,max_elevation) = raster.compute_min_max(1,true)?;
     let band = raster.read_band::<f64>(1)?;
     let bounds = raster.bounds()?;
+
+    let positive_elevation_scale = 80.0/max_elevation;
+    let negative_elevation_scale = 20.0/min_elevation.abs();
+
+//    * find the max_elevation from the raster, if possible
+//    * find the absolute value of the min_elevation from the raster, if possible
+//    * if elevation >= 0
+//      * elevation_scaled = (elevation*80)/max_elevation
+//    * else
+//      * elevation_scaled = 20 - (elevation.abs()*20)/min_elevation.abs()
+    
 
     progress.finish(|| "Raster read.");
 
@@ -489,7 +501,15 @@ pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut Layer, r
             if let Some(elevation) = band.get_value(x, y) {
 
                 if let Some(feature) = layer.feature(fid) {
+
+                    let elevation_scaled = if elevation >= &0.0 {
+                        20 + (elevation * positive_elevation_scale).floor() as i32
+                    } else {
+                        20 - (elevation.abs() * negative_elevation_scale).floor() as i32
+                    };
+
                     feature.set_field_double(TilesLayer::FIELD_ELEVATION, *elevation)?;
+                    feature.set_field_integer(TilesLayer::FIELD_ELEVATION_SCALED, elevation_scaled)?;
 
                     layer.set_feature(feature)?;
     
@@ -700,6 +720,8 @@ pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut Layer,
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Layer, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
+    // Algorithm borrowed from AFMG with some modifications
+
     progress.start_known_endpoint(|| ("Generating temperatures.",layer.feature_count() as usize));
 
     let equator_temp = equator_temp as f64;
@@ -725,9 +747,9 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Laye
     ))).collect();
     let features = features?;
 
-    for (i,(working_fid,site_y,elevation,is_ocean)) in features.iter().enumerate() {
+    for (i,feature) in features.iter().enumerate() {
 
-        if let (Some(working_fid),Some(site_y),Some(elevation),Some(is_ocean)) = (working_fid,site_y,elevation,is_ocean) {
+        if let (Some(working_fid),Some(site_y),Some(elevation),Some(is_ocean)) = feature {
             let base_temp = equator_temp - (interpolate(site_y.abs()/90.0) * temp_delta);
             let adabiatic_temp = base_temp - if is_ocean == &0 {
                 (elevation/1000.0)*6.5
@@ -760,6 +782,8 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Laye
 
 pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut Layer, winds: [f64; 6], progress: &mut Progress) -> Result<(),CommandError> {
 
+    // Algorithm borrowed from AFMG with some modifications
+
     progress.start_known_endpoint(|| ("Generating winds.",layer.feature_count() as usize));
 
     let features: Result<Vec<(Option<u64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
@@ -768,9 +792,9 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut Layer, wind
     ))).collect();
     let features = features?;
 
-    for (i,(working_fid,site_y)) in features.iter().enumerate() {
+    for (i,feature) in features.iter().enumerate() {
 
-        if let (Some(working_fid),Some(site_y)) = (working_fid,site_y) {
+        if let (Some(working_fid),Some(site_y)) = feature {
 
             let wind_tier = ((site_y - 89.0)/30.0).abs().floor() as usize;
             let wind_dir = winds[wind_tier];
@@ -790,7 +814,249 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut Layer, wind
 
     }
 
-    progress.finish(|| "Winds calculated.");
+    progress.finish(|| "Winds generated.");
+
+    Ok(())
+}
+
+
+
+pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Layer, moisture: u16, progress: &mut Progress) -> Result<(),CommandError> {
+
+    // Algorithm borrowed from AFMG with some modifications, most importantly I don't have a grid, so I follow the paths of the wind to neighbors.
+
+    const MAX_PASSABLE_ELEVATION: i32 = 85; // FUTURE: I've found that this is unnecessary, the elevation change should drop the precipitation and prevent any from passing on. 
+
+    // I believe what this does is scale the moisture scale correctly to the size of the map. Otherwise, I don't know.
+    let cells_number_modifier = (layer.feature_count() as f64/10000.0).powf(0.25);
+    let prec_input_modifier = moisture as f64/100.0;
+    let modifier = cells_number_modifier * prec_input_modifier;
+
+    // Bands of rain at different latitudes, like the ITCZ
+    let latitude_modifier = [4.0, 2.0, 2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0, 1.0, 1.0, 1.0, 0.5];
+
+    #[derive(Clone)]
+    struct PrecipitationTile {
+        elevation: i32,
+        wind: i32,
+        is_ocean: bool,
+        neighbors: Vec<(u64,i32)>,
+        lat_modifier: f64,
+        temperature: f64,
+        precipitation: f64
+    }
+    
+    progress.start_known_endpoint(|| ("Precipitation: mapping tiles.",layer.feature_count() as usize));
+    let mut tile_map = HashMap::new();
+
+    for (i,feature) in layer.features().enumerate() {
+        let fid = feature.fid();
+        let site_y = feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?;
+        let elevation_scaled = feature.field_as_integer_by_name(TilesLayer::FIELD_ELEVATION_SCALED)?;
+        let wind = feature.field_as_integer_by_name(TilesLayer::FIELD_WIND)?;
+        let temperature = feature.field_as_double_by_name(TilesLayer::FIELD_TEMPERATURE)?;
+        let is_ocean = feature.field_as_integer_by_name(TilesLayer::FIELD_OCEAN)?;
+        let neighbors = feature.field_as_string_by_name(TilesLayer::FIELD_NEIGHBOR_TILES)?;
+
+        if let (Some(fid),Some(lat),Some(elevation),Some(wind),Some(is_ocean),Some(temperature),Some(neighbors)) = (fid,site_y,elevation_scaled,wind,is_ocean,temperature,neighbors) {
+
+            let lat_band = ((lat.abs() - 1.0) / 5.0).floor() as usize;
+            let lat_modifier = latitude_modifier[lat_band];
+
+            let neighbors: Vec<(u64,i32)> = neighbors.split(',').filter_map(|a| {
+                let mut a = a.splitn(2, ':');
+                if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
+                    if let Some(direction) = a.next().map(|d| d.parse().ok()).flatten() {
+                        if direction >= 0 {
+                            Some((neighbor,direction))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+                
+            }).collect();
+
+            let is_ocean = is_ocean != 0;
+
+            tile_map.insert(fid, PrecipitationTile {
+                elevation,
+                wind,
+                is_ocean,
+                neighbors,
+                lat_modifier,
+                temperature,
+                precipitation: 0.0
+            });
+
+            progress.update(|| i);
+
+        }
+
+    }
+
+    progress.finish(|| "Precipitation: tiles mapped.");
+
+    // I can't work on the tiles map while also iterating it, so I have to copy the keys
+    let mut working_tiles: Vec<u64> = tile_map.keys().copied().collect();
+    // The order of the tiles changes the results, so make sure they are always in the same order to 
+    // keep the results reproducible. I know this seems OCD, but it's important if anyone wants
+    // to test things.
+    working_tiles.sort();
+    let working_tiles = working_tiles;
+
+    progress.start_known_endpoint(|| ("Precipitation: tracing winds.",working_tiles.len()));
+
+    for (i,start_fid) in working_tiles.iter().enumerate() {
+        if let Some(tile) = tile_map.get(&start_fid).cloned() {
+
+            let max_prec = 120.0 * tile.lat_modifier;
+            let mut humidity = max_prec - tile.elevation as f64;
+
+            let mut current = tile;
+            let mut current_fid = *start_fid;
+            let mut visited = vec![current_fid];
+
+            loop {
+                if humidity < 0.0 {
+                    // there is no humidity left to work with.
+                    break;
+                }
+
+                // find neighbor closest to wind direction
+                let mut best_neighbor: Option<(_,_)> = None;
+                for (fid,direction) in &current.neighbors {
+                    // calculate angle difference
+                    let angle_diff = (direction - current.wind).abs();
+                    let angle_diff = if angle_diff > 180 {
+                        360 - angle_diff
+                    } else {
+                        angle_diff
+                    };
+                    
+                    // if the angle difference is greater than 45, it's not going the right way, so don't even bother with this one.
+                    if angle_diff < 45 {
+                        if let Some(better_neighbor) = best_neighbor {
+                            if better_neighbor.1 > angle_diff {
+                                best_neighbor = Some((*fid,angle_diff));
+                            }
+
+                        } else {
+                            best_neighbor = Some((*fid,angle_diff));
+                        }
+    
+                    }
+
+                }
+
+                let next = if let Some((next_fid,_)) = best_neighbor {
+                    if visited.contains(&next_fid) {
+                        // we've reached one we've already visited, I don't want to go in circles.
+                        None
+                    } else {
+                        // visit it so we don't do this one again.
+                        visited.push(next_fid);
+                        tile_map.get(&next_fid).map(|tile| (next_fid,tile.clone()))
+                    }
+
+                } else {
+                    None
+                };
+
+                if let Some((next_fid,mut next)) = next {
+                    if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
+                        if current.is_ocean {
+                            if !next.is_ocean {
+                                // coastal precipitation
+                                // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
+                                // necessary considering it's the only randomness I would use, and nothing else is randomized.
+                                next.precipitation += (humidity / 15.0).max(1.0);
+                            } else {
+                                // add more humidity
+                                humidity = (humidity + 5.0 * current.lat_modifier).max(max_prec);
+                                // precipitation over water cells
+                                current.precipitation += 5.0 * modifier;
+                            }
+                        } else {
+                            let is_passable = next.elevation < MAX_PASSABLE_ELEVATION;
+                            let precipitation = if is_passable {
+                                // precipitation under normal conditions
+                                let normal_loss = (humidity / (10.0 * current.lat_modifier)).max(1.0);
+                                // difference in height
+                                let diff = (next.elevation - current.elevation).max(0) as f64;
+                                // additional modifier for high elevation of mountains
+                                let modifier = (next.elevation / 70).pow(2) as f64;
+                                (normal_loss + diff + modifier).clamp(1.0,humidity.max(1.0))
+                            } else {
+                                humidity
+                            };
+                            current.precipitation = precipitation;
+                            // sometimes precipitation evaporates
+                            humidity = if is_passable {
+                                // FUTURE: I feel like this evaporation was supposed to be a multiplier not an addition. Not much is evaporating.
+                                // FUTURE: Shouldn't it also depend on temperature?
+                                let evaporation = if precipitation > 1.5 { 1.0 } else { 0.0 };
+                                (humidity - precipitation + evaporation).clamp(0.0,max_prec)
+                            } else {
+                                0.0
+                            };
+    
+                        }
+    
+                        if let Some(real_current) = tile_map.get_mut(&current_fid) {
+                            real_current.precipitation = current.precipitation;
+                        }
+    
+                        if let Some(real_next) = tile_map.get_mut(&next_fid) {
+                            real_next.precipitation = next.precipitation;
+                        }
+    
+                    }
+
+                    (current_fid,current) = (next_fid,next);
+                } else {
+                    if current.is_ocean {
+                        // precipitation over water cells
+                        current.precipitation += 5.0 * modifier;
+                    } else {
+                        current.precipitation = humidity;
+                    }
+
+                    if let Some(real_current) = tile_map.get_mut(&current_fid) {
+                        real_current.precipitation = current.precipitation;
+                    }
+
+                    break;
+
+                }
+            }
+            
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Precipitation: winds traced.");
+
+    progress.start_known_endpoint(|| ("Writing precipitation",tile_map.len()));
+
+    for (fid,tile) in tile_map {
+        if let Some(working_feature) = layer.feature(fid) {
+
+            working_feature.set_field_double(TilesLayer::FIELD_PRECIPITATION, tile.precipitation)?;
+
+            layer.set_feature(working_feature)?;
+        }
+
+
+    }
+
+    progress.finish(|| "Precipitation written.");
 
     Ok(())
 }

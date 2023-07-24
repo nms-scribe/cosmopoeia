@@ -143,5 +143,17 @@ impl RasterMap {
 
     }
 
+    pub(crate) fn compute_min_max(&self, index: isize, is_approx_ok: bool) -> Result<(f64,f64),CommandError> {
+        let band = if self.dataset.raster_count() > (index - 1) {
+            self.dataset.rasterband(index)? // 1-based array
+        } else {
+            return Err(CommandError::RasterDatasetRequired)
+        };
+
+        let statistics = band.compute_raster_min_max(is_approx_ok)?;
+        Ok((statistics.min,statistics.max))
+    }
+
+
 }
 
