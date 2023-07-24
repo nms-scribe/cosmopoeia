@@ -52,10 +52,11 @@ command!{
     dev::DevPointsFromExtent;
     dev::DevTrianglesFromPoints;
     dev::DevVoronoiFromTriangles;
-    dev::DevVoronoiNeighbors;
-    dev::DevSampleHeightsToVoronoi;
-    dev::DevSampleOceanToVoronoi;
     convert_heightmap::ConvertHeightmap;
+    convert_heightmap::ConvertHeightmapVoronoi;
+    convert_heightmap::ConvertHeightmapSample;
+    convert_heightmap::ConvertHeightmapOcean;
+    convert_heightmap::ConvertHeightmapNeighbors;
     gen_climate::GenClimate;
     gen_climate::GenClimateTemperature;
     gen_climate::GenClimateWind;
