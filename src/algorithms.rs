@@ -42,6 +42,10 @@ pub(crate) struct PointGenerator<Random: Rng> {
 }
 
 impl<Random: Rng> PointGenerator<Random> {
+    const START_X: f64 = 0.0;
+    // You would think I'd be able to start generating at 0, but that appears to be one pixel below the bottom of the grid on my test.
+    // FUTURE: Revisit this, could this have just been bad starting data?
+    const START_Y: f64 = 1.0;
 
     pub(crate) fn new(random: Random, extent: Extent, est_point_count: usize) -> Self {
         let density = est_point_count as f64/(extent.width*extent.height); // number of points per unit square
@@ -108,17 +112,17 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
                 Some(self.make_point(-self.extent.width, -self.extent.height))
             },
             PointGeneratorPhase::NorthwestInfinity => {
-                self.phase = PointGeneratorPhase::Random(0.0,0.0);
+                self.phase = PointGeneratorPhase::Random(Self::START_X,Self::START_Y);
                 Some(self.make_point(-self.extent.width, self.extent.height*2.0))
             },
             PointGeneratorPhase::Random(x, y) => if y < &self.extent.height {
                 if x < &self.extent.width {
-                    let x_j = (x + jitter!()).clamp(0.0,self.extent.width);
-                    let y_j = (y + jitter!()).clamp(0.0,self.extent.height);
+                    let x_j = (x + jitter!()).clamp(Self::START_X,self.extent.width);
+                    let y_j = (y + jitter!()).clamp(Self::START_Y,self.extent.height);
                     self.phase = PointGeneratorPhase::Random(x + self.spacing, *y);
                     Some(self.make_point(x_j,y_j))
                 } else {
-                    self.phase = PointGeneratorPhase::Random(0.0, y + self.spacing);
+                    self.phase = PointGeneratorPhase::Random(Self::START_X, y + self.spacing);
                     self.next()
                 }
                 
