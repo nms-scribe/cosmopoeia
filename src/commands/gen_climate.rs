@@ -10,8 +10,7 @@ use crate::progress::ConsoleProgressBar;
 
 
 subcommand_def!{
-    /// Generates temperature values for climates
-    #[command(hide=true)]
+    /// Generates temperature data
     pub(crate) struct GenClimateTemperature {
 
         /// The path to the world map GeoPackage file
@@ -44,35 +43,34 @@ impl Task for GenClimateTemperature {
 
 
 subcommand_def!{
-    /// Generates wind directions for climate
-    #[command(hide=true)]
+    /// Generates wind data
     pub(crate) struct GenClimateWind {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
         #[arg(long,default_value="225")]
-        // Wind direction above latitude 60 N
+        /// Wind direction above latitude 60 N
         north_polar: u16,
 
         #[arg(long,default_value="45")]
-        // Wind direction from latitude 30 N to 60 N
+        /// Wind direction from latitude 30 N to 60 N
         north_middle: u16,
 
         #[arg(long,default_value="225")]
-        // Wind direction from the equator to latitude 30 N
+        /// Wind direction from the equator to latitude 30 N
         north_tropical: u16,
 
         #[arg(long,default_value="315")]
-        // Wind direction from the equator to latitude 30 S
+        /// Wind direction from the equator to latitude 30 S
         south_tropical: u16,
 
         #[arg(long,default_value="135")]
-        // Wind direction from latitude 30 S to 60 S
+        /// Wind direction from latitude 30 S to 60 S
         south_middle: u16,
 
         #[arg(long,default_value="315")]
-        // Wind direction below latitude 60 S
+        /// Wind direction below latitude 60 S
         south_polar: u16,
 
     }
@@ -102,8 +100,7 @@ impl Task for GenClimateWind {
 
 
 subcommand_def!{
-    /// Generates precipitation values for climates
-    #[command(hide=true)]
+    /// Generates precipitation data (requires wind and temperatures)
     pub(crate) struct GenClimatePrecipitation {
 
         /// The path to the world map GeoPackage file
@@ -148,27 +145,27 @@ subcommand_def!{
         polar_temp: i8,
 
         #[arg(long,default_value="225")]
-        // Wind direction above latitude 60 N
+        /// Wind direction above latitude 60 N
         north_polar_wind: u16,
 
         #[arg(long,default_value="45")]
-        // Wind direction from latitude 30 N to 60 N
+        /// Wind direction from latitude 30 N to 60 N
         north_middle_wind: u16,
 
         #[arg(long,default_value="225")]
-        // Wind direction from the equator to latitude 30 N
+        /// Wind direction from the equator to latitude 30 N
         north_tropical_wind: u16,
 
         #[arg(long,default_value="315")]
-        // Wind direction from the equator to latitude 30 S
+        /// Wind direction from the equator to latitude 30 S
         south_tropical_wind: u16,
 
         #[arg(long,default_value="135")]
-        // Wind direction from latitude 30 S to 60 S
+        /// Wind direction from latitude 30 S to 60 S
         south_middle_wind: u16,
 
         #[arg(long,default_value="315")]
-        // Wind direction below latitude 60 S
+        /// Wind direction below latitude 60 S
         south_polar_wind: u16,
 
         #[arg(long,default_value="100")]

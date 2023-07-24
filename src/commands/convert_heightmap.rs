@@ -136,7 +136,6 @@ impl Task for ConvertHeightmap {
 
 subcommand_def!{
     /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    #[command(hide=true)]
     pub(crate) struct ConvertHeightmapVoronoi {
 
         /// The path to the heightmap containing the elevation data
@@ -208,7 +207,6 @@ impl Task for ConvertHeightmapVoronoi {
 
 subcommand_def!{
     /// Samples elevation data from a heightmap into tiles
-    #[command(hide=true)]
     pub(crate) struct ConvertHeightmapSample {
 
         /// The path to the heightmap containing the elevation data
@@ -239,7 +237,6 @@ impl Task for ConvertHeightmapSample {
 
 subcommand_def!{
     /// Samples ocean flag from a heightmap into tiles
-    #[command(hide=true)]
     pub(crate) struct ConvertHeightmapOcean {
 
         /// The path to the heightmap containing the elevation data
@@ -308,7 +305,6 @@ impl Task for ConvertHeightmapOcean {
 // FUTURE: This will be an alias for a CreateTerrainNeighbors, since it doesn't matter how the tiles were created.
 subcommand_def!{
     /// Calculates neighbors for tiles
-    #[command(hide=true)]
     pub(crate) struct ConvertHeightmapNeighbors {
 
         /// The path to the world map GeoPackage file
