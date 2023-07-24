@@ -554,7 +554,61 @@ function applyDefaultBiomesSystem() {
   return {i: d3.range(0, name.length), name, color, biomesMartix, habitability, iconsDensity, icons, cost};
 }
 
+function isWetLand(moisture, temperature, height) {
+  if (moisture > 40 && temperature > -2 && height < 25) return true; //near coast
+  if (moisture > 24 && temperature > -2 && height > 24 && height < 60) return true; //off coast
+  return false;
+}
+
+
+
 ```
+
+### Analysis
+
+* **Input: Biomes Table** Input is a table with the following columns:
+  * key_name: string -- This is the name of the biome for referencing in the algorithm
+  * built_in: bool -- Indicates if the biome is built-in. Built-in biomes should not be deleted, nor their key_name changed, or biome generation isn't going to work anymore.
+  * habitability: integer - a value to be used later.
+  * movement_cost: integer - a value to be used later.
+* **Input: Biomes Matrix** This is a 2d array with x specifying hot to cold, and y specifying dry to wet. This is a lookup for what climate to put given a temperature and precipitation.
+  ```
+  // hot ↔ cold [>19°C; <-4°C]; dry ↕ wet
+    matrix: [[&str; 26]; 5] =
+    [["Marine", "Marine", "Marine", "Marine", "Marine", "Marine", "Marine", "Marine", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "taiga"],
+     ["cold desert", "cold desert", "cold desert", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga", "taiga"],
+     ["grassland", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga", "taiga"],
+     ["grassland", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga", "taiga"],
+     ["temperate deciduous forest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga"]]
+  ```
+
+* for each tile
+  * let temperature = tile temperature
+  * let precipitation = tile precipitation
+  * let elevation = tile elevation_scale
+  * let moisture = if height < 20 ? 0 : calculate_moisture(tile)
+  * tile.biome = get_biome_id(moisture, temperature, elevation)
+
+* calculate_moisture
+  * let moist = tile.precipitation
+  * if (tile.is_river) moist += Math.max(tile.water_flux / 20, 2); 
+  * let n = [moist, ...precipitation of all neighboring cells]
+  * return 4 + n.average;
+
+* get_biome_id(moisture,temperature,elevation)
+  * if elevation < 20 return "ocean"
+  * if temperature < -5 return "tundra"
+  * if is_wet_land(moisture,temperature,height) return "wetland"
+  * let moisture_band = ((moisture/5).floor()).min(4)
+  * let temperature_band = (20 - temperature).clamp(0,25)
+  * return biome_matrix[moisture_band][temperature_band]
+
+* is_wet_land(moisture,temperature,height) 
+  * if moisture > 40 && temperature > -2 && height < 25: return true // near coast -- TODO: Except that we don't know that.
+  * if moisture > 24 && temperature > -2 && height > 24 && height < 60: return true -- TODO: Further from coast?
+  * return false
+
+**NOTE:** It appears that I need to have rivers and lakes before I can do this, which is part of the moisture.
 
 # Tasks
 
@@ -593,12 +647,12 @@ To proceed on this, I can break it down into the following steps:
     [X] Generate temperatures
     [X] Generate wind directions
     [X] Generate precipitation
-[ ] `gen-biomes` command
-    [ ] Biome file
-    [ ] Review AFMG biome generation algorithms
 [ ] `gen-water` command
-    [ ] Water file
     [ ] Review AFMG river generation algorithm
+    [ ] Water files
+[ ] `gen-biomes` command
+    [X] Review AFMG biome generation algorithms
+    [ ] Create command (requires water, temperature, and precipitation)
 [ ] `gen-people` command
     [ ] various auxiliary files
     [ ] Review AFMG people generation algorithms -- again, wait on improvements until later

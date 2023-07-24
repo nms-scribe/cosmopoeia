@@ -29,6 +29,7 @@ use crate::algorithms::generate_precipitation;
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
 pub(crate) const TILES_LAYER_NAME: &str = "tiles";
+pub(crate) const BIOME_LAYER_NAME: &str = "biomes";
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
 // The solution to this would probably require rewriting the gdal crate, so I'm not going to bother with this at this time, I'll just have to be more careful. 
@@ -77,11 +78,25 @@ impl<'lifetime> WorldLayer<'lifetime> {
         Ok(())
     }
 
+    fn add_without_geometry(&mut self, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
+        // This function is used for lookup tables, like biomes.
+
+        // I had to dig into the source to get this stuff...
+        let feature = gdal::vector::Feature::new(self.layer.defn())?;
+        for (field, value) in field_names.iter().zip(field_values.iter()) {
+            feature.set_field(field, value)?;
+        }
+        feature.create(&self.layer)?;
+        Ok(())
+
+    }
+
 
     fn read_geometries(&mut self) -> LayerGeometryIterator {
         LayerGeometryIterator::new(&mut self.layer)
 
     }
+
 
 
 
@@ -113,15 +128,6 @@ impl<'lifetime> PointsLayer<'lifetime> {
         self.points.add(point,&[],&[])
 
     }
-
-/* TODO: I'm going to need something like this eventually for sampling the tiles, so don't delete this yet.
-    pub(crate) fn sample_point_from_raster(&mut self, x: f64, y: f64, transformer: &RasterCoordTransformer, buffer: &RasterBandBuffer<f64>) -> Result<(),CommandError> {
-        let (lon,lat) = transformer.pixels_to_coords(x, y);
-        let mut point = Geometry::empty(wkbPoint)?;
-        point.add_point_2d((lon,lat));
-        self.add_point(point, buffer.get_value(x, y))
-    }
- */
 
     pub(crate) fn read_points(&mut self) -> LayerGeometryIterator {
         self.points.read_geometries()
@@ -257,6 +263,56 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
 }
 
+pub(crate) struct BiomeLayer<'lifetime> {
+    biomes: WorldLayer<'lifetime>
+}
+
+impl<'lifetime> BiomeLayer<'lifetime> {
+
+    pub(crate) const FIELD_NAME: &str = "name";
+
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 1] = [
+        (Self::FIELD_NAME,OGRFieldType::OFTString),
+    ];
+
+    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+        let biomes = WorldLayer::open_from_dataset(dataset, BIOME_LAYER_NAME)?;
+        Ok(Self {
+            biomes
+        })
+    }
+    
+
+    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+        let biomes = WorldLayer::create_from_dataset(dataset, BIOME_LAYER_NAME, OGRwkbGeometryType::wkbNone, Some(&Self::FIELD_DEFS), overwrite)?;
+
+        Ok(Self {
+            biomes
+        })
+    }
+
+
+    pub(crate) fn add_biome(&mut self, name: String) -> Result<(),CommandError> {
+
+        self.biomes.add_without_geometry(&[
+            Self::FIELD_NAME
+        ], &[
+            FieldValue::StringValue(name)
+        ])
+
+    }
+
+    pub(crate) fn list_biomes(&mut self) -> Result<Vec<String>,CommandError> {
+        Ok(self.biomes.layer.features().filter_map(|feature| {
+            feature.field_as_string_by_name(Self::FIELD_NAME).transpose()
+        }).collect::<Result<Vec<String>,gdal::errors::GdalError>>()?)
+    }
+
+
+
+
+}
+
 pub(crate) struct WorldMap {
     dataset: Dataset
 }
@@ -319,6 +375,10 @@ impl WorldMap {
 
     #[allow(dead_code)] pub(crate) fn tiles_layer(&self) -> Result<TilesLayer,CommandError> {
         TilesLayer::open_from_dataset(&self.dataset)
+    }
+
+    pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
+        BiomeLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
@@ -579,6 +639,15 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
 
     pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {
         Ok(TilesLayer::open_from_dataset(&mut self.dataset)?)
+
+    }
+
+    pub(crate) fn create_biomes_layer(&mut self, overwrite: bool) -> Result<BiomeLayer,CommandError> {
+        Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    }
+
+    pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
+        Ok(BiomeLayer::open_from_dataset(&mut self.dataset)?)
 
     }
 
