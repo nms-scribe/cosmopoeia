@@ -7,6 +7,8 @@ use rand::Rng;
 use gdal::vector::Geometry;
 use gdal::vector::OGRwkbGeometryType::wkbPoint;
 use gdal::vector::OGRwkbGeometryType::wkbPolygon;
+use gdal::vector::Layer;
+use gdal::vector::LayerAccess;
 use ordered_float::NotNan;
 
 use crate::errors::CommandError;
@@ -15,6 +17,9 @@ use crate::utils::Point;
 use crate::utils::GeometryGeometryIterator;
 use crate::utils::create_polygon;
 use crate::world_map::VoronoiTile;
+use crate::progress::ProgressObserver;
+use crate::raster::RasterMap;
+use crate::world_map::TilesLayer;
 
 enum PointGeneratorPhase {
     NortheastInfinity,
@@ -447,3 +452,345 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
 }
 
 
+
+pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut Layer, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
+
+    progress.start_unknown_endpoint(|| "Reading raster");
+
+    let band = raster.read_band::<f64>(1)?;
+    let bounds = raster.bounds()?;
+
+    progress.finish(|| "Raster read.");
+
+    progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
+
+    let mut features = Vec::new();
+
+    for (i,feature) in layer.features().enumerate() {
+        features.push((i,
+                       feature.fid(),
+                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?,
+                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?
+        ))
+
+    }
+
+    progress.finish(|| "Tiles read.");
+
+    progress.start_known_endpoint(|| ("Sampling elevations.",layer.feature_count() as usize));
+
+    for (i,fid,site_lon,site_lat) in features {
+
+
+        if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
+
+            let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
+
+            if let Some(elevation) = band.get_value(x, y) {
+
+                if let Some(feature) = layer.feature(fid) {
+                    feature.set_field_double(TilesLayer::FIELD_ELEVATION, *elevation)?;
+
+                    layer.set_feature(feature)?;
+    
+                }
+
+            }
+
+
+        }
+
+        progress.update(|| i);
+
+
+
+
+    }
+
+    progress.finish(|| "Elevation sampled.");
+
+    Ok(())
+}
+
+
+pub(crate) enum OceanSamplingMethod {
+    Below(f64), // any elevation below the specified value is ocean
+    AllData, // any elevation that is not nodata is ocean
+    NoData, // any elevation that is nodata is ocean
+    NoDataAndBelow(f64), // any elevation that is no data or below the specified value is ocean.
+    // TODO: Another option: a list of points to act as seeds, along with an elevation, use a flood-fill to mark oceans that are connected to these and under that elevation.
+}
+
+pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut Layer, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
+
+    progress.start_unknown_endpoint(|| "Reading raster");
+
+    let band = raster.read_band::<f64>(1)?;
+    let bounds = raster.bounds()?;
+    let no_data_value = band.no_data_value();
+
+    progress.finish(|| "Raster read.");
+
+    progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
+
+    let mut features = Vec::new();
+
+    for (i,feature) in layer.features().enumerate() {
+        features.push((i,
+                       feature.fid(),
+                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?,
+                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?
+        ))
+
+    }
+
+    progress.finish(|| "Tiles read.");
+
+    progress.start_known_endpoint(|| ("Sampling oceans.",layer.feature_count() as usize));
+
+    let mut bad_ocean_tile_found = false;
+
+    for (i,fid,site_lon,site_lat) in features {
+
+
+        if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
+
+            let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
+
+            if let Some(feature) = layer.feature(fid) {
+
+                let is_ocean = if let Some(elevation) = band.get_value(x, y) {
+                    let is_no_data = match no_data_value {
+                        Some(no_data_value) if no_data_value.is_nan() => elevation.is_nan(),
+                        Some(no_data_value) => elevation == no_data_value,
+                        None => false,
+                    };
+
+                    match method {
+                        OceanSamplingMethod::Below(_) if is_no_data => false,
+                        OceanSamplingMethod::Below(below) => elevation < &below,
+                        OceanSamplingMethod::AllData => !is_no_data,
+                        OceanSamplingMethod::NoData => is_no_data,
+                        OceanSamplingMethod::NoDataAndBelow(below) => is_no_data || (elevation < &below),
+                    }
+
+                } else {
+
+                    match method {
+                        OceanSamplingMethod::Below(_) => false,
+                        OceanSamplingMethod::AllData => false,
+                        OceanSamplingMethod::NoData => true,
+                        OceanSamplingMethod::NoDataAndBelow(_) => true,
+                    }
+
+                };
+
+                if let Some(elevation) = feature.field_as_double_by_name(TilesLayer::FIELD_ELEVATION)? {
+                    if is_ocean && (elevation > 0.0) {
+                        bad_ocean_tile_found = true;
+                    }
+
+                }
+
+                let is_ocean = if is_ocean { 1 } else { 0 };
+
+                feature.set_field_integer(TilesLayer::FIELD_OCEAN, is_ocean)?;
+
+                layer.set_feature(feature)?;
+
+            }
+
+
+
+        }
+
+        progress.update(|| i);
+
+
+
+
+    }
+
+    progress.finish(|| "Oceans sampled.");
+
+    if bad_ocean_tile_found {
+        println!("At least one ocean tile was found with an elevation above 0.")
+
+    }
+
+    Ok(())
+}
+
+
+pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut Layer, progress: &mut Progress) -> Result<(),CommandError> {
+
+    progress.start_known_endpoint(|| ("Calculating neighbors.",layer.feature_count() as usize));
+
+    let features: Result<Vec<(Option<u64>,Option<Geometry>,Option<f64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
+        feature.fid(),
+        feature.geometry().cloned(),
+        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?,
+        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?,
+    ))).collect();
+    let features = features?;
+
+    // # Loop through all features and find features that touch each feature
+    // for f in feature_dict.values():
+    for (i,(working_fid,working_geometry,site_x,site_y)) in features.iter().enumerate() {
+
+        if let Some(working_fid) = working_fid {
+            if let Some(working_geometry) = working_geometry {
+
+                let envelope = working_geometry.envelope();
+                layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
+    
+    
+                let mut neighbors = Vec::new();
+    
+                for intersecting_feature in layer.features() {
+    
+                    if let Some(intersecting_fid) = intersecting_feature.fid() {
+                        if (working_fid != &intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+
+                            let neighbor_site_x = intersecting_feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?;
+                            let neighbor_site_y = intersecting_feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?;
+                            let neighbor_angle = if let (Some(site_x),Some(site_y),Some(neighbor_site_x),Some(neighbor_site_y)) = (site_x,site_y,neighbor_site_x,neighbor_site_y) {
+                                // needs to be clockwise, from the north, with a value from 0..360
+                                // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+                                let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                                // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+                                let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
+                                // And then, to get the values in the range from 0..360, mod it.
+                                let clamped = clockwise_from_north % 360.0;
+                                clamped
+                            } else {
+                                // in the off chance that we actually are missing data, this marks an appropriate angle.
+                                -360.0 
+                            };
+                        
+                            neighbors.push(format!("{}:{}",intersecting_fid,neighbor_angle)) 
+                        }
+
+                    }
+    
+                }
+                
+                layer.clear_spatial_filter();
+
+                if let Some(working_feature) = layer.feature(*working_fid) {
+                    working_feature.set_field_string(TilesLayer::FIELD_NEIGHBOR_TILES, &neighbors.join(","))?;
+    
+                    layer.set_feature(working_feature)?;
+
+                }
+    
+
+            }
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Neighbors calculated.");
+
+    Ok(())
+}
+
+
+pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Layer, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
+
+    progress.start_known_endpoint(|| ("Generating temperatures.",layer.feature_count() as usize));
+
+    let equator_temp = equator_temp as f64;
+    let polar_temp = polar_temp as f64;
+    let temp_delta = equator_temp - polar_temp;
+    const EXPONENT: f64 = 0.5;
+
+    fn interpolate(t: f64) -> f64 { // TODO: Test this somehow...
+        // From AFMG/d3: `t` is supposed to be a value from 0 to 1. If t <= 0.5 (`(t *= 2) <= 1`) then the function above is `y = ((2x)^(1/2))/2`. If t is greater, then the function is `y = (2 - (2-x)^(1/2))/2`. The two functions both create a sort of parabola. The first one starts curving up steep at 0 (the pole) and then flattens out to almost diagonal at 0.5. The second one continues the diagonal that curves more steeply up towards 1 (the equator). I'm not sure whey this curve was chosen, I would have expected a flatter curve at the equator.
+        let t = t * 2.0;
+        (if t <= 1.0 {
+            t.powf(EXPONENT)
+        } else {
+            2.0 - (2.0-t).powf(EXPONENT)
+        })/2.0
+    }
+
+    let features: Result<Vec<(Option<u64>,Option<f64>,Option<f64>,Option<i32>)>,CommandError> = layer.features().map(|feature| Ok((
+        feature.fid(),
+        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?,
+        feature.field_as_double_by_name(TilesLayer::FIELD_ELEVATION)?,
+        feature.field_as_integer_by_name(TilesLayer::FIELD_OCEAN)?,
+    ))).collect();
+    let features = features?;
+
+    for (i,(working_fid,site_y,elevation,is_ocean)) in features.iter().enumerate() {
+
+        if let (Some(working_fid),Some(site_y),Some(elevation),Some(is_ocean)) = (working_fid,site_y,elevation,is_ocean) {
+            let base_temp = equator_temp - (interpolate(site_y.abs()/90.0) * temp_delta);
+            let adabiatic_temp = base_temp - if is_ocean == &0 {
+                (elevation/1000.0)*6.5
+            } else {
+                0.0
+            };
+            let temp = (adabiatic_temp*100.0).round()/100.0;
+
+            if let Some(working_feature) = layer.feature(*working_fid) {
+                working_feature.set_field_double(TilesLayer::FIELD_TEMPERATURE, temp)?;
+
+                layer.set_feature(working_feature)?;
+
+            }
+
+
+        }
+
+        progress.update(|| i);
+
+
+    }
+
+    progress.finish(|| "Temperatures calculated.");
+
+    Ok(())
+}
+
+
+
+pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut Layer, winds: [f64; 6], progress: &mut Progress) -> Result<(),CommandError> {
+
+    progress.start_known_endpoint(|| ("Generating winds.",layer.feature_count() as usize));
+
+    let features: Result<Vec<(Option<u64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
+        feature.fid(),
+        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?,
+    ))).collect();
+    let features = features?;
+
+    for (i,(working_fid,site_y)) in features.iter().enumerate() {
+
+        if let (Some(working_fid),Some(site_y)) = (working_fid,site_y) {
+
+            let wind_tier = ((site_y - 89.0)/30.0).abs().floor() as usize;
+            let wind_dir = winds[wind_tier];
+
+            if let Some(working_feature) = layer.feature(*working_fid) {
+                working_feature.set_field_double(TilesLayer::FIELD_WIND, wind_dir)?;
+
+                layer.set_feature(working_feature)?;
+
+            }
+
+
+        }
+
+        progress.update(|| i);
+
+
+    }
+
+    progress.finish(|| "Winds calculated.");
+
+    Ok(())
+}

@@ -16,7 +16,7 @@ use crate::algorithms::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::algorithms::VoronoiGenerator;
 use crate::world_map::VoronoiTile;
-use crate::world_map::OceanSamplingMethod;
+use crate::algorithms::OceanSamplingMethod;
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
@@ -305,6 +305,10 @@ impl Task for ConvertHeightmap {
         progress.finish(|| "Voronoi generated.");
 
         target.load_tile_layer(self.overwrite, voronois, &mut progress)?;
+
+        // TODO: Some of the following could be done at the same time. Instead of iterating through all the tiles
+        // three times, just iterate once and 1) sample elevations, 2) sample ocean and 3) calculate neighbors.
+        // I just have to find a way to do that all at once while still being able to keep it separate for testing.
 
         // sample elevations
         target.sample_elevations_on_tiles(&source,&mut progress)?;

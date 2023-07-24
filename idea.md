@@ -181,10 +181,10 @@ Analysis:
   * init_temp = temp_equator - int(lat/90) * temp_delta;
   * tile.temperature = clamp(init_temp - convertToFriendly(tile.elevation),-128,127)
 * convertToFriendly(elevation) -- this is really just an adabiatic temperature reduction.
-  * if elevation < 20 return 0;
+  * if is_ocean return 0; 
   * exponent = input (value from 1.5 to 2.2, configured in the Units dialog)
-  * height = (elevation-18)^exponent;
-  * return round((height/1000)*6.5,2);
+  * return round((elevation/1000)*6.5,2);
+  * -- NOTE: Unlike AFMG, our temperature change can be negative as well. So, if you go below sea-level, it can get hotter.
 
 This algorithm is fairly straightforward, even if I might disagree with some of it.
 
@@ -351,14 +351,14 @@ function generatePrecipitation() {
 }
 ```
 
-Analysis:
+### Analysis:
 
 NOTE: I think a lot of this depends on the cells being arranged in a grid form, but I'm not certain.
 
 * let cells_number_modifier = (initial number of points/10000)^0.25 TODO: What is this for?
-* let prec_input_modifier = (input value "Precipidation" 0-100)/100
+* let prec_input_modifier = (input value "Precipitation" 0-100)/100
 * let modifier = cells_number_modifier * prec_input_modifier
-  * Okay, there are two things this might be doing: making sure the precipitation scales for the number of points, or determine how many cells will have "precipitation". I'm guessing at the first one.
+  * Okay, what I believe this is calculating a "percent" of the cells that have precipitation.
 * let westerly = []
 * let easterly = []
 * let southerly = 0
@@ -440,6 +440,74 @@ Okay, in re-thinking this: I don't need to worry about the grid if I do have the
 * We do the calculations as above, but when looking for the next cell, we need to look in that cell's neighbor IDs, not just going along the array. We continue following that chain of cells until all of the humidity is used up. 
 * We may also want to keep a list of "visited" tiles so that I don't revisit a tile in the path along the way. This prevents circles, just as a check.
 
+### My Conversion of AFMG Algorithm
+
+**First** Calculate winds for every tile (this is needed before we can "rain"), and it probably goes into the database.
+-- TODO: Actually, maybe I could calculate as we go, but it would be nice if someone could adjust this how they want.
+
+* let winds = array[18] of wind directions in clockwise angles from north
+* for each tile:
+  * lat = tile.lat
+  * wind_tier = ((lat - 89).abs() / 30).floor(); 
+    * Basically, like the lat_band, but the division is into five degrees
+  * tile.set(tile.fid(),"WIND_DIR",winds[wind_tier])
+
+**Second** Calculate precipitation
+
+* let prec_percent = input: Percent precipitation (input value "Precipitation" 0-100)
+* let tiles = list
+* let max_elevation = 0;
+* for each tile in layer:
+  * max_elevation = max(elevation of tile,max_elevation)
+  * add tile data to tiles
+* let elevation_factor = 80/max // this is used for quickly calculating things by elevation, it represents an assumed max value of 0, with 20 being sea-level, which comes from the AFMG stuff.
+* let max_passable_elevation = 65
+
+* let cells_number_modifier = (count of tiles/10000)^0.25
+* let prec_input_modifier = pec_percent/100
+* let modifier = cells_number_modifier * prec_input_modifier
+  * Okay, what I believe this is calculating a "percent" of the cells that have precipitation.
+* let latitude_modifier = [4, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0.5]
+  * This bases itself on "bands" of rain. See the comments on this one above. Basically, represents things like ITCZ.
+
+* for each tile in tiles:
+  * lat = tile.lat
+  * lat_band = ((lat.abs() - 1) / 5).floor()
+  * lat_mod = latitude_modifier[lat_band]
+  * trace_winds(tile.fid(),lat_mod) // the second is a modifier for humidity by latitude
+
+trace_winds(tile_fid,modifier):
+  * let max_prec = 120*modifier;
+  * let humidity = max_prec - (elevation of tile * elevation_factor + 20) // The 20, again, has to do with copying this algorithm from AFMG.
+  * if humidity < 0 return;
+  * let current = tile
+  * while current is not none:
+    * let wind_dir = wind direction for current
+    * let next = neighbor of current who is closest to that wind direction.
+    * if next.fid = current.fid return; // we don't want to go in circles.
+    * if temperature of current >= -5 // humidity does not change over permafrost
+      * if current is_ocean:
+        * if not next_neighbor is_ocean:
+          * next_neighbor.precipitation += ((humidity / rand(10,20)),1).max() // coastal precipitation
+        * else 
+          * humidity = (humidity + 5 * modifier, max_prec).max(); // we add more humidity
+          * current.precipitation += 5 * modifier; // water cells precipitation
+      * else 
+        * is_passable = next.elevation  < max_passable_elevation
+        * precipitiation = is_passable ? get_precipitation(humidity,current,next) : humidity
+        * current.precipitation = precipitation;
+        * evaporation = precipitation > 1.5 ? 1 : 0;
+        * humidity = is_passable? (humidity - precipitation + evaporation),clamp(0, max_prec) : 0
+    * if humidity == 0 return; // we've passed on all of the humidity
+    * current = next
+  
+* get_precipitation(humidity,i,n)
+  * normal_loss = Math.max(humidity / (10 * modifier), 1); // precipitation in normal conditions
+  * diff = Math.max(next.height - current.height, 0) * elevation_factor; // difference in height -- the elavation_factor is part of converting from AFMG
+  * mod = ((next.height * elevation_factor + 20) / 70) ^ 2; // 50 stands for hills, 70 for mountains -- NOTE: I'm not sure if I need this
+  * return clamp(normal_loss + diff * mod, 1, humidity))
+
+
 
 # Tasks
 
@@ -475,6 +543,9 @@ To proceed on this, I can break it down into the following steps:
     [X] add Ocean Mask option vs ocean elevation.
 [ ] `gen-climate` command
     [ ] Review AFMG climate generation algorithms and add them -- we'll wait on improved algorithms until later
+    [X] Generate temperatures
+    [ ] Generate wind directions
+    [ ] Generate precipitation
     [ ] Figure out whether we're overwriting or creating new processed Terrain files, and if the latter, come up with a default naming scheme so the `genesis` command can leave the working files, and it is easy to "find" files when working with the other tools. Maybe there's a "project" file which is automatically updated? Or, maybe the required layers are required parameters, and can be specified with a configuration file, with an option to update that file after running commands.
 [ ] `gen-biomes` command
     [ ] Biome file

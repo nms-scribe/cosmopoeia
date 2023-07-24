@@ -16,7 +16,7 @@ use crate::algorithms::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::algorithms::VoronoiGenerator;
 use crate::world_map::VoronoiTile;
-use crate::world_map::OceanSamplingMethod;
+use crate::algorithms::OceanSamplingMethod;
 
 
 subcommand_def!{
@@ -269,7 +269,7 @@ subcommand_def!{
         no_data: bool,
 
         // If the value is below this value, it is considered ocean. If not specified, all data will be ocean.
-        #[arg(long)]
+        #[arg(long,allow_hyphen_values=true)]
         below: Option<f64>,
 
     }
@@ -298,4 +298,95 @@ impl Task for DevSampleOceanToVoronoi {
     }
 }
 
+
+subcommand_def!{
+    /// Samples heights from an elevation map onto a voronoi tiles layer
+    #[command(hide=true)]
+    pub(crate) struct DevGenerateTemperatures {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        /// The rough temperature (in celsius) at the equator
+        #[arg(long,default_value="25",allow_hyphen_values=true)]
+        equator_temp: i8,
+
+        /// The rough temperature (in celsius) at the poles
+        #[arg(long,default_value="-15",allow_hyphen_values=true)]
+        polar_temp: i8,
+
+    }
+}
+
+impl Task for DevGenerateTemperatures {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+        
+        target.generate_temperatures(self.equator_temp,self.polar_temp,&mut progress)
+    
+    }
+}
+
+
+
+subcommand_def!{
+    /// Samples heights from an elevation map onto a voronoi tiles layer
+    #[command(hide=true)]
+    pub(crate) struct DevGenerateWind {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="225")]
+        // Wind direction above latitude 60 N
+        north_polar: u16,
+
+        #[arg(long,default_value="45")]
+        // Wind direction from latitude 30 N to 60 N
+        north_middle: u16,
+
+        #[arg(long,default_value="225")]
+        // Wind direction from the equator to latitude 30 N
+        north_tropical: u16,
+
+        #[arg(long,default_value="315")]
+        // Wind direction from the equator to latitude 30 S
+        south_tropical: u16,
+
+        #[arg(long,default_value="135")]
+        // Wind direction from latitude 30 S to 60 S
+        south_middle: u16,
+
+        #[arg(long,default_value="315")]
+        // Wind direction below latitude 60 S
+        south_polar: u16,
+
+    }
+}
+
+impl Task for DevGenerateWind {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        let winds = [
+            self.north_polar as f64,
+            self.north_middle as f64,
+            self.north_tropical as f64,
+            self.south_tropical as f64,
+            self.south_middle as f64,
+            self.south_polar as f64
+        ];
+
+        target.generate_winds(winds,&mut progress)
+    
+    }
+}
 

@@ -54,6 +54,8 @@ command!{
     dev::DevVoronoiNeighbors;
     dev::DevSampleHeightsToVoronoi;
     dev::DevSampleOceanToVoronoi;
+    dev::DevGenerateTemperatures;
+    dev::DevGenerateWind;
     convert_heightmap::ConvertHeightmap;
 }
 

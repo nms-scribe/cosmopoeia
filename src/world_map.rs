@@ -18,6 +18,12 @@ use crate::progress::ProgressObserver;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::raster::RasterMap;
+use crate::algorithms::OceanSamplingMethod;
+use crate::algorithms::sample_elevations;
+use crate::algorithms::sample_ocean;
+use crate::algorithms::calculate_neighbors;
+use crate::algorithms::generate_temperatures;
+use crate::algorithms::generate_winds;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
@@ -179,31 +185,28 @@ impl VoronoiTile {
     }
 }
 
-pub(crate) enum OceanSamplingMethod {
-    Below(f64), // any elevation below the specified value is ocean
-    AllData, // any elevation that is not nodata is ocean
-    NoData, // any elevation that is nodata is ocean
-    NoDataAndBelow(f64), // any elevation that is no data or below the specified value is ocean.
-}
-
 pub(crate) struct TilesLayer<'lifetime> {
     tiles: WorldLayer<'lifetime>
 }
 
 impl<'lifetime> TilesLayer<'lifetime> {
 
-    const FIELD_SITE_X: &str = "site_x";
-    const FIELD_SITE_Y: &str = "site_y";
-    const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
-    const FIELD_ELEVATION: &str = "elevation";
-    const FIELD_OCEAN: &str = "is_ocean";
+    pub(crate) const FIELD_SITE_X: &str = "site_x";
+    pub(crate) const FIELD_SITE_Y: &str = "site_y";
+    pub(crate) const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
+    pub(crate) const FIELD_ELEVATION: &str = "elevation";
+    pub(crate) const FIELD_OCEAN: &str = "is_ocean";
+    pub(crate) const FIELD_TEMPERATURE: &str = "temperature";
+    pub(crate) const FIELD_WIND: &str = "wind_dir";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 5] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 7] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
         (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString),
         (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
-        (Self::FIELD_OCEAN,OGRFieldType::OFTInteger)
+        (Self::FIELD_OCEAN,OGRFieldType::OFTInteger),
+        (Self::FIELD_TEMPERATURE,OGRFieldType::OFTReal),
+        (Self::FIELD_WIND,OGRFieldType::OFTReal)
     ];
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
@@ -242,232 +245,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     }
 
-    pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let layer = &mut self.tiles.layer;
-
-        progress.start_known_endpoint(|| ("Calculating neighbors.",layer.feature_count() as usize));
-
-        let features: Result<Vec<(Option<u64>,Option<Geometry>,Option<f64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
-            feature.fid(),
-            feature.geometry().cloned(),
-            feature.field_as_double_by_name(Self::FIELD_SITE_X)?,
-            feature.field_as_double_by_name(Self::FIELD_SITE_Y)?,
-        ))).collect();
-        let features = features?;
-
-        // # Loop through all features and find features that touch each feature
-        // for f in feature_dict.values():
-        for (i,(working_fid,working_geometry,site_x,site_y)) in features.iter().enumerate() {
-
-            if let Some(working_fid) = working_fid {
-                if let Some(working_geometry) = working_geometry {
-
-                    let envelope = working_geometry.envelope();
-                    layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
-        
-        
-                    let mut neighbors = Vec::new();
-        
-                    for intersecting_feature in layer.features() {
-        
-                        if let Some(intersecting_fid) = intersecting_feature.fid() {
-                            if (working_fid != &intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
-
-                                let neighbor_site_x = intersecting_feature.field_as_double_by_name(Self::FIELD_SITE_X)?;
-                                let neighbor_site_y = intersecting_feature.field_as_double_by_name(Self::FIELD_SITE_Y)?;
-                                let neighbor_angle = if let (Some(site_x),Some(site_y),Some(neighbor_site_x),Some(neighbor_site_y)) = (site_x,site_y,neighbor_site_x,neighbor_site_y) {
-                                    // needs to be clockwise, from the north, with a value from 0..360
-                                    // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-                                    let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
-                                    // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-                                    let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
-                                    // And then, to get the values in the range from 0..360, mod it.
-                                    let clamped = clockwise_from_north % 360.0;
-                                    clamped
-                                } else {
-                                    // in the off chance that we actually are missing data, this marks an appropriate angle.
-                                    -360.0 
-                                };
-                            
-                                neighbors.push(format!("{}:{}",intersecting_fid,neighbor_angle)) 
-                            }
-    
-                        }
-        
-                    }
-                    
-                    layer.clear_spatial_filter();
-
-                    if let Some(working_feature) = layer.feature(*working_fid) {
-                        working_feature.set_field_string(Self::FIELD_NEIGHBOR_TILES, &neighbors.join(","))?;
-        
-                        layer.set_feature(working_feature)?;
-    
-                    }
-        
-    
-                }
-            }
-
-            progress.update(|| i);
-
-        }
-
-        progress.finish(|| "Neighbors calculated.");
-
-        Ok(())
-    }
-
-
-    pub(crate) fn sample_elevations<Progress: ProgressObserver>(&mut self, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
-
-        let layer = &mut self.tiles.layer;
-
-        progress.start_unknown_endpoint(|| "Reading raster");
-
-        let band = raster.read_band::<f64>(1)?;
-        let bounds = raster.bounds()?;
-
-        progress.finish(|| "Raster read.");
-
-        progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
-
-        let mut features = Vec::new();
-
-        for (i,feature) in layer.features().enumerate() {
-            features.push((i,
-                           feature.fid(),
-                           feature.field_as_double_by_name(Self::FIELD_SITE_X)?,
-                           feature.field_as_double_by_name(Self::FIELD_SITE_Y)?
-            ))
-
-        }
-
-        progress.finish(|| "Tiles read.");
-
-        progress.start_known_endpoint(|| ("Sampling elevations.",layer.feature_count() as usize));
-
-        for (i,fid,site_lon,site_lat) in features {
-
-
-            if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
-
-                let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
-
-                if let Some(elevation) = band.get_value(x, y) {
-
-                    if let Some(feature) = layer.feature(fid) {
-                        feature.set_field_double(Self::FIELD_ELEVATION, *elevation)?;
-
-                        layer.set_feature(feature)?;
-        
-                    }
-
-                }
-
-    
-            }
-
-            progress.update(|| i);
-
-
-
-
-        }
-
-        progress.finish(|| "Elevation sampled.");
-
-        Ok(())
-    }
-
-    pub(crate) fn sample_ocean<Progress: ProgressObserver>(&mut self, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
-
-        let layer = &mut self.tiles.layer;
-
-        progress.start_unknown_endpoint(|| "Reading raster");
-
-        let band = raster.read_band::<f64>(1)?;
-        let bounds = raster.bounds()?;
-        let no_data_value = band.no_data_value();
-
-        progress.finish(|| "Raster read.");
-
-        progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
-
-        let mut features = Vec::new();
-
-        for (i,feature) in layer.features().enumerate() {
-            features.push((i,
-                           feature.fid(),
-                           feature.field_as_double_by_name(Self::FIELD_SITE_X)?,
-                           feature.field_as_double_by_name(Self::FIELD_SITE_Y)?
-            ))
-
-        }
-
-        progress.finish(|| "Tiles read.");
-
-        progress.start_known_endpoint(|| ("Sampling oceans.",layer.feature_count() as usize));
-
-        for (i,fid,site_lon,site_lat) in features {
-
-
-            if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
-
-                let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
-
-                if let Some(feature) = layer.feature(fid) {
-
-                    let is_ocean = if let Some(elevation) = band.get_value(x, y) {
-                        let is_no_data = match no_data_value {
-                            Some(no_data_value) if no_data_value.is_nan() => elevation.is_nan(),
-                            Some(no_data_value) => elevation == no_data_value,
-                            None => false,
-                        };
-
-                        match method {
-                            OceanSamplingMethod::Below(_) if is_no_data => false,
-                            OceanSamplingMethod::Below(below) => elevation < &below,
-                            OceanSamplingMethod::AllData => !is_no_data,
-                            OceanSamplingMethod::NoData => is_no_data,
-                            OceanSamplingMethod::NoDataAndBelow(below) => is_no_data || (elevation < &below),
-                        }
-
-                    } else {
-
-                        match method {
-                            OceanSamplingMethod::Below(_) => false,
-                            OceanSamplingMethod::AllData => false,
-                            OceanSamplingMethod::NoData => true,
-                            OceanSamplingMethod::NoDataAndBelow(_) => true,
-                        }
-
-                    };
-
-                    let is_ocean = if is_ocean { 1 } else { 0 };
-
-                    feature.set_field_integer(Self::FIELD_OCEAN, is_ocean)?;
-
-                    layer.set_feature(feature)?;
-    
-                }
-
-
-    
-            }
-
-            progress.update(|| i);
-
-
-
-
-        }
-
-        progress.finish(|| "Oceans sampled.");
-
-        Ok(())
-    }
 
 
 }
@@ -629,7 +407,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            tiles.calculate_neighbors(progress)?;
+            calculate_neighbors(&mut tiles.tiles.layer,progress)?;
 
             Ok(())
     
@@ -652,7 +430,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            tiles.sample_elevations(raster,progress)?;
+            sample_elevations(&mut tiles.tiles.layer,raster,progress)?;
 
             Ok(())
     
@@ -675,7 +453,54 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            tiles.sample_ocean(raster,method,progress)?;
+            sample_ocean(&mut tiles.tiles.layer,raster,method,progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
+
+    pub(crate) fn generate_temperatures<Progress: ProgressObserver>(&mut self, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            generate_temperatures(&mut tiles.tiles.layer, equator_temp,polar_temp,progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
+
+
+    pub(crate) fn generate_winds<Progress: ProgressObserver>(&mut self, winds: [f64; 6], progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            generate_winds(&mut tiles.tiles.layer, winds, progress)?;
 
             Ok(())
     
