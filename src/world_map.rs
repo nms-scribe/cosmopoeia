@@ -11,6 +11,8 @@ use gdal::vector::OGRFieldType;
 use gdal::vector::FieldValue;
 use gdal::vector::Geometry;
 use gdal::vector::Layer;
+use gdal::vector::Feature;
+use gdal::vector::FeatureIterator;
 use gdal::Transaction;
 
 use crate::errors::CommandError;
@@ -25,6 +27,7 @@ use crate::algorithms::calculate_neighbors;
 use crate::algorithms::generate_temperatures;
 use crate::algorithms::generate_winds;
 use crate::algorithms::generate_precipitation;
+use crate::algorithms::generate_flowage;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
@@ -177,12 +180,12 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 }
 
-pub(crate) struct VoronoiTile {
+pub(crate) struct VoronoiSite {
     geometry: Geometry,
     site: Point
 }
 
-impl VoronoiTile {
+impl VoronoiSite {
 
     pub(crate) fn new(geometry: Geometry, site: Point) -> Self {
         Self {
@@ -191,6 +194,248 @@ impl VoronoiTile {
         }
     }
 }
+
+
+pub(crate) struct TileFeature<'lifetime> {
+
+    feature: Feature<'lifetime>
+}
+
+impl<'lifetime> TileFeature<'lifetime> {
+
+    fn from_data(feature: Feature<'lifetime>) -> Self {
+        Self {
+            feature
+        }
+    }
+
+    pub(crate) fn fid(&self) -> Option<u64> {
+        self.feature.fid()
+    }
+
+    pub(crate) fn geometry(&self) -> Option<&Geometry> {
+        self.feature.geometry()
+    }
+
+    pub(crate) fn site_x(&self) -> Result<Option<f64>,CommandError> {
+        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?)
+    }
+
+    pub(crate) fn site_y(&self) -> Result<Option<f64>,CommandError> {
+        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?)
+    }
+
+    pub(crate) fn neighbors(&self) -> Result<Option<Vec<(u64,i32)>>,CommandError> {
+        if let Some(neighbors) = self.feature.field_as_string_by_name(TilesLayer::FIELD_NEIGHBOR_TILES)? {
+            Ok(Some(neighbors.split(',').filter_map(|a| {
+                let mut a = a.splitn(2, ':');
+                if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
+                    if let Some(direction) = a.next().map(|d| d.parse().ok()).flatten() {
+                        if direction >= 0 {
+                            Some((neighbor,direction))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+                
+            }).collect()))
+        } else {
+            Ok(Some(Vec::new()))
+        }
+    }
+
+    pub(crate) fn elevation(&self) -> Result<Option<f64>,CommandError> {
+        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_ELEVATION)?)
+    }
+
+    pub(crate) fn elevation_scaled(&self) -> Result<Option<i32>,CommandError> {
+        Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_ELEVATION_SCALED)?)
+    }
+
+    pub(crate) fn ocean(&self) -> Result<Option<bool>,CommandError> {
+        Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_SITE_Y)?.map(|n| n != 0))
+    }
+
+    pub(crate) fn temperature(&self) -> Result<Option<f64>,CommandError> {
+        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_TEMPERATURE)?)
+    }
+
+    pub(crate) fn wind(&self) -> Result<Option<i32>,CommandError> {
+        Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_WIND)?)
+    }
+
+    pub(crate) fn precipitation(&self) -> Result<Option<f64>,CommandError> {
+        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_PRECIPITATION)?)
+    }
+
+    #[allow(dead_code)] pub(crate) fn set_site_x(&mut self, value: f64) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_double(TilesLayer::FIELD_SITE_X, value)?)
+    }
+
+    #[allow(dead_code)] pub(crate) fn set_site_y(&mut self, value: f64) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_double(TilesLayer::FIELD_SITE_Y, value)?)
+    }
+
+    pub(crate) fn set_neighbors(&mut self, value: &Vec<(u64,i32)>) -> Result<(),CommandError> {
+        let neighbors = value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",");
+        Ok(self.feature.set_field_string(TilesLayer::FIELD_ELEVATION, &neighbors)?)
+    }
+
+    pub(crate) fn set_elevation(&mut self, value: f64) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_double(TilesLayer::FIELD_ELEVATION, value)?)
+    }
+
+    pub(crate) fn set_elevation_scaled(&mut self, value: i32) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_integer(TilesLayer::FIELD_ELEVATION_SCALED, value)?)
+    }
+
+    pub(crate) fn set_ocean(&mut self, value: bool) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_integer(TilesLayer::FIELD_OCEAN, if value { 1 } else { 0 })?)
+    }
+
+    pub(crate) fn set_temperature(&mut self, value: f64) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_double(TilesLayer::FIELD_TEMPERATURE, value)?)
+    }
+
+    pub(crate) fn set_wind(&mut self, value: i32) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_integer(TilesLayer::FIELD_WIND, value)?)
+    }
+
+    pub(crate) fn set_precipitation(&mut self, value: f64) -> Result<(),CommandError> {
+        Ok(self.feature.set_field_double(TilesLayer::FIELD_PRECIPITATION, value)?)
+    }
+
+
+}
+
+pub(crate) struct TileFeatureIterator<'lifetime> {
+    features: FeatureIterator<'lifetime>
+}
+
+impl<'lifetime> Iterator for TileFeatureIterator<'lifetime> {
+    type Item = TileFeature<'lifetime>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.features.next().map(TileFeature::from_data)
+    }
+}
+
+impl<'lifetime> From<FeatureIterator<'lifetime>> for TileFeatureIterator<'lifetime> {
+    fn from(features: FeatureIterator<'lifetime>) -> Self {
+        Self {
+            features
+        }
+    }
+}
+
+pub(crate) struct TileDataIterator<'lifetime, Data: TileData> {
+    features: TileFeatureIterator<'lifetime>,
+    data: std::marker::PhantomData<Data>
+}
+
+impl<'lifetime,Data: TileData> Iterator for TileDataIterator<'lifetime,Data> {
+    type Item = Result<Data,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(data) = self.features.next() {
+            if let Some(feature) = Data::from_data(data).transpose() {
+                return Some(feature)
+            }
+        }
+        None
+    }
+}
+
+impl<'lifetime,Data: TileData> From<TileFeatureIterator<'lifetime>> for TileDataIterator<'lifetime,Data> {
+    fn from(features: TileFeatureIterator<'lifetime>) -> Self {
+        Self {
+            features,
+            data: std::marker::PhantomData
+        }
+    }
+}
+
+pub(crate) trait TileData: Sized {
+
+    fn from_data(feature: TileFeature) -> Result<Option<Self>,CommandError>;
+
+}
+
+macro_rules! tile_data {
+    (variables@ $feature: ident, $($field: ident),*) => {
+        $(
+            let $field = $feature.$field()?;
+        )*
+    };
+    (constructor@ $($field: ident),*) => {
+        if let ($(Some($field)),*) = ($($field),*) {
+            Ok(Some(Self {
+                $(
+                    $field
+                ),*
+            }))
+        } else {
+            Ok(None)
+        }
+
+    };
+    (from_data@ $feature: ident, fid, geometry, $($field: ident),*) => {{
+        let fid = $feature.fid();
+        let geometry = $feature.geometry().cloned();
+        tile_data!(variables@ $feature, $($field),*);
+        tile_data!(constructor@ fid, geometry, $($field),*)
+    }};
+    (from_data@ $feature: ident, fid, $($field: ident),*) => {{
+        let fid = $feature.fid();
+        tile_data!(variables@ $feature, $($field),*);
+        tile_data!(constructor@ fid, $($field),*)
+    }};
+    ($name: ident, fid, $($field: ident: $type: ty),*) => {
+        pub(crate) struct $name {
+            pub(crate) fid: u64,
+            $(
+                pub(crate) $field: $type
+            ),*
+        }
+
+        impl TileData for $name {
+
+            fn from_data(feature: TileFeature) -> Result<Option<Self>,CommandError> {
+                tile_data!(from_data@ feature,fid,$($field),*)
+            }
+        }
+        
+    };
+    ($name: ident, fid, geometry, $($field: ident: $type: ty),*) => {
+        pub(crate) struct $name {
+            pub(crate) fid: u64,
+            pub(crate) geometry: Geometry,
+            $(
+                pub(crate) $field: $type
+            ),*
+        }
+
+        impl TileData for $name {
+
+            fn from_data(feature: TileFeature) -> Result<Option<Self>,CommandError> {
+                tile_data!(from_data@ feature,fid,geometry,$($field),*)
+            }
+        }
+        
+    };
+}
+
+tile_data!(TileDataSite, fid, site_x: f64,site_y: f64);
+tile_data!(TileDataSiteGeo, fid, geometry, site_x: f64,site_y: f64);
+tile_data!(TileDataLatElevOcean, fid, site_y: f64, elevation: f64, ocean: bool);
+tile_data!(TileDataLat, fid, site_y: f64);
+tile_data!(TileDataForPrecipitation, fid, site_y: f64, elevation_scaled: i32, wind: i32, ocean: bool, neighbors: Vec<(u64,i32)>, temperature: f64);
+
 
 pub(crate) struct TilesLayer<'lifetime> {
     tiles: WorldLayer<'lifetime>
@@ -218,7 +463,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         (Self::FIELD_ELEVATION_SCALED,OGRFieldType::OFTInteger),
         (Self::FIELD_OCEAN,OGRFieldType::OFTInteger),
         (Self::FIELD_TEMPERATURE,OGRFieldType::OFTReal),
-        (Self::FIELD_WIND,OGRFieldType::OFTReal),
+        (Self::FIELD_WIND,OGRFieldType::OFTInteger),
         (Self::FIELD_PRECIPITATION,OGRFieldType::OFTReal)
     ];
 
@@ -238,7 +483,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         })
     }
 
-    pub(crate) fn add_tile(&mut self, tile: VoronoiTile) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, tile: VoronoiSite) -> Result<(),CommandError> {
 
         let (x,y) = tile.site.to_tuple();
         self.tiles.add(tile.geometry,&[
@@ -252,13 +497,47 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     }
 
-
-    #[allow(dead_code)] pub(crate) fn read_tiles(&mut self) -> LayerGeometryIterator {
-        self.tiles.read_geometries()
-
+    pub(crate) fn read_features<Progress: ProgressObserver, Data: TileData>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Reading tiles.",self.tiles.layer.feature_count() as usize));
+        let mut result = Vec::new();
+        for (i,feature) in self.tiles.layer.features().enumerate() {
+            if let Some(data) = Data::from_data(TileFeature::from_data(feature))? {
+                result.push(data)
+            }
+            progress.update(|| i);
+        }
+        progress.finish(|| "Tiles read.");
+        Ok(result)
     }
 
+    pub(crate) fn feature_by_id(&self, fid: u64) -> Option<TileFeature> {
+        self.tiles.layer.feature(fid).map(TileFeature::from_data)
+    }
 
+    pub(crate) fn update_feature(&self, feature: TileFeature) -> Result<(),CommandError> {
+        Ok(self.tiles.layer.set_feature(feature.feature)?)
+    }
+
+    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
+    pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
+        self.tiles.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
+    }
+
+    pub(crate) fn features(&mut self) -> TileFeatureIterator {
+        self.tiles.layer.features().into()
+    }
+
+    pub(crate) fn data<Data: TileData>(&mut self) -> TileDataIterator<Data> {
+        self.features().into()
+    }
+
+    pub(crate) fn clear_spatial_filter(&mut self) {
+        self.tiles.layer.clear_spatial_filter()
+    }
+
+    pub(crate) fn feature_count(&self) -> usize {
+        self.tiles.layer.feature_count() as usize
+    }
 
 
 }
@@ -439,7 +718,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<VoronoiTile,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<VoronoiSite,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut target = target.create_tile_layer(overwrite_layer)?;
@@ -474,7 +753,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            calculate_neighbors(&mut tiles.tiles.layer,progress)?;
+            calculate_neighbors(&mut tiles,progress)?;
 
             Ok(())
     
@@ -497,7 +776,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            sample_elevations(&mut tiles.tiles.layer,raster,progress)?;
+            sample_elevations(&mut tiles,raster,progress)?;
 
             Ok(())
     
@@ -520,7 +799,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            sample_ocean(&mut tiles.tiles.layer,raster,method,progress)?;
+            sample_ocean(&mut tiles,raster,method,progress)?;
 
             Ok(())
     
@@ -543,7 +822,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            generate_temperatures(&mut tiles.tiles.layer, equator_temp,polar_temp,progress)?;
+            generate_temperatures(&mut tiles, equator_temp,polar_temp,progress)?;
 
             Ok(())
     
@@ -561,13 +840,13 @@ impl WorldMap {
     }
 
 
-    pub(crate) fn generate_winds<Progress: ProgressObserver>(&mut self, winds: [f64; 6], progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn generate_winds<Progress: ProgressObserver>(&mut self, winds: [i32; 6], progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            generate_winds(&mut tiles.tiles.layer, winds, progress)?;
+            generate_winds(&mut tiles, winds, progress)?;
 
             Ok(())
     
@@ -591,7 +870,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            generate_precipitation(&mut tiles.tiles.layer, moisture, progress)?;
+            generate_precipitation(&mut tiles, moisture, progress)?;
 
             Ok(())
     
@@ -607,6 +886,32 @@ impl WorldMap {
 
 
     }
+
+    pub(crate) fn generate_flowage<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            generate_flowage(&mut tiles, progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
+
+
+    }
+
+
+
 
 }
 
@@ -646,7 +951,7 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
         Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
 
-    pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
+    #[allow(dead_code)] pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
         Ok(BiomeLayer::open_from_dataset(&mut self.dataset)?)
 
     }

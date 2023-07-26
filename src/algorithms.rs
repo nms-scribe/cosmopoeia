@@ -7,8 +7,6 @@ use rand::Rng;
 use gdal::vector::Geometry;
 use gdal::vector::OGRwkbGeometryType::wkbPoint;
 use gdal::vector::OGRwkbGeometryType::wkbPolygon;
-use gdal::vector::Layer;
-use gdal::vector::LayerAccess;
 use ordered_float::NotNan;
 
 use crate::errors::CommandError;
@@ -16,7 +14,12 @@ use crate::utils::Extent;
 use crate::utils::Point;
 use crate::utils::GeometryGeometryIterator;
 use crate::utils::create_polygon;
-use crate::world_map::VoronoiTile;
+use crate::world_map::VoronoiSite;
+use crate::world_map::TileDataSite;
+use crate::world_map::TileDataSiteGeo;
+use crate::world_map::TileDataLatElevOcean;
+use crate::world_map::TileDataLat;
+use crate::world_map::TileDataForPrecipitation;
 use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
@@ -337,7 +340,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    fn create_voronoi(site: Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<VoronoiTile>,CommandError> {
+    fn create_voronoi(site: Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<VoronoiSite>,CommandError> {
         if (voronoi.vertices.len() >= 3) && extent.contains(&site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
@@ -354,7 +357,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             } else {
                 Some(polygon)
             };
-            Ok(polygon.map(|a| VoronoiTile::new(a,site)))
+            Ok(polygon.map(|a| VoronoiSite::new(a,site)))
         } else {
             // In any case, these would result in either a line or a point, not even a sliver.
             Ok(None)
@@ -429,7 +432,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
 impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator for VoronoiGenerator<GeometryIterator> {
 
-    type Item = Result<VoronoiTile,CommandError>; // TODO: Should be a voronoi struct defined in world_map.
+    type Item = Result<VoronoiSite,CommandError>; // TODO: Should be a voronoi struct defined in world_map.
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.phase {
@@ -457,7 +460,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
 
 
 
-pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut Layer, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut TilesLayer, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
 
     progress.start_unknown_endpoint(|| "Reading raster");
 
@@ -478,51 +481,35 @@ pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut Layer, r
 
     progress.finish(|| "Raster read.");
 
-    progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
+    let features = layer.read_features::<_,TileDataSite>(progress)?;
 
-    let mut features = Vec::new();
+    progress.start_known_endpoint(|| ("Sampling elevations.",features.len()));
 
-    for (i,feature) in layer.features().enumerate() {
-        features.push((i,
-                       feature.fid(),
-                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?,
-                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?
-        ))
-
-    }
-
-    progress.finish(|| "Tiles read.");
-
-    progress.start_known_endpoint(|| ("Sampling elevations.",layer.feature_count() as usize));
-
-    for (i,fid,site_lon,site_lat) in features {
+    for (i,feature) in features.iter().enumerate() {
 
 
-        if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
+        let (x,y) = bounds.coords_to_pixels(feature.site_x, feature.site_y);
 
-            let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
+        if let Some(elevation) = band.get_value(x, y) {
 
-            if let Some(elevation) = band.get_value(x, y) {
+            if let Some(mut feature) = layer.feature_by_id(feature.fid) {
 
-                if let Some(feature) = layer.feature(fid) {
+                let elevation_scaled = if elevation >= &0.0 {
+                    20 + (elevation * positive_elevation_scale).floor() as i32
+                } else {
+                    20 - (elevation.abs() * negative_elevation_scale).floor() as i32
+                };
 
-                    let elevation_scaled = if elevation >= &0.0 {
-                        20 + (elevation * positive_elevation_scale).floor() as i32
-                    } else {
-                        20 - (elevation.abs() * negative_elevation_scale).floor() as i32
-                    };
+                feature.set_elevation(*elevation)?;
+                feature.set_elevation_scaled(elevation_scaled)?;
 
-                    feature.set_field_double(TilesLayer::FIELD_ELEVATION, *elevation)?;
-                    feature.set_field_integer(TilesLayer::FIELD_ELEVATION_SCALED, elevation_scaled)?;
-
-                    layer.set_feature(feature)?;
-    
-                }
+                layer.update_feature(feature)?;
 
             }
 
-
         }
+
+
 
         progress.update(|| i);
 
@@ -545,7 +532,7 @@ pub(crate) enum OceanSamplingMethod {
     // TODO: Another option: a list of points to act as seeds, along with an elevation, use a flood-fill to mark oceans that are connected to these and under that elevation.
 }
 
-pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut Layer, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
 
     progress.start_unknown_endpoint(|| "Reading raster");
 
@@ -555,78 +542,58 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut Layer, raster
 
     progress.finish(|| "Raster read.");
 
-    progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count() as usize));
+    let features = layer.read_features::<_,TileDataSite>(progress)?;
 
-    let mut features = Vec::new();
-
-    for (i,feature) in layer.features().enumerate() {
-        features.push((i,
-                       feature.fid(),
-                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?,
-                       feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?
-        ))
-
-    }
-
-    progress.finish(|| "Tiles read.");
-
-    progress.start_known_endpoint(|| ("Sampling oceans.",layer.feature_count() as usize));
+    progress.start_known_endpoint(|| ("Sampling oceans.",features.len()));
 
     let mut bad_ocean_tile_found = false;
 
-    for (i,fid,site_lon,site_lat) in features {
+    for (i,feature) in features.iter().enumerate() {
 
 
-        if let (Some(fid),Some(site_lon),Some(site_lat)) = (fid,site_lon,site_lat) {
+        let (x,y) = bounds.coords_to_pixels(feature.site_x, feature.site_y);
 
-            let (x,y) = bounds.coords_to_pixels(site_lon, site_lat);
+        if let Some(mut feature) = layer.feature_by_id(feature.fid) {
 
-            if let Some(feature) = layer.feature(fid) {
-
-                let is_ocean = if let Some(elevation) = band.get_value(x, y) {
-                    let is_no_data = match no_data_value {
-                        Some(no_data_value) if no_data_value.is_nan() => elevation.is_nan(),
-                        Some(no_data_value) => elevation == no_data_value,
-                        None => false,
-                    };
-
-                    match method {
-                        OceanSamplingMethod::Below(_) if is_no_data => false,
-                        OceanSamplingMethod::Below(below) => elevation < &below,
-                        OceanSamplingMethod::AllData => !is_no_data,
-                        OceanSamplingMethod::NoData => is_no_data,
-                        OceanSamplingMethod::NoDataAndBelow(below) => is_no_data || (elevation < &below),
-                    }
-
-                } else {
-
-                    match method {
-                        OceanSamplingMethod::Below(_) => false,
-                        OceanSamplingMethod::AllData => false,
-                        OceanSamplingMethod::NoData => true,
-                        OceanSamplingMethod::NoDataAndBelow(_) => true,
-                    }
-
+            let is_ocean = if let Some(elevation) = band.get_value(x, y) {
+                let is_no_data = match no_data_value {
+                    Some(no_data_value) if no_data_value.is_nan() => elevation.is_nan(),
+                    Some(no_data_value) => elevation == no_data_value,
+                    None => false,
                 };
 
-                if let Some(elevation) = feature.field_as_double_by_name(TilesLayer::FIELD_ELEVATION)? {
-                    if is_ocean && (elevation > 0.0) {
-                        bad_ocean_tile_found = true;
-                    }
-
+                match method {
+                    OceanSamplingMethod::Below(_) if is_no_data => false,
+                    OceanSamplingMethod::Below(below) => elevation < &below,
+                    OceanSamplingMethod::AllData => !is_no_data,
+                    OceanSamplingMethod::NoData => is_no_data,
+                    OceanSamplingMethod::NoDataAndBelow(below) => is_no_data || (elevation < &below),
                 }
 
-                let is_ocean = if is_ocean { 1 } else { 0 };
+            } else {
 
-                feature.set_field_integer(TilesLayer::FIELD_OCEAN, is_ocean)?;
+                match method {
+                    OceanSamplingMethod::Below(_) => false,
+                    OceanSamplingMethod::AllData => false,
+                    OceanSamplingMethod::NoData => true,
+                    OceanSamplingMethod::NoDataAndBelow(_) => true,
+                }
 
-                layer.set_feature(feature)?;
+            };
+
+            if let Some(elevation) = feature.elevation()? {
+                if is_ocean && (elevation > 0.0) {
+                    bad_ocean_tile_found = true;
+                }
 
             }
 
+            feature.set_ocean(is_ocean)?;
 
+            layer.update_feature(feature)?;
 
         }
+
 
         progress.update(|| i);
 
@@ -646,71 +613,62 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut Layer, raster
 }
 
 
-pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut Layer, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut TilesLayer, progress: &mut Progress) -> Result<(),CommandError> {
 
-    progress.start_known_endpoint(|| ("Calculating neighbors.",layer.feature_count() as usize));
+    let features = layer.read_features::<_,TileDataSiteGeo>(progress)?;
 
-    let features: Result<Vec<(Option<u64>,Option<Geometry>,Option<f64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
-        feature.fid(),
-        feature.geometry().cloned(),
-        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?,
-        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?,
-    ))).collect();
-    let features = features?;
+    progress.start_known_endpoint(|| ("Calculating neighbors.",features.len()));
 
     // # Loop through all features and find features that touch each feature
     // for f in feature_dict.values():
-    for (i,(working_fid,working_geometry,site_x,site_y)) in features.iter().enumerate() {
+    for (i,feature) in features.iter().enumerate() {
 
-        if let Some(working_fid) = working_fid {
-            if let Some(working_geometry) = working_geometry {
+        let working_fid = feature.fid;
+        let working_geometry = &feature.geometry;
 
-                let envelope = working_geometry.envelope();
-                layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
-    
-    
-                let mut neighbors = Vec::new();
-    
-                for intersecting_feature in layer.features() {
-    
-                    if let Some(intersecting_fid) = intersecting_feature.fid() {
-                        if (working_fid != &intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+        let envelope = working_geometry.envelope();
+        layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
 
-                            let neighbor_site_x = intersecting_feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?;
-                            let neighbor_site_y = intersecting_feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?;
-                            let neighbor_angle = if let (Some(site_x),Some(site_y),Some(neighbor_site_x),Some(neighbor_site_y)) = (site_x,site_y,neighbor_site_x,neighbor_site_y) {
-                                // needs to be clockwise, from the north, with a value from 0..360
-                                // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-                                let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
-                                // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-                                let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
-                                // And then, to get the values in the range from 0..360, mod it.
-                                let clamped = clockwise_from_north % 360.0;
-                                clamped
-                            } else {
-                                // in the off chance that we actually are missing data, this marks an appropriate angle.
-                                -360.0 
-                            };
-                        
-                            neighbors.push(format!("{}:{}",intersecting_fid,neighbor_angle)) 
-                        }
 
-                    }
-    
-                }
+        let mut neighbors = Vec::new();
+
+        for intersecting_feature in layer.features() {
+
+            if let Some(intersecting_fid) = intersecting_feature.fid() {
+                if (working_fid != intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+
+                    let neighbor_site_x = intersecting_feature.site_x()?;
+                    let neighbor_site_y = intersecting_feature.site_y()?;
+                    let neighbor_angle = if let (site_x,site_y,Some(neighbor_site_x),Some(neighbor_site_y)) = (feature.site_x,feature.site_y,neighbor_site_x,neighbor_site_y) {
+                        // needs to be clockwise, from the north, with a value from 0..360
+                        // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+                        let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                        // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+                        let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
+                        // And then, to get the values in the range from 0..360, mod it.
+                        let clamped = clockwise_from_north % 360.0;
+                        clamped
+                    } else {
+                        // in the off chance that we actually are missing data, this marks an appropriate angle.
+                        -360.0 
+                    };
                 
-                layer.clear_spatial_filter();
-
-                if let Some(working_feature) = layer.feature(*working_fid) {
-                    working_feature.set_field_string(TilesLayer::FIELD_NEIGHBOR_TILES, &neighbors.join(","))?;
-    
-                    layer.set_feature(working_feature)?;
-
+                    neighbors.push((intersecting_fid,neighbor_angle.floor() as i32)) 
                 }
-    
 
             }
+
         }
+        
+        layer.clear_spatial_filter();
+
+        if let Some(mut working_feature) = layer.feature_by_id(working_fid) {
+            working_feature.set_neighbors(&neighbors)?;
+
+            layer.update_feature(working_feature)?;
+
+        }
+
 
         progress.update(|| i);
 
@@ -722,11 +680,9 @@ pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut Layer,
 }
 
 
-pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Layer, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut TilesLayer, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
     // Algorithm borrowed from AFMG with some modifications
-
-    progress.start_known_endpoint(|| ("Generating temperatures.",layer.feature_count() as usize));
 
     let equator_temp = equator_temp as f64;
     let polar_temp = polar_temp as f64;
@@ -743,34 +699,28 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Laye
         })/2.0
     }
 
-    let features: Result<Vec<(Option<u64>,Option<f64>,Option<f64>,Option<i32>)>,CommandError> = layer.features().map(|feature| Ok((
-        feature.fid(),
-        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?,
-        feature.field_as_double_by_name(TilesLayer::FIELD_ELEVATION)?,
-        feature.field_as_integer_by_name(TilesLayer::FIELD_OCEAN)?,
-    ))).collect();
-    let features = features?;
+    let features = layer.read_features::<_,TileDataLatElevOcean>(progress)?;
+
+    progress.start_known_endpoint(|| ("Generating temperatures.",features.len()));
 
     for (i,feature) in features.iter().enumerate() {
 
-        if let (Some(working_fid),Some(site_y),Some(elevation),Some(is_ocean)) = feature {
-            let base_temp = equator_temp - (interpolate(site_y.abs()/90.0) * temp_delta);
-            let adabiatic_temp = base_temp - if is_ocean == &0 {
-                (elevation/1000.0)*6.5
-            } else {
-                0.0
-            };
-            let temp = (adabiatic_temp*100.0).round()/100.0;
+        let base_temp = equator_temp - (interpolate(feature.site_y.abs()/90.0) * temp_delta);
+        let adabiatic_temp = base_temp - if !feature.ocean {
+            (feature.elevation/1000.0)*6.5
+        } else {
+            0.0
+        };
+        let temp = (adabiatic_temp*100.0).round()/100.0;
 
-            if let Some(working_feature) = layer.feature(*working_fid) {
-                working_feature.set_field_double(TilesLayer::FIELD_TEMPERATURE, temp)?;
+        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
+            working_feature.set_temperature(temp)?;
 
-                layer.set_feature(working_feature)?;
-
-            }
-
+            layer.update_feature(working_feature)?;
 
         }
+
+
 
         progress.update(|| i);
 
@@ -784,34 +734,27 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Laye
 
 
 
-pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut Layer, winds: [f64; 6], progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut TilesLayer, winds: [i32; 6], progress: &mut Progress) -> Result<(),CommandError> {
 
     // Algorithm borrowed from AFMG with some modifications
 
-    progress.start_known_endpoint(|| ("Generating winds.",layer.feature_count() as usize));
 
-    let features: Result<Vec<(Option<u64>,Option<f64>)>,CommandError> = layer.features().map(|feature| Ok((
-        feature.fid(),
-        feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?,
-    ))).collect();
-    let features = features?;
+    let features = layer.read_features::<_,TileDataLat>(progress)?;
+
+    progress.start_known_endpoint(|| ("Generating winds.",features.len()));
 
     for (i,feature) in features.iter().enumerate() {
 
-        if let (Some(working_fid),Some(site_y)) = feature {
+        let wind_tier = ((feature.site_y - 89.0)/30.0).abs().floor() as usize;
+        let wind_dir = winds[wind_tier];
 
-            let wind_tier = ((site_y - 89.0)/30.0).abs().floor() as usize;
-            let wind_dir = winds[wind_tier];
+        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
+            working_feature.set_wind(wind_dir)?;
 
-            if let Some(working_feature) = layer.feature(*working_fid) {
-                working_feature.set_field_double(TilesLayer::FIELD_WIND, wind_dir)?;
-
-                layer.set_feature(working_feature)?;
-
-            }
-
+            layer.update_feature(working_feature)?;
 
         }
+
 
         progress.update(|| i);
 
@@ -825,7 +768,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut Layer, wind
 
 
 
-pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Layer, moisture: u16, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut TilesLayer, moisture: u16, progress: &mut Progress) -> Result<(),CommandError> {
 
     // Algorithm borrowed from AFMG with some modifications, most importantly I don't have a grid, so I follow the paths of the wind to neighbors.
 
@@ -853,53 +796,26 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Lay
     progress.start_known_endpoint(|| ("Precipitation: mapping tiles.",layer.feature_count() as usize));
     let mut tile_map = HashMap::new();
 
-    for (i,feature) in layer.features().enumerate() {
-        let fid = feature.fid();
-        let site_y = feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?;
-        let elevation_scaled = feature.field_as_integer_by_name(TilesLayer::FIELD_ELEVATION_SCALED)?;
-        let wind = feature.field_as_integer_by_name(TilesLayer::FIELD_WIND)?;
-        let temperature = feature.field_as_double_by_name(TilesLayer::FIELD_TEMPERATURE)?;
-        let is_ocean = feature.field_as_integer_by_name(TilesLayer::FIELD_OCEAN)?;
-        let neighbors = feature.field_as_string_by_name(TilesLayer::FIELD_NEIGHBOR_TILES)?;
+    // TODO: I could add a features.map thing in here too, but I need to control some of the data.
+    for (i,feature) in layer.data::<TileDataForPrecipitation>().enumerate() {
+        let feature = feature?;
 
-        if let (Some(fid),Some(lat),Some(elevation),Some(wind),Some(is_ocean),Some(temperature),Some(neighbors)) = (fid,site_y,elevation_scaled,wind,is_ocean,temperature,neighbors) {
 
-            let lat_band = ((lat.abs() - 1.0) / 5.0).floor() as usize;
-            let lat_modifier = latitude_modifier[lat_band];
+        let lat_band = ((feature.site_y.abs() - 1.0) / 5.0).floor() as usize;
+        let lat_modifier = latitude_modifier[lat_band];
 
-            let neighbors: Vec<(u64,i32)> = neighbors.split(',').filter_map(|a| {
-                let mut a = a.splitn(2, ':');
-                if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
-                    if let Some(direction) = a.next().map(|d| d.parse().ok()).flatten() {
-                        if direction >= 0 {
-                            Some((neighbor,direction))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-                
-            }).collect();
+        tile_map.insert(feature.fid, PrecipitationTile {
+            elevation: feature.elevation_scaled,
+            wind: feature.wind,
+            is_ocean: feature.ocean,
+            neighbors: feature.neighbors,
+            lat_modifier,
+            temperature: feature.temperature,
+            precipitation: 0.0
+        });
 
-            let is_ocean = is_ocean != 0;
+        progress.update(|| i);
 
-            tile_map.insert(fid, PrecipitationTile {
-                elevation,
-                wind,
-                is_ocean,
-                neighbors,
-                lat_modifier,
-                temperature,
-                precipitation: 0.0
-            });
-
-            progress.update(|| i);
-
-        }
 
     }
 
@@ -1050,11 +966,11 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Lay
     progress.start_known_endpoint(|| ("Writing precipitation",tile_map.len()));
 
     for (fid,tile) in tile_map {
-        if let Some(working_feature) = layer.feature(fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(fid) {
 
-            working_feature.set_field_double(TilesLayer::FIELD_PRECIPITATION, tile.precipitation)?;
+            working_feature.set_precipitation(tile.precipitation)?;
 
-            layer.set_feature(working_feature)?;
+            layer.update_feature(working_feature)?;
         }
 
 
@@ -1062,5 +978,90 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Lay
 
     progress.finish(|| "Precipitation written.");
 
+    Ok(())
+}
+
+
+pub(crate) fn generate_flowage<Progress: ProgressObserver>(_layer: &mut TilesLayer, _progress: &mut Progress) -> Result<(),CommandError> {
+/*
+   #[derive(Clone)]
+   struct WaterInfoTile {
+       elevation: i32,
+       is_ocean: bool,
+       neighbors: Vec<u64>,
+       temperature: f64,
+       precipitation: f64,
+       flowage: f64,
+       lake_depth_scaled: i32,
+   }
+   
+   progress.start_known_endpoint(|| ("Water: mapping tiles.",layer.feature_count() as usize));
+   let mut tile_map = HashMap::new();
+   let mut queue = Vec::new();
+
+   for (i,feature) in layer.features().enumerate() {
+       let fid = feature.fid();
+       let elevation_scaled = feature.field_as_integer_by_name(TilesLayer::FIELD_ELEVATION_SCALED)?;
+       let temperature = feature.field_as_double_by_name(TilesLayer::FIELD_TEMPERATURE)?;
+       let precipitation = feature.field_as_double_by_name(TilesLayer::FIELD_PRECIPITATION)?;
+       let is_ocean = feature.field_as_integer_by_name(TilesLayer::FIELD_OCEAN)?;
+       let neighbors = feature.field_as_string_by_name(TilesLayer::FIELD_NEIGHBOR_TILES)?;
+
+       if let (Some(fid),Some(elevation),Some(is_ocean),Some(temperature),Some(precipitation),Some(neighbors)) = (fid,elevation_scaled,is_ocean,temperature,precipitation,neighbors) {
+
+           let neighbors: Vec<u64> = neighbors.split(',').filter_map(|a| {
+               let mut a = a.splitn(2, ':');
+               if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
+                   Some(neighbor)
+               } else {
+                   None
+               }
+               
+           }).collect();
+
+           let is_ocean = is_ocean != 0;
+
+           tile_map.insert(fid, WaterInfoTile {
+               elevation,
+               is_ocean,
+               neighbors,
+               temperature,
+               precipitation,
+               flowage: 0.0,
+               lake_depth_scaled: 0
+           });
+
+           queue.push((fid,precipitation.floor() as i32));
+
+           progress.update(|| i);
+
+       }
+
+   }
+
+   progress.finish(|| "Water: tiles mapped.");
+
+    /*
+* Create a queue of tiles and accumulation.
+* Start off with every land tile using an flowage equal to their precipitation
+* Process queue:
+  * pop the tile and flowage off the stack.
+  * find their lowest neighbors (include lake_depth in the calculation)
+  * if the lowest neighbor(s) is higher than this elevation + lake_depth, then subtract the difference from the flowage and add to the lake depth. Then act as if they were equal with the rest if there's still any flowage left.
+  * If the lowest neighbor(s) is equal to this elevation + lake_depth, then flood-fill:
+     * let lake_threshold = flowage.
+     * while lake_threshold > 0:
+      * subtract 1 from lake_threshold.
+      * add 1 to the lake depth (or some other small amount)
+      * walk each neighbor:
+        * if the neighbor is higher than the new lake elevation, then don't do anything.
+        * if the neighbor is between the tile elevation and the new lake elevation, set it's lake_depth so that the elevations will match. And continue to walk it's neighbors.
+        * if the neighbor is below the tile elevation, add it to a list of potential outlets. 
+     * Once done, if there's a list of outlets, choose the lowest one(s). Queue those tiles with the original flowage divided equally.
+  * If the lowest neighbor(s) are lower than this elevation, then divide the flowage equally. Also, if the current tile has a lake_depth, add the difference between the elevations to the flowage as well before dividing. Then queue those neighbors with that flowage.
+  * Finally, mark this tile in the database by increasing the flowage and which tiles were flowed to if we didn't make a lake.
+
+    
+     */*/
     Ok(())
 }

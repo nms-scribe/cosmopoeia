@@ -85,12 +85,12 @@ impl Task for GenClimateWind {
         let mut target = WorldMap::edit(self.target)?;
 
         let winds = [
-            self.north_polar as f64,
-            self.north_middle as f64,
-            self.north_tropical as f64,
-            self.south_tropical as f64,
-            self.south_middle as f64,
-            self.south_polar as f64
+            self.north_polar as i32,
+            self.north_middle as i32,
+            self.north_tropical as i32,
+            self.south_tropical as i32,
+            self.south_middle as i32,
+            self.south_polar as i32
         ];
 
         target.generate_winds(winds,&mut progress)
@@ -187,12 +187,12 @@ impl Task for GenClimate {
         target.generate_temperatures(self.equator_temp,self.polar_temp,&mut progress)?;
     
         let winds = [
-            self.north_polar_wind as f64,
-            self.north_middle_wind as f64,
-            self.north_tropical_wind as f64,
-            self.south_tropical_wind as f64,
-            self.south_middle_wind as f64,
-            self.south_polar_wind as f64
+            self.north_polar_wind as i32,
+            self.north_middle_wind as i32,
+            self.north_tropical_wind as i32,
+            self.south_tropical_wind as i32,
+            self.south_middle_wind as i32,
+            self.south_polar_wind as i32
         ];
 
         target.generate_winds(winds,&mut progress)?;

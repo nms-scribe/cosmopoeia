@@ -7,6 +7,7 @@ mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod dev;
 mod convert_heightmap;
 mod gen_climate;
+mod gen_water;
 mod gen_biome;
 
 // NOTE: Further 'use' statements in the command macro below
@@ -62,6 +63,7 @@ command!{
     gen_climate::GenClimateTemperature;
     gen_climate::GenClimateWind;
     gen_climate::GenClimatePrecipitation;
+    gen_water::GenWaterFlowage;
     gen_biome::GenBiome;
 }
 
