@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::collections::HashMap;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -269,7 +270,7 @@ impl<'lifetime> TileFeature<'lifetime> {
         Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_WIND)?)
     }
 
-    pub(crate) fn precipitation(&self) -> Result<Option<f64>,CommandError> {
+    #[allow(dead_code)] pub(crate) fn precipitation(&self) -> Result<Option<f64>,CommandError> {
         Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_PRECIPITATION)?)
     }
 
@@ -283,7 +284,7 @@ impl<'lifetime> TileFeature<'lifetime> {
 
     pub(crate) fn set_neighbors(&mut self, value: &Vec<(u64,i32)>) -> Result<(),CommandError> {
         let neighbors = value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",");
-        Ok(self.feature.set_field_string(TilesLayer::FIELD_ELEVATION, &neighbors)?)
+        Ok(self.feature.set_field_string(TilesLayer::FIELD_NEIGHBOR_TILES, &neighbors)?)
     }
 
     pub(crate) fn set_elevation(&mut self, value: f64) -> Result<(),CommandError> {
@@ -333,6 +334,16 @@ impl<'lifetime> From<FeatureIterator<'lifetime>> for TileFeatureIterator<'lifeti
     }
 }
 
+
+// NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
+// This is a much easier version of the same thing.
+pub(crate) trait TileData: Sized {
+
+    fn try_from_feature(feature: TileFeature) -> Result<Self,CommandError>;
+
+}
+
+
 pub(crate) struct TileDataIterator<'lifetime, Data: TileData> {
     features: TileFeatureIterator<'lifetime>,
     data: std::marker::PhantomData<Data>
@@ -342,12 +353,7 @@ impl<'lifetime,Data: TileData> Iterator for TileDataIterator<'lifetime,Data> {
     type Item = Result<Data,CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(data) = self.features.next() {
-            if let Some(feature) = Data::from_data(data).transpose() {
-                return Some(feature)
-            }
-        }
-        None
+        self.features.next().map(Data::try_from_feature)
     }
 }
 
@@ -360,81 +366,66 @@ impl<'lifetime,Data: TileData> From<TileFeatureIterator<'lifetime>> for TileData
     }
 }
 
-pub(crate) trait TileData: Sized {
-
-    fn from_data(feature: TileFeature) -> Result<Option<Self>,CommandError>;
-
-}
-
+#[macro_export]
 macro_rules! tile_data {
     (variables@ $feature: ident, $($field: ident),*) => {
         $(
             let $field = $feature.$field()?;
         )*
     };
-    (constructor@ $($field: ident),*) => {
-        if let ($(Some($field)),*) = ($($field),*) {
-            Ok(Some(Self {
-                $(
-                    $field
-                ),*
-            }))
-        } else {
-            Ok(None)
-        }
+    (fieldassign@ $feature: ident geometry $type: ty) => {
+        $feature.geometry().cloned().ok_or_else(|| CommandError::MissingGeometry)?
+    };
+    (fieldassign@ $feature: ident fid $type: ty) => {
+        $feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?
+    };
+    (fieldassign@ $feature: ident $field: ident $type: ty) => {
+        $feature.$field()?.ok_or_else(|| CommandError::MissingField(stringify!($field)))?
+    };
+    (fieldassign@ $feature: ident $field: ident $type: ty = $function: expr) => {
+        $function(&$feature)?
+    };
+    (constructor@ $name: ident  $feature: ident $($field: ident: $type: ty $(= $function: expr)?),*) => {
+        Ok($name {
+            $(
+                $field: tile_data!(fieldassign@ $feature $field $type $(= $function)?)
+            ),*
+        })
 
     };
-    (from_data@ $feature: ident, fid, geometry, $($field: ident),*) => {{
-        let fid = $feature.fid();
-        let geometry = $feature.geometry().cloned();
-        tile_data!(variables@ $feature, $($field),*);
-        tile_data!(constructor@ fid, geometry, $($field),*)
+    (from_data@ $name: ident $feature: ident, $($field: ident: $type: ty $(= $function: expr)?),*) => {{
+        tile_data!(constructor@ $name $feature $($field: $type $(= $function)? ),*)
     }};
-    (from_data@ $feature: ident, fid, $($field: ident),*) => {{
-        let fid = $feature.fid();
-        tile_data!(variables@ $feature, $($field),*);
-        tile_data!(constructor@ fid, $($field),*)
-    }};
-    ($name: ident, fid, $($field: ident: $type: ty),*) => {
+    (fielddef@ $type: ty [$function: expr]) => {
+        $type
+    };
+    (fielddef@ $type: ty) => {
+        $type
+    };
+    ($name: ident $($field: ident: $type: ty $(= $function: expr)?),*) => {
+        #[derive(Clone)]
         pub(crate) struct $name {
-            pub(crate) fid: u64,
             $(
-                pub(crate) $field: $type
+                pub(crate) $field: tile_data!(fielddef@ $type $([$function])?)
             ),*
         }
 
         impl TileData for $name {
 
-            fn from_data(feature: TileFeature) -> Result<Option<Self>,CommandError> {
-                tile_data!(from_data@ feature,fid,$($field),*)
+            fn try_from_feature(feature: crate::world_map::TileFeature) -> Result<Self,CommandError> {
+                tile_data!(from_data@ $name feature, $($field: $type $(= $function)?),*)
             }
-        }
-        
-    };
-    ($name: ident, fid, geometry, $($field: ident: $type: ty),*) => {
-        pub(crate) struct $name {
-            pub(crate) fid: u64,
-            pub(crate) geometry: Geometry,
-            $(
-                pub(crate) $field: $type
-            ),*
-        }
+        }        
 
-        impl TileData for $name {
-
-            fn from_data(feature: TileFeature) -> Result<Option<Self>,CommandError> {
-                tile_data!(from_data@ feature,fid,geometry,$($field),*)
-            }
-        }
-        
     };
 }
 
-tile_data!(TileDataSite, fid, site_x: f64,site_y: f64);
-tile_data!(TileDataSiteGeo, fid, geometry, site_x: f64,site_y: f64);
-tile_data!(TileDataLatElevOcean, fid, site_y: f64, elevation: f64, ocean: bool);
-tile_data!(TileDataLat, fid, site_y: f64);
-tile_data!(TileDataForPrecipitation, fid, site_y: f64, elevation_scaled: i32, wind: i32, ocean: bool, neighbors: Vec<(u64,i32)>, temperature: f64);
+tile_data!(TileDataSite fid: u64, site_x: f64, site_y: f64);
+tile_data!(TileDataSiteGeo fid: u64, geometry: Geometry, site_x: f64, site_y: f64);
+tile_data!(TileDataLatElevOcean fid: u64, site_y: f64, elevation: f64, ocean: bool);
+tile_data!(TileDataLat fid: u64, site_y: f64);
+
+
 
 
 pub(crate) struct TilesLayer<'lifetime> {
@@ -497,16 +488,25 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     }
 
-    pub(crate) fn read_features<Progress: ProgressObserver, Data: TileData>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+    pub(crate) fn features_to_vec<Progress: ProgressObserver, Data: TileData>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
         progress.start_known_endpoint(|| ("Reading tiles.",self.tiles.layer.feature_count() as usize));
         let mut result = Vec::new();
-        for (i,feature) in self.tiles.layer.features().enumerate() {
-            if let Some(data) = Data::from_data(TileFeature::from_data(feature))? {
-                result.push(data)
-            }
+        for (i,feature) in self.read_features().enumerate() {
+            result.push(Data::try_from_feature(feature)?);
             progress.update(|| i);
         }
         progress.finish(|| "Tiles read.");
+        Ok(result)
+    }
+
+    pub(crate) fn features_to_map<Progress: ProgressObserver, Data: TileData>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Mapping tiles.",self.tiles.layer.feature_count() as usize));
+        let mut result = HashMap::new();
+        for (i,feature) in self.read_features().enumerate() {
+            result.insert(tile_data!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+            progress.update(|| i);
+        }
+        progress.finish(|| "Tiles mapped.");
         Ok(result)
     }
 
@@ -523,12 +523,12 @@ impl<'lifetime> TilesLayer<'lifetime> {
         self.tiles.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
     }
 
-    pub(crate) fn features(&mut self) -> TileFeatureIterator {
+    pub(crate) fn read_features(&mut self) -> TileFeatureIterator {
         self.tiles.layer.features().into()
     }
 
-    pub(crate) fn data<Data: TileData>(&mut self) -> TileDataIterator<Data> {
-        self.features().into()
+    #[allow(dead_code)] pub(crate) fn read_data<Data: TileData>(&mut self) -> TileDataIterator<Data> {
+        self.read_features().into()
     }
 
     pub(crate) fn clear_spatial_filter(&mut self) {

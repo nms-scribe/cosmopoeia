@@ -13,6 +13,8 @@ pub(crate) enum CommandError {
     VoronoiExpectsPolygons,
     VoronoiExpectsTriangles,
     FloatIsNan,
+    MissingField(&'static str),
+    MissingGeometry,
     #[allow(dead_code)] RasterDatasetRequired,
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType)
 }
@@ -28,8 +30,10 @@ impl Display for CommandError {
             Self::VoronoiExpectsPolygons => write!(f,"Voronoi input data should be polygons."),
             Self::VoronoiExpectsTriangles => write!(f,"Voronoi input polygons should be triangles."),
             Self::FloatIsNan => write!(f,"A float was not a number."),
+            Self::MissingField(a) => write!(f,"While loading data, a record had no value in for '{}'",a),
+            Self::MissingGeometry => write!(f,"While loading data, a record had no geometry"),
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
-            Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a)
+            Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
         }
     }
 }
