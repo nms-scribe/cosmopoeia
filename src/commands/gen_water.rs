@@ -7,11 +7,10 @@ use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
-use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
-    pub(crate) struct GenWaterFlowage {
+    pub(crate) struct GenWaterFlow {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -19,7 +18,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenWaterFlowage {
+impl Task for GenWaterFlow {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -27,13 +26,35 @@ impl Task for GenWaterFlowage {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.generate_flowage(&mut progress)?;
+        target.generate_water_flow(&mut progress)?;
 
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        target.save()?;
+        Ok(())
 
-        progress.finish(|| "Layer Saved.");
+
+    }
+}
+
+subcommand_def!{
+    /// Generates precipitation data (requires wind and temperatures)
+    pub(crate) struct GenWaterFill {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenWaterFill {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        let (tile_map,tile_queue) = target.get_tile_map_and_queue_for_water_fill(&mut progress)?;
+
+        target.generate_water_fill(tile_map,tile_queue,&mut progress)?;
 
         Ok(())
 

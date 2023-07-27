@@ -28,7 +28,8 @@ use crate::algorithms::calculate_neighbors;
 use crate::algorithms::generate_temperatures;
 use crate::algorithms::generate_winds;
 use crate::algorithms::generate_precipitation;
-use crate::algorithms::generate_flowage;
+use crate::algorithms::generate_water_flow;
+use crate::algorithms::generate_water_fill;
 
 pub(crate) const POINTS_LAYER_NAME: &str = "points";
 pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
@@ -202,32 +203,49 @@ pub(crate) struct TileFeature<'lifetime> {
     feature: Feature<'lifetime>
 }
 
-impl<'lifetime> TileFeature<'lifetime> {
 
-    fn from_data(feature: Feature<'lifetime>) -> Self {
-        Self {
-            feature
-        }
-    }
-
-    pub(crate) fn fid(&self) -> Option<u64> {
-        self.feature.fid()
-    }
-
-    pub(crate) fn geometry(&self) -> Option<&Geometry> {
-        self.feature.geometry()
-    }
-
-    pub(crate) fn site_x(&self) -> Result<Option<f64>,CommandError> {
-        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_SITE_X)?)
-    }
-
-    pub(crate) fn site_y(&self) -> Result<Option<f64>,CommandError> {
-        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_SITE_Y)?)
-    }
-
-    pub(crate) fn neighbors(&self) -> Result<Option<Vec<(u64,i32)>>,CommandError> {
-        if let Some(neighbors) = self.feature.field_as_string_by_name(TilesLayer::FIELD_NEIGHBOR_TILES)? {
+macro_rules! tile_field {
+    (fieldtype@ f64) => {
+        f64
+    };
+    (fieldtype@ i32) => {
+        i32
+    };
+    (fieldtype@ bool) => {
+        bool
+    };
+    (fieldtype@ vec_u64_i32) => {
+        Vec<(u64,i32)>
+    };
+    (fieldtype@ vec_u64) => {
+        Vec<u64>
+    };
+    (setfieldtype@ f64) => {
+        f64
+    };
+    (setfieldtype@ i32) => {
+        i32
+    };
+    (setfieldtype@ bool) => {
+        bool
+    };
+    (setfieldtype@ vec_u64_i32) => {
+        &Vec<(u64,i32)>
+    };
+    (setfieldtype@ vec_u64) => {
+        &Vec<u64>
+    };
+    (getfield@ $self: ident $field: ident f64) => {
+        Ok($self.feature.field_as_double_by_name(TilesLayer::$field)?)
+    };
+    (getfield@ $self: ident $field: ident i32) => {
+        Ok($self.feature.field_as_integer_by_name(TilesLayer::$field)?)
+    };
+    (getfield@ $self: ident $field: ident bool) => {
+        Ok($self.feature.field_as_integer_by_name(TilesLayer::$field)?.map(|n| n != 0))
+    };
+    (getfield@ $self: ident $field: ident vec_u64_i32) => {
+        if let Some(neighbors) = $self.feature.field_as_string_by_name(TilesLayer::$field)? {
             Ok(Some(neighbors.split(',').filter_map(|a| {
                 let mut a = a.splitn(2, ':');
                 if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
@@ -248,68 +266,92 @@ impl<'lifetime> TileFeature<'lifetime> {
         } else {
             Ok(Some(Vec::new()))
         }
+
+    };
+    (getfield@ $self: ident $field: ident vec_u64) => {
+        if let Some(neighbors) = $self.feature.field_as_string_by_name(TilesLayer::$field)? {
+            Ok(Some(neighbors.split(',').filter_map(|a| {
+                a.parse().ok()
+            }).collect()))
+        } else {
+            Ok(Some(Vec::new()))
+        }
+
+    };
+    (setfield@ $self: ident $field: ident $value: ident f64) => {
+        Ok($self.feature.set_field_double(TilesLayer::$field, $value)?)
+    };
+    (setfield@ $self: ident $field: ident $value: ident i32) => {
+        Ok($self.feature.set_field_integer(TilesLayer::$field, $value)?)
+    };
+    (setfield@ $self: ident $field: ident $value: ident bool) => {
+        Ok($self.feature.set_field_integer(TilesLayer::$field, if $value { 1 } else { 0 })?)
+    };
+    (setfield@ $self: ident $field: ident $value: ident vec_u64_i32) => {{
+        let neighbors = $value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",");
+        Ok($self.feature.set_field_string(TilesLayer::$field, &neighbors)?)
+    }};
+    (setfield@ $self: ident $field: ident $value: ident vec_u64) => {{
+        let neighbors = $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",");
+        Ok($self.feature.set_field_string(TilesLayer::$field, &neighbors)?)
+    }};
+    (get@ $(#[$attr: meta])* $prop: ident $field: ident $type: ident) => {
+        $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<tile_field!(fieldtype@ $type)>,CommandError> {
+            tile_field!(getfield@ self $field $type)
+        }
+    };
+    (set@ $(#[$attr: meta])* $set_prop: ident $field: ident $type: ident) => {
+        $(#[$attr])* pub(crate) fn $set_prop(&mut self, value: tile_field!(setfieldtype@ $type)) -> Result<(),CommandError> {
+            tile_field!(setfield@ self $field value $type)
+        }            
+    };
+    ($(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $field: ident $type: ident) => {
+        tile_field!(get@ $(#[$get_attr])* $prop $field $type);
+
+        tile_field!(set@ $(#[$set_attr])* $set_prop $field $type);
+        
+    };
+}
+
+impl<'lifetime> TileFeature<'lifetime> {
+
+    fn from_data(feature: Feature<'lifetime>) -> Self {
+        Self {
+            feature
+        }
     }
 
-    pub(crate) fn elevation(&self) -> Result<Option<f64>,CommandError> {
-        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_ELEVATION)?)
+    pub(crate) fn fid(&self) -> Option<u64> {
+        self.feature.fid()
     }
 
-    pub(crate) fn elevation_scaled(&self) -> Result<Option<i32>,CommandError> {
-        Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_ELEVATION_SCALED)?)
+    pub(crate) fn geometry(&self) -> Option<&Geometry> {
+        self.feature.geometry()
     }
 
-    pub(crate) fn ocean(&self) -> Result<Option<bool>,CommandError> {
-        Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_SITE_Y)?.map(|n| n != 0))
-    }
+    tile_field!(site_x #[allow(dead_code)] set_site_x FIELD_SITE_X f64);
 
-    pub(crate) fn temperature(&self) -> Result<Option<f64>,CommandError> {
-        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_TEMPERATURE)?)
-    }
+    tile_field!(site_y #[allow(dead_code)] set_site_y FIELD_SITE_Y f64);
 
-    pub(crate) fn wind(&self) -> Result<Option<i32>,CommandError> {
-        Ok(self.feature.field_as_integer_by_name(TilesLayer::FIELD_WIND)?)
-    }
+    tile_field!(elevation set_elevation FIELD_ELEVATION f64);
 
-    #[allow(dead_code)] pub(crate) fn precipitation(&self) -> Result<Option<f64>,CommandError> {
-        Ok(self.feature.field_as_double_by_name(TilesLayer::FIELD_PRECIPITATION)?)
-    }
+    tile_field!(elevation_scaled set_elevation_scaled FIELD_ELEVATION_SCALED i32);
 
-    #[allow(dead_code)] pub(crate) fn set_site_x(&mut self, value: f64) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_double(TilesLayer::FIELD_SITE_X, value)?)
-    }
+    tile_field!(is_ocean set_is_ocean FIELD_IS_OCEAN bool);
 
-    #[allow(dead_code)] pub(crate) fn set_site_y(&mut self, value: f64) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_double(TilesLayer::FIELD_SITE_Y, value)?)
-    }
+    tile_field!(temperature set_temperature FIELD_TEMPERATURE f64);
 
-    pub(crate) fn set_neighbors(&mut self, value: &Vec<(u64,i32)>) -> Result<(),CommandError> {
-        let neighbors = value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",");
-        Ok(self.feature.set_field_string(TilesLayer::FIELD_NEIGHBOR_TILES, &neighbors)?)
-    }
+    tile_field!(wind set_wind FIELD_WIND i32);
 
-    pub(crate) fn set_elevation(&mut self, value: f64) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_double(TilesLayer::FIELD_ELEVATION, value)?)
-    }
+    tile_field!(precipitation set_precipitation FIELD_PRECIPITATION f64);
 
-    pub(crate) fn set_elevation_scaled(&mut self, value: i32) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_integer(TilesLayer::FIELD_ELEVATION_SCALED, value)?)
-    }
+    tile_field!(#[allow(dead_code)] water_flow set_water_flow FIELD_WATER_FLOW f64);
 
-    pub(crate) fn set_ocean(&mut self, value: bool) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_integer(TilesLayer::FIELD_OCEAN, if value { 1 } else { 0 })?)
-    }
+    tile_field!(#[allow(dead_code)] water_accumulation set_water_accumulation FIELD_WATER_ACCUMULATION f64);
 
-    pub(crate) fn set_temperature(&mut self, value: f64) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_double(TilesLayer::FIELD_TEMPERATURE, value)?)
-    }
+    tile_field!(neighbors set_neighbors FIELD_NEIGHBOR_TILES vec_u64_i32);
 
-    pub(crate) fn set_wind(&mut self, value: i32) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_integer(TilesLayer::FIELD_WIND, value)?)
-    }
-
-    pub(crate) fn set_precipitation(&mut self, value: f64) -> Result<(),CommandError> {
-        Ok(self.feature.set_field_double(TilesLayer::FIELD_PRECIPITATION, value)?)
-    }
+    tile_field!(#[allow(dead_code)] flow_to set_flow_to FIELD_FLOW_TO vec_u64);
 
 
 }
@@ -337,37 +379,21 @@ impl<'lifetime> From<FeatureIterator<'lifetime>> for TileFeatureIterator<'lifeti
 
 // NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
 // This is a much easier version of the same thing.
-pub(crate) trait TileData: Sized {
+pub(crate) trait TileEntity: Sized {
 
     fn try_from_feature(feature: TileFeature) -> Result<Self,CommandError>;
 
 }
 
+pub(crate) trait TileEntityWithNeighborsElevation {
 
-pub(crate) struct TileDataIterator<'lifetime, Data: TileData> {
-    features: TileFeatureIterator<'lifetime>,
-    data: std::marker::PhantomData<Data>
-}
+    fn neighbors(&self) -> &Vec<(u64,i32)>;
 
-impl<'lifetime,Data: TileData> Iterator for TileDataIterator<'lifetime,Data> {
-    type Item = Result<Data,CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.features.next().map(Data::try_from_feature)
-    }
-}
-
-impl<'lifetime,Data: TileData> From<TileFeatureIterator<'lifetime>> for TileDataIterator<'lifetime,Data> {
-    fn from(features: TileFeatureIterator<'lifetime>) -> Self {
-        Self {
-            features,
-            data: std::marker::PhantomData
-        }
-    }
+    fn elevation(&self) -> &f64;
 }
 
 #[macro_export]
-macro_rules! tile_data {
+macro_rules! tile_entity {
     (variables@ $feature: ident, $($field: ident),*) => {
         $(
             let $field = $feature.$field()?;
@@ -388,13 +414,13 @@ macro_rules! tile_data {
     (constructor@ $name: ident  $feature: ident $($field: ident: $type: ty $(= $function: expr)?),*) => {
         Ok($name {
             $(
-                $field: tile_data!(fieldassign@ $feature $field $type $(= $function)?)
+                $field: tile_entity!(fieldassign@ $feature $field $type $(= $function)?)
             ),*
         })
 
     };
     (from_data@ $name: ident $feature: ident, $($field: ident: $type: ty $(= $function: expr)?),*) => {{
-        tile_data!(constructor@ $name $feature $($field: $type $(= $function)? ),*)
+        tile_entity!(constructor@ $name $feature $($field: $type $(= $function)? ),*)
     }};
     (fielddef@ $type: ty [$function: expr]) => {
         $type
@@ -406,25 +432,119 @@ macro_rules! tile_data {
         #[derive(Clone)]
         pub(crate) struct $name {
             $(
-                pub(crate) $field: tile_data!(fielddef@ $type $([$function])?)
+                pub(crate) $field: tile_entity!(fielddef@ $type $([$function])?)
             ),*
         }
 
-        impl TileData for $name {
+        impl TileEntity for $name {
 
             fn try_from_feature(feature: crate::world_map::TileFeature) -> Result<Self,CommandError> {
-                tile_data!(from_data@ $name feature, $($field: $type $(= $function)?),*)
+                tile_entity!(from_data@ $name feature, $($field: $type $(= $function)?),*)
             }
         }        
 
     };
 }
 
-tile_data!(TileDataSite fid: u64, site_x: f64, site_y: f64);
-tile_data!(TileDataSiteGeo fid: u64, geometry: Geometry, site_x: f64, site_y: f64);
-tile_data!(TileDataLatElevOcean fid: u64, site_y: f64, elevation: f64, ocean: bool);
-tile_data!(TileDataLat fid: u64, site_y: f64);
+tile_entity!(TileEntitySite fid: u64, site_x: f64, site_y: f64);
+tile_entity!(TileEntitySiteGeo fid: u64, geometry: Geometry, site_x: f64, site_y: f64);
+tile_entity!(TileEntityLatElevOcean fid: u64, site_y: f64, elevation: f64, is_ocean: bool);
+tile_entity!(TileEntityLat fid: u64, site_y: f64);
+tile_entity!(TileEntityForWaterFlow
+    elevation: f64, 
+    is_ocean: bool, 
+    neighbors: Vec<(u64,i32)>,
+    precipitation: f64,
+    water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
+    water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
+    flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new())
+);
 
+impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
+
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+
+    fn elevation(&self) -> &f64 {
+        &self.elevation
+    }
+}
+
+
+
+// Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
+// just use a different function because it's based on a trait. I could take this one out
+// of the macro and figure something out, but this is easier.
+tile_entity!(TileEntityForWaterFill
+    elevation: f64, 
+    is_ocean: bool, 
+    neighbors: Vec<(u64,i32)>,
+    precipitation: f64,
+    water_flow: f64,
+    water_accumulation: f64,
+    flow_to: Vec<u64>,
+    lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
+);
+
+impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
+
+    fn from(value: TileEntityForWaterFlow) -> Self {
+        Self {
+            elevation: value.elevation,
+            is_ocean: value.is_ocean,
+            neighbors: value.neighbors,
+            precipitation: value.precipitation,
+            water_flow: value.water_flow,
+            water_accumulation: value.water_accumulation,
+            flow_to: value.flow_to,
+            lake_id: None
+        }
+    }
+}
+
+impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
+
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+
+    fn elevation(&self) -> &f64 {
+        &self.elevation
+    }
+}
+
+
+pub(crate) struct TileEntityIterator<'lifetime, Data: TileEntity> {
+    features: TileFeatureIterator<'lifetime>,
+    data: std::marker::PhantomData<Data>
+}
+
+// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
+impl<'lifetime,Data: TileEntity> Iterator for TileEntityIterator<'lifetime,Data> {
+    type Item = Result<(u64,Data),CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(feature) = self.features.next() {
+            match (feature.fid(),Data::try_from_feature(feature)) {
+                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                (_, Err(e)) => Some(Err(e)),
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'lifetime,Data: TileEntity> From<TileFeatureIterator<'lifetime>> for TileEntityIterator<'lifetime,Data> {
+    fn from(features: TileFeatureIterator<'lifetime>) -> Self {
+        Self {
+            features,
+            data: std::marker::PhantomData
+        }
+    }
+}
 
 
 
@@ -441,21 +561,27 @@ impl<'lifetime> TilesLayer<'lifetime> {
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
     // If I ever get rid of those algorithms, this field can go away.
     pub(crate) const FIELD_ELEVATION_SCALED: &str = "elevation_scaled";
-    pub(crate) const FIELD_OCEAN: &str = "is_ocean";
+    pub(crate) const FIELD_IS_OCEAN: &str = "is_ocean";
     pub(crate) const FIELD_TEMPERATURE: &str = "temperature";
     pub(crate) const FIELD_WIND: &str = "wind_dir";
     pub(crate) const FIELD_PRECIPITATION: &str = "precipitation";
+    pub(crate) const FIELD_WATER_FLOW: &str = "water_flow";
+    pub(crate) const FIELD_WATER_ACCUMULATION: &str = "water_accum";
+    pub(crate) const FIELD_FLOW_TO: &str = "flow_to";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 9] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 12] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
-        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString),
         (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
         (Self::FIELD_ELEVATION_SCALED,OGRFieldType::OFTInteger),
-        (Self::FIELD_OCEAN,OGRFieldType::OFTInteger),
+        (Self::FIELD_IS_OCEAN,OGRFieldType::OFTInteger),
         (Self::FIELD_TEMPERATURE,OGRFieldType::OFTReal),
         (Self::FIELD_WIND,OGRFieldType::OFTInteger),
-        (Self::FIELD_PRECIPITATION,OGRFieldType::OFTReal)
+        (Self::FIELD_PRECIPITATION,OGRFieldType::OFTReal),
+        (Self::FIELD_WATER_FLOW,OGRFieldType::OFTReal),
+        (Self::FIELD_WATER_ACCUMULATION,OGRFieldType::OFTReal),
+        (Self::FIELD_FLOW_TO,OGRFieldType::OFTString),
+        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString) // put this one last to make the tables easier to read in QGIS.
     ];
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
@@ -488,7 +614,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     }
 
-    pub(crate) fn features_to_vec<Progress: ProgressObserver, Data: TileData>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+    pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: TileEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
         progress.start_known_endpoint(|| ("Reading tiles.",self.tiles.layer.feature_count() as usize));
         let mut result = Vec::new();
         for (i,feature) in self.read_features().enumerate() {
@@ -499,19 +625,23 @@ impl<'lifetime> TilesLayer<'lifetime> {
         Ok(result)
     }
 
-    pub(crate) fn features_to_map<Progress: ProgressObserver, Data: TileData>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Mapping tiles.",self.tiles.layer.feature_count() as usize));
+    pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: TileEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Indexing tiles.",self.tiles.layer.feature_count() as usize));
         let mut result = HashMap::new();
         for (i,feature) in self.read_features().enumerate() {
-            result.insert(tile_data!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+            result.insert(tile_entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
             progress.update(|| i);
         }
-        progress.finish(|| "Tiles mapped.");
+        progress.finish(|| "Tiles indexed.");
         Ok(result)
     }
 
-    pub(crate) fn feature_by_id(&self, fid: u64) -> Option<TileFeature> {
-        self.tiles.layer.feature(fid).map(TileFeature::from_data)
+    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<TileFeature> {
+        self.tiles.layer.feature(*fid).map(TileFeature::from_data)
+    }
+
+    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: TileEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
+        self.feature_by_id(fid).map(Data::try_from_feature).transpose()
     }
 
     pub(crate) fn update_feature(&self, feature: TileFeature) -> Result<(),CommandError> {
@@ -527,7 +657,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         self.tiles.layer.features().into()
     }
 
-    #[allow(dead_code)] pub(crate) fn read_data<Data: TileData>(&mut self) -> TileDataIterator<Data> {
+    pub(crate) fn read_entities<Data: TileEntity>(&mut self) -> TileEntityIterator<Data> {
         self.read_features().into()
     }
 
@@ -887,13 +1017,13 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn generate_flowage<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn generate_water_flow<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            generate_flowage(&mut tiles, progress)?;
+            let result = generate_water_flow(&mut tiles, progress)?;
 
             Ok(())
     
@@ -907,6 +1037,54 @@ impl WorldMap {
     
         Ok(())
 
+
+    }
+
+    pub(crate) fn get_tile_map_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
+
+        let mut tile_map = HashMap::new();
+        let mut tile_queue = Vec::new();
+
+        let mut tiles = self.tiles_layer()?;
+
+        progress.start_known_endpoint(|| ("Indexing data.",tiles.feature_count() as usize));
+
+        for (i,data) in tiles.read_entities::<TileEntityForWaterFill>().enumerate() {
+            let (fid,entity) = data?;
+            if entity.water_accumulation > 0.0 {
+                tile_queue.push((fid,entity.water_accumulation));
+            }
+            tile_map.insert(fid, entity);
+            progress.update(|| i);
+    
+        }
+        progress.finish(|| "Data indexed.");
+
+        Ok((tile_map,tile_queue))
+        
+    
+    }
+
+
+    pub(crate) fn generate_water_fill<Progress: ProgressObserver>(&mut self, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut tiles = target.edit_tile_layer()?;
+
+
+            generate_water_fill(&mut tiles, tile_map, tile_queue, progress)?;
+
+            Ok(())
+    
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer Saved.");
+    
+        Ok(())
 
     }
 

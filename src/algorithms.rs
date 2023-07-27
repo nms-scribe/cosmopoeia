@@ -15,16 +15,19 @@ use crate::utils::Point;
 use crate::utils::GeometryGeometryIterator;
 use crate::utils::create_polygon;
 use crate::world_map::VoronoiSite;
-use crate::world_map::TileDataSite;
-use crate::world_map::TileDataSiteGeo;
-use crate::world_map::TileDataLatElevOcean;
-use crate::world_map::TileDataLat;
+use crate::world_map::TileEntitySite;
+use crate::world_map::TileEntitySiteGeo;
+use crate::world_map::TileEntityLatElevOcean;
+use crate::world_map::TileEntityLat;
 use crate::world_map::TileFeature;
+use crate::world_map::TileEntityForWaterFlow;
+use crate::world_map::TileEntityForWaterFill;
+use crate::world_map::TileEntityWithNeighborsElevation;
 use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
-use crate::tile_data;
-use crate::world_map::TileData;
+use crate::tile_entity;
+use crate::world_map::TileEntity;
 
 enum PointGeneratorPhase {
     NortheastInfinity,
@@ -483,7 +486,7 @@ pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut TilesLay
 
     progress.finish(|| "Raster read.");
 
-    let features = layer.features_to_vec::<_,TileDataSite>(progress)?;
+    let features = layer.read_entities_to_vec::<_,TileEntitySite>(progress)?;
 
     progress.start_known_endpoint(|| ("Sampling elevations.",features.len()));
 
@@ -494,7 +497,7 @@ pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut TilesLay
 
         if let Some(elevation) = band.get_value(x, y) {
 
-            if let Some(mut feature) = layer.feature_by_id(feature.fid) {
+            if let Some(mut feature) = layer.feature_by_id(&feature.fid) {
 
                 let elevation_scaled = if elevation >= &0.0 {
                     20 + (elevation * positive_elevation_scale).floor() as i32
@@ -544,7 +547,7 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, r
 
     progress.finish(|| "Raster read.");
 
-    let features = layer.features_to_vec::<_,TileDataSite>(progress)?;
+    let features = layer.read_entities_to_vec::<_,TileEntitySite>(progress)?;
 
     progress.start_known_endpoint(|| ("Sampling oceans.",features.len()));
 
@@ -555,7 +558,7 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, r
 
         let (x,y) = bounds.coords_to_pixels(feature.site_x, feature.site_y);
 
-        if let Some(mut feature) = layer.feature_by_id(feature.fid) {
+        if let Some(mut feature) = layer.feature_by_id(&feature.fid) {
 
             let is_ocean = if let Some(elevation) = band.get_value(x, y) {
                 let is_no_data = match no_data_value {
@@ -590,7 +593,7 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, r
 
             }
 
-            feature.set_ocean(is_ocean)?;
+            feature.set_is_ocean(is_ocean)?;
 
             layer.update_feature(feature)?;
 
@@ -617,7 +620,7 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, r
 
 pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut TilesLayer, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let features = layer.features_to_vec::<_,TileDataSiteGeo>(progress)?;
+    let features = layer.read_entities_to_vec::<_,TileEntitySiteGeo>(progress)?;
 
     progress.start_known_endpoint(|| ("Calculating neighbors.",features.len()));
 
@@ -664,7 +667,7 @@ pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut TilesL
         
         layer.clear_spatial_filter();
 
-        if let Some(mut working_feature) = layer.feature_by_id(working_fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(&working_fid) {
             working_feature.set_neighbors(&neighbors)?;
 
             layer.update_feature(working_feature)?;
@@ -701,21 +704,21 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Tile
         })/2.0
     }
 
-    let features = layer.features_to_vec::<_,TileDataLatElevOcean>(progress)?;
+    let features = layer.read_entities_to_vec::<_,TileEntityLatElevOcean>(progress)?;
 
     progress.start_known_endpoint(|| ("Generating temperatures.",features.len()));
 
     for (i,feature) in features.iter().enumerate() {
 
         let base_temp = equator_temp - (interpolate(feature.site_y.abs()/90.0) * temp_delta);
-        let adabiatic_temp = base_temp - if !feature.ocean {
+        let adabiatic_temp = base_temp - if !feature.is_ocean {
             (feature.elevation/1000.0)*6.5
         } else {
             0.0
         };
         let temp = (adabiatic_temp*100.0).round()/100.0;
 
-        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(&feature.fid) {
             working_feature.set_temperature(temp)?;
 
             layer.update_feature(working_feature)?;
@@ -741,7 +744,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut TilesLayer,
     // Algorithm borrowed from AFMG with some modifications
 
 
-    let features = layer.features_to_vec::<_,TileDataLat>(progress)?;
+    let features = layer.read_entities_to_vec::<_,TileEntityLat>(progress)?;
 
     progress.start_known_endpoint(|| ("Generating winds.",features.len()));
 
@@ -750,7 +753,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut TilesLayer,
         let wind_tier = ((feature.site_y - 89.0)/30.0).abs().floor() as usize;
         let wind_dir = winds[wind_tier];
 
-        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(&feature.fid) {
             working_feature.set_wind(wind_dir)?;
 
             layer.update_feature(working_feature)?;
@@ -780,28 +783,28 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     const LATITUDE_MODIFIERS: [f64; 18] = [4.0, 2.0, 2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0, 1.0, 1.0, 1.0, 0.5];
 
     // I believe what this does is scale the moisture scale correctly to the size of the map. Otherwise, I don't know.
-    let cells_number_modifier = (layer.feature_count() as f64/10000.0).powf(0.25);
+    let cells_number_modifier = (layer.feature_count() as f64 / 10000.0).powf(0.25);
     let prec_input_modifier = moisture as f64/100.0;
     let modifier = cells_number_modifier * prec_input_modifier;
 
-    tile_data!(TileDataForPrecipitation 
+    tile_entity!(TileDataForPrecipitation 
         elevation_scaled: i32, 
         wind: i32, 
-        ocean: bool, 
+        is_ocean: bool, 
         neighbors: Vec<(u64,i32)>,
         temperature: f64,
         precipitation: f64 = |_| {
             Ok::<_,CommandError>(0.0)
         },
         lat_modifier: f64 = |feature: &TileFeature| {
-            let site_y = tile_data!(fieldassign@ feature site_y f64);
+            let site_y = tile_entity!(fieldassign@ feature site_y f64);
             let lat_band = ((site_y.abs() - 1.0) / 5.0).floor() as usize;
             let lat_modifier = LATITUDE_MODIFIERS[lat_band];
             Ok::<_,CommandError>(lat_modifier)
         }
     );
 
-    let mut tile_map = layer.features_to_map::<_,TileDataForPrecipitation>(progress)?;
+    let mut tile_map = layer.read_entities_to_index::<_,TileDataForPrecipitation>(progress)?;
 
     // I can't work on the tiles map while also iterating it, so I have to copy the keys
     let mut working_tiles: Vec<u64> = tile_map.keys().copied().collect();
@@ -814,7 +817,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     progress.start_known_endpoint(|| ("Tracing winds.",working_tiles.len()));
 
     for (i,start_fid) in working_tiles.iter().enumerate() {
-        if let Some(tile) = tile_map.get(&start_fid).cloned() {
+        if let Some(tile) = tile_map.get(start_fid).cloned() {
 
             let max_prec = 120.0 * tile.lat_modifier;
             let mut humidity = max_prec - tile.elevation_scaled as f64;
@@ -828,6 +831,9 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
                     // there is no humidity left to work with.
                     break;
                 }
+
+                // TODO: I wonder if I should be sending the precipitation to all tiles in the general direction of the wind, not just
+                // one. That changes this algorithm a lot, though.
 
                 // find neighbor closest to wind direction
                 let mut best_neighbor: Option<(_,_)> = None;
@@ -871,8 +877,8 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
 
                 if let Some((next_fid,mut next)) = next {
                     if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
-                        if current.ocean {
-                            if !next.ocean {
+                        if current.is_ocean {
+                            if !next.is_ocean {
                                 // coastal precipitation
                                 // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
                                 // necessary considering it's the only randomness I would use, and nothing else is randomized.
@@ -921,7 +927,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
 
                     (current_fid,current) = (next_fid,next);
                 } else {
-                    if current.ocean {
+                    if current.is_ocean {
                         // precipitation over water cells
                         current.precipitation += 5.0 * modifier;
                     } else {
@@ -948,7 +954,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     progress.start_known_endpoint(|| ("Writing precipitation",tile_map.len()));
 
     for (fid,tile) in tile_map {
-        if let Some(mut working_feature) = layer.feature_by_id(fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(&fid) {
 
             working_feature.set_precipitation(tile.precipitation)?;
 
@@ -963,155 +969,350 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     Ok(())
 }
 
+fn find_lowest_neighbors<Data: TileEntityWithNeighborsElevation>(entity: &Data, tile_map: &HashMap<u64,Data>) -> (Vec<u64>, Option<f64>) {
+    let mut lowest = Vec::new();
+    let mut lowest_elevation = None;
 
-pub(crate) fn generate_flowage<Progress: ProgressObserver>(_layer: &mut TilesLayer, _progress: &mut Progress) -> Result<(),CommandError> {
+    // find the lowest neighbors
+    for (neighbor_fid,_) in entity.neighbors() {
+        if let Some(neighbor) = tile_map.get(&neighbor_fid) {
+            let neighbor_elevation = neighbor.elevation();
+            if let Some(lowest_elevation) = lowest_elevation.as_mut() {
+                if neighbor_elevation < *lowest_elevation {
+                    *lowest_elevation = neighbor_elevation;
+                    lowest = vec![*neighbor_fid];
+                } else if neighbor_elevation == *lowest_elevation {
+                    lowest.push(*neighbor_fid)
+                }
+            } else {
+                lowest_elevation = Some(neighbor_elevation);
+                lowest.push(*neighbor_fid)
+            }
 
-// TODO: Do the flow first, so I can make sure that works, then we'll go on to the lakes. In fact, this might just return the map and queue so we can link them into a separate function later.
+        }
 
-/*
-   #[derive(Clone)]
-   struct WaterInfoTile {
-       elevation: i32,
-       is_ocean: bool,
-       neighbors: Vec<u64>,
-       temperature: f64,
-       precipitation: f64,
-       flowage: f64,
-       lake_depth_scaled: i32,
-   }
-   
-   progress.start_known_endpoint(|| ("Water: mapping tiles.",layer.feature_count() as usize));
-   let mut tile_map = HashMap::new();
-   let mut queue = Vec::new();
+    }
+    (lowest,lowest_elevation.copied())
 
-   for (i,feature) in layer.features().enumerate() {
-       let fid = feature.fid();
-       let elevation_scaled = feature.field_as_integer_by_name(TilesLayer::FIELD_ELEVATION_SCALED)?;
-       let temperature = feature.field_as_double_by_name(TilesLayer::FIELD_TEMPERATURE)?;
-       let precipitation = feature.field_as_double_by_name(TilesLayer::FIELD_PRECIPITATION)?;
-       let is_ocean = feature.field_as_integer_by_name(TilesLayer::FIELD_OCEAN)?;
-       let neighbors = feature.field_as_string_by_name(TilesLayer::FIELD_NEIGHBOR_TILES)?;
+}
 
-       if let (Some(fid),Some(elevation),Some(is_ocean),Some(temperature),Some(precipitation),Some(neighbors)) = (fid,elevation_scaled,is_ocean,temperature,precipitation,neighbors) {
+pub(crate) fn generate_water_flow<Progress: ProgressObserver>(layer: &mut TilesLayer, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<u64>),CommandError> {
 
-           let neighbors: Vec<u64> = neighbors.split(',').filter_map(|a| {
-               let mut a = a.splitn(2, ':');
-               if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
-                   Some(neighbor)
-               } else {
-                   None
-               }
-               
-           }).collect();
 
-           let is_ocean = is_ocean != 0;
+    // from the AFMG code, this is also done in calculating precipitation. I'm wondering if it's unscaling the precipitation somehow?
+    let cells_number_modifier = ((layer.feature_count() / 10000) as f64).powf(0.25);
 
-           tile_map.insert(fid, WaterInfoTile {
-               elevation,
-               is_ocean,
-               neighbors,
-               temperature,
-               precipitation,
-               flowage: 0.0,
-               lake_depth_scaled: 0
-           });
+    let mut tile_map = HashMap::new();
+    let mut tile_list = Vec::new();
+    let mut lake_queue = Vec::new();
 
-           queue.push((fid,precipitation.floor() as i32));
+    progress.start_known_endpoint(|| ("Indexing data.",layer.feature_count() as usize));
 
-           progress.update(|| i);
+    for (i,data) in layer.read_entities::<TileEntityForWaterFlow>().enumerate() {
+        let (fid,entity) = data?;
+        if !entity.is_ocean {
+            // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 
+            // FUTURE: Although it takes about twice as much memory, which could be important in the future.
+            tile_list.push((fid,entity.elevation));
+        }
+        tile_map.insert(fid, entity);
+        progress.update(|| i);
 
-       }
+    }
+    progress.finish(|| "Data indexed.");
+    
+    // sort tile list so the highest is first.
+    tile_list.sort_by(|(_,a),(_,b)| 
+        if a > b {
+            Ordering::Less
+        } else if a < b {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    );
 
-   }
+    progress.start_known_endpoint(|| ("Calculating initial flow",tile_list.len()));
+    
+    for (i,(fid,elevation)) in tile_list.iter().enumerate() {
+        let (water_flow,lowest,lowest_elevation) = if let Some(entity) = tile_map.get(fid) {
+            let water_flow = entity.water_flow + entity.precipitation / cells_number_modifier;
+            let (lowest,lowest_elevation) = find_lowest_neighbors(entity,&tile_map);
 
-   progress.finish(|| "Water: tiles mapped.");
+            (water_flow,lowest,lowest_elevation)
+
+        } else {
+            (0.0,vec![],None)
+        };
+
+        let (water_accumulation,flow_to) = if let Some(lowest_elevation) = lowest_elevation {
+
+            if &lowest_elevation < elevation {
+                let neighbor_flow = water_flow/lowest.len() as f64;
+                //println!("flowing {} to {} neighbors",neighbor_flow,lowest.len());
+                for neighbor in &lowest {
+                    if let Some(neighbor) = tile_map.get_mut(&neighbor) {
+                        neighbor.water_flow += neighbor_flow;
+                    }
+                }
+                (0.0,lowest)
+            } else {
+                lake_queue.push(*fid);
+                (water_flow,Vec::new())
+            }
+
+        } else { // else there are... no neighbors? for some reason? I'm not going to start a lake, though.
+            (water_flow,Vec::new())
+        };
+
+        if let Some(tile) = tile_map.get_mut(&fid) {
+            tile.water_flow = water_flow;
+            tile.water_accumulation += water_accumulation;
+            tile.flow_to = flow_to;
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Flow calculated.");
+
+    progress.start_known_endpoint(|| ("Writing flow",tile_map.len()));
+
+    for (fid,tile) in &tile_map {
+        if let Some(mut working_feature) = layer.feature_by_id(&fid) {
+
+            working_feature.set_water_flow(tile.water_flow)?;
+            working_feature.set_water_accumulation(tile.water_accumulation)?;
+            working_feature.set_flow_to(&tile.flow_to)?;
+
+            layer.update_feature(working_feature)?;
+        }
+
+
+    }
+
+    progress.finish(|| "Flow written.");
+
+    Ok((tile_map.into_iter().map(|(k,v)| (k,v.into())).collect(),lake_queue))
+
+
+
+
+
+}
+
+
+
+// this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesLayer, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<(),CommandError> {
+
+    struct Lake {
+        elevation: f64,
+        spillover_elevation: f64,
+        contained_tiles: Vec<u64>,
+        shoreline_tiles: Vec<u64>,
+        spillover_tiles: Vec<u64>,
+        outlet_tiles: Vec<u64>
+    }
+
+    enum Task {
+        FillLake(usize, f64),
+        AddToFlow(f64)
+    }
+
+    let mut tile_queue = tile_queue;
+    let mut tile_map = tile_map;
+    let mut next_lake_id = (0..).into_iter();
+    let mut lake_map = HashMap::new();
+
+    progress.start_unknown_endpoint(|| "Filling lakes.");
+
+    while let Some((tile_fid,accumulation)) = tile_queue.pop() {
+
+        // figure out what we've got to do.
+        let task = if let Some(tile) = tile_map.get(&tile_fid) {
+
+            // we don't bother with accumulation in ocean.
+            if tile.is_ocean {
+                continue;
+            }
+
+            // if the tile has no accumulation, there's nothing to do:
+            if accumulation <= 0.0 {
+                continue;
+            }
+
+            // look for an existing lake
+            if let Some(lake_id) = tile.lake_id {
+                // we're already in a lake, so the accumulation is intended to fill it.
+                Task::FillLake(lake_id, accumulation)
+            } else {
+                // there is no lake here, so this is a flow task, unless it turns out we need a lake here.
+                // we already calculated the lowest neighbors that are actually below the tile in Flow, so let's just check that first.
+
+                let flow_to = &tile.flow_to;
+                if flow_to.len() > 0 {
+                    // we've got tiles that are lowever in elevation to go to...
+                    let neighbor_flow = accumulation/flow_to.len() as f64;
+
+                    for neighbor_fid in flow_to {
+                        // add a task to the queue to flow this down.
+                        tile_queue.push((*neighbor_fid,neighbor_flow));
+                    }
+                    // and the task for this one is to add to the flow:
+                    Task::AddToFlow(accumulation)
+                } else {
+                    // we need to recalculate to find the lowest neighbors that we can assume are above:
+                    let (lowest,lowest_elevation) = find_lowest_neighbors(tile,&tile_map);
+
+                    // assuming that succeeded, we can create a new lake now.
+                    if let Some(lowest_elevation) = lowest_elevation {
+                        // we need to be in a lake, so create a new one.
+                        let lake_id = next_lake_id.next().unwrap(); // it should be an infinite iterator, so it should always return Some.
+
+                        let new_lake = Lake {
+                            elevation: tile.elevation,
+                            spillover_elevation: lowest_elevation,
+                            contained_tiles: vec![tile_fid],
+                            shoreline_tiles: tile.neighbors.iter().map(|(a,_)| *a).collect(),
+                            spillover_tiles: lowest,
+                            outlet_tiles: Vec::new(),
+                        };
+
+                        lake_map.insert(lake_id, new_lake);
+                        Task::FillLake(lake_id,accumulation) // I just inserted it, it should exist here.
+    
+                    } else {
+                        // this is a tile with no neighbors, which should be impossible. but there is nothing I can do.
+                        continue;
+                    }
+    
+
+                }
+                
+
+    
+            }
+
+        } else {
+            continue;
+        };
+
+        match task {
+            Task::AddToFlow(accumulation) => {
+                if let Some(tile) = tile_map.get_mut(&tile_fid) {
+                    tile.water_flow += accumulation;
+                    if let Some(mut feature) = layer.feature_by_id(&tile_fid) {
+
+                        feature.set_water_flow(tile.water_flow)?;
+
+                        layer.update_feature(feature)?;
+                    }
+                }
+
+            }
+            Task::FillLake(lake_id,accumulation) => {
+                if let Some(lake) = lake_map.get_mut(&lake_id) {
+                    let outlet_tiles = &lake.outlet_tiles;
+                    if outlet_tiles.len() > 0 {
+                        // we can automatically flow to those tiles.
+                        let neighbor_flow = accumulation/outlet_tiles.len() as f64;
+    
+                        for neighbor_fid in outlet_tiles {
+                            // add a task to the queue to flow this down.
+                            tile_queue.push((*neighbor_fid,neighbor_flow));
+                        }
+    
+                    } else {
+                        // no outlet tiles, so we have to grow the lake.
+    
+                        let accumulation_per_tile = accumulation/lake.contained_tiles.len() as f64;
+                        let spillover_difference = lake.spillover_elevation - lake.elevation;
+                        let lake_increase = accumulation_per_tile.min(spillover_difference);
+                        lake.elevation = lake.elevation + lake_increase;
+                        let remaining_accum_per_tile = accumulation_per_tile - lake_increase;
+                        let accumulation = remaining_accum_per_tile * lake.contained_tiles.len() as f64;
+    
+                        if remaining_accum_per_tile > 0.0 {
+                            // we need to increase the size of the lake. Right now, we are at the spillover level.
+                            // Basically, pretend that we are making the lake deeper by 0.0001 (or some small amount)
+                            // and walk the shoreline and beyond looking for:
+                            // * tiles that are in a lake already:
+                            //   * if the lake elevation is between this lake elevation and the test elevation, we need to "swallow" the lake.
+                            //   * if the lake is shorter than this lake's elevation, then this is the same as if the tile were a lower shoreline.
+                            // * tiles that are between the lake elevation and this test elevation (new part of a lake, and keep walking it's neighbors)
+                            // * tiles that are taller than than the test elevation:
+                            // * tiles that are shorter than the lake elevation (since lake elevation is at spillover, this means we're starting to go downhill again, so this is a new outlet and new shoreline, as above, we'll also add some flow to this eventually)
+
+                            
+                        }
+    
+                    }
+    
+                }
+            },
+            
+        }
+
+    }
+
+    progress.finish(|| "Lakes filled.");
+
+    // TODO: Last thing is to take the "lakes" and update all contained tiles with their lake_elevation in the actual layers. Any neighboring tiles with 
+    // the same lake elevation are considered part of the same lake.
 
     /*
-* read features:
-    * tile_map: a map of tiles by id, with elevation, precipitation, and new fields water_flow, flow_to, lake_id for tracking data
-    * tile_list: a list of **land** tile ids to work on
-* queue: Create an empty queue of later "jobs"
-* sort tile_list so that the highest elevations are first.
-* for each tile in tile_list:
-   * let water_flow = tile_map[tile].water_flow + tile_map[tile].precipitation
-   * tile_map[tile].water_flow = water_flow
-   * find it's lowest neighbors: there may be more than one if they're a bunch that are equal
-   * if there are no lowest neighbors, which is unlikely, then just continue.
-   * if lowest neighbors are below this tile's elevation:
-        * let neighbor_flow = water_flow/neighbors.len
-        * for each neighbor: tile_map[neighbor].water_flow += neighbor_flow
-        * tile_map[tile].flow_to = neighbors
-    * else if they are equal to or higher:
-        * queue,push(fill_lake_task,tile,water_flow)
 
-* let next_lake_id = (1..).iter()
-* let lake_map: map of lakes by id, with contained_tiles, shoreline_tiles, outlet_tiles, lake_elevation, spillover_elevation
-* for each task in queue:
-    * if fill_lake_task:
-        * if tile_map[tile].lake_id is none: // new lake
-            * use this tile as the contained_tiles
-            * copy the neighbors into shoreline_tiles
-            * calculate the lowest elevation from the neighbors as spillover_elevation
-            * there are no known outlets yet, so don't bother with that.
-            * lake_elevation = tile.elevation
-            * create new lake, give it a an id from next_lake_id and add it to the table.
-        * otherwise:
-            * try to get the lake off the map based on that id.
-        * if there are outlet tiles:
-            * queue.push(flow_water_task,outlet_tile,water_flow/outlet_tiles.len)
-            * do I want to give lower tiles higher divisions of the flow?
-        * else:
-            * let new_lake_elevation = lake.elevation + (water_flow/lake.contained_tiles.len)
-            * if new_lake_elevation > lake.spillover_elevation:
-              * lake.elevation = lake.spillover_elevation
-              * water_flow = (new_lake_elevation - lake.elevation) * lake.contained_tiles.len
-            * if water_flow > 0: // we still have some water left over, so start "spreading" the lake.
-              * let new_lake_area = (lake.contained_tiles.len.sqrt + 1).pow(2)
-              * let new_lake_elevation = lake.elevation + (water_flow/(lake.contained_tiles.len.sqrt + 1.pow(2)))
-                // the idea is to just assume that the lake will grow a little bigger. a 1-tile lake will become a 4 tile lake, 4 tiles will become 9, etc.
-                // I'm not set on that.
-              * flood-fill lake to that level:
-                * let filled = copy of lake.contained_tiles
-                * let checked = copy of lake.contained_tiles
-                * let check_queue = copy of lake.shoreline_tiles
-                * let new_shoreline = []
-                * let new_outlet = []
-                * while check = check_queue.pop
-                  * if check is in checked, then continue
-                  * add check to checked
-                  * if check elevation is higher than new_lake_elevation:
-                    * add check to new_shoreline
-                    * continue
-                  * else if check is part of a lake:
-                    * if the lake elevation is higher, I'm not sure what to do, since it shouldn't be.
-                    * if the lake elevation is the same or lower:
-                      * add the contents of the other lake to filled
-                      * add the shoreline of the other lake to the check_queue
-                      * update the tiles to match this lake's id
-                      * delete the old lake
-                  * else if check is an ocean: add the check to new_outlet and new_shoreline and continue
-                  * else if check is less than the old spillover level, which will only happen if we've gone over the first shoreline and are now going downhill
-                    * add check to new_shoreline and new_outlet and continue
-                  * else 
-                    * add check to filled
-                    * add check.neighbors to check_queue
-              * replace the lake data with the new lake data from above
-              * if the new lake has outlet tiles: divide the waterflow among with tiles of greater difference between their elevation and the lake level getting more. Then push a flow water task on the queue for them.
-    * if flow_water task:
-        * tile_map[tile].water_flow += water_flow (increase)
-        * assuming there is a tile_map[tile].flow_to:
-            * let neighbor_flow = water_flow/neighbors.len
-            * for each neighbor: queue.push(flow_water_task,neighbor,neighbor_flow)
-        * if there are no flow_to neighbors then convert this to a fill_lake task.
+  TODO: From here...
+  * we are now working with the lake.
+  * if that lake has outlet tiles:
+    * divide the accumulation between the outlet tiles and add them to the queue
+    * set the accumulation for this tile to 0.
+  * if that lake does not have any outlet tiles
+    * distributed_accumulation = accumulation / number of contained tiles
+    * spillover_difference = spillover - lake elevation
+    * lake_increase = distributed_accumulation.min(spillover_difference)
+    * new lake elevation = lake elevation + lake_increase
+    * distributed_accumulation -= new_lake_elevation
+    * new accumulation = distributed accumulation * lake.tile.count.
+    * if distributed_accumulation > 0:
+        * use a flood-fill type algorithm to see what would happen if we raised the lake by some small amount (such as 0.001):
+            * set test_elevation to that new_lake_elevation + the small amount
+            * create a queue out of the lake's shoreline tiles
+            * create a new contained tiles
+            * create a new shoreline tiles
+            * create a list of outlet tiles
+            * create a checked map to ignore tiles that are already checked
+            * while let new_lake_tile = queue.pop
+                * if the tile is checked already, continue
+                * if new_lake_tile is part of a lake, and that lake elevation is between spillover elevation and the test elevation: TODO: Under what conditions would it be over?
+                * merge that lake into this new data:
+                    * add it's contained tiles to the new contained tiles
+                    * add it's shoreline to the queue
+                    * delete the old lake
+                * else if new_lake_tile is lower in elevation than the spillover elevation: (will happen if there's a lower spot on the other side of the spillover tiles)
+                * add to the list of outlet tiles
+                * else if new_lake_tile is equal in greater than and equal in elevation to the spillover and less than or equal to the test_elevation:
+                * add the tile to contained tiles and the shoreline
+                * add it's neighbors to the queue
+                * else if the new_lake_tile is greater than the test_elevation:
+                * add the tile to the shorelines
+                * set the new spillover to the minimum of spillover and this tile's elevation.
+        * replace the lake with this lake information, and apply the lake information to all of the contained tiles.
+  * set the remaining accumulation to this tile, and add it back to the queue (further outlet or flooding up to spillover will occur next time.)
 
-* finally, write this to the database for each tile:
-  * flow, flow_to, lake_elevation for each lake
+* Now that lakes are calculated, we now apply lake_elevation to all of the tiles which are contained in lakes.
+
+* Write to the database:
+  * lake_elevation for each tile in a lake.
+  * new values for water_flow
 
 
 
 
-
-
-     */*/
+     */    
     Ok(())
+
+
 }

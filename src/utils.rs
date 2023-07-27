@@ -24,6 +24,9 @@ pub(crate) fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
         }
         StdRng::from_seed(seeds)
     } else {
+        // FUTURE: It would be nice if I could print out the seed that is being used so the user can reproduce a map.
+        // But this doesn't do it. The only option right now is to generate the seed myself, but rand doesn't publicise the
+        // stuff it's using.
         StdRng::from_entropy()
     }
 }
