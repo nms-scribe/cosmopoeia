@@ -353,6 +353,8 @@ impl<'lifetime> TileFeature<'lifetime> {
 
     tile_field!(#[allow(dead_code)] flow_to set_flow_to FIELD_FLOW_TO vec_u64);
 
+    tile_field!(#[allow(dead_code)] lake_elevation set_lake_elevation FIELD_LAKE_ELEVATION f64);
+
 
 }
 
@@ -480,7 +482,6 @@ tile_entity!(TileEntityForWaterFill
     elevation: f64, 
     is_ocean: bool, 
     neighbors: Vec<(u64,i32)>,
-    precipitation: f64,
     water_flow: f64,
     water_accumulation: f64,
     flow_to: Vec<u64>,
@@ -494,7 +495,6 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
             elevation: value.elevation,
             is_ocean: value.is_ocean,
             neighbors: value.neighbors,
-            precipitation: value.precipitation,
             water_flow: value.water_flow,
             water_accumulation: value.water_accumulation,
             flow_to: value.flow_to,
@@ -567,9 +567,10 @@ impl<'lifetime> TilesLayer<'lifetime> {
     pub(crate) const FIELD_PRECIPITATION: &str = "precipitation";
     pub(crate) const FIELD_WATER_FLOW: &str = "water_flow";
     pub(crate) const FIELD_WATER_ACCUMULATION: &str = "water_accum";
+    pub(crate) const FIELD_LAKE_ELEVATION: &str = "lake_elev";
     pub(crate) const FIELD_FLOW_TO: &str = "flow_to";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 12] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 13] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
         (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
@@ -580,6 +581,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         (Self::FIELD_PRECIPITATION,OGRFieldType::OFTReal),
         (Self::FIELD_WATER_FLOW,OGRFieldType::OFTReal),
         (Self::FIELD_WATER_ACCUMULATION,OGRFieldType::OFTReal),
+        (Self::FIELD_LAKE_ELEVATION,OGRFieldType::OFTReal),
         (Self::FIELD_FLOW_TO,OGRFieldType::OFTString),
         (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString) // put this one last to make the tables easier to read in QGIS.
     ];
@@ -1017,13 +1019,14 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn generate_water_flow<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn generate_water_flow<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<u64>),CommandError> {
 
+        let mut result = None;
         self.with_transaction(|target| {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            let result = generate_water_flow(&mut tiles, progress)?;
+            result = Some(generate_water_flow(&mut tiles, progress)?);
 
             Ok(())
     
@@ -1035,7 +1038,7 @@ impl WorldMap {
     
         progress.finish(|| "Layer Saved.");
     
-        Ok(())
+        Ok(result.unwrap()) // the only way it wouldn't be Some is if there was an error.
 
 
     }

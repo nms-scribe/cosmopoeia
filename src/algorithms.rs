@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::IntoIter;
 use std::collections::hash_map::Entry;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
 use rand::Rng;
 use gdal::vector::Geometry;
@@ -1112,7 +1113,6 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
         spillover_elevation: f64,
         contained_tiles: Vec<u64>,
         shoreline_tiles: Vec<u64>,
-        spillover_tiles: Vec<u64>,
         outlet_tiles: Vec<u64>
     }
 
@@ -1126,9 +1126,12 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
     let mut next_lake_id = (0..).into_iter();
     let mut lake_map = HashMap::new();
 
+    println!("tile_queue {}",tile_queue.len());
+
     progress.start_unknown_endpoint(|| "Filling lakes.");
 
     while let Some((tile_fid,accumulation)) = tile_queue.pop() {
+        println!("tile_queue pop {}",tile_fid);
 
         // figure out what we've got to do.
         let task = if let Some(tile) = tile_map.get(&tile_fid) {
@@ -1159,12 +1162,13 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                     for neighbor_fid in flow_to {
                         // add a task to the queue to flow this down.
                         tile_queue.push((*neighbor_fid,neighbor_flow));
+                        println!("tile_queue.push (flow_to) {}",neighbor_fid);
                     }
                     // and the task for this one is to add to the flow:
                     Task::AddToFlow(accumulation)
                 } else {
                     // we need to recalculate to find the lowest neighbors that we can assume are above:
-                    let (lowest,lowest_elevation) = find_lowest_neighbors(tile,&tile_map);
+                    let (_,lowest_elevation) = find_lowest_neighbors(tile,&tile_map);
 
                     // assuming that succeeded, we can create a new lake now.
                     if let Some(lowest_elevation) = lowest_elevation {
@@ -1176,7 +1180,6 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                             spillover_elevation: lowest_elevation,
                             contained_tiles: vec![tile_fid],
                             shoreline_tiles: tile.neighbors.iter().map(|(a,_)| *a).collect(),
-                            spillover_tiles: lowest,
                             outlet_tiles: Vec::new(),
                         };
 
@@ -1213,7 +1216,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
             }
             Task::FillLake(lake_id,accumulation) => {
-                if let Some(lake) = lake_map.get_mut(&lake_id) {
+                let (new_lake,accumulation) = if let Some(lake) = lake_map.get(&lake_id) {
                     let outlet_tiles = &lake.outlet_tiles;
                     if outlet_tiles.len() > 0 {
                         // we can automatically flow to those tiles.
@@ -1222,7 +1225,9 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                         for neighbor_fid in outlet_tiles {
                             // add a task to the queue to flow this down.
                             tile_queue.push((*neighbor_fid,neighbor_flow));
+                            println!("tile_queue.push (first outlet) {}",neighbor_fid);
                         }
+                        continue;
     
                     } else {
                         // no outlet tiles, so we have to grow the lake.
@@ -1230,10 +1235,10 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                         let accumulation_per_tile = accumulation/lake.contained_tiles.len() as f64;
                         let spillover_difference = lake.spillover_elevation - lake.elevation;
                         let lake_increase = accumulation_per_tile.min(spillover_difference);
-                        lake.elevation = lake.elevation + lake_increase;
+                        let new_lake_elevation = lake.elevation + lake_increase;
                         let remaining_accum_per_tile = accumulation_per_tile - lake_increase;
                         let accumulation = remaining_accum_per_tile * lake.contained_tiles.len() as f64;
-    
+
                         if remaining_accum_per_tile > 0.0 {
                             // we need to increase the size of the lake. Right now, we are at the spillover level.
                             // Basically, pretend that we are making the lake deeper by 0.0001 (or some small amount)
@@ -1245,19 +1250,146 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                             // * tiles that are taller than than the test elevation:
                             // * tiles that are shorter than the lake elevation (since lake elevation is at spillover, this means we're starting to go downhill again, so this is a new outlet and new shoreline, as above, we'll also add some flow to this eventually)
 
-                            
+                            let test_elevation = new_lake_elevation + 0.001;
+                            let mut walk_queue = lake.shoreline_tiles.clone();
+                            let mut new_shoreline = Vec::new();
+                            let mut new_outlets = Vec::new();
+                            let mut new_contained_tiles = lake.contained_tiles.clone();
+                            let mut checked_tiles: HashSet<u64> = HashSet::from_iter(new_contained_tiles.iter().copied());
+                            let mut new_spillover_elevation = None;
+
+                            while let Some(check_fid) = walk_queue.pop() {
+                                if checked_tiles.contains(&check_fid) {
+                                    continue;
+                                }
+                                checked_tiles.insert(check_fid);
+
+                                if let Some(check) = tile_map.get(&check_fid) {
+
+                                    if let Some(lake_id) = check.lake_id {
+                                        // it's in a lake already...
+                                        if let Some(other_lake) = lake_map.get(&lake_id) {
+                                            if (other_lake.elevation <= test_elevation) && (other_lake.elevation >= new_lake_elevation) {
+                                                // merge the other one into this one.
+                                                // it's contained tiles become part of this one
+                                                new_contained_tiles.extend(other_lake.contained_tiles.iter());
+                                                // plus, we've already checked them.
+                                                checked_tiles.extend(other_lake.contained_tiles.iter());
+                                                // add it's shoreline to the check queue
+                                                walk_queue.extend(other_lake.shoreline_tiles.iter());
+                                                // TODO: Don't worry about deleting the old lake, just make sure we update the lake id for the new lake on the
+                                                // tiles, and make sure we check those when updating the lake data.
+                                            } else {
+                                                // otherwise, add this as an outlet. (I'm assuming that the lake is lower in elevation, I'm not sure how else we could have reached it)
+                                                new_outlets.push(check_fid);
+                                                new_shoreline.push(check_fid);
+                                            }
+
+                                        } else {
+                                            // TODO: Is this an error?
+                                            continue;
+                                        }
+                                    } else {
+                                        // it's not in a lake, just check it's elevation
+                                        if check.elevation > test_elevation {
+                                            // it's too high to flood. This is part of the shoreline.
+                                            new_shoreline.push(check_fid);
+                                            // And this might change our spillover elevation
+                                            new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(check.elevation)).or_else(|| Some(check.elevation));
+                                        } else if check.elevation < new_lake_elevation {
+                                            // it's below the original spillover, which means it's beyond our initial shoreline. This is an outlet.
+                                            new_outlets.push(check_fid);
+                                            new_shoreline.push(check_fid);
+                                        } else {
+                                            // it's floodable.
+                                            new_contained_tiles.push(check_fid);
+                                            walk_queue.extend(check.neighbors.iter().map(|(id,_)| id));
+
+                                        }
+                                    }
+
+                                } else {
+                                    continue;
+                                }
+
+                            }
+
+                            (Lake {
+                                elevation: new_lake_elevation,
+                                spillover_elevation: new_spillover_elevation.unwrap_or_else(|| new_lake_elevation),
+                                contained_tiles: new_contained_tiles,
+                                shoreline_tiles: new_shoreline,
+                                outlet_tiles: new_outlets,
+                            },accumulation)
+
+                        
+                        } else {
+                            (Lake {
+                                elevation: new_lake_elevation,
+                                spillover_elevation: lake.spillover_elevation,
+                                contained_tiles: lake.contained_tiles.clone(),
+                                shoreline_tiles: lake.shoreline_tiles.clone(),
+                                outlet_tiles: lake.outlet_tiles.clone(),
+                            },accumulation)
                         }
     
                     }
     
+                } else {
+                    continue;
+                };
+
+                // update the new lake.
+                for tile in &new_lake.contained_tiles {
+                    if let Some(tile) = tile_map.get_mut(&tile) {
+                        tile.lake_id = Some(lake_id);
+                    }
                 }
+
+                if accumulation > 0.0 { // we're still not done we have to do something with the remaining water.
+                    let outlet_tiles = &new_lake.outlet_tiles;
+                    if outlet_tiles.len() > 0 {
+                        // this is the same as above, but with the new lake.
+                        // we can automatically flow to those tiles.
+                        let neighbor_flow = accumulation/outlet_tiles.len() as f64;
+    
+                        for neighbor_fid in outlet_tiles {
+                            // add a task to the queue to flow this down.
+                            tile_queue.push((*neighbor_fid,neighbor_flow));
+                            println!("tile_queue.push (second outlet) {}",neighbor_fid);
+                        }
+                    } else {
+                        // add this task back to the queue so it can try to flood the lake to the next spillover.
+                        tile_queue.push((tile_fid,accumulation));
+                        println!("tile_queue.push (remaining accum) {}",tile_fid);
+
+                    }
+
+                }
+
+                // replace it in the map.
+                lake_map.insert(lake_id, new_lake);
             },
             
         }
 
     }
 
+   broken!("I've got an infinite loop jumping back and forth between 4062 and 1210. Figure out what's going on with that. Both are being marked as outlets.");
+
     progress.finish(|| "Lakes filled.");
+
+    for lake in lake_map.values() {
+        for tile in &lake.contained_tiles {
+            if let Some(mut feature) = layer.feature_by_id(&tile) {
+
+                feature.set_lake_elevation(lake.elevation)?;
+
+                layer.update_feature(feature)?;
+            }
+    
+        }
+    }
 
     // TODO: Last thing is to take the "lakes" and update all contained tiles with their lake_elevation in the actual layers. Any neighboring tiles with 
     // the same lake elevation are considered part of the same lake.
