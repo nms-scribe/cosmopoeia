@@ -1417,8 +1417,6 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
     // - rivers have to be traced using water_flow (to indicate size) and flow_to to indicate direction. Also include outlet_from to join rivers to lakes.
     // TODO: Then, I need to curve and simplify the borders of said lakes.
 
-    // TODO: Random seed can be "seed_from_u64".
-
     Ok(())
 
 

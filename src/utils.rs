@@ -16,13 +16,9 @@ use gdal::vector::OGRwkbGeometryType::wkbLinearRing;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 
-pub(crate) fn random_number_generator(seed_vec: Vec<u8>) -> StdRng {
-    if seed_vec.len() > 0 {
-        let mut seeds = [0u8; 32];
-        for (&x, p) in seed_vec.iter().zip(seeds.iter_mut()) {
-            *p = x;
-        }
-        StdRng::from_seed(seeds)
+pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
+    if let Some(seed) = seed {
+        StdRng::seed_from_u64(seed)
     } else {
         // FUTURE: It would be nice if I could print out the seed that is being used so the user can reproduce a map.
         // But this doesn't do it. The only option right now is to generate the seed myself, but rand doesn't publicise the

@@ -44,8 +44,8 @@ subcommand_def!{
         tiles: usize,
 
         #[arg(long)]
-        /// Seeds for the random number generator (up to 32), note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Vec<u8>,
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -149,8 +149,8 @@ subcommand_def!{
         tiles: usize,
 
         #[arg(long)]
-        /// Seeds for the random number generator (up to 32), note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Vec<u8>,
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
