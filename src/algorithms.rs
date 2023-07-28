@@ -1115,8 +1115,8 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
         elevation: f64,
         spillover_elevation: f64,
         contained_tiles: Vec<u64>,
-        shoreline_tiles: Vec<u64>,
-        outlet_tiles: Vec<u64>
+        shoreline_tiles: Vec<(u64,u64)>, // a bordering lake tile, the actual shoreline tile
+        outlet_tiles: Vec<(u64,u64)> // from, to
     }
 
     enum Task {
@@ -1178,7 +1178,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                             elevation: tile.elevation,
                             spillover_elevation: lowest_elevation,
                             contained_tiles: vec![tile_fid],
-                            shoreline_tiles: tile.neighbors.iter().map(|(a,_)| *a).collect(),
+                            shoreline_tiles: tile.neighbors.iter().map(|(a,_)| (tile_fid,*a)).collect(),
                             outlet_tiles: Vec::new(),
                         };
 
@@ -1215,13 +1215,13 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
             }
             Task::FillLake(lake_id,accumulation) => {
-                let (new_lake,accumulation) = if let Some(lake) = lake_map.get(&lake_id) {
+                let (new_lake,accumulation,delete_lakes) = if let Some(lake) = lake_map.get(&lake_id) {
                     let outlet_tiles = &lake.outlet_tiles;
                     if outlet_tiles.len() > 0 {
                         // we can automatically flow to those tiles.
                         let neighbor_flow = accumulation/outlet_tiles.len() as f64;
     
-                        for neighbor_fid in outlet_tiles {
+                        for (_,neighbor_fid) in outlet_tiles {
                             // add a task to the queue to flow this down.
                             tile_queue.push((*neighbor_fid,neighbor_flow));
                         }
@@ -1255,8 +1255,10 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                             let mut new_contained_tiles = lake.contained_tiles.clone();
                             let mut checked_tiles: HashSet<u64> = HashSet::from_iter(new_contained_tiles.iter().copied());
                             let mut new_spillover_elevation = None;
+                            let mut delete_lakes = Vec::new();
 
-                            while let Some(check_fid) = walk_queue.pop() {
+
+                            while let Some((sponsor_fid,check_fid)) = walk_queue.pop() {
                                 if checked_tiles.contains(&check_fid) {
                                     continue;
                                 }
@@ -1266,11 +1268,11 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                                 if let Some(check) = tile_map.get(&check_fid) {
                                     if check.is_ocean {
                                         // it's an outlet
-                                        new_outlets.push(check_fid);
-                                        new_shoreline.push(check_fid);
+                                        new_outlets.push((sponsor_fid,check_fid));
+                                        new_shoreline.push((sponsor_fid,check_fid));
                                     } else if check.elevation > test_elevation {
                                         // it's too high to fill. This is now part of the shoreline.
-                                        new_shoreline.push(check_fid);
+                                        new_shoreline.push((sponsor_fid,check_fid));
                                         // And this might change our spillover elevation
                                         new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(check.elevation)).or_else(|| Some(check.elevation));
                                     } else if let Some(lake_id) = check.lake_id {
@@ -1285,12 +1287,11 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                                                 checked_tiles.extend(other_lake.contained_tiles.iter());
                                                 // add it's shoreline to the check queue
                                                 walk_queue.extend(other_lake.shoreline_tiles.iter());
-                                                // TODO: Don't worry about deleting the old lake, just make sure we update the lake id for the new lake on the
-                                                // tiles, and make sure we check those when updating the lake data.
+                                                delete_lakes.push(lake_id);
                                             } else {
                                                 // otherwise, add this as an outlet. (I'm assuming that the lake is lower in elevation, I'm not sure how else we could have reached it)
-                                                new_outlets.push(check_fid);
-                                                new_shoreline.push(check_fid);
+                                                new_outlets.push((sponsor_fid,check_fid));
+                                                new_shoreline.push((sponsor_fid,check_fid));
                                             }
 
                                         } else {
@@ -1299,12 +1300,12 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                                         }
                                     } else if check.elevation < new_lake_elevation {
                                             // it's below the original spillover, which means it's an outlet beyond our initial shoreline.
-                                            new_outlets.push(check_fid);
-                                            new_shoreline.push(check_fid);
+                                            new_outlets.push((sponsor_fid,check_fid));
+                                            new_shoreline.push((sponsor_fid,check_fid));
                                     } else {
                                         // it's floodable.
                                         new_contained_tiles.push(check_fid);
-                                        walk_queue.extend(check.neighbors.iter().map(|(id,_)| id));
+                                        walk_queue.extend(check.neighbors.iter().map(|(id,_)| (check_fid,*id)));
                                     }
 
                                 } else {
@@ -1319,7 +1320,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                                 contained_tiles: new_contained_tiles,
                                 shoreline_tiles: new_shoreline,
                                 outlet_tiles: new_outlets,
-                            },accumulation)
+                            },accumulation,delete_lakes)
 
                         
                         } else {
@@ -1329,7 +1330,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                                 contained_tiles: lake.contained_tiles.clone(),
                                 shoreline_tiles: lake.shoreline_tiles.clone(),
                                 outlet_tiles: lake.outlet_tiles.clone(),
-                            },accumulation)
+                            },accumulation,vec![])
                         }
     
                     }
@@ -1339,9 +1340,18 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                 };
 
                 // update the new lake.
+                // mark the contained tiles...
                 for tile in &new_lake.contained_tiles {
                     if let Some(tile) = tile_map.get_mut(&tile) {
                         tile.lake_id = Some(lake_id);
+                        tile.outlet_from = Vec::new()
+                    }
+                }
+
+                // mark the outlet tiles...
+                for (sponsor,tile) in &new_lake.outlet_tiles {
+                    if let Some(tile) = tile_map.get_mut(&tile) {
+                        tile.outlet_from = vec![*sponsor];
                     }
                 }
 
@@ -1352,7 +1362,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                         // we can automatically flow to those tiles.
                         let neighbor_flow = accumulation/outlet_tiles.len() as f64;
     
-                        for neighbor_fid in outlet_tiles {
+                        for (_,neighbor_fid) in outlet_tiles {
                             // add a task to the queue to flow this down.
                             tile_queue.push((*neighbor_fid,neighbor_flow));
                         }
@@ -1365,6 +1375,9 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
                 }
 
                 // replace it in the map.
+                for lake in delete_lakes {
+                    lake_map.remove(&lake);
+                }
                 lake_map.insert(lake_id, new_lake);
             },
             
@@ -1391,15 +1404,19 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
             feature.set_lake_elevation(lake_elevation)?;
 
+            feature.set_outlet_from(&tile.outlet_from)?;
+
             layer.update_feature(feature)?;
         }
         progress.update(|| i);
 
     }
 
-    // TODO: I need to "delete" lakes from the lake_map after all. Just provide a list of lakes to delete when creating new lakes.
-    // TODO: I need to track the "outlets" as well.
-    // TODO: I'm not sure if the lakes with outlets are going to have rivers going to them, the river chanel drawing should take into account these outlets and at least draw to the nearest lake.
+    // TODO: Next step, we need to turn the rivers and lakes into another layer:
+    // - lakes can be found by dissolving on lake elevation, and then giving them a negavite buffer.
+    // - rivers have to be traced using water_flow (to indicate size) and flow_to to indicate direction. Also include outlet_from to join rivers to lakes.
+    // TODO: Then, I need to curve and simplify the borders of said lakes.
+
     // TODO: Random seed can be "seed_from_u64".
 
     Ok(())

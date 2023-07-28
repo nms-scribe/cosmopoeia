@@ -372,6 +372,11 @@ impl<'lifetime> TileFeature<'lifetime> {
 
     tile_field!(#[allow(dead_code)] flow_to set_flow_to FIELD_FLOW_TO vec_u64);
 
+    // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
+    // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
+    // to store it. In any way, you never know when I might support outlet from multiple points.
+    tile_field!(#[allow(dead_code)] outlet_from set_outlet_from FIELD_OUTLET_FROM vec_u64);
+
     tile_field!(#[allow(dead_code)] lake_elevation set_lake_elevation FIELD_LAKE_ELEVATION option_f64);
 
 
@@ -504,6 +509,7 @@ tile_entity!(TileEntityForWaterFill
     water_flow: f64,
     water_accumulation: f64,
     flow_to: Vec<u64>,
+    outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
     lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
 );
 
@@ -517,6 +523,7 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
             water_flow: value.water_flow,
             water_accumulation: value.water_accumulation,
             flow_to: value.flow_to,
+            outlet_from: Vec::new(),
             lake_id: None
         }
     }
@@ -588,8 +595,9 @@ impl<'lifetime> TilesLayer<'lifetime> {
     pub(crate) const FIELD_WATER_ACCUMULATION: &str = "water_accum";
     pub(crate) const FIELD_LAKE_ELEVATION: &str = "lake_elev";
     pub(crate) const FIELD_FLOW_TO: &str = "flow_to";
+    pub(crate) const FIELD_OUTLET_FROM: &str = "outlet_from";
 
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 13] = [
+    const FIELD_DEFS: [(&str,OGRFieldType::Type); 14] = [
         (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
         (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
         (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
@@ -602,6 +610,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         (Self::FIELD_WATER_ACCUMULATION,OGRFieldType::OFTReal),
         (Self::FIELD_LAKE_ELEVATION,OGRFieldType::OFTReal),
         (Self::FIELD_FLOW_TO,OGRFieldType::OFTString),
+        (Self::FIELD_OUTLET_FROM,OGRFieldType::OFTString),
         (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString) // put this one last to make the tables easier to read in QGIS.
     ];
 
