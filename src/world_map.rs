@@ -205,23 +205,29 @@ pub(crate) struct TileFeature<'lifetime> {
 
 
 macro_rules! tile_field {
-    (fieldtype@ f64) => {
+    (getfieldtype@ f64) => {
         f64
     };
-    (fieldtype@ i32) => {
+    (getfieldtype@ i32) => {
         i32
     };
-    (fieldtype@ bool) => {
+    (getfieldtype@ bool) => {
         bool
     };
-    (fieldtype@ vec_u64_i32) => {
+    (getfieldtype@ option_f64) => {
+        f64 // this is the same because everything's an option, the option tag only means it can accept options
+    };
+    (getfieldtype@ vec_u64_i32) => {
         Vec<(u64,i32)>
     };
-    (fieldtype@ vec_u64) => {
+    (getfieldtype@ vec_u64) => {
         Vec<u64>
     };
     (setfieldtype@ f64) => {
         f64
+    };
+    (setfieldtype@ option_f64) => {
+        Option<f64>
     };
     (setfieldtype@ i32) => {
         i32
@@ -236,6 +242,10 @@ macro_rules! tile_field {
         &Vec<u64>
     };
     (getfield@ $self: ident $field: ident f64) => {
+        Ok($self.feature.field_as_double_by_name(TilesLayer::$field)?)
+    };
+    (getfield@ $self: ident $field: ident option_f64) => {
+        // see above for getfieldtype option_f64
         Ok($self.feature.field_as_double_by_name(TilesLayer::$field)?)
     };
     (getfield@ $self: ident $field: ident i32) => {
@@ -281,6 +291,15 @@ macro_rules! tile_field {
     (setfield@ $self: ident $field: ident $value: ident f64) => {
         Ok($self.feature.set_field_double(TilesLayer::$field, $value)?)
     };
+    (setfield@ $self: ident $field: ident $value: ident option_f64) => {
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_double(TilesLayer::$field, value)?)
+        } else {
+            // There's no unsetfield, but this should have the same effect.
+            // FUTURE: I've put in a feature request to gdal crate.
+            Ok($self.feature.set_field_double(TilesLayer::$field,f64::NAN)?)
+        }
+    };
     (setfield@ $self: ident $field: ident $value: ident i32) => {
         Ok($self.feature.set_field_integer(TilesLayer::$field, $value)?)
     };
@@ -296,7 +315,7 @@ macro_rules! tile_field {
         Ok($self.feature.set_field_string(TilesLayer::$field, &neighbors)?)
     }};
     (get@ $(#[$attr: meta])* $prop: ident $field: ident $type: ident) => {
-        $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<tile_field!(fieldtype@ $type)>,CommandError> {
+        $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<tile_field!(getfieldtype@ $type)>,CommandError> {
             tile_field!(getfield@ self $field $type)
         }
     };
@@ -353,7 +372,7 @@ impl<'lifetime> TileFeature<'lifetime> {
 
     tile_field!(#[allow(dead_code)] flow_to set_flow_to FIELD_FLOW_TO vec_u64);
 
-    tile_field!(#[allow(dead_code)] lake_elevation set_lake_elevation FIELD_LAKE_ELEVATION f64);
+    tile_field!(#[allow(dead_code)] lake_elevation set_lake_elevation FIELD_LAKE_ELEVATION option_f64);
 
 
 }
