@@ -4,6 +4,7 @@ use ordered_float::NotNan;
 use ordered_float::FloatIsNan;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::Rng;
 use gdal::vector::Geometry;
 use gdal::vector::Layer;
 use gdal::vector::LayerAccess;
@@ -17,14 +18,17 @@ use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 
 pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
-    if let Some(seed) = seed {
-        StdRng::seed_from_u64(seed)
+    let seed = if let Some(seed) = seed {
+        seed
     } else {
         // FUTURE: It would be nice if I could print out the seed that is being used so the user can reproduce a map.
-        // But this doesn't do it. The only option right now is to generate the seed myself, but rand doesn't publicise the
-        // stuff it's using.
-        StdRng::from_entropy()
-    }
+        // The only option right now is to generate the seed myself, but rand doesn't publicise the stuff it's using (I suspect that actually makes sense).
+        let mut seeder = StdRng::from_entropy();
+        let seed = seeder.gen::<u64>();
+        println!("Using random seed {}",seed);
+        seed
+    };
+    StdRng::seed_from_u64(seed)
 }
 
 
