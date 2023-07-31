@@ -13,6 +13,7 @@ use gdal::vector::OGRwkbGeometryType::wkbNone;
 use gdal::vector::OGRwkbGeometryType::wkbGeometryCollection;
 use gdal::vector::OGRwkbGeometryType::wkbPolygon;
 use gdal::vector::OGRwkbGeometryType::wkbLinearRing;
+use gdal::vector::OGRwkbGeometryType::wkbLineString;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -252,5 +253,14 @@ pub(crate) fn create_polygon(vertices: Vec<Point>) -> Result<Geometry,CommandErr
     let mut polygon = Geometry::empty(wkbPolygon)?;
     polygon.add_geometry(line)?;
     Ok(polygon)
+
+}
+
+pub(crate) fn create_line(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
+    let mut line = Geometry::empty(wkbLineString)?;
+    for point in vertices {
+        line.add_point_2d(point.to_tuple());
+    }
+    Ok(line)
 
 }

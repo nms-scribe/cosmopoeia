@@ -58,6 +58,36 @@ impl Task for GenWaterFill {
 
         Ok(())
 
+    }
+}
+
+subcommand_def!{
+    /// Generates precipitation data (requires wind and temperatures)
+    pub(crate) struct GenWaterConnectRivers {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long)]
+        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite: bool
+
+    }
+}
+
+impl Task for GenWaterConnectRivers {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        let segments = target.generate_water_connect_rivers(&mut progress)?;
+
+        target.load_river_segments(segments,self.overwrite,&mut progress)?;
+
+        Ok(())
 
     }
 }

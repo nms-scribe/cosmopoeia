@@ -15,8 +15,10 @@ pub(crate) enum CommandError {
     FloatIsNan,
     MissingField(&'static str),
     MissingGeometry,
+    InvalidValueForSegmentFrom(String),
+    InvalidValueForSegmentTo(String),
     #[allow(dead_code)] RasterDatasetRequired,
-    #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType)
+    #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType),
 }
 
 impl Error for CommandError {
@@ -32,6 +34,8 @@ impl Display for CommandError {
             Self::FloatIsNan => write!(f,"A float was not a number."),
             Self::MissingField(a) => write!(f,"While loading data, a record had no value in for '{}'",a),
             Self::MissingGeometry => write!(f,"While loading data, a record had no geometry"),
+            Self::InvalidValueForSegmentFrom(a) => write!(f,"Invalid value ('{}') found for from_type in river segments layer.",a),
+            Self::InvalidValueForSegmentTo(a) => write!(f,"Invalid value ('{}') found for to_type in river segments layer.",a),
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
         }

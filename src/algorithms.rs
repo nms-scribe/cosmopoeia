@@ -3,6 +3,7 @@ use std::collections::hash_map::IntoIter;
 use std::collections::hash_map::Entry;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use rand::Rng;
 use gdal::vector::Geometry;
@@ -24,10 +25,14 @@ use crate::world_map::TileFeature;
 use crate::world_map::TileEntityForWaterFlow;
 use crate::world_map::TileEntityForWaterFill;
 use crate::world_map::TileEntityWithNeighborsElevation;
+use crate::world_map::TileEntityForRiverConnect;
+use crate::world_map::RiverSegmentFrom;
+use crate::world_map::RiverSegmentTo;
+use crate::world_map::NewRiverSegment;
 use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
-use crate::tile_entity;
+use crate::entity;
 use crate::world_map::TileEntity;
 
 enum PointGeneratorPhase {
@@ -788,7 +793,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     let prec_input_modifier = moisture as f64/100.0;
     let modifier = cells_number_modifier * prec_input_modifier;
 
-    tile_entity!(TileDataForPrecipitation 
+    entity!(TileDataForPrecipitation TileEntity {
         elevation_scaled: i32, 
         wind: i32, 
         is_ocean: bool, 
@@ -798,13 +803,14 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
             Ok::<_,CommandError>(0.0)
         },
         lat_modifier: f64 = |feature: &TileFeature| {
-            let site_y = tile_entity!(fieldassign@ feature site_y f64);
+            let site_y = entity!(fieldassign@ feature site_y f64);
             let lat_band = ((site_y.abs() - 1.0) / 5.0).floor() as usize;
             let lat_modifier = LATITUDE_MODIFIERS[lat_band];
             Ok::<_,CommandError>(lat_modifier)
         }
-    );
+    });
 
+    // I need to trace the data across the map, so I can't just do quick read and writes to the database.
     let mut tile_map = layer.read_entities_to_index::<_,TileDataForPrecipitation>(progress)?;
 
     // I can't work on the tiles map while also iterating it, so I have to copy the keys
@@ -1412,12 +1418,243 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
     }
 
-    // TODO: Next step, we need to turn the rivers and lakes into another layer:
-    // - lakes can be found by dissolving on lake elevation, and then giving them a negavite buffer.
-    // - rivers have to be traced using water_flow (to indicate size) and flow_to to indicate direction. Also include outlet_from to join rivers to lakes.
-    // TODO: Then, I need to curve and simplify the borders of said lakes.
+
+
 
     Ok(())
 
 
 }
+
+pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_>, progress: &mut Progress) -> Result<Vec<NewRiverSegment>,CommandError> {
+
+    struct Segment {
+        from: u64,
+        to: u64,
+        flow: f64,
+        from_lake: bool,
+    }
+
+
+    let mut tile_from_index = HashMap::new();
+    let mut tile_to_index = HashMap::new();
+    let mut segment_queue = Vec::new();
+    let mut result = Vec::new();
+
+    macro_rules! add_segment {
+        ($from: expr, $to: expr, $flow: expr, $from_lake: expr) => {{
+            // add a new segment to the processing queue and to the maps for easier finding.
+            // Use an Rc to make it easier to share the same value in the various places. 
+            // Otherwise, we would need some sort of id map and a whole other structure with potential errors.
+            let from = $from;
+            let to = $to;
+            let flow = $flow;
+            let from_lake = $from_lake;
+            let segment = Rc::from(Segment {
+                from,
+                to,
+                flow,
+                from_lake,
+            });
+            match tile_from_index.entry(from) {
+                Entry::Vacant(entry) => {
+                    entry.insert(vec![segment.clone()]);
+                },
+                Entry::Occupied(mut entry) => entry.get_mut().push(segment.clone()),
+            };
+            match tile_to_index.entry(to) {
+                Entry::Vacant(entry) => {
+                    entry.insert(vec![segment.clone()]);
+                },
+                Entry::Occupied(mut entry) => entry.get_mut().push(segment.clone()),
+            };
+            segment_queue.push(segment);
+            
+        }};
+    }
+
+    progress.start_known_endpoint(|| ("Mapping segments.",tiles.feature_count()));
+
+    // iterate through all the tiles. Create segments when there is a flow_to or outlet_from value. 
+    // Also, index the segments by starting tile or ending tile, as it will help connect things later.
+    for (i,entity) in tiles.read_entities::<TileEntityForRiverConnect>().enumerate() {
+        let (fid,tile) = entity?;
+        for flow_to in tile.flow_to {
+            add_segment!(fid,flow_to,tile.water_flow,false)
+        }
+        for outlet_from in tile.outlet_from {
+            add_segment!(outlet_from,fid,tile.water_flow,true)
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Segments mapped.");
+
+    progress.start_known_endpoint(|| ("Drawing segments.",segment_queue.len()));
+
+    for (i,segment) in segment_queue.iter().enumerate() {
+        // look in tile_from_index to see what segments start after this segment.
+        // if there are none, then this segment ends in a mouth to a lake or ocean
+        // if there is one, this segment continues on to a new one.
+        // if there is more than one, this segment branches (delta)
+        let to_type = match tile_from_index.get(&segment.to) {
+            Some(list) => match list.len() {
+                0 => RiverSegmentTo::Mouth,
+                1 => RiverSegmentTo::Continuing,
+                _ => RiverSegmentTo::Confluence             
+            },
+            None => RiverSegmentTo::Mouth,
+        };
+        // check to see what segment ends in this one.
+        // if there are none, then this segment starts at a source
+        // if there are one, this segment is a continuation
+        // if there is more than one, this segment begins with a confluence.
+        let from_type = if segment.from_lake {
+            RiverSegmentFrom::Lake
+        } else {
+            match tile_from_index.get(&segment.from) {
+                Some(list) => match list.len() {
+                    0 => RiverSegmentFrom::Source,
+                    1 => RiverSegmentFrom::Continuing,
+                    _ => RiverSegmentFrom::Branch
+                },
+                None => RiverSegmentFrom::Source,
+            }
+        };
+
+        if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(&segment.from),tiles.feature_by_id(&segment.to)) {
+            let start_point = from_tile.site_point()?;
+            let end_point = to_tile.site_point()?;
+            result.push(NewRiverSegment {
+                from_tile: segment.from as i64,
+                to_tile: segment.to as i64,
+                flow: segment.flow,
+                from_type,
+                to_type,
+                line: vec![start_point,end_point]
+            })
+
+    
+    
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Segments drawn.");
+
+    // Rivers: I'm not at all certain if we need whole lines, we might get a way with single line segments. If we add attributes, whole rivers can still be found. This allows us to retain the "water_flow" for each segment separately for drawing them wider later.
+    // * for each segment in queue
+    //   * look in start_map for what segments start at segment.to:
+    //     * if none, then segment.end_type = mouth (could be ocean or lake)
+    //     * if one, then segment.end_type = continuing
+    //     * if two or more, then segment.end_type = branching
+    //   * if segment.start_type isn't lake:
+    //     * look in end_map for what segments end at segment.from:
+    //       * if none, then segment.start_type = source
+    //       * if one, then segment.start_type = continuing
+    //       * if two or more, then segment.start_type = confluence
+    //   * point a = find the site point for segment.from
+    //   * point d = find the site point for segment.to
+    //   -- to create "automatic" bezier curves, we need to know where the previous and next segments are as well to determine the best tangents to use.
+    //      -- a bezier curve has two end points and two control points which are on tangent lines to the curve from those end points. The tangent
+    //      -- lines for "automatic" are calculated as being parallel to the neighboring line segments, 
+    //      -- https://math.stackexchange.com/a/4207568
+    //   * pre_point = match start_type:
+    //     * source | lake: None
+    //     * continuing: find site point for previous segment.from
+    //     * confluence: find the previous segment with largest flow, and return segment.from for that. (if equal, then can we find a point on an arc between the two?)
+    //   * post_point = match end_type
+    //     * mouth: None
+    //     * continuing: find the site point for the next segment.to
+    //     * branching: find the next segment with the largest flow, and return segment.to for that. (see confluence above for if the sites are equal)
+    //   * point b = 
+    //     * if pre_point: a point 1/3 of the distance from a to d, on a line parallel to pre_point to d
+    //     * else: a point 1/3 of the way from a to d (linear interpolation)
+    //   * point c =
+    //     * if post_point: a point 1/3 of the distance from d to a, on a line parallel to a to post_point
+    //     * else: a point 1/3 of the way from d to a (linear interpolation)
+    //   * see code below for something to start with to generate bezier curve control points
+    //   * finally, convert those bezier curves into sets of points to create line strings that roughly follow the curve. 
+    //     * https://math.stackexchange.com/a/317055
+    //     * also there's this which reduces the number or points while increasing accuracy: https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html I found a Javascript translation here: https://github.com/mattdesl/adaptive-bezier-curve, and I found a rust translation of that: https://crates.io/crates/adaptive-bezier, but it has dependencies I don't need. It might be good to reference that if I can't understand the javascript stuff.
+    //       -- since it recurses at the end of the function, I think I can do tail recursion with this.
+    /*
+// --- From ChatGPT: convert https://math.stackexchange.com/a/4207568 into rust:
+use std::iter::FromIterator;
+
+#[derive(Debug, Clone, Copy)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+impl Point {
+    fn new(x: f64, y: f64) -> Point {
+        Point { x, y }
+    }
+
+    fn normalized(self) -> Point {
+        let len = (self.x * self.x + self.y * self.y).sqrt();
+        Point {
+            x: self.x / len,
+            y: self.y / len,
+        }
+    }
+}
+
+fn bezier_fd(pos: &[(Point, Point)]) -> Vec<Vec<Point>> {
+    // Make the normalized tangent vectors
+    let mut tgt: Vec<Point> = pos
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .chain(std::iter::once((pos[1].0 - pos[0].0).normalized()))
+        .chain(std::iter::once((pos.last().unwrap().0 - pos[pos.len() - 2].0).normalized()))
+        .collect();
+
+    // Build Bezier curves
+    let mut curves: Vec<Vec<Point>> = Vec::new();
+    let (mut p0, mut t0) = tgt.remove(0);
+    let mut row = vec![p0];
+    for (p, t) in tgt {
+        let s = (p - p0).abs() / 3.0;
+        row.extend_from_slice(&[p0 + t0 * s, p - t * s, p]);
+        curves.push(row);
+        row = Vec::new();
+        p0 = p;
+        t0 = t;
+    }
+
+    curves
+}
+
+fn main() {
+    // Define points
+    let pos = [
+        (Point::new(0.5, 0.5), Point::new(0.5, 0.5)),
+        (Point::new(1.0, -0.5), Point::new(1.0, -0.5)),
+        (Point::new(1.5, 1.0), Point::new(1.5, 1.0)),
+        (Point::new(2.25, 1.1), Point::new(2.25, 1.1)),
+        (Point::new(2.6, -0.5), Point::new(2.6, -0.5)),
+        (Point::new(3.0, 0.5), Point::new(3.0, 0.5)),
+    ];
+
+    let curves = bezier_fd(&pos);
+
+    // Display the Bezier curves (curves vector contains the control points for each Bezier curve segment)
+    for curve in &curves {
+        for point in curve {
+            println!("{:?}", point);
+        }
+    }
+}
+
+     */
+
+    Ok(result)
+
+}
+

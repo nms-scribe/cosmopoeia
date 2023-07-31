@@ -20,6 +20,7 @@ use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
+use crate::utils::create_line;
 use crate::raster::RasterMap;
 use crate::algorithms::OceanSamplingMethod;
 use crate::algorithms::sample_elevations;
@@ -30,11 +31,8 @@ use crate::algorithms::generate_winds;
 use crate::algorithms::generate_precipitation;
 use crate::algorithms::generate_water_flow;
 use crate::algorithms::generate_water_fill;
+use crate::algorithms::generate_water_connect_rivers;
 
-pub(crate) const POINTS_LAYER_NAME: &str = "points";
-pub(crate) const TRIANGLES_LAYER_NAME: &str = "triangles";
-pub(crate) const TILES_LAYER_NAME: &str = "tiles";
-pub(crate) const BIOME_LAYER_NAME: &str = "biomes";
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
 // The solution to this would probably require rewriting the gdal crate, so I'm not going to bother with this at this time, I'll just have to be more careful. 
@@ -78,8 +76,13 @@ impl<'lifetime> WorldLayer<'lifetime> {
     }
 
     fn add(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
-
-        self.layer.create_feature_fields(geometry,field_names,field_values)?;
+        // I dug out the source to get this. I wanted to be able to return the feature being created.
+        let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
+        feature.set_geometry(geometry)?;
+        for (field, value) in field_names.iter().zip(field_values.iter()) {
+            feature.set_field(&field, value)?;
+        }
+        feature.create(&self.layer)?;
         Ok(())
     }
 
@@ -113,15 +116,18 @@ pub(crate) struct PointsLayer<'lifetime> {
 
 impl<'lifetime> PointsLayer<'lifetime> {
 
+    const LAYER_NAME: &str = "points";
+    
+
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let points = WorldLayer::open_from_dataset(dataset, POINTS_LAYER_NAME)?;
+        let points = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
         Ok(Self {
             points
         })
     }
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let points = WorldLayer::create_from_dataset(dataset, POINTS_LAYER_NAME, OGRwkbGeometryType::wkbPoint, None, overwrite)?;
+        let points = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPoint, None, overwrite)?;
 
         Ok(Self {
             points
@@ -130,7 +136,8 @@ impl<'lifetime> PointsLayer<'lifetime> {
 
     pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
-        self.points.add(point,&[],&[])
+        self.points.add(point,&[],&[])?;
+        Ok(())
 
     }
 
@@ -150,8 +157,11 @@ pub(crate) struct TrianglesLayer<'lifetime> {
 
 impl<'lifetime> TrianglesLayer<'lifetime> {
 
+    const LAYER_NAME: &str = "triangles";
+
+
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::open_from_dataset(dataset, TRIANGLES_LAYER_NAME)?;
+        let tiles = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
         Ok(Self {
             tiles
         })
@@ -159,7 +169,7 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::create_from_dataset(dataset, TRIANGLES_LAYER_NAME, OGRwkbGeometryType::wkbPolygon, None, overwrite)?;
+        let tiles = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPolygon, None, overwrite)?;
 
         Ok(Self {
             tiles
@@ -168,7 +178,8 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
     pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
 
-        self.tiles.add(geo,&[],&[])
+        self.tiles.add(geo,&[],&[])?;
+        Ok(())
 
     }
 
@@ -197,16 +208,89 @@ impl VoronoiSite {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum RiverSegmentFrom {
+    Source,
+    Lake,
+    Branch,
+    Continuing
+}
 
-pub(crate) struct TileFeature<'lifetime> {
+impl TryFrom<String> for RiverSegmentFrom {
+    type Error = CommandError;
 
-    feature: Feature<'lifetime>
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "source" => Ok(Self::Source),
+            "lake" => Ok(Self::Lake),
+            "branch" => Ok(Self::Branch),
+            "continuing" => Ok(Self::Continuing),
+            a => Err(CommandError::InvalidValueForSegmentFrom(a.to_owned()))
+        }
+    }
+}
+
+impl Into<&str> for &RiverSegmentFrom {
+
+    fn into(self) -> &'static str {
+        match self {
+            RiverSegmentFrom::Source => "source",
+            RiverSegmentFrom::Lake => "lake",
+            RiverSegmentFrom::Branch => "branch",
+            RiverSegmentFrom::Continuing => "continuing",
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum RiverSegmentTo {
+    Mouth,
+    Confluence,
+    Continuing
+}
+
+impl TryFrom<String> for RiverSegmentTo {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "mouth" => Ok(Self::Mouth),
+            "confluence" => Ok(Self::Confluence),
+            "continuing" => Ok(Self::Continuing),
+            a => Err(CommandError::InvalidValueForSegmentTo(a.to_owned()))
+        }
+    }
+}
+
+impl Into<&str> for &RiverSegmentTo {
+
+    fn into(self) -> &'static str {
+        match self {
+            RiverSegmentTo::Mouth => "mouth",
+            RiverSegmentTo::Confluence => "confluence",
+            RiverSegmentTo::Continuing => "continuing",
+        }
+    }
 }
 
 
-macro_rules! tile_field {
+
+
+macro_rules! feature {
+    (bool_to_int@ $value: ident) => {
+        if $value { 1 } else { 0 }
+    };
+    (id_list_to_string@ $value: ident) => {
+        $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",")
+    };
+    (neighbor_directions_to_string@ $value: ident) => {
+        $value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",")
+    };
     (getfieldtype@ f64) => {
         f64
+    };
+    (getfieldtype@ i64) => {
+        i64
     };
     (getfieldtype@ i32) => {
         i32
@@ -217,11 +301,17 @@ macro_rules! tile_field {
     (getfieldtype@ option_f64) => {
         f64 // this is the same because everything's an option, the option tag only means it can accept options
     };
-    (getfieldtype@ vec_u64_i32) => {
+    (getfieldtype@ neighbor_directions) => {
         Vec<(u64,i32)>
     };
-    (getfieldtype@ vec_u64) => {
+    (getfieldtype@ id_list) => {
         Vec<u64>
+    };
+    (getfieldtype@ river_segment_from) => {
+        RiverSegmentFrom
+    };
+    (getfieldtype@ river_segment_to) => {
+        RiverSegmentTo
     };
     (setfieldtype@ f64) => {
         f64
@@ -229,33 +319,45 @@ macro_rules! tile_field {
     (setfieldtype@ option_f64) => {
         Option<f64>
     };
+    (setfieldtype@ i64) => {
+        i64
+    };
     (setfieldtype@ i32) => {
         i32
     };
     (setfieldtype@ bool) => {
         bool
     };
-    (setfieldtype@ vec_u64_i32) => {
+    (setfieldtype@ neighbor_directions) => {
         &Vec<(u64,i32)>
     };
-    (setfieldtype@ vec_u64) => {
+    (setfieldtype@ id_list) => {
         &Vec<u64>
     };
-    (getfield@ $self: ident $field: ident f64) => {
-        Ok($self.feature.field_as_double_by_name(TilesLayer::$field)?)
+    (setfieldtype@ river_segment_from) => {
+        &RiverSegmentFrom
     };
-    (getfield@ $self: ident $field: ident option_f64) => {
+    (setfieldtype@ river_segment_to) => {
+        &RiverSegmentTo
+    };
+    (getfield@ $self: ident f64 $field: path) => {
+        Ok($self.feature.field_as_double_by_name($field)?)
+    };
+    (getfield@ $self: ident option_f64 $field: path) => {
         // see above for getfieldtype option_f64
-        Ok($self.feature.field_as_double_by_name(TilesLayer::$field)?)
+        Ok($self.feature.field_as_double_by_name($field)?)
     };
-    (getfield@ $self: ident $field: ident i32) => {
-        Ok($self.feature.field_as_integer_by_name(TilesLayer::$field)?)
+    (getfield@ $self: ident i64 $field: path) => {
+        Ok($self.feature.field_as_integer64_by_name($field)?)
     };
-    (getfield@ $self: ident $field: ident bool) => {
-        Ok($self.feature.field_as_integer_by_name(TilesLayer::$field)?.map(|n| n != 0))
+    (getfield@ $self: ident i32 $field: path) => {
+        Ok($self.feature.field_as_integer_by_name($field)?)
     };
-    (getfield@ $self: ident $field: ident vec_u64_i32) => {
-        if let Some(neighbors) = $self.feature.field_as_string_by_name(TilesLayer::$field)? {
+    (getfield@ $self: ident bool $field: path) => {
+        Ok($self.feature.field_as_integer_by_name($field)?.map(|n| n != 0))
+    };
+    (getfield@ $self: ident neighbor_directions $field: path) => {
+        if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(neighbors.split(',').filter_map(|a| {
                 let mut a = a.splitn(2, ':');
                 if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
@@ -278,8 +380,8 @@ macro_rules! tile_field {
         }
 
     };
-    (getfield@ $self: ident $field: ident vec_u64) => {
-        if let Some(neighbors) = $self.feature.field_as_string_by_name(TilesLayer::$field)? {
+    (getfield@ $self: ident id_list $field: path) => {
+        if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(neighbors.split(',').filter_map(|a| {
                 a.parse().ok()
             }).collect()))
@@ -288,138 +390,162 @@ macro_rules! tile_field {
         }
 
     };
-    (setfield@ $self: ident $field: ident $value: ident f64) => {
-        Ok($self.feature.set_field_double(TilesLayer::$field, $value)?)
+    (getfield@ $self: ident river_segment_from $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(Some(RiverSegmentFrom::try_from(value)?))
+        } else {
+            Ok(None)
+        }
+
     };
-    (setfield@ $self: ident $field: ident $value: ident option_f64) => {
+    (getfield@ $self: ident river_segment_to $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(Some(RiverSegmentTo::try_from(value)?))
+        } else {
+            Ok(None)
+        }
+
+    };
+    (setfield@ $self: ident $value: ident f64 $field: path) => {
+        Ok($self.feature.set_field_double($field, $value)?)
+    };
+    (setfield@ $self: ident $value: ident option_f64 $field: path) => {
         if let Some(value) = $value {
-            Ok($self.feature.set_field_double(TilesLayer::$field, value)?)
+            Ok($self.feature.set_field_double($field, value)?)
         } else {
             // There's no unsetfield, but this should have the same effect.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok($self.feature.set_field_double(TilesLayer::$field,f64::NAN)?)
+            Ok($self.feature.set_field_double($field,f64::NAN)?)
         }
     };
-    (setfield@ $self: ident $field: ident $value: ident i32) => {
-        Ok($self.feature.set_field_integer(TilesLayer::$field, $value)?)
+    (setfield@ $self: ident $value: ident i32 $field: path) => {
+        Ok($self.feature.set_field_integer($field, $value)?)
     };
-    (setfield@ $self: ident $field: ident $value: ident bool) => {
-        Ok($self.feature.set_field_integer(TilesLayer::$field, if $value { 1 } else { 0 })?)
+    (setfield@ $self: ident $value: ident i64 $field: path) => {
+        Ok($self.feature.set_field_integer64($field, $value)?)
     };
-    (setfield@ $self: ident $field: ident $value: ident vec_u64_i32) => {{
-        let neighbors = $value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",");
-        Ok($self.feature.set_field_string(TilesLayer::$field, &neighbors)?)
+    (setfield@ $self: ident $value: ident bool $field: path) => {
+        Ok($self.feature.set_field_integer($field, feature!(bool_to_int@ $value))?)
+    };
+    (setfield@ $self: ident $value: ident neighbor_directions $field: path) => {{
+        let neighbors = feature!(neighbor_directions_to_string@ $value);
+        Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
-    (setfield@ $self: ident $field: ident $value: ident vec_u64) => {{
-        let neighbors = $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",");
-        Ok($self.feature.set_field_string(TilesLayer::$field, &neighbors)?)
+    (setfield@ $self: ident $value: ident id_list $field: path) => {{
+        let neighbors = feature!(id_list_to_string@ $value);
+        Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
-    (get@ $(#[$attr: meta])* $prop: ident $field: ident $type: ident) => {
-        $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<tile_field!(getfieldtype@ $type)>,CommandError> {
-            tile_field!(getfield@ self $field $type)
+    (setfield@ $self: ident $value: ident river_segment_from $field: path) => {{
+        Ok($self.feature.set_field_string($field, $value.into())?)
+    }};
+    (setfield@ $self: ident $value: ident river_segment_to $field: path) => {{
+        Ok($self.feature.set_field_string($field, $value.into())?)
+    }};
+    (to_value@ $prop: ident f64) => {
+        FieldValue::RealValue($prop)
+    };
+    (to_value@ $prop: ident i32) => {
+        FieldValue::IntegerValue($prop)
+    };
+    (to_value@ $prop: ident bool) => {
+        FieldValue::IntegerValue(feature!(bool_to_int@ $prop))
+    };
+    (to_value@ $prop: ident option_f64) => {
+        if let Some(value) = $prop {
+            FieldValue::RealValue(value)
+        } else {
+            // There's no unsetfield, but this should have the same effect.
+            // FUTURE: I've put in a feature request to gdal crate.
+            FieldValue::RealValue(f64::NAN)
         }
     };
-    (set@ $(#[$attr: meta])* $set_prop: ident $field: ident $type: ident) => {
-        $(#[$attr])* pub(crate) fn $set_prop(&mut self, value: tile_field!(setfieldtype@ $type)) -> Result<(),CommandError> {
-            tile_field!(setfield@ self $field value $type)
+    (to_value@ $prop: ident id_list) => {
+        FieldValue::StringValue(feature!(id_list_to_string@ $prop))
+    };
+    (to_value@ $prop: ident neighbor_directions) => {
+        FieldValue::StringValue(feature!(neighbor_directions_to_string@ $prop))
+    };
+    (to_value@ $prop: ident i64) => {
+        FieldValue::Integer64Value($prop)
+    };
+    (to_value@ $prop: ident river_segment_from) => {{
+        FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
+    }};
+    (to_value@ $prop: ident river_segment_to) => {{
+        FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
+    }};
+    (get@ $(#[$attr: meta])* $prop: ident $type: ident $field: path) => {
+        $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<feature!(getfieldtype@ $type)>,CommandError> {
+            feature!(getfield@ self $type $field)
+        }
+    };
+    (set@ $(#[$attr: meta])* $set_prop: ident $type: ident $field: path) => {
+        $(#[$attr])* pub(crate) fn $set_prop(&mut self, value: feature!(setfieldtype@ $type)) -> Result<(),CommandError> {
+            feature!(setfield@ self value $type $field)
         }            
     };
-    ($(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $field: ident $type: ident) => {
-        tile_field!(get@ $(#[$get_attr])* $prop $field $type);
+    (props@ $(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $type: ident $field: path) => {
+        feature!(get@ $(#[$get_attr])* $prop $type $field);
 
-        tile_field!(set@ $(#[$set_attr])* $set_prop $field $type);
-        
+        feature!(set@ $(#[$set_attr])* $set_prop $type $field);
+
+    };
+    ($field_count: literal; $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_values: #[$to_values_attr: meta])? {$($(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $prop_type: ident $field: ident $name: literal $field_type: path;)*}) => {
+
+        $(pub(crate) const $field: &str = $name;)*
+
+        const FIELD_DEFS: [(&str,OGRFieldType::Type); $field_count] = [
+            $((Self::$field,$field_type)),*
+        ];
+
+        $(#[$fid_attr])? pub(crate) fn fid(&self) -> Option<u64> {
+            self.feature.fid()
+        }
+    
+        $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Option<&Geometry> {
+            self.feature.geometry()
+        }
+
+        $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature!(setfieldtype@ $prop_type)),*) -> ([&'static str; $field_count],[FieldValue; $field_count]) {
+            ([
+                $(Self::$field),*
+            ],[
+                $(feature!(to_value@ $prop $prop_type)),*
+            ])
+
+        }
+    
+        $(
+            feature!(props@ $(#[$get_attr])* $prop $(#[$set_attr])* $set_prop $prop_type Self::$field);
+        )*
     };
 }
 
-impl<'lifetime> TileFeature<'lifetime> {
 
-    fn from_data(feature: Feature<'lifetime>) -> Self {
-        Self {
-            feature
-        }
-    }
-
-    pub(crate) fn fid(&self) -> Option<u64> {
-        self.feature.fid()
-    }
-
-    pub(crate) fn geometry(&self) -> Option<&Geometry> {
-        self.feature.geometry()
-    }
-
-    tile_field!(site_x #[allow(dead_code)] set_site_x FIELD_SITE_X f64);
-
-    tile_field!(site_y #[allow(dead_code)] set_site_y FIELD_SITE_Y f64);
-
-    tile_field!(elevation set_elevation FIELD_ELEVATION f64);
-
-    tile_field!(elevation_scaled set_elevation_scaled FIELD_ELEVATION_SCALED i32);
-
-    tile_field!(is_ocean set_is_ocean FIELD_IS_OCEAN bool);
-
-    tile_field!(temperature set_temperature FIELD_TEMPERATURE f64);
-
-    tile_field!(wind set_wind FIELD_WIND i32);
-
-    tile_field!(precipitation set_precipitation FIELD_PRECIPITATION f64);
-
-    tile_field!(#[allow(dead_code)] water_flow set_water_flow FIELD_WATER_FLOW f64);
-
-    tile_field!(#[allow(dead_code)] water_accumulation set_water_accumulation FIELD_WATER_ACCUMULATION f64);
-
-    tile_field!(neighbors set_neighbors FIELD_NEIGHBOR_TILES vec_u64_i32);
-
-    tile_field!(#[allow(dead_code)] flow_to set_flow_to FIELD_FLOW_TO vec_u64);
-
-    // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
-    // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
-    // to store it. In any way, you never know when I might support outlet from multiple points.
-    tile_field!(#[allow(dead_code)] outlet_from set_outlet_from FIELD_OUTLET_FROM vec_u64);
-
-    tile_field!(#[allow(dead_code)] lake_elevation set_lake_elevation FIELD_LAKE_ELEVATION option_f64);
-
-
+pub(crate) struct TypedFeatureIterator<'lifetime, TypedFeature: From<Feature<'lifetime>>> {
+    features: FeatureIterator<'lifetime>,
+    _phantom: std::marker::PhantomData<TypedFeature>
 }
 
-pub(crate) struct TileFeatureIterator<'lifetime> {
-    features: FeatureIterator<'lifetime>
-}
-
-impl<'lifetime> Iterator for TileFeatureIterator<'lifetime> {
-    type Item = TileFeature<'lifetime>;
+impl<'lifetime, TypedFeature: From<Feature<'lifetime>>> Iterator for TypedFeatureIterator<'lifetime, TypedFeature> {
+    type Item = TypedFeature;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.features.next().map(TileFeature::from_data)
+        self.features.next().map(TypedFeature::from)
     }
 }
 
-impl<'lifetime> From<FeatureIterator<'lifetime>> for TileFeatureIterator<'lifetime> {
+impl<'lifetime, TypedFeature: From<Feature<'lifetime>>> From<FeatureIterator<'lifetime>> for TypedFeatureIterator<'lifetime, TypedFeature> {
     fn from(features: FeatureIterator<'lifetime>) -> Self {
         Self {
-            features
+            features,
+            _phantom: std::marker::PhantomData::default()
         }
     }
-}
-
-
-// NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
-// This is a much easier version of the same thing.
-pub(crate) trait TileEntity: Sized {
-
-    fn try_from_feature(feature: TileFeature) -> Result<Self,CommandError>;
-
-}
-
-pub(crate) trait TileEntityWithNeighborsElevation {
-
-    fn neighbors(&self) -> &Vec<(u64,i32)>;
-
-    fn elevation(&self) -> &f64;
 }
 
 #[macro_export]
-macro_rules! tile_entity {
+macro_rules! entity {
     (variables@ $feature: ident, $($field: ident),*) => {
         $(
             let $field = $feature.$field()?;
@@ -440,13 +566,13 @@ macro_rules! tile_entity {
     (constructor@ $name: ident  $feature: ident $($field: ident: $type: ty $(= $function: expr)?),*) => {
         Ok($name {
             $(
-                $field: tile_entity!(fieldassign@ $feature $field $type $(= $function)?)
+                $field: entity!(fieldassign@ $feature $field $type $(= $function)?)
             ),*
         })
 
     };
     (from_data@ $name: ident $feature: ident, $($field: ident: $type: ty $(= $function: expr)?),*) => {{
-        tile_entity!(constructor@ $name $feature $($field: $type $(= $function)? ),*)
+        entity!(constructor@ $name $feature $($field: $type $(= $function)? ),*)
     }};
     (fielddef@ $type: ty [$function: expr]) => {
         $type
@@ -454,29 +580,122 @@ macro_rules! tile_entity {
     (fielddef@ $type: ty) => {
         $type
     };
-    ($name: ident $($field: ident: $type: ty $(= $function: expr)?),*) => {
+    (feature_class@ TileEntity) => {
+        TileFeature
+    };
+    (feature_class@ RiverSegmentEntity) => {
+        RiverSegmentFeature
+    };
+    ($name: ident $entity_class: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]
         pub(crate) struct $name {
             $(
-                pub(crate) $field: tile_entity!(fielddef@ $type $([$function])?)
+                pub(crate) $field: entity!(fielddef@ $type $([$function])?)
             ),*
         }
 
-        impl TileEntity for $name {
+        impl $entity_class for $name {
 
-            fn try_from_feature(feature: crate::world_map::TileFeature) -> Result<Self,CommandError> {
-                tile_entity!(from_data@ $name feature, $($field: $type $(= $function)?),*)
+            fn try_from_feature(feature: entity!(feature_class@ $entity_class)) -> Result<Self,CommandError> {
+                entity!(from_data@ $name feature, $($field: $type $(= $function)?),*)
             }
-        }        
+
+        }
 
     };
 }
 
-tile_entity!(TileEntitySite fid: u64, site_x: f64, site_y: f64);
-tile_entity!(TileEntitySiteGeo fid: u64, geometry: Geometry, site_x: f64, site_y: f64);
-tile_entity!(TileEntityLatElevOcean fid: u64, site_y: f64, elevation: f64, is_ocean: bool);
-tile_entity!(TileEntityLat fid: u64, site_y: f64);
-tile_entity!(TileEntityForWaterFlow
+pub(crate) struct TileFeature<'lifetime> {
+
+    feature: Feature<'lifetime>
+}
+
+impl<'lifetime> From<Feature<'lifetime>> for TileFeature<'lifetime> {
+
+    fn from(feature: Feature<'lifetime>) -> Self {
+        Self {
+            feature
+        }
+    }
+}
+
+impl<'lifetime> TileFeature<'lifetime> {
+
+    feature!(14; to_values: #[allow(dead_code)] {
+        site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
+        site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
+        elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+        // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
+        // If I ever get rid of those algorithms, this field can go away.
+        elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
+        is_ocean set_is_ocean bool FIELD_IS_OCEAN "is_ocean" OGRFieldType::OFTInteger;
+        temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
+        wind set_wind i32 FIELD_WIND "wind_dir" OGRFieldType::OFTInteger;
+        precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation" OGRFieldType::OFTReal;
+        #[allow(dead_code)] water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
+        #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
+        #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
+        #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
+        // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
+        // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
+        // to store it. In any way, you never know when I might support outlet from multiple points.
+        #[allow(dead_code)] outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
+        neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles" OGRFieldType::OFTString;
+
+    });
+
+    pub(crate) fn site_point(&self) -> Result<Point,CommandError> {
+        if let (Some(x),Some(y)) = (self.site_x()?,self.site_y()?) {
+            Ok(Point::try_from((x,y))?)
+        } else {
+            Err(CommandError::MissingField("site"))
+        }
+    }
+
+}
+
+// NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
+// This is a much easier version of the same thing.
+pub(crate) trait TileEntity: Sized {
+
+    fn try_from_feature(feature: TileFeature) -> Result<Self,CommandError>;
+
+}
+
+pub(crate) trait TileEntityWithNeighborsElevation {
+
+    fn neighbors(&self) -> &Vec<(u64,i32)>;
+
+    fn elevation(&self) -> &f64;
+}
+
+
+entity!(TileEntityNewSiteGeo TileEntity {
+    site_x: f64, 
+    site_y: f64
+}); // TODO: Replace VoronoiSite with this...
+entity!(TileEntitySite TileEntity {
+    fid: u64, 
+    site_x: f64, 
+    site_y: f64
+});
+entity!(TileEntitySiteGeo TileEntity {
+    fid: u64, 
+    geometry: Geometry, 
+    site_x: f64, 
+    site_y: f64
+});
+entity!(TileEntityLatElevOcean TileEntity {
+    fid: u64, 
+    site_y: f64, 
+    elevation: f64, 
+    is_ocean: bool
+});
+entity!(TileEntityLat TileEntity {
+    fid: u64, 
+    site_y: f64
+});
+entity!(TileEntityForWaterFlow TileEntity {
     elevation: f64, 
     is_ocean: bool, 
     neighbors: Vec<(u64,i32)>,
@@ -484,7 +703,7 @@ tile_entity!(TileEntityForWaterFlow
     water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
     water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
     flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new())
-);
+});
 
 impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
 
@@ -497,12 +716,10 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
     }
 }
 
-
-
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
 // just use a different function because it's based on a trait. I could take this one out
 // of the macro and figure something out, but this is easier.
-tile_entity!(TileEntityForWaterFill
+entity!(TileEntityForWaterFill TileEntity {
     elevation: f64, 
     is_ocean: bool, 
     neighbors: Vec<(u64,i32)>,
@@ -511,7 +728,13 @@ tile_entity!(TileEntityForWaterFill
     flow_to: Vec<u64>,
     outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
     lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
-);
+});
+
+entity!(TileEntityForRiverConnect TileEntity {
+    water_flow: f64,
+    flow_to: Vec<u64>,
+    outlet_from: Vec<u64>
+});
 
 impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 
@@ -542,7 +765,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
 
 
 pub(crate) struct TileEntityIterator<'lifetime, Data: TileEntity> {
-    features: TileFeatureIterator<'lifetime>,
+    features: TypedFeatureIterator<'lifetime,TileFeature<'lifetime>>,
     data: std::marker::PhantomData<Data>
 }
 
@@ -563,8 +786,8 @@ impl<'lifetime,Data: TileEntity> Iterator for TileEntityIterator<'lifetime,Data>
     }
 }
 
-impl<'lifetime,Data: TileEntity> From<TileFeatureIterator<'lifetime>> for TileEntityIterator<'lifetime,Data> {
-    fn from(features: TileFeatureIterator<'lifetime>) -> Self {
+impl<'lifetime,Data: TileEntity> From<TypedFeatureIterator<'lifetime,TileFeature<'lifetime>>> for TileEntityIterator<'lifetime,Data> {
+    fn from(features: TypedFeatureIterator<'lifetime,TileFeature<'lifetime>>) -> Self {
         Self {
             features,
             data: std::marker::PhantomData
@@ -580,42 +803,10 @@ pub(crate) struct TilesLayer<'lifetime> {
 
 impl<'lifetime> TilesLayer<'lifetime> {
 
-    pub(crate) const FIELD_SITE_X: &str = "site_x";
-    pub(crate) const FIELD_SITE_Y: &str = "site_y";
-    pub(crate) const FIELD_NEIGHBOR_TILES: &str = "neighbor_tiles";
-    pub(crate) const FIELD_ELEVATION: &str = "elevation";
-    // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
-    // If I ever get rid of those algorithms, this field can go away.
-    pub(crate) const FIELD_ELEVATION_SCALED: &str = "elevation_scaled";
-    pub(crate) const FIELD_IS_OCEAN: &str = "is_ocean";
-    pub(crate) const FIELD_TEMPERATURE: &str = "temperature";
-    pub(crate) const FIELD_WIND: &str = "wind_dir";
-    pub(crate) const FIELD_PRECIPITATION: &str = "precipitation";
-    pub(crate) const FIELD_WATER_FLOW: &str = "water_flow";
-    pub(crate) const FIELD_WATER_ACCUMULATION: &str = "water_accum";
-    pub(crate) const FIELD_LAKE_ELEVATION: &str = "lake_elev";
-    pub(crate) const FIELD_FLOW_TO: &str = "flow_to";
-    pub(crate) const FIELD_OUTLET_FROM: &str = "outlet_from";
-
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 14] = [
-        (Self::FIELD_SITE_X,OGRFieldType::OFTReal),
-        (Self::FIELD_SITE_Y,OGRFieldType::OFTReal),
-        (Self::FIELD_ELEVATION,OGRFieldType::OFTReal),
-        (Self::FIELD_ELEVATION_SCALED,OGRFieldType::OFTInteger),
-        (Self::FIELD_IS_OCEAN,OGRFieldType::OFTInteger),
-        (Self::FIELD_TEMPERATURE,OGRFieldType::OFTReal),
-        (Self::FIELD_WIND,OGRFieldType::OFTInteger),
-        (Self::FIELD_PRECIPITATION,OGRFieldType::OFTReal),
-        (Self::FIELD_WATER_FLOW,OGRFieldType::OFTReal),
-        (Self::FIELD_WATER_ACCUMULATION,OGRFieldType::OFTReal),
-        (Self::FIELD_LAKE_ELEVATION,OGRFieldType::OFTReal),
-        (Self::FIELD_FLOW_TO,OGRFieldType::OFTString),
-        (Self::FIELD_OUTLET_FROM,OGRFieldType::OFTString),
-        (Self::FIELD_NEIGHBOR_TILES,OGRFieldType::OFTString) // put this one last to make the tables easier to read in QGIS.
-    ];
+    pub(crate) const LAYER_NAME: &str = "tiles";
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::open_from_dataset(dataset, TILES_LAYER_NAME)?;
+        let tiles = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
         Ok(Self {
             tiles
         })
@@ -623,7 +814,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::create_from_dataset(dataset, TILES_LAYER_NAME, OGRwkbGeometryType::wkbPolygon, Some(&Self::FIELD_DEFS), overwrite)?;
+        let tiles = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPolygon, Some(&TileFeature::FIELD_DEFS), overwrite)?;
 
         Ok(Self {
             tiles
@@ -634,8 +825,8 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
         let (x,y) = tile.site.to_tuple();
         self.tiles.add(tile.geometry,&[
-                Self::FIELD_SITE_X,
-                Self::FIELD_SITE_Y,
+                TileFeature::FIELD_SITE_X,
+                TileFeature::FIELD_SITE_Y,
             ],&[
                 FieldValue::RealValue(x),
                 FieldValue::RealValue(y),
@@ -659,7 +850,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         progress.start_known_endpoint(|| ("Indexing tiles.",self.tiles.layer.feature_count() as usize));
         let mut result = HashMap::new();
         for (i,feature) in self.read_features().enumerate() {
-            result.insert(tile_entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+            result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
             progress.update(|| i);
         }
         progress.finish(|| "Tiles indexed.");
@@ -667,7 +858,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
     }
 
     pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<TileFeature> {
-        self.tiles.layer.feature(*fid).map(TileFeature::from_data)
+        self.tiles.layer.feature(*fid).map(TileFeature::from)
     }
 
     #[allow(dead_code)] pub(crate) fn entity_by_id<Data: TileEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
@@ -683,7 +874,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
         self.tiles.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
     }
 
-    pub(crate) fn read_features(&mut self) -> TileFeatureIterator {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TileFeature> {
         self.tiles.layer.features().into()
     }
 
@@ -702,11 +893,185 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
 }
 
+
+pub(crate) struct RiverSegmentFeature<'lifetime> {
+
+    feature: Feature<'lifetime>
+}
+
+impl<'lifetime> From<Feature<'lifetime>> for RiverSegmentFeature<'lifetime> {
+
+    fn from(feature: Feature<'lifetime>) -> Self {
+        Self {
+            feature
+        }
+    }
+}
+
+impl<'lifetime> RiverSegmentFeature<'lifetime> {
+
+    feature!(5; geometry: #[allow(dead_code)] {
+        from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
+        to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile" OGRFieldType::OFTInteger64;
+        flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
+        from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
+        to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type" OGRFieldType::OFTString;
+    });
+
+}
+
+// NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
+// This is a much easier version of the same thing.
+pub(crate) trait RiverSegmentEntity: Sized {
+
+    fn try_from_feature(feature: RiverSegmentFeature) -> Result<Self,CommandError>;
+
+}
+
+pub(crate) struct RiverSegmentEntityIterator<'lifetime, Data: RiverSegmentEntity> {
+    features: TypedFeatureIterator<'lifetime,RiverSegmentFeature<'lifetime>>,
+    data: std::marker::PhantomData<Data>
+}
+
+// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
+impl<'lifetime,Data: RiverSegmentEntity> Iterator for RiverSegmentEntityIterator<'lifetime,Data> {
+    type Item = Result<(u64,Data),CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(feature) = self.features.next() {
+            match (feature.fid(),Data::try_from_feature(feature)) {
+                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                (_, Err(e)) => Some(Err(e)),
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'lifetime,Data: RiverSegmentEntity> From<TypedFeatureIterator<'lifetime,RiverSegmentFeature<'lifetime>>> for RiverSegmentEntityIterator<'lifetime,Data> {
+    fn from(features: TypedFeatureIterator<'lifetime,RiverSegmentFeature<'lifetime>>) -> Self {
+        Self {
+            features,
+            data: std::marker::PhantomData
+        }
+    }
+}
+
+entity!(NewRiverSegment RiverSegmentEntity {
+    from_tile: i64,
+    to_tile: i64,
+    flow: f64,
+    from_type: RiverSegmentFrom,
+    to_type: RiverSegmentTo,
+    line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
+});
+
+
+
+pub(crate) struct RiverSegmentsLayer<'lifetime> {
+    segments: WorldLayer<'lifetime>
+}
+
+impl<'lifetime> RiverSegmentsLayer<'lifetime> {
+
+    pub(crate) const LAYER_NAME: &str = "river_segments";
+
+    #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+        let segments = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
+        Ok(Self {
+            segments
+        })
+    }
+    
+
+    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+        let segments = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbLineString, Some(&RiverSegmentFeature::FIELD_DEFS), overwrite)?;
+
+        Ok(Self {
+            segments
+        })
+    }
+
+    pub(crate) fn add_segment(&mut self, segment: &NewRiverSegment) -> Result<(),CommandError> {
+        let geometry = create_line(&segment.line)?;
+        let (field_names,field_values) = RiverSegmentFeature::to_field_names_values(
+            segment.from_tile, 
+            segment.to_tile, 
+            segment.flow, 
+            &segment.from_type, 
+            &segment.to_type);
+        self.segments.add(geometry, &field_names, &field_values)
+    }
+
+
+    #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: RiverSegmentEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Reading tiles.",self.segments.layer.feature_count() as usize));
+        let mut result = Vec::new();
+        for (i,feature) in self.read_features().enumerate() {
+            result.push(Data::try_from_feature(feature)?);
+            progress.update(|| i);
+        }
+        progress.finish(|| "Tiles read.");
+        Ok(result)
+    }
+
+    #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: RiverSegmentEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Indexing tiles.",self.segments.layer.feature_count() as usize));
+        let mut result = HashMap::new();
+        for (i,feature) in self.read_features().enumerate() {
+            result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+            progress.update(|| i);
+        }
+        progress.finish(|| "Tiles indexed.");
+        Ok(result)
+    }
+
+    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<RiverSegmentFeature> {
+        self.segments.layer.feature(*fid).map(RiverSegmentFeature::from)
+    }
+
+    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: RiverSegmentEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
+        self.feature_by_id(fid).map(Data::try_from_feature).transpose()
+    }
+
+    #[allow(dead_code)] pub(crate) fn update_feature(&self, feature: RiverSegmentFeature) -> Result<(),CommandError> {
+        Ok(self.segments.layer.set_feature(feature.feature)?)
+    }
+
+    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
+    #[allow(dead_code)] pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
+        self.segments.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
+    }
+
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<RiverSegmentFeature> {
+        self.segments.layer.features().into()
+    }
+
+    #[allow(dead_code)] pub(crate) fn read_entities<Data: RiverSegmentEntity>(&mut self) -> RiverSegmentEntityIterator<Data> {
+        self.read_features().into()
+    }
+
+    #[allow(dead_code)] pub(crate) fn clear_spatial_filter(&mut self) {
+        self.segments.layer.clear_spatial_filter()
+    }
+
+    #[allow(dead_code)] pub(crate) fn feature_count(&self) -> usize {
+        self.segments.layer.feature_count() as usize
+    }
+
+
+}
+
+
 pub(crate) struct BiomeLayer<'lifetime> {
     biomes: WorldLayer<'lifetime>
 }
 
 impl<'lifetime> BiomeLayer<'lifetime> {
+
+    pub(crate) const LAYER_NAME: &str = "biomes";
 
     pub(crate) const FIELD_NAME: &str = "name";
 
@@ -715,7 +1080,7 @@ impl<'lifetime> BiomeLayer<'lifetime> {
     ];
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let biomes = WorldLayer::open_from_dataset(dataset, BIOME_LAYER_NAME)?;
+        let biomes = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
         Ok(Self {
             biomes
         })
@@ -723,7 +1088,7 @@ impl<'lifetime> BiomeLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let biomes = WorldLayer::create_from_dataset(dataset, BIOME_LAYER_NAME, OGRwkbGeometryType::wkbNone, Some(&Self::FIELD_DEFS), overwrite)?;
+        let biomes = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbNone, Some(&Self::FIELD_DEFS), overwrite)?;
 
         Ok(Self {
             biomes
@@ -1119,6 +1484,57 @@ impl WorldMap {
 
     }
 
+    pub(crate) fn generate_water_connect_rivers(&mut self, progress: &mut crate::progress::ConsoleProgressBar) -> Result<Vec<NewRiverSegment>,CommandError> {
+
+        let mut result = None;
+
+        self.with_transaction(|target| {
+            // FUTURE: I don't really need this to be in a transaction. The layer shouldn't need to be edited. However,
+            // a feature iterator function requires the layer to be mutable. So, to avoid confusion, I'm marking this as
+            // in a transaction as well.
+
+            let mut tiles = target.edit_tile_layer()?;
+
+            result = Some(generate_water_connect_rivers(&mut tiles, progress)?);
+
+            Ok(())
+    
+        })?;
+    
+        Ok(result.unwrap())
+
+    }
+
+    pub(crate) fn load_river_segments<Progress: ProgressObserver>(&mut self, segments: Vec<NewRiverSegment>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut segments_layer = target.create_river_segments_layer(overwrite_layer)?;
+
+        
+            // boundary points    
+    
+            progress.start_known_endpoint(|| ("Writing segments.",segments.len()));
+    
+            for (i,segment) in segments.iter().enumerate() {
+                segments_layer.add_segment(segment)?;
+                progress.update(|| i);
+            }
+    
+            progress.finish(|| "Segments written.");
+    
+            Ok(())
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving layer."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer saved.");
+    
+        Ok(())
+
+    }
+
 
 
 
@@ -1151,6 +1567,11 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
 
     }
 
+    pub(crate) fn create_river_segments_layer(&mut self, overwrite: bool) -> Result<RiverSegmentsLayer,CommandError> {
+        Ok(RiverSegmentsLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+
+    }
+
     pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {
         Ok(TilesLayer::open_from_dataset(&mut self.dataset)?)
 
@@ -1166,6 +1587,7 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
     }
 
     fn commit(self) -> Result<(),CommandError> {
+        // TODO: Am I doing this anywhere?
         self.dataset.commit()?;
         Ok(())
     }

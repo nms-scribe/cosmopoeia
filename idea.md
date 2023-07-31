@@ -1348,8 +1348,13 @@ To proceed on this, I can break it down into the following steps:
     [X] Generate wind directions
     [X] Generate precipitation
 [ ] `gen-water` command
-    [ ] Review AFMG river generation algorithm
-    [ ] Water files
+    [X] Review AFMG river generation algorithm
+    [X] Generate flow
+    [X] Fill lakes
+    [X] Connect Rivers
+    [ ] Make connected rivers into bezier curves
+    [ ] Draw river polygons
+    [ ] Draw lake polygons
 [ ] `gen-biomes` command
     [X] Review AFMG biome generation algorithms
     [ ] Create command (requires water, temperature, and precipitation)
@@ -1358,6 +1363,8 @@ To proceed on this, I can break it down into the following steps:
     [ ] Review AFMG people generation algorithms -- again, wait on improvements until later
     [ ] Figure out how to break the task apart into sub commands and create those commands.
 [ ] Improved, Similar-area voronoization algorithm vaguely described above
+[ ] Documentation
+    [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, a few other places), and start updating those places when changes are made.
     -- I feel like having all the above is enough to announce, as long as "creating terrain", a large task, will be the next thing on the list.
