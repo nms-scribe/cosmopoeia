@@ -15,7 +15,7 @@ use crate::progress::ProgressObserver;
 use crate::algorithms::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::algorithms::VoronoiGenerator;
-use crate::world_map::VoronoiSite;
+use crate::world_map::NewTileEntity;
 
 
 subcommand_def!{
@@ -190,7 +190,7 @@ impl Task for DevVoronoiFromTriangles {
 
         progress.start(|| ("Copying voronoi.",generator.size_hint().1));
         
-        let voronoi: Vec<Result<VoronoiSite,CommandError>> = generator.collect();
+        let voronoi: Vec<Result<NewTileEntity,CommandError>> = generator.collect();
     
         target.load_tile_layer(self.overwrite, voronoi.into_iter(), &mut progress)
     

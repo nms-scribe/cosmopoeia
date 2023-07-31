@@ -193,21 +193,6 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 }
 
-pub(crate) struct VoronoiSite {
-    geometry: Geometry,
-    site: Point
-}
-
-impl VoronoiSite {
-
-    pub(crate) fn new(geometry: Geometry, site: Point) -> Self {
-        Self {
-            geometry,
-            site
-        }
-    }
-}
-
 #[derive(Clone)]
 pub(crate) enum RiverSegmentFrom {
     Source,
@@ -670,10 +655,11 @@ pub(crate) trait TileEntityWithNeighborsElevation {
 }
 
 
-entity!(TileEntityNewSiteGeo TileEntity {
+entity!(NewTileEntity TileEntity {
+    geometry: Geometry,
     site_x: f64, 
     site_y: f64
-}); // TODO: Replace VoronoiSite with this...
+}); 
 entity!(TileEntitySite TileEntity {
     fid: u64, 
     site_x: f64, 
@@ -821,15 +807,14 @@ impl<'lifetime> TilesLayer<'lifetime> {
         })
     }
 
-    pub(crate) fn add_tile(&mut self, tile: VoronoiSite) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, tile: NewTileEntity) -> Result<(),CommandError> {
 
-        let (x,y) = tile.site.to_tuple();
         self.tiles.add(tile.geometry,&[
                 TileFeature::FIELD_SITE_X,
                 TileFeature::FIELD_SITE_Y,
             ],&[
-                FieldValue::RealValue(x),
-                FieldValue::RealValue(y),
+                FieldValue::RealValue(tile.site_x),
+                FieldValue::RealValue(tile.site_y),
             ])?;
         Ok(())
 
@@ -1243,7 +1228,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<VoronoiSite,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn load_tile_layer<'lifetime, Generator: Iterator<Item=Result<NewTileEntity,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
             let mut target = target.create_tile_layer(overwrite_layer)?;
