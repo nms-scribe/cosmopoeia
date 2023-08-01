@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["N M Sheldon"]
 
 [dependencies]
+adaptive-bezier = "0.1.0"
 clap = { version = "4.3.11", features = ["derive"] }
 gdal = { version = "0.15.0", features = ["array"] }
 indicatif = "0.17.5"

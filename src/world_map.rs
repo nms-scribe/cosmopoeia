@@ -198,7 +198,10 @@ pub(crate) enum RiverSegmentFrom {
     Source,
     Lake,
     Branch,
-    Continuing
+    Continuing,
+    BranchingLake,
+    BranchingConfluence,
+    Confluence,
 }
 
 impl TryFrom<String> for RiverSegmentFrom {
@@ -210,6 +213,9 @@ impl TryFrom<String> for RiverSegmentFrom {
             "lake" => Ok(Self::Lake),
             "branch" => Ok(Self::Branch),
             "continuing" => Ok(Self::Continuing),
+            "lake-branch" => Ok(Self::BranchingLake),
+            "branch-confluence" => Ok(Self::BranchingConfluence),
+            "confluence" => Ok(Self::Confluence),
             a => Err(CommandError::InvalidValueForSegmentFrom(a.to_owned()))
         }
     }
@@ -223,6 +229,9 @@ impl Into<&str> for &RiverSegmentFrom {
             RiverSegmentFrom::Lake => "lake",
             RiverSegmentFrom::Branch => "branch",
             RiverSegmentFrom::Continuing => "continuing",
+            RiverSegmentFrom::BranchingLake => "lake-branch",
+            RiverSegmentFrom::BranchingConfluence => "branch-confluence",
+            RiverSegmentFrom::Confluence => "confluence",
         }
     }
 }
@@ -231,7 +240,9 @@ impl Into<&str> for &RiverSegmentFrom {
 pub(crate) enum RiverSegmentTo {
     Mouth,
     Confluence,
-    Continuing
+    Continuing,
+    Branch,
+    BranchingConfluence,
 }
 
 impl TryFrom<String> for RiverSegmentTo {
@@ -242,6 +253,8 @@ impl TryFrom<String> for RiverSegmentTo {
             "mouth" => Ok(Self::Mouth),
             "confluence" => Ok(Self::Confluence),
             "continuing" => Ok(Self::Continuing),
+            "branch" => Ok(Self::Branch),
+            "branch-confluence" => Ok(Self::BranchingConfluence),
             a => Err(CommandError::InvalidValueForSegmentTo(a.to_owned()))
         }
     }
@@ -254,6 +267,8 @@ impl Into<&str> for &RiverSegmentTo {
             RiverSegmentTo::Mouth => "mouth",
             RiverSegmentTo::Confluence => "confluence",
             RiverSegmentTo::Continuing => "continuing",
+            RiverSegmentTo::Branch => "branch",
+            RiverSegmentTo::BranchingConfluence => "branch-confluence",
         }
     }
 }
@@ -1469,7 +1484,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn generate_water_connect_rivers(&mut self, progress: &mut crate::progress::ConsoleProgressBar) -> Result<Vec<NewRiverSegment>,CommandError> {
+    pub(crate) fn generate_water_connect_rivers(&mut self, bezier_scale: f64, progress: &mut crate::progress::ConsoleProgressBar) -> Result<Vec<NewRiverSegment>,CommandError> {
 
         let mut result = None;
 
@@ -1480,7 +1495,7 @@ impl WorldMap {
 
             let mut tiles = target.edit_tile_layer()?;
 
-            result = Some(generate_water_connect_rivers(&mut tiles, progress)?);
+            result = Some(generate_water_connect_rivers(&mut tiles, bezier_scale, progress)?);
 
             Ok(())
     

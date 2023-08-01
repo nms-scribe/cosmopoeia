@@ -1352,9 +1352,11 @@ To proceed on this, I can break it down into the following steps:
     [X] Generate flow
     [X] Fill lakes
     [X] Connect Rivers
-    [ ] Make connected rivers into bezier curves
-    [ ] Draw river polygons
+    [X] Make connected rivers into bezier curves
+        [X] Need to work on the bezier function -- what data type should be returned?
+        [X] Need to work on polylinization of the bezier curve.
     [ ] Draw lake polygons
+    [ ] Draw river polygons
 [ ] `gen-biomes` command
     [X] Review AFMG biome generation algorithms
     [ ] Create command (requires water, temperature, and precipitation)

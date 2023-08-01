@@ -70,7 +70,11 @@ subcommand_def!{
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        overwrite: bool,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to follow river and lake shoreline curves. The higher the number, the smoother the curves.
+        bezier_scale: f64
 
     }
 }
@@ -83,7 +87,7 @@ impl Task for GenWaterConnectRivers {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let segments = target.generate_water_connect_rivers(&mut progress)?;
+        let segments = target.generate_water_connect_rivers(self.bezier_scale,&mut progress)?;
 
         target.load_river_segments(segments,self.overwrite,&mut progress)?;
 

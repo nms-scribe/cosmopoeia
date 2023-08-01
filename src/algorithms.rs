@@ -34,6 +34,7 @@ use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
 use crate::entity;
 use crate::world_map::TileEntity;
+use crate::utils::PolyBezier;
 
 enum PointGeneratorPhase {
     NortheastInfinity,
@@ -1430,19 +1431,24 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
 }
 
-pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_>, progress: &mut Progress) -> Result<Vec<NewRiverSegment>,CommandError> {
+struct RiverSegment {
+    from: u64,
+    to: u64,
+    flow: f64,
+    from_lake: bool,
+}
 
-    struct Segment {
-        from: u64,
-        to: u64,
-        flow: f64,
-        from_lake: bool,
-    }
+
+
+pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_>, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiverSegment>,CommandError> {
+
+    // TODO: If I didn't need tiles to be mut in order to get the iterator, I could also take the Segment layer and just update it here
+    // instead of returning a Vec to do so outside. -- Although, what if I took the whole world map transaction?
 
 
     let mut tile_from_index = HashMap::new();
     let mut tile_to_index = HashMap::new();
-    let mut segment_queue = Vec::new();
+    let mut segment_queue: Vec<Rc<RiverSegment>> = Vec::new();
     let mut result = Vec::new();
 
     macro_rules! add_segment {
@@ -1454,7 +1460,7 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
             let to = $to;
             let flow = $flow;
             let from_lake = $from_lake;
-            let segment = Rc::from(Segment {
+            let segment = Rc::from(RiverSegment {
                 from,
                 to,
                 flow,
@@ -1464,13 +1470,19 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
                 Entry::Vacant(entry) => {
                     entry.insert(vec![segment.clone()]);
                 },
-                Entry::Occupied(mut entry) => entry.get_mut().push(segment.clone()),
+                Entry::Occupied(mut entry) => {
+                    let list = entry.get_mut();
+                    list.push(segment.clone());
+                },
             };
             match tile_to_index.entry(to) {
                 Entry::Vacant(entry) => {
                     entry.insert(vec![segment.clone()]);
                 },
-                Entry::Occupied(mut entry) => entry.get_mut().push(segment.clone()),
+                Entry::Occupied(mut entry) => {
+                    let list = entry.get_mut();
+                    list.push(segment.clone());
+                },
             };
             segment_queue.push(segment);
             
@@ -1499,45 +1511,100 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
     progress.start_known_endpoint(|| ("Drawing segments.",segment_queue.len()));
 
     for (i,segment) in segment_queue.iter().enumerate() {
-        // look in tile_from_index to see what segments start after this segment.
-        // if there are none, then this segment ends in a mouth to a lake or ocean
-        // if there is one, this segment continues on to a new one.
-        // if there is more than one, this segment branches (delta)
-        let to_type = match tile_from_index.get(&segment.to) {
+        // a segment ends with a confluence if more than one segment ends at the same to point.
+        let ends_with_confluence = tile_to_index.get(&segment.to).map(|a| a.len() > 1).unwrap_or_else(|| false);
+        // a segment starts with branching if more than one segment starts at the same point.
+        // Also, on occasion there are duplicates because flow_to and outlet_from both work. Allow these duplicates
+        // as branches because it makes for an interesting map, but make sure they both show they are from a lake.
+        let (starts_with_branching,branch_is_from_lake) = tile_from_index.get(&segment.from).map(|a| (a.len() > 1, a.iter().any(|a| a.from_lake))).unwrap_or_else(|| (false,false));
+
+        // Get start and end topological types, as well as potential previous and next tiles for curve manipulation.
+
+        let (to_type,next_tile) = match tile_from_index.get(&segment.to) {
+            // I am looking for what other segments come from the end of this segment.
+            // if no other segments, then it's a mouth
+            // if 1 segment, then it's continuing, Except it could be a confluence if multiple others go to that same point
+            // if >1 segments, then it's branching, But it could be a branching confluence if multiple others go to that same point
             Some(list) => match list.len() {
-                0 => RiverSegmentTo::Mouth,
-                1 => RiverSegmentTo::Continuing,
-                _ => RiverSegmentTo::Confluence             
-            },
-            None => RiverSegmentTo::Mouth,
-        };
-        // check to see what segment ends in this one.
-        // if there are none, then this segment starts at a source
-        // if there are one, this segment is a continuation
-        // if there is more than one, this segment begins with a confluence.
-        let from_type = if segment.from_lake {
-            RiverSegmentFrom::Lake
-        } else {
-            match tile_from_index.get(&segment.from) {
-                Some(list) => match list.len() {
-                    0 => RiverSegmentFrom::Source,
-                    1 => RiverSegmentFrom::Continuing,
-                    _ => RiverSegmentFrom::Branch
+                0 => (RiverSegmentTo::Mouth,None), // if it ends with a mouth, then it isn't a confluence even if other segments end here.
+                1 => {
+                    let next_tile = Some(list[0].to);
+                    if ends_with_confluence {
+                        (RiverSegmentTo::Confluence,next_tile)
+                    } else {
+                        (RiverSegmentTo::Continuing,next_tile)
+                    }
                 },
-                None => RiverSegmentFrom::Source,
+                _ => {
+                    let next_tile = find_flowingest_tile(list).map(|a| a.to);
+                    if ends_with_confluence {
+                        (RiverSegmentTo::BranchingConfluence,next_tile)
+                    } else {
+                        (RiverSegmentTo::Branch,next_tile)
+                    }
+
+                }
+            },
+            None => (RiverSegmentTo::Mouth,None),
+        };
+
+
+        let (from_type,previous_tile) = if segment.from_lake {
+            if starts_with_branching {
+                (RiverSegmentFrom::BranchingLake,None)
+            } else {
+                (RiverSegmentFrom::Lake,None)
+            }
+        } else {
+            match tile_to_index.get(&segment.from) {
+                // I am looking for what other segments lead to the start of this segment.
+                // if no other segments, then it's a plain source
+                // if 1 segment, then it's continuing, Except it could be a branch if multiple others come from the same point
+                // if >1 segments, then it's a confluence, But it could be a branching confluence if multiple others go to that same point
+                Some(list) => match list.len() {
+                    0 => (RiverSegmentFrom::Source,None), // much like ending with a mouth, multiple rivers could start from the same source and not be connected.
+                    1 => {
+                        let previous_tile = Some(list[0].from);
+                        if starts_with_branching {
+                            if branch_is_from_lake {
+                                (RiverSegmentFrom::BranchingLake,previous_tile)
+                            } else {
+                                (RiverSegmentFrom::Branch,previous_tile)
+                            }
+                        } else {
+                            (RiverSegmentFrom::Continuing,previous_tile)
+                        }
+                    },
+                    _ => {
+                        let previous_tile = find_flowingest_tile(list).map(|a| a.from);
+                        if starts_with_branching {
+                            (RiverSegmentFrom::BranchingConfluence,previous_tile)
+                        } else {
+                            (RiverSegmentFrom::Confluence,previous_tile)
+                        }
+                    }
+                },
+                None => (RiverSegmentFrom::Source,None),
             }
         };
 
         if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(&segment.from),tiles.feature_by_id(&segment.to)) {
             let start_point = from_tile.site_point()?;
             let end_point = to_tile.site_point()?;
+            // need previous and next points to give the thingy a curve.
+            let previous_point = find_tile_site_point(previous_tile, tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
+            let next_point = find_tile_site_point(next_tile, tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));
+            // create the bezier
+            let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point,&[start_point,end_point],next_point);
+            // convert that to a polyline.
+            let line = bezier.to_poly_line(bezier_scale)?;
             result.push(NewRiverSegment {
                 from_tile: segment.from as i64,
                 to_tile: segment.to as i64,
                 flow: segment.flow,
                 from_type,
                 to_type,
-                line: vec![start_point,end_point]
+                line
             })
 
     
@@ -1550,115 +1617,47 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
 
     progress.finish(|| "Segments drawn.");
 
-    // Rivers: I'm not at all certain if we need whole lines, we might get a way with single line segments. If we add attributes, whole rivers can still be found. This allows us to retain the "water_flow" for each segment separately for drawing them wider later.
-    // * for each segment in queue
-    //   * look in start_map for what segments start at segment.to:
-    //     * if none, then segment.end_type = mouth (could be ocean or lake)
-    //     * if one, then segment.end_type = continuing
-    //     * if two or more, then segment.end_type = branching
-    //   * if segment.start_type isn't lake:
-    //     * look in end_map for what segments end at segment.from:
-    //       * if none, then segment.start_type = source
-    //       * if one, then segment.start_type = continuing
-    //       * if two or more, then segment.start_type = confluence
-    //   * point a = find the site point for segment.from
-    //   * point d = find the site point for segment.to
-    //   -- to create "automatic" bezier curves, we need to know where the previous and next segments are as well to determine the best tangents to use.
-    //      -- a bezier curve has two end points and two control points which are on tangent lines to the curve from those end points. The tangent
-    //      -- lines for "automatic" are calculated as being parallel to the neighboring line segments, 
-    //      -- https://math.stackexchange.com/a/4207568
-    //   * pre_point = match start_type:
-    //     * source | lake: None
-    //     * continuing: find site point for previous segment.from
-    //     * confluence: find the previous segment with largest flow, and return segment.from for that. (if equal, then can we find a point on an arc between the two?)
-    //   * post_point = match end_type
-    //     * mouth: None
-    //     * continuing: find the site point for the next segment.to
-    //     * branching: find the next segment with the largest flow, and return segment.to for that. (see confluence above for if the sites are equal)
-    //   * point b = 
-    //     * if pre_point: a point 1/3 of the distance from a to d, on a line parallel to pre_point to d
-    //     * else: a point 1/3 of the way from a to d (linear interpolation)
-    //   * point c =
-    //     * if post_point: a point 1/3 of the distance from d to a, on a line parallel to a to post_point
-    //     * else: a point 1/3 of the way from d to a (linear interpolation)
-    //   * see code below for something to start with to generate bezier curve control points
-    //   * finally, convert those bezier curves into sets of points to create line strings that roughly follow the curve. 
-    //     * https://math.stackexchange.com/a/317055
-    //     * also there's this which reduces the number or points while increasing accuracy: https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html I found a Javascript translation here: https://github.com/mattdesl/adaptive-bezier-curve, and I found a rust translation of that: https://crates.io/crates/adaptive-bezier, but it has dependencies I don't need. It might be good to reference that if I can't understand the javascript stuff.
-    //       -- since it recurses at the end of the function, I think I can do tail recursion with this.
-    /*
-// --- From ChatGPT: convert https://math.stackexchange.com/a/4207568 into rust:
-use std::iter::FromIterator;
-
-#[derive(Debug, Clone, Copy)]
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-impl Point {
-    fn new(x: f64, y: f64) -> Point {
-        Point { x, y }
-    }
-
-    fn normalized(self) -> Point {
-        let len = (self.x * self.x + self.y * self.y).sqrt();
-        Point {
-            x: self.x / len,
-            y: self.y / len,
-        }
-    }
-}
-
-fn bezier_fd(pos: &[(Point, Point)]) -> Vec<Vec<Point>> {
-    // Make the normalized tangent vectors
-    let mut tgt: Vec<Point> = pos
-        .windows(2)
-        .map(|pair| pair[1] - pair[0])
-        .chain(std::iter::once((pos[1].0 - pos[0].0).normalized()))
-        .chain(std::iter::once((pos.last().unwrap().0 - pos[pos.len() - 2].0).normalized()))
-        .collect();
-
-    // Build Bezier curves
-    let mut curves: Vec<Vec<Point>> = Vec::new();
-    let (mut p0, mut t0) = tgt.remove(0);
-    let mut row = vec![p0];
-    for (p, t) in tgt {
-        let s = (p - p0).abs() / 3.0;
-        row.extend_from_slice(&[p0 + t0 * s, p - t * s, p]);
-        curves.push(row);
-        row = Vec::new();
-        p0 = p;
-        t0 = t;
-    }
-
-    curves
-}
-
-fn main() {
-    // Define points
-    let pos = [
-        (Point::new(0.5, 0.5), Point::new(0.5, 0.5)),
-        (Point::new(1.0, -0.5), Point::new(1.0, -0.5)),
-        (Point::new(1.5, 1.0), Point::new(1.5, 1.0)),
-        (Point::new(2.25, 1.1), Point::new(2.25, 1.1)),
-        (Point::new(2.6, -0.5), Point::new(2.6, -0.5)),
-        (Point::new(3.0, 0.5), Point::new(3.0, 0.5)),
-    ];
-
-    let curves = bezier_fd(&pos);
-
-    // Display the Bezier curves (curves vector contains the control points for each Bezier curve segment)
-    for curve in &curves {
-        for point in curve {
-            println!("{:?}", point);
-        }
-    }
-}
-
-     */
-
     Ok(result)
 
+}
+
+fn find_curve_making_point(start_point: &Point, end_point: &Point) -> Point {
+    // This function creates a phantom point which can be used to give an otherwise straight ending segment a bit of a curve.
+    let parallel = start_point.subtract(end_point);
+    // I want to switch the direction of the curve in some way that looks random, but is reproducible.
+    // The easiest way I can think of is basically to base it off of whether the integral part of a value is even.
+    let is_even = start_point.x.rem_euclid(2.0) < 1.0;
+    let perpendicular = parallel.perpendicular(is_even);
+    let normalized = perpendicular.normalized();
+    end_point.add(&normalized)
+}
+
+fn find_tile_site_point(previous_tile: Option<u64>, tiles: &TilesLayer<'_>) -> Result<Option<Point>, CommandError> {
+    Ok(if let Some(x) = previous_tile {
+        if let Some(x) = tiles.feature_by_id(&x) {
+            Some(x.site_point()?)
+        } else {
+            None
+        }
+    } else {
+        None
+    })
+}
+
+fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> Option<Rc<RiverSegment>> {
+    let mut next_tile: Option<&Rc<RiverSegment>> = None;
+    for tile in list {
+        if let Some(next) = next_tile {
+            if tile.flow > next.flow {
+                next_tile = Some(tile)
+            } else if (tile.flow == next.flow) && tile.to > next.to {
+                // I want this algorithm to be reproducible.
+                next_tile = Some(tile)
+            }
+        } else {
+            next_tile = Some(tile)
+        }
+    };
+    next_tile.cloned()
 }
 
