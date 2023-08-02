@@ -47,7 +47,11 @@ subcommand_def!{
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to follow lake shoreline curves. The higher the number, the smoother the curves.
-        bezier_scale: f64
+        bezier_scale: f64,
+
+        #[arg(long,default_value="2")]
+        /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
+        buffer_scale: f64
 
 
 
@@ -64,7 +68,7 @@ impl Task for GenWaterFill {
 
         let (tile_map,tile_queue) = target.get_tile_map_and_queue_for_water_fill(&mut progress)?;
 
-        let lakes = target.generate_water_fill(tile_map,tile_queue,&mut progress)?;
+        let lakes = target.generate_water_fill(tile_map,tile_queue,self.bezier_scale,self.buffer_scale,&mut progress)?;
 
         target.load_lakes(lakes,self.overwrite,&mut progress)?;
 

@@ -893,6 +893,13 @@ impl<'lifetime> TilesLayer<'lifetime> {
         self.tiles.layer.feature_count() as usize
     }
 
+    pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
+        let extent = self.tiles.layer.get_extent()?;
+        let width = extent.MaxX - extent.MinX;
+        let height = extent.MaxY - extent.MinY;
+        let tiles = self.feature_count();
+        Ok((width*height)/tiles as f64)
+    }
 
 }
 
@@ -1618,7 +1625,7 @@ impl WorldMap {
     }
 
 
-    pub(crate) fn generate_water_fill<Progress: ProgressObserver>(&mut self, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
+    pub(crate) fn generate_water_fill<Progress: ProgressObserver>(&mut self, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
 
         let mut result = None;
 
@@ -1626,7 +1633,7 @@ impl WorldMap {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            result = Some(generate_water_fill(&mut tiles, tile_map, tile_queue, progress)?);
+            result = Some(generate_water_fill(&mut tiles, tile_map, tile_queue, lake_bezier_scale, lake_buffer_scale, progress)?);
 
             Ok(())
     

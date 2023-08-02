@@ -15,6 +15,7 @@ use crate::utils::Extent;
 use crate::utils::Point;
 use crate::utils::GeometryGeometryIterator;
 use crate::utils::create_polygon;
+use crate::utils::bezierify_polygon;
 use crate::world_map::NewTileEntity;
 use crate::world_map::TileEntitySite;
 use crate::world_map::TileEntitySiteGeo;
@@ -1114,21 +1115,41 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(layer: &mut TilesL
 
 }
 
+struct Lake {
+    elevation: f64,
+    spillover_elevation: f64,
+    contained_tiles: Vec<u64>,
+    shoreline_tiles: Vec<(u64,u64)>, // a bordering lake tile, the actual shoreline tile
+    outlet_tiles: Vec<(u64,u64)> // from, to
+}
 
+impl Lake {
+
+    fn dissolve_tiles(&self, layer: &mut TilesLayer<'_>) -> Geometry {
+        let mut lake_geometry = None;
+        for tile in &self.contained_tiles {
+            if let Some(tile) = layer.feature_by_id(&tile) {
+                if let Some(tile) = tile.geometry() {
+                    if let Some(lake) = lake_geometry {
+                        lake_geometry = tile.union(&lake)
+                    } else {
+                        lake_geometry = Some(tile.clone())
+                    }
+                }
+        
+            }
+        }
+        lake_geometry.unwrap()
+    }
+    
+    
+}
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesLayer, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesLayer, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
 
     // TODO: I may need to add some modifiers for the lake filling values, so that I end up with more endorheic lakes.
     // TODO: I predict there will be a problem with lakes on the edges of the maps, which will also be part of the flow algorithm, but I haven't gotten that far yet. I will need a lot more real-world testing to get this figured out.
-
-    struct Lake {
-        elevation: f64,
-        spillover_elevation: f64,
-        contained_tiles: Vec<u64>,
-        shoreline_tiles: Vec<(u64,u64)>, // a bordering lake tile, the actual shoreline tile
-        outlet_tiles: Vec<(u64,u64)> // from, to
-    }
 
     enum Task {
         FillLake(usize, f64),
@@ -1426,53 +1447,17 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
     let mut lakes = Vec::new();
 
+    let tile_area = layer.estimate_average_tile_area()?;
+    let tile_width = tile_area.sqrt();
+    let buffer_distance = (tile_width/10.0) * -lake_buffer_scale;
+    // the next isn't customizable, it just seems to work right. FUTURE: Check this with higher and lower resolution tiles.
+    let simplify_tolerance = tile_width/10.0;
+
     for lake in lake_map.values() {
         if lake.contained_tiles.len() > 0 {
-            let mut lake_geometry = None;
-            for tile in &lake.contained_tiles {
-                if let Some(tile) = layer.feature_by_id(&tile) {
-                    if let Some(tile) = tile.geometry() {
-                        if let Some(lake) = lake_geometry {
-                            lake_geometry = tile.union(&lake)
-                        } else {
-                            lake_geometry = Some(tile.clone())
-                        }
-                    }
-    
-                }
-            }
-            let lake_geometry = lake_geometry.unwrap();
-            let lake_geometry = lake_geometry.buffer(-0.5, 1)?; // TOPDO: Should the buffer be configurable?
-            // TODO: move the buffer into the lake_geometry function somehow...
-            // TODO: There's a problem with null geometries being created. Fix that.
+            let lake_geometry = lake.dissolve_tiles(layer);
+            make_curvy_lakes(lake.elevation, lake_bezier_scale, buffer_distance, simplify_tolerance, lake_geometry, &mut lakes)?;
 
-            if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
-                for i in 0..lake_geometry.geometry_count() {
-                    let geometry = lake_geometry.get_geometry(i);
-                    lakes.push(NewLake {
-                        elevation: lake.elevation,
-                        geometry: lake_geometry_to_bezier(&geometry)?,
-                    })
-        
-                }
-    
-            } else {
-                lakes.push(NewLake {
-                    elevation: lake.elevation,
-                    geometry: lake_geometry_to_bezier(&lake_geometry)?,
-                })
-
-            }
-
-            // TODO: I need to "curve" the lakes somehow. In looking at them, I'm not certain
-            // that I can just find curves for the points on the polygons, as that's going to make them bigger than the
-            // tiles, even with the buffer. It might be better to somehow use the edges as the tangents, and match up
-            // the mid points of those edges as the vertices.
-            // TODO: Also, with the inverse buffering, there are a few polygons where the borders cross.
-            // TODO: One possibility: what if I debuffer it *after* the bezierization? Because as it is, I'm getting sharp
-            // corners due to the large number of points in the corners.
-            // TODO: Another possibility: what if I simplify after buffering?
-    
         }
     }
 
@@ -1481,18 +1466,57 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
 }
 
-fn lake_geometry_to_bezier(geometry: &Geometry) -> Result<Geometry,CommandError> {
-    let geometry = geometry.simplify(0.5)?;
-    let mut input = Vec::new();
-    let line = geometry.get_geometry(0);
-    for i in 0..line.point_count() {
-        let (x,y,_) = line.get_point(i as i32);
-        input.push(Point::from_f64(x,y)?);
-    }
-    let bezier = PolyBezier::from_poly_line(&input);
-    let geometry = create_polygon(&bezier.to_poly_line(100.0)?)?; // TODO: Configure this
-    Ok(geometry)
+fn make_curvy_lakes(lake_elevation: f64, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64, lake_geometry: Geometry, lakes: &mut Vec<NewLake>) -> Result<(), CommandError> {
+    let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
+    // occasionally, the simplification turns the lakes into a multipolygon, so just create separate lakes for that.
+    if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
+        for i in 0..lake_geometry.geometry_count() {
+            let geometry = bezierify_polygon(&lake_geometry.get_geometry(i),bezier_scale)?;
+            lakes.push(NewLake {
+                elevation: lake_elevation,
+                geometry,
+            })
+        }
+    
+    } else {
+        let geometry = bezierify_polygon(&lake_geometry,bezier_scale)?;
+        lakes.push(NewLake {
+            elevation: lake_elevation,
+            geometry,
+        })
+    
+    };
+
+    Ok(())
 }
+
+fn simplify_lake_geometry(lake_geometry: Geometry, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
+    let lake_geometry = if buffer_distance != 0.0 {
+        lake_geometry.buffer(buffer_distance, 1)?
+    } else {
+        lake_geometry
+    };
+    let lake_geometry = if simplify_tolerance > 0.0 {
+        let mut simplify_tolerance = simplify_tolerance;
+        let mut simplified = lake_geometry.simplify(simplify_tolerance)?;
+        // There have been occasions where the geometry gets simplified out of existence, which makes the polygon_to_vertices function
+        // print out error messages. This loop decreases simplification until the geometry works.
+        while simplified.geometry_count() == 0 {
+            simplify_tolerance -= 0.05;
+            if simplify_tolerance <= 0.0 {
+                simplified = lake_geometry;
+                break;
+            } else {
+                simplified = lake_geometry.simplify(simplify_tolerance)?;
+            }
+        }
+        simplified
+    } else {
+        lake_geometry
+    };
+    Ok(lake_geometry)
+}
+
 
 struct RiverSegment {
     from: u64,

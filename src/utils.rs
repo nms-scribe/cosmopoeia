@@ -301,6 +301,29 @@ pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandEr
 
 }
 
+pub(crate) fn polygon_to_vertices(geometry: &Geometry) -> Result<Vec<Point>, CommandError> {
+    let mut input = Vec::new();
+    
+    if geometry.geometry_count() > 0 {
+        let line = geometry.get_geometry(0);
+        for i in 0..line.point_count() {
+            let (x,y,_) = line.get_point(i as i32);
+            input.push(Point::from_f64(x,y)?);
+        }
+    }
+    
+    Ok(input)
+}
+
+pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Geometry, CommandError> {
+    let input = polygon_to_vertices(&geometry)?;
+    let bezier = PolyBezier::from_poly_line(&input);
+    let geometry = create_polygon(&bezier.to_poly_line(scale)?)?;
+    Ok(geometry)
+}
+
+
+
 pub(crate) fn create_line(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
     let mut line = Geometry::empty(wkbLineString)?;
     for point in vertices {
