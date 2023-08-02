@@ -586,6 +586,9 @@ macro_rules! entity {
     (feature_class@ RiverSegmentEntity) => {
         RiverSegmentFeature
     };
+    (feature_class@ LakeEntity) => {
+        LakeFeature
+    };
     ($name: ident $entity_class: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]
         pub(crate) struct $name {
@@ -1007,24 +1010,24 @@ impl<'lifetime> RiverSegmentsLayer<'lifetime> {
 
 
     #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: RiverSegmentEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Reading tiles.",self.segments.layer.feature_count() as usize));
+        progress.start_known_endpoint(|| ("Reading river segments.",self.segments.layer.feature_count() as usize));
         let mut result = Vec::new();
         for (i,feature) in self.read_features().enumerate() {
             result.push(Data::try_from_feature(feature)?);
             progress.update(|| i);
         }
-        progress.finish(|| "Tiles read.");
+        progress.finish(|| "River segments read.");
         Ok(result)
     }
 
     #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: RiverSegmentEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Indexing tiles.",self.segments.layer.feature_count() as usize));
+        progress.start_known_endpoint(|| ("Indexing river segments.",self.segments.layer.feature_count() as usize));
         let mut result = HashMap::new();
         for (i,feature) in self.read_features().enumerate() {
             result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
             progress.update(|| i);
         }
-        progress.finish(|| "Tiles indexed.");
+        progress.finish(|| "River segments indexed.");
         Ok(result)
     }
 
@@ -1064,6 +1067,159 @@ impl<'lifetime> RiverSegmentsLayer<'lifetime> {
 
 }
 
+
+pub(crate) struct LakeFeature<'lifetime> {
+
+    feature: Feature<'lifetime>
+}
+
+impl<'lifetime> From<Feature<'lifetime>> for LakeFeature<'lifetime> {
+
+    fn from(feature: Feature<'lifetime>) -> Self {
+        Self {
+            feature
+        }
+    }
+}
+
+impl<'lifetime> LakeFeature<'lifetime> {
+
+    feature!(1; geometry: #[allow(dead_code)] {
+        #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+    });
+
+}
+
+pub(crate) trait LakeEntity: Sized {
+
+    fn try_from_feature(feature: LakeFeature) -> Result<Self,CommandError>;
+
+}
+
+pub(crate) struct LakeEntityIterator<'lifetime, Data: LakeEntity> {
+    features: TypedFeatureIterator<'lifetime,LakeFeature<'lifetime>>,
+    data: std::marker::PhantomData<Data>
+}
+
+// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
+impl<'lifetime,Data: LakeEntity> Iterator for LakeEntityIterator<'lifetime,Data> {
+    type Item = Result<(u64,Data),CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(feature) = self.features.next() {
+            match (feature.fid(),Data::try_from_feature(feature)) {
+                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                (_, Err(e)) => Some(Err(e)),
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'lifetime,Data: LakeEntity> From<TypedFeatureIterator<'lifetime,LakeFeature<'lifetime>>> for LakeEntityIterator<'lifetime,Data> {
+    fn from(features: TypedFeatureIterator<'lifetime,LakeFeature<'lifetime>>) -> Self {
+        Self {
+            features,
+            data: std::marker::PhantomData
+        }
+    }
+}
+
+entity!(NewLake LakeEntity {
+    elevation: f64,
+    geometry: Geometry
+});
+
+
+pub(crate) struct LakesLayer<'lifetime> {
+    lakes: WorldLayer<'lifetime>
+}
+
+impl<'lifetime> LakesLayer<'lifetime> {
+
+    pub(crate) const LAYER_NAME: &str = "lakes";
+
+    #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+        let lakes = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
+        Ok(Self {
+            lakes
+        })
+    }
+    
+
+    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+        let lakes = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPolygon, Some(&LakeFeature::FIELD_DEFS), overwrite)?;
+
+        Ok(Self {
+            lakes
+        })
+    }
+
+    pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<(),CommandError> {
+        let (field_names,field_values) = LakeFeature::to_field_names_values(
+            lake.elevation);
+        self.lakes.add(lake.geometry, &field_names, &field_values)
+    }
+
+    #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: LakeEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Reading lakes.",self.lakes.layer.feature_count() as usize));
+        let mut result = Vec::new();
+        for (i,feature) in self.read_features().enumerate() {
+            result.push(Data::try_from_feature(feature)?);
+            progress.update(|| i);
+        }
+        progress.finish(|| "Lakes read.");
+        Ok(result)
+    }
+
+    #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: LakeEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+        progress.start_known_endpoint(|| ("Indexing lakes.",self.lakes.layer.feature_count() as usize));
+        let mut result = HashMap::new();
+        for (i,feature) in self.read_features().enumerate() {
+            result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+            progress.update(|| i);
+        }
+        progress.finish(|| "Lakes indexed.");
+        Ok(result)
+    }
+
+    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<LakeFeature> {
+        self.lakes.layer.feature(*fid).map(LakeFeature::from)
+    }
+
+    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: LakeEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
+        self.feature_by_id(fid).map(Data::try_from_feature).transpose()
+    }
+
+    #[allow(dead_code)] pub(crate) fn update_feature(&self, feature: LakeFeature) -> Result<(),CommandError> {
+        Ok(self.lakes.layer.set_feature(feature.feature)?)
+    }
+
+    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
+    #[allow(dead_code)] pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
+        self.lakes.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
+    }
+
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<LakeFeature> {
+        self.lakes.layer.features().into()
+    }
+
+    #[allow(dead_code)] pub(crate) fn read_entities<Data: LakeEntity>(&mut self) -> LakeEntityIterator<Data> {
+        self.read_features().into()
+    }
+
+    #[allow(dead_code)] pub(crate) fn clear_spatial_filter(&mut self) {
+        self.lakes.layer.clear_spatial_filter()
+    }
+
+    #[allow(dead_code)] pub(crate) fn feature_count(&self) -> usize {
+        self.lakes.layer.feature_count() as usize
+    }
+
+
+}
 
 pub(crate) struct BiomeLayer<'lifetime> {
     biomes: WorldLayer<'lifetime>
@@ -1462,13 +1618,15 @@ impl WorldMap {
     }
 
 
-    pub(crate) fn generate_water_fill<Progress: ProgressObserver>(&mut self, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn generate_water_fill<Progress: ProgressObserver>(&mut self, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
+
+        let mut result = None;
 
         self.with_transaction(|target| {
             let mut tiles = target.edit_tile_layer()?;
 
 
-            generate_water_fill(&mut tiles, tile_map, tile_queue, progress)?;
+            result = Some(generate_water_fill(&mut tiles, tile_map, tile_queue, progress)?);
 
             Ok(())
     
@@ -1480,11 +1638,11 @@ impl WorldMap {
     
         progress.finish(|| "Layer Saved.");
     
-        Ok(())
+        Ok(result.unwrap())
 
     }
 
-    pub(crate) fn generate_water_connect_rivers(&mut self, bezier_scale: f64, progress: &mut crate::progress::ConsoleProgressBar) -> Result<Vec<NewRiverSegment>,CommandError> {
+    pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(&mut self, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiverSegment>,CommandError> {
 
         let mut result = None;
 
@@ -1535,6 +1693,35 @@ impl WorldMap {
 
     }
 
+    pub(crate) fn load_lakes<Progress: ProgressObserver>(&mut self, lakes: Vec<NewLake>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut lakes_layer = target.create_lakes_layer(overwrite_layer)?;
+
+        
+            // boundary points    
+    
+            progress.start_known_endpoint(|| ("Writing segments.",lakes.len()));
+    
+            for (i,lake) in lakes.into_iter().enumerate() {
+                lakes_layer.add_lake(lake)?;
+                progress.update(|| i);
+            }
+    
+            progress.finish(|| "Segments written.");
+    
+            Ok(())
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving layer."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer saved.");
+    
+        Ok(())
+
+    }
 
 
 
@@ -1571,6 +1758,12 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
         Ok(RiverSegmentsLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }
+
+    fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakesLayer,CommandError> {
+        Ok(LakesLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    }
+
+
 
     pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {
         Ok(TilesLayer::open_from_dataset(&mut self.dataset)?)

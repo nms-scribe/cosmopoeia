@@ -41,6 +41,16 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
+        #[arg(long)]
+        /// If true and the lakes layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite: bool,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to follow lake shoreline curves. The higher the number, the smoother the curves.
+        bezier_scale: f64
+
+
+
     }
 }
 
@@ -54,7 +64,9 @@ impl Task for GenWaterFill {
 
         let (tile_map,tile_queue) = target.get_tile_map_and_queue_for_water_fill(&mut progress)?;
 
-        target.generate_water_fill(tile_map,tile_queue,&mut progress)?;
+        let lakes = target.generate_water_fill(tile_map,tile_queue,&mut progress)?;
+
+        target.load_lakes(lakes,self.overwrite,&mut progress)?;
 
         Ok(())
 
@@ -69,11 +81,11 @@ subcommand_def!{
         target: PathBuf,
 
         #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+        /// If true and the river_segments layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
         overwrite: bool,
 
         #[arg(long,default_value="100")]
-        /// This number is used for generating points to follow river and lake shoreline curves. The higher the number, the smoother the curves.
+        /// This number is used for generating points to follow river curves. The higher the number, the smoother the curves.
         bezier_scale: f64
 
     }
@@ -95,3 +107,4 @@ impl Task for GenWaterConnectRivers {
 
     }
 }
+

@@ -7,8 +7,7 @@ use std::rc::Rc;
 
 use rand::Rng;
 use gdal::vector::Geometry;
-use gdal::vector::OGRwkbGeometryType::wkbPoint;
-use gdal::vector::OGRwkbGeometryType::wkbPolygon;
+use gdal::vector::OGRwkbGeometryType;
 use ordered_float::NotNan;
 
 use crate::errors::CommandError;
@@ -35,6 +34,7 @@ use crate::world_map::TilesLayer;
 use crate::entity;
 use crate::world_map::TileEntity;
 use crate::utils::PolyBezier;
+use crate::world_map::NewLake;
 
 enum PointGeneratorPhase {
     NortheastInfinity,
@@ -87,7 +87,7 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
-        let mut point = Geometry::empty(wkbPoint)?;
+        let mut point = Geometry::empty(OGRwkbGeometryType::wkbPoint)?;
         point.add_point_2d((self.extent.west + x,self.extent.south + y));
         Ok(point)
     }
@@ -362,7 +362,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             let mut needs_a_trim = false;
             Self::sort_clockwise(&site,&mut vertices,extent,&mut needs_a_trim);
             vertices.push(vertices[0].clone());
-            let polygon = create_polygon(vertices)?;
+            let polygon = create_polygon(&vertices)?;
             let polygon = if needs_a_trim {
                 // intersection code is not trivial, just let someone else do it.
                 polygon.intersection(extent_geo)
@@ -389,7 +389,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         for geometry in source {
             let geometry = geometry?;
             
-            if geometry.geometry_type() != wkbPolygon {
+            if geometry.geometry_type() != OGRwkbGeometryType::wkbPolygon {
                 return Err(CommandError::VoronoiExpectsPolygons)
             }
             
@@ -1117,7 +1117,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(layer: &mut TilesL
 
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesLayer, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesLayer, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
 
     // TODO: I may need to add some modifiers for the lake filling values, so that I end up with more endorheic lakes.
     // TODO: I predict there will be a problem with lakes on the edges of the maps, which will also be part of the flow algorithm, but I haven't gotten that far yet. I will need a lot more real-world testing to get this figured out.
@@ -1424,11 +1424,74 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
     }
 
 
+    let mut lakes = Vec::new();
+
+    for lake in lake_map.values() {
+        if lake.contained_tiles.len() > 0 {
+            let mut lake_geometry = None;
+            for tile in &lake.contained_tiles {
+                if let Some(tile) = layer.feature_by_id(&tile) {
+                    if let Some(tile) = tile.geometry() {
+                        if let Some(lake) = lake_geometry {
+                            lake_geometry = tile.union(&lake)
+                        } else {
+                            lake_geometry = Some(tile.clone())
+                        }
+                    }
+    
+                }
+            }
+            let lake_geometry = lake_geometry.unwrap();
+            let lake_geometry = lake_geometry.buffer(-0.5, 1)?; // TOPDO: Should the buffer be configurable?
+            // TODO: move the buffer into the lake_geometry function somehow...
+            // TODO: There's a problem with null geometries being created. Fix that.
+
+            if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
+                for i in 0..lake_geometry.geometry_count() {
+                    let geometry = lake_geometry.get_geometry(i);
+                    lakes.push(NewLake {
+                        elevation: lake.elevation,
+                        geometry: lake_geometry_to_bezier(&geometry)?,
+                    })
+        
+                }
+    
+            } else {
+                lakes.push(NewLake {
+                    elevation: lake.elevation,
+                    geometry: lake_geometry_to_bezier(&lake_geometry)?,
+                })
+
+            }
+
+            // TODO: I need to "curve" the lakes somehow. In looking at them, I'm not certain
+            // that I can just find curves for the points on the polygons, as that's going to make them bigger than the
+            // tiles, even with the buffer. It might be better to somehow use the edges as the tangents, and match up
+            // the mid points of those edges as the vertices.
+            // TODO: Also, with the inverse buffering, there are a few polygons where the borders cross.
+            // TODO: One possibility: what if I debuffer it *after* the bezierization? Because as it is, I'm getting sharp
+            // corners due to the large number of points in the corners.
+            // TODO: Another possibility: what if I simplify after buffering?
+    
+        }
+    }
+
+    Ok(lakes)
 
 
-    Ok(())
+}
 
-
+fn lake_geometry_to_bezier(geometry: &Geometry) -> Result<Geometry,CommandError> {
+    let geometry = geometry.simplify(0.5)?;
+    let mut input = Vec::new();
+    let line = geometry.get_geometry(0);
+    for i in 0..line.point_count() {
+        let (x,y,_) = line.get_point(i as i32);
+        input.push(Point::from_f64(x,y)?);
+    }
+    let bezier = PolyBezier::from_poly_line(&input);
+    let geometry = create_polygon(&bezier.to_poly_line(100.0)?)?; // TODO: Configure this
+    Ok(geometry)
 }
 
 struct RiverSegment {

@@ -70,7 +70,7 @@ impl Extent {
         vertices.push((self.west,self.south+self.height).try_into()?);
         vertices.push((self.west+self.width,self.south+self.height).try_into()?);
         vertices.push((self.west+self.width,self.south).try_into()?);
-        create_polygon(vertices)
+        create_polygon(&vertices)
     }
 
 }
@@ -284,15 +284,16 @@ impl std::ops::Add for &Point {
     }
 }
 
-pub(crate) fn create_polygon(vertices: Vec<Point>) -> Result<Geometry,CommandError> {
+pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
     // close the polygon if necessary
-    let mut vertices = vertices;
-    if vertices.get(0) != vertices.last() {
-        vertices.push(vertices[0].clone())
-    }
     let mut line = Geometry::empty(wkbLinearRing)?;
     for point in vertices {
         line.add_point_2d(point.to_tuple())
+    
+    }
+    if vertices.get(0) != vertices.last() {
+        // if the vertices don't link up, then link them.
+        line.add_point_2d(vertices[0].to_tuple())
     }
     let mut polygon = Geometry::empty(wkbPolygon)?;
     polygon.add_geometry(line)?;
