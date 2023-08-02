@@ -28,7 +28,7 @@ use crate::world_map::TileEntityWithNeighborsElevation;
 use crate::world_map::TileEntityForRiverConnect;
 use crate::world_map::RiverSegmentFrom;
 use crate::world_map::RiverSegmentTo;
-use crate::world_map::NewRiverSegment;
+use crate::world_map::NewRiver;
 use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
@@ -1009,7 +1009,7 @@ fn find_lowest_neighbors<Data: TileEntityWithNeighborsElevation>(entity: &Data, 
 
 }
 
-pub(crate) fn generate_water_flow<Progress: ProgressObserver>(layer: &mut TilesLayer, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<u64>),CommandError> {
+pub(crate) fn generate_water_flow<Progress: ProgressObserver>(layer: &mut TilesLayer, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
 
     // from the AFMG code, this is also done in calculating precipitation. I'm wondering if it's unscaling the precipitation somehow?
@@ -1070,7 +1070,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(layer: &mut TilesL
                 }
                 (0.0,lowest)
             } else {
-                lake_queue.push(*fid);
+                lake_queue.push((*fid,water_flow));
                 (water_flow,Vec::new())
             }
 
@@ -1447,6 +1447,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
     let mut lakes = Vec::new();
 
+    // figure out some numbers for generating curvy lakes.
     let tile_area = layer.estimate_average_tile_area()?;
     let tile_width = tile_area.sqrt();
     let buffer_distance = (tile_width/10.0) * -lake_buffer_scale;
@@ -1521,36 +1522,35 @@ fn simplify_lake_geometry(lake_geometry: Geometry, buffer_distance: f64, simplif
 struct RiverSegment {
     from: u64,
     to: u64,
-    flow: f64,
+    to_flow: f64,
     from_lake: bool,
 }
 
 
-
-pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_>, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiverSegment>,CommandError> {
+pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_>, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiver>,CommandError> {
 
     // TODO: If I didn't need tiles to be mut in order to get the iterator, I could also take the Segment layer and just update it here
     // instead of returning a Vec to do so outside. -- Although, what if I took the whole world map transaction?
-
-
+    
+    
     let mut tile_from_index = HashMap::new();
     let mut tile_to_index = HashMap::new();
     let mut segment_queue: Vec<Rc<RiverSegment>> = Vec::new();
     let mut result = Vec::new();
 
     macro_rules! add_segment {
-        ($from: expr, $to: expr, $flow: expr, $from_lake: expr) => {{
+        ($from: expr, $to: expr, $to_flow: expr, $from_lake: expr) => {{
             // add a new segment to the processing queue and to the maps for easier finding.
             // Use an Rc to make it easier to share the same value in the various places. 
             // Otherwise, we would need some sort of id map and a whole other structure with potential errors.
             let from = $from;
             let to = $to;
-            let flow = $flow;
+            let to_flow = $to_flow;
             let from_lake = $from_lake;
             let segment = Rc::from(RiverSegment {
                 from,
                 to,
-                flow,
+                to_flow,
                 from_lake,
             });
             match tile_from_index.entry(from) {
@@ -1582,11 +1582,13 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
     // Also, index the segments by starting tile or ending tile, as it will help connect things later.
     for (i,entity) in tiles.read_entities::<TileEntityForRiverConnect>().enumerate() {
         let (fid,tile) = entity?;
-        for flow_to in tile.flow_to {
-            add_segment!(fid,flow_to,tile.water_flow,false)
+        for flow_to in &tile.flow_to {
+            // get the flow for the 
+            add_segment!(fid,*flow_to,tile.water_flow/tile.flow_to.len() as f64,false)
         }
-        for outlet_from in tile.outlet_from {
-            add_segment!(outlet_from,fid,tile.water_flow,true)
+        for outlet_from in &tile.outlet_from {
+            // get the flow for the outlet from the current tile?
+            add_segment!(*outlet_from,fid,tile.water_flow,true)
         }
 
         progress.update(|| i);
@@ -1603,7 +1605,7 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
         // a segment starts with branching if more than one segment starts at the same point.
         // Also, on occasion there are duplicates because flow_to and outlet_from both work. Allow these duplicates
         // as branches because it makes for an interesting map, but make sure they both show they are from a lake.
-        let (starts_with_branching,branch_is_from_lake) = tile_from_index.get(&segment.from).map(|a| (a.len() > 1, a.iter().any(|a| a.from_lake))).unwrap_or_else(|| (false,false));
+        let (branch_start_count,branch_is_from_lake) = tile_from_index.get(&segment.from).map(|a| (a.len(), a.iter().any(|a| a.from_lake))).unwrap_or_else(|| (0,false));
 
         // Get start and end topological types, as well as potential previous and next tiles for curve manipulation.
 
@@ -1623,11 +1625,11 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
                     }
                 },
                 _ => {
-                    let next_tile = find_flowingest_tile(list).map(|a| a.to);
+                    let (next_tile,_) = find_flowingest_tile(list);
                     if ends_with_confluence {
-                        (RiverSegmentTo::BranchingConfluence,next_tile)
+                        (RiverSegmentTo::BranchingConfluence,Some(next_tile.to))
                     } else {
-                        (RiverSegmentTo::Branch,next_tile)
+                        (RiverSegmentTo::Branch,Some(next_tile.to))
                     }
 
                 }
@@ -1636,11 +1638,12 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
         };
 
 
-        let (from_type,previous_tile) = if segment.from_lake {
-            if starts_with_branching {
-                (RiverSegmentFrom::BranchingLake,None)
+        let (from_type,previous_tile,from_flow) = if segment.from_lake {
+            // the flow for these, since there is technically no beginning segment, is the same as the ending flow.
+            if branch_start_count > 1 {
+                (RiverSegmentFrom::BranchingLake,None,segment.to_flow)
             } else {
-                (RiverSegmentFrom::Lake,None)
+                (RiverSegmentFrom::Lake,None,segment.to_flow)
             }
         } else {
             match tile_to_index.get(&segment.from) {
@@ -1649,31 +1652,36 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
                 // if 1 segment, then it's continuing, Except it could be a branch if multiple others come from the same point
                 // if >1 segments, then it's a confluence, But it could be a branching confluence if multiple others go to that same point
                 Some(list) => match list.len() {
-                    0 => (RiverSegmentFrom::Source,None), // much like ending with a mouth, multiple rivers could start from the same source and not be connected.
+                    0 => (RiverSegmentFrom::Source,None,0.0), // much like ending with a mouth, multiple rivers could start from the same source and not be connected.
                     1 => {
                         let previous_tile = Some(list[0].from);
-                        if starts_with_branching {
+                        if branch_start_count > 1 {
                             if branch_is_from_lake {
-                                (RiverSegmentFrom::BranchingLake,previous_tile)
+                                (RiverSegmentFrom::BranchingLake,previous_tile,segment.to_flow) // same as the outflow because it's from a lake
                             } else {
-                                (RiverSegmentFrom::Branch,previous_tile)
+                                (RiverSegmentFrom::Branch,previous_tile,list[0].to_flow/branch_start_count as f64)
                             }
                         } else {
-                            (RiverSegmentFrom::Continuing,previous_tile)
+                            (RiverSegmentFrom::Continuing,previous_tile,list[0].to_flow)
                         }
                     },
                     _ => {
-                        let previous_tile = find_flowingest_tile(list).map(|a| a.from);
-                        if starts_with_branching {
-                            (RiverSegmentFrom::BranchingConfluence,previous_tile)
+                        let (previous_tile,total_flow) = find_flowingest_tile(list);
+                        let previous_tile = Some(previous_tile.from);
+                        if branch_start_count > 1 {
+                            (RiverSegmentFrom::BranchingConfluence,previous_tile,total_flow/branch_start_count as f64)
                         } else {
-                            (RiverSegmentFrom::Confluence,previous_tile)
+                            (RiverSegmentFrom::Confluence,previous_tile,total_flow)
                         }
                     }
                 },
-                None => (RiverSegmentFrom::Source,None),
+                None => (RiverSegmentFrom::Source,None,0.0),
             }
         };
+
+        if (from_flow == 0.0) && (segment.to_flow == 0.0) {
+            continue;
+        }
 
         if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(&segment.from),tiles.feature_by_id(&segment.to)) {
             let start_point = from_tile.site_point()?;
@@ -1685,12 +1693,13 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
             let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point,&[start_point,end_point],next_point);
             // convert that to a polyline.
             let line = bezier.to_poly_line(bezier_scale)?;
-            result.push(NewRiverSegment {
+            result.push(NewRiver {
                 from_tile: segment.from as i64,
-                to_tile: segment.to as i64,
-                flow: segment.flow,
                 from_type,
+                from_flow: from_flow,
+                to_tile: segment.to as i64,
                 to_type,
+                to_flow: segment.to_flow,
                 line
             })
 
@@ -1731,20 +1740,22 @@ fn find_tile_site_point(previous_tile: Option<u64>, tiles: &TilesLayer<'_>) -> R
     })
 }
 
-fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> Option<Rc<RiverSegment>> {
-    let mut next_tile: Option<&Rc<RiverSegment>> = None;
-    for tile in list {
-        if let Some(next) = next_tile {
-            if tile.flow > next.flow {
-                next_tile = Some(tile)
-            } else if (tile.flow == next.flow) && tile.to > next.to {
+fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) {
+    let mut chosen_segment: Option<&Rc<RiverSegment>> = None;
+    let mut total_flow = 0.0;
+    for segment in list {
+        total_flow += segment.to_flow;
+        if let Some(potential) = chosen_segment {
+            if segment.to_flow > potential.to_flow {
+                chosen_segment = Some(segment)
+            } else if (segment.to_flow == potential.to_flow) && segment.to > potential.to {
                 // I want this algorithm to be reproducible.
-                next_tile = Some(tile)
+                chosen_segment = Some(segment)
             }
         } else {
-            next_tile = Some(tile)
+            chosen_segment = Some(segment)
         }
     };
-    next_tile.cloned()
+    (chosen_segment.unwrap().clone(),total_flow)
 }
 

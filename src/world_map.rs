@@ -583,8 +583,8 @@ macro_rules! entity {
     (feature_class@ TileEntity) => {
         TileFeature
     };
-    (feature_class@ RiverSegmentEntity) => {
-        RiverSegmentFeature
+    (feature_class@ RiverEntity) => {
+        RiverFeature
     };
     (feature_class@ LakeEntity) => {
         LakeFeature
@@ -904,12 +904,12 @@ impl<'lifetime> TilesLayer<'lifetime> {
 }
 
 
-pub(crate) struct RiverSegmentFeature<'lifetime> {
+pub(crate) struct RiverFeature<'lifetime> {
 
     feature: Feature<'lifetime>
 }
 
-impl<'lifetime> From<Feature<'lifetime>> for RiverSegmentFeature<'lifetime> {
+impl<'lifetime> From<Feature<'lifetime>> for RiverFeature<'lifetime> {
 
     fn from(feature: Feature<'lifetime>) -> Self {
         Self {
@@ -918,33 +918,34 @@ impl<'lifetime> From<Feature<'lifetime>> for RiverSegmentFeature<'lifetime> {
     }
 }
 
-impl<'lifetime> RiverSegmentFeature<'lifetime> {
+impl<'lifetime> RiverFeature<'lifetime> {
 
-    feature!(5; geometry: #[allow(dead_code)] {
+    feature!(6; geometry: #[allow(dead_code)] {
         from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
-        to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile" OGRFieldType::OFTInteger64;
-        flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
         from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
+        from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
+        to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile" OGRFieldType::OFTInteger64;
         to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type" OGRFieldType::OFTString;
+        to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow" OGRFieldType::OFTReal;
     });
 
 }
 
 // NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
 // This is a much easier version of the same thing.
-pub(crate) trait RiverSegmentEntity: Sized {
+pub(crate) trait RiverEntity: Sized {
 
-    fn try_from_feature(feature: RiverSegmentFeature) -> Result<Self,CommandError>;
+    fn try_from_feature(feature: RiverFeature) -> Result<Self,CommandError>;
 
 }
 
-pub(crate) struct RiverSegmentEntityIterator<'lifetime, Data: RiverSegmentEntity> {
-    features: TypedFeatureIterator<'lifetime,RiverSegmentFeature<'lifetime>>,
+pub(crate) struct RiverEntityIterator<'lifetime, Data: RiverEntity> {
+    features: TypedFeatureIterator<'lifetime,RiverFeature<'lifetime>>,
     data: std::marker::PhantomData<Data>
 }
 
 // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-impl<'lifetime,Data: RiverSegmentEntity> Iterator for RiverSegmentEntityIterator<'lifetime,Data> {
+impl<'lifetime,Data: RiverEntity> Iterator for RiverEntityIterator<'lifetime,Data> {
     type Item = Result<(u64,Data),CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -960,8 +961,8 @@ impl<'lifetime,Data: RiverSegmentEntity> Iterator for RiverSegmentEntityIterator
     }
 }
 
-impl<'lifetime,Data: RiverSegmentEntity> From<TypedFeatureIterator<'lifetime,RiverSegmentFeature<'lifetime>>> for RiverSegmentEntityIterator<'lifetime,Data> {
-    fn from(features: TypedFeatureIterator<'lifetime,RiverSegmentFeature<'lifetime>>) -> Self {
+impl<'lifetime,Data: RiverEntity> From<TypedFeatureIterator<'lifetime,RiverFeature<'lifetime>>> for RiverEntityIterator<'lifetime,Data> {
+    fn from(features: TypedFeatureIterator<'lifetime,RiverFeature<'lifetime>>) -> Self {
         Self {
             features,
             data: std::marker::PhantomData
@@ -969,24 +970,25 @@ impl<'lifetime,Data: RiverSegmentEntity> From<TypedFeatureIterator<'lifetime,Riv
     }
 }
 
-entity!(NewRiverSegment RiverSegmentEntity {
+entity!(NewRiver RiverEntity {
     from_tile: i64,
-    to_tile: i64,
-    flow: f64,
     from_type: RiverSegmentFrom,
+    from_flow: f64,
+    to_tile: i64,
     to_type: RiverSegmentTo,
+    to_flow: f64,
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
 
 
-pub(crate) struct RiverSegmentsLayer<'lifetime> {
+pub(crate) struct RiversLayer<'lifetime> {
     segments: WorldLayer<'lifetime>
 }
 
-impl<'lifetime> RiverSegmentsLayer<'lifetime> {
+impl<'lifetime> RiversLayer<'lifetime> {
 
-    pub(crate) const LAYER_NAME: &str = "river_segments";
+    pub(crate) const LAYER_NAME: &str = "rivers";
 
     #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
         let segments = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
@@ -997,26 +999,27 @@ impl<'lifetime> RiverSegmentsLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let segments = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbLineString, Some(&RiverSegmentFeature::FIELD_DEFS), overwrite)?;
+        let segments = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbLineString, Some(&RiverFeature::FIELD_DEFS), overwrite)?;
 
         Ok(Self {
             segments
         })
     }
 
-    pub(crate) fn add_segment(&mut self, segment: &NewRiverSegment) -> Result<(),CommandError> {
+    pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<(),CommandError> {
         let geometry = create_line(&segment.line)?;
-        let (field_names,field_values) = RiverSegmentFeature::to_field_names_values(
+        let (field_names,field_values) = RiverFeature::to_field_names_values(
             segment.from_tile, 
-            segment.to_tile, 
-            segment.flow, 
             &segment.from_type, 
-            &segment.to_type);
+            segment.from_flow, 
+            segment.to_tile, 
+            &segment.to_type,
+            segment.to_flow);
         self.segments.add(geometry, &field_names, &field_values)
     }
 
 
-    #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: RiverSegmentEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+    #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: RiverEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
         progress.start_known_endpoint(|| ("Reading river segments.",self.segments.layer.feature_count() as usize));
         let mut result = Vec::new();
         for (i,feature) in self.read_features().enumerate() {
@@ -1027,7 +1030,7 @@ impl<'lifetime> RiverSegmentsLayer<'lifetime> {
         Ok(result)
     }
 
-    #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: RiverSegmentEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+    #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: RiverEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
         progress.start_known_endpoint(|| ("Indexing river segments.",self.segments.layer.feature_count() as usize));
         let mut result = HashMap::new();
         for (i,feature) in self.read_features().enumerate() {
@@ -1038,15 +1041,15 @@ impl<'lifetime> RiverSegmentsLayer<'lifetime> {
         Ok(result)
     }
 
-    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<RiverSegmentFeature> {
-        self.segments.layer.feature(*fid).map(RiverSegmentFeature::from)
+    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<RiverFeature> {
+        self.segments.layer.feature(*fid).map(RiverFeature::from)
     }
 
-    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: RiverSegmentEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
+    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: RiverEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
         self.feature_by_id(fid).map(Data::try_from_feature).transpose()
     }
 
-    #[allow(dead_code)] pub(crate) fn update_feature(&self, feature: RiverSegmentFeature) -> Result<(),CommandError> {
+    #[allow(dead_code)] pub(crate) fn update_feature(&self, feature: RiverFeature) -> Result<(),CommandError> {
         Ok(self.segments.layer.set_feature(feature.feature)?)
     }
 
@@ -1055,11 +1058,11 @@ impl<'lifetime> RiverSegmentsLayer<'lifetime> {
         self.segments.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
     }
 
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<RiverSegmentFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<RiverFeature> {
         self.segments.layer.features().into()
     }
 
-    #[allow(dead_code)] pub(crate) fn read_entities<Data: RiverSegmentEntity>(&mut self) -> RiverSegmentEntityIterator<Data> {
+    #[allow(dead_code)] pub(crate) fn read_entities<Data: RiverEntity>(&mut self) -> RiverEntityIterator<Data> {
         self.read_features().into()
     }
 
@@ -1575,7 +1578,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn generate_water_flow<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<u64>),CommandError> {
+    pub(crate) fn generate_water_flow<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
         let mut result = None;
         self.with_transaction(|target| {
@@ -1649,7 +1652,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(&mut self, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiverSegment>,CommandError> {
+    pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(&mut self, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiver>,CommandError> {
 
         let mut result = None;
 
@@ -1670,22 +1673,22 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn load_river_segments<Progress: ProgressObserver>(&mut self, segments: Vec<NewRiverSegment>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn load_rivers<Progress: ProgressObserver>(&mut self, segments: Vec<NewRiver>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
         self.with_transaction(|target| {
-            let mut segments_layer = target.create_river_segments_layer(overwrite_layer)?;
+            let mut segments_layer = target.create_rivers_layer(overwrite_layer)?;
 
         
             // boundary points    
     
-            progress.start_known_endpoint(|| ("Writing segments.",segments.len()));
+            progress.start_known_endpoint(|| ("Writing rivers.",segments.len()));
     
             for (i,segment) in segments.iter().enumerate() {
                 segments_layer.add_segment(segment)?;
                 progress.update(|| i);
             }
     
-            progress.finish(|| "Segments written.");
+            progress.finish(|| "Rivers written.");
     
             Ok(())
         })?;
@@ -1708,14 +1711,14 @@ impl WorldMap {
         
             // boundary points    
     
-            progress.start_known_endpoint(|| ("Writing segments.",lakes.len()));
+            progress.start_known_endpoint(|| ("Writing lakes.",lakes.len()));
     
             for (i,lake) in lakes.into_iter().enumerate() {
                 lakes_layer.add_lake(lake)?;
                 progress.update(|| i);
             }
     
-            progress.finish(|| "Segments written.");
+            progress.finish(|| "Lakes written.");
     
             Ok(())
         })?;
@@ -1761,8 +1764,8 @@ impl<'lifetime> WorldMapTransaction<'lifetime> {
 
     }
 
-    pub(crate) fn create_river_segments_layer(&mut self, overwrite: bool) -> Result<RiverSegmentsLayer,CommandError> {
-        Ok(RiverSegmentsLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_rivers_layer(&mut self, overwrite: bool) -> Result<RiversLayer,CommandError> {
+        Ok(RiversLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }
 

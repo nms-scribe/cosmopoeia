@@ -63,6 +63,7 @@ command!{
     gen_climate::GenClimateTemperature;
     gen_climate::GenClimateWind;
     gen_climate::GenClimatePrecipitation;
+    gen_water::GenWater;
     gen_water::GenWaterFlow;
     gen_water::GenWaterFill;
     gen_water::GenWaterConnectRivers;

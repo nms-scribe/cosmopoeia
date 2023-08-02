@@ -1347,7 +1347,7 @@ To proceed on this, I can break it down into the following steps:
     [X] Generate temperatures
     [X] Generate wind directions
     [X] Generate precipitation
-[ ] `gen-water` command
+[X] `gen-water` command
     [X] Review AFMG river generation algorithm
     [X] Generate flow
     [X] Fill lakes
@@ -1356,7 +1356,7 @@ To proceed on this, I can break it down into the following steps:
         [X] Need to work on the bezier function -- what data type should be returned?
         [X] Need to work on polylinization of the bezier curve.
     [X] Draw lake polygons
-    [ ] Draw river polygons
+    [X] Draw river polygons - This can all be done in QGIS
 [ ] `gen-biomes` command
     [X] Review AFMG biome generation algorithms
     [ ] Create command (requires water, temperature, and precipitation)
