@@ -1419,7 +1419,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
     progress.finish(|| "Lakes filled.");
 
-    progress.start_known_endpoint(|| ("Writing lakes.",tile_map.len()));
+    progress.start_known_endpoint(|| ("Writing lake elevations.",tile_map.len()));
 
     for (i,(tile_fid,tile)) in tile_map.iter().enumerate() {
         if let Some(mut feature) = layer.feature_by_id(&tile_fid) {
@@ -1444,6 +1444,9 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
 
     }
 
+    progress.finish(|| "Lake elevations written.");
+
+
 
     let mut lakes = Vec::new();
 
@@ -1454,13 +1457,19 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(layer: &mut TilesL
     // the next isn't customizable, it just seems to work right. FUTURE: Check this with higher and lower resolution tiles.
     let simplify_tolerance = tile_width/10.0;
 
-    for lake in lake_map.values() {
+    progress.start_known_endpoint(|| ("Drawing lakes.",lake_map.len()));
+
+    for (i,lake) in lake_map.values().enumerate() {
         if lake.contained_tiles.len() > 0 {
             let lake_geometry = lake.dissolve_tiles(layer);
             make_curvy_lakes(lake.elevation, lake_bezier_scale, buffer_distance, simplify_tolerance, lake_geometry, &mut lakes)?;
 
         }
+
+        progress.update(|| i);
     }
+
+    progress.finish(|| "Lakes drawn.");
 
     Ok(lakes)
 
@@ -1684,26 +1693,29 @@ pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(tiles: &
         }
 
         if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(&segment.from),tiles.feature_by_id(&segment.to)) {
-            let start_point = from_tile.site_point()?;
-            let end_point = to_tile.site_point()?;
-            // need previous and next points to give the thingy a curve.
-            let previous_point = find_tile_site_point(previous_tile, tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
-            let next_point = find_tile_site_point(next_tile, tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));
-            // create the bezier
-            let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point,&[start_point,end_point],next_point);
-            // convert that to a polyline.
-            let line = bezier.to_poly_line(bezier_scale)?;
-            result.push(NewRiver {
-                from_tile: segment.from as i64,
-                from_type,
-                from_flow: from_flow,
-                to_tile: segment.to as i64,
-                to_type,
-                to_flow: segment.to_flow,
-                line
-            })
-
+            let from_lake = from_tile.lake_elevation()?;
+            let to_lake = to_tile.lake_elevation()?;
+            if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
+                let start_point = from_tile.site_point()?;
+                let end_point = to_tile.site_point()?;
+                // need previous and next points to give the thingy a curve.
+                let previous_point = find_tile_site_point(previous_tile, tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
+                let next_point = find_tile_site_point(next_tile, tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));
+                // create the bezier
+                let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point,&[start_point,end_point],next_point);
+                // convert that to a polyline.
+                let line = bezier.to_poly_line(bezier_scale)?;
+                result.push(NewRiver {
+                    from_tile: segment.from as i64,
+                    from_type,
+                    from_flow: from_flow,
+                    to_tile: segment.to as i64,
+                    to_type,
+                    to_flow: segment.to_flow,
+                    line
+                })
     
+            } // I don't want to add segments that are going between tiles in the same lake. As that can create weird arms in lakes with concave sides
     
         }
 

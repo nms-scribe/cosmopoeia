@@ -105,6 +105,8 @@ AFMG creates flat maps. This format hides the fact that the areas of cells near 
 
 While I can't make the voronoi cells exactly the same area without creating a hexagonal grid map, I could try to place the points so that the areas of each cell are similar to each other on the globe. This means, placing less points in the upper latitudes. I am not yet sure how to do this, but this might be doable by taking a subset of points on a rectangular extent that would fit into a shape similar to some pseudocylindrical projection, such as Mollweide. These points would then be stretched out from the east and west by some standard formula to fill the rectangle.
 
+Part of this process is replacing anything based on distances between coordinates with a distance algorithm that assumes the coordinates are lat/lon. This includes the production of voronoi. (which depend on equidistance between points, this is done in the calculation of triangle circumcenters), and bezier curve generation for rivers, lakes and other features.
+
 The results of such a map will look very strange in am equirectanguilar projection, due to colors stretching east-west near the poles, and straighter coasts and boundary lines in those areas. I could overcome this by using something that's not a true voronoi. Take the original voronoi generated over a rectangular area, and calculate new shapes by dissolving them by which stretched voronoi their center points lay in, creating more organic edges to the higher latitude cells. 
 
 Something like this could also be used to get around another problem with AFMG: uniformly smooth borders. If the original rectangular voronoi created more points in areas of higher relief, this could be used to create rougher looking cells in those areas in the final map.
@@ -126,6 +128,17 @@ A second problem is that there doesn't seem to be any accounting for the Earth's
 I don't know the details of AFMG's algorithms for generating political features. I don't know if there's something I can improve. I just know that it outputs results that seem odd sometimes. I have to play around with the assumptions for these, maybe what AFMG has are more sufficient than I'm seeing.
 
 One thing I will change, are the "types" of cultures. I will also add the ability to filter out types depending on an epoch or world type. AFMG has "generic", "river", "lake", "naval", "nomadic", "hunting", and "highland". I'm surprised there is no "agricultural" or "industrial" culture type, and I'm not sure what a "highland" culture would be, short of men in kilts. In addition, "naval" cultures in the 19th century are much different from naval cultures in the 1st century, and in earlier ages those cultures shouldn't even be generated. Finally, I feel like a "wildlands" culture is unlikely -- it should be filled in with all sorts of nomadic and hunting cultures instead -- at best there might be a frontier culture of sorts which combines two or more cultures together. There should also be some fantasy cultures: Elves who actually prefer to live in forests, and Dwarves who actually want to build cities in mountains. And creatures whose real homes are underground, or underwater.
+
+## Water
+
+Water flow is based on the tiles, however, there are two problems: 1) rivers and lakes aren't "detailed" enough. and 2) rivers and lakes should be able to form natural political borders. 
+
+I'm wondering if generating river flow would be better done with a heightmap instead. 
+1) Take the elevation tiles and generate a raster heightmap using interpolation from the tile sites. 
+2) use that result to generate the rivers and lakes on a grid instead using more traditional DEM water flow algorithms.
+3) Convert those maps and rivers into polygons using appropriate digitization and smoothing algorithms.
+4) Pull those back in and intersect them with the tiles somehow to get a "water-infused" tile layer, where tiles are split by rivers and lakes. I just have to watch out for cases where the new tile areas become tiny because of a minor crossing. Maybe in that case we add the new tile to neighboring tiles.
+5) Use that layer for generating people things.
 
 # AFMG Algorithms
 
@@ -1359,12 +1372,21 @@ To proceed on this, I can break it down into the following steps:
     [X] Draw river polygons - This can all be done in QGIS
 [ ] `gen-biomes` command
     [X] Review AFMG biome generation algorithms
-    [ ] Create command (requires water, temperature, and precipitation)
+    [ ] Create command (requires water, temperature, precipitation, rivers and lakes)
 [ ] `gen-people` command
     [ ] various auxiliary files
     [ ] Review AFMG people generation algorithms -- again, wait on improvements until later
     [ ] Figure out how to break the task apart into sub commands and create those commands.
-[ ] Improved, Similar-area voronoization algorithm vaguely described above
+[ ] `curve-borders` command
+    [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal.
+    [ ] is_ocean
+    [ ] biomes
+    [ ] nations and provinces
+    [ ] cultures
+    [ ] religions
+[ ] `create-terrain` commands
+    [ ] terrain template files
+    [ ] Review AFMG terrain generation algorithms
 [ ] Documentation
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
@@ -1378,9 +1400,7 @@ To proceed on this, I can break it down into the following steps:
     [ ] `gen-climate-temperatures`
     [ ] `gen-climate-wind`
     [ ] `gen-climate-precipitation`
-[ ] `create-terrain` commands
-    [ ] terrain template files
-    [ ] Review AFMG terrain generation algorithms
+[ ] Improved, Similar-area voronoization algorithm vaguely described above
 [ ] Improved climate generation commands
 [ ] Improved people generation commands
 [ ] `gen-features` command
