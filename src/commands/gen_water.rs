@@ -79,7 +79,7 @@ impl Task for GenWaterFill {
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
-    pub(crate) struct GenWaterConnectRivers {
+    pub(crate) struct GenWaterRivers {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -95,7 +95,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenWaterConnectRivers {
+impl Task for GenWaterRivers {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -103,7 +103,7 @@ impl Task for GenWaterConnectRivers {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let segments = target.generate_water_connect_rivers(self.bezier_scale,&mut progress)?;
+        let segments = target.generate_water_rivers(self.bezier_scale,&mut progress)?;
 
         target.load_rivers(segments,self.overwrite,&mut progress)?;
 
@@ -159,7 +159,7 @@ impl Task for GenWater {
 
         target.load_lakes(lakes,self.overwrite_lakes || self.overwrite,&mut progress)?;
 
-        let segments = target.generate_water_connect_rivers(self.bezier_scale,&mut progress)?;
+        let segments = target.generate_water_rivers(self.bezier_scale,&mut progress)?;
 
         target.load_rivers(segments,self.overwrite_rivers || self.overwrite,&mut progress)?;
 

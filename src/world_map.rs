@@ -31,7 +31,7 @@ use crate::algorithms::generate_winds;
 use crate::algorithms::generate_precipitation;
 use crate::algorithms::generate_water_flow;
 use crate::algorithms::generate_water_fill;
-use crate::algorithms::generate_water_connect_rivers;
+use crate::algorithms::generate_water_rivers;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -1652,7 +1652,7 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn generate_water_connect_rivers<Progress: ProgressObserver>(&mut self, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiver>,CommandError> {
+    pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(&mut self, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiver>,CommandError> {
 
         let mut result = None;
 
@@ -1663,7 +1663,7 @@ impl WorldMap {
 
             let mut tiles = target.edit_tile_layer()?;
 
-            result = Some(generate_water_connect_rivers(&mut tiles, bezier_scale, progress)?);
+            result = Some(generate_water_rivers(&mut tiles, bezier_scale, progress)?);
 
             Ok(())
     
