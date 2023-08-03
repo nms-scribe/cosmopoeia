@@ -1,5 +1,7 @@
 use std::path::Path;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry::Occupied;
+use std::collections::hash_map::Entry::Vacant;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -313,6 +315,12 @@ macro_rules! feature {
     (getfieldtype@ river_segment_to) => {
         RiverSegmentTo
     };
+    (getfieldtype@ string) => {
+        String
+    };
+    (getfieldtype@ biome_criteria) => {
+        BiomeCriteria
+    };
     (setfieldtype@ f64) => {
         f64
     };
@@ -339,6 +347,12 @@ macro_rules! feature {
     };
     (setfieldtype@ river_segment_to) => {
         &RiverSegmentTo
+    };
+    (setfieldtype@ string) => {
+        &str
+    };
+    (setfieldtype@ biome_criteria) => {
+        &BiomeCriteria
     };
     (getfield@ $self: ident f64 $field: path) => {
         Ok($self.feature.field_as_double_by_name($field)?)
@@ -406,6 +420,17 @@ macro_rules! feature {
         }
 
     };
+    (getfield@ $self: ident string $field: path) => {
+        Ok($self.feature.field_as_string_by_name($field)?)
+    };
+    (getfield@ $self: ident biome_criteria $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(Some(BiomeCriteria::try_from(value)?))
+        } else {
+            Ok(None)
+        }
+
+    };
     (setfield@ $self: ident $value: ident f64 $field: path) => {
         Ok($self.feature.set_field_double($field, $value)?)
     };
@@ -441,6 +466,12 @@ macro_rules! feature {
     (setfield@ $self: ident $value: ident river_segment_to $field: path) => {{
         Ok($self.feature.set_field_string($field, $value.into())?)
     }};
+    (setfield@ $self: ident $value: ident string $field: path) => {{
+        Ok($self.feature.set_field_string($field, $value)?)
+    }};
+    (setfield@ $self: ident $value: ident biome_criteria $field: path) => {{
+        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
+    }};
     (to_value@ $prop: ident f64) => {
         FieldValue::RealValue($prop)
     };
@@ -473,6 +504,12 @@ macro_rules! feature {
     }};
     (to_value@ $prop: ident river_segment_to) => {{
         FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
+    }};
+    (to_value@ $prop: ident string) => {{
+        FieldValue::StringValue($prop.to_owned())
+    }};
+    (to_value@ $prop: ident biome_criteria) => {{
+        FieldValue::StringValue(Into::<String>::into($prop))
     }};
     (get@ $(#[$attr: meta])* $prop: ident $type: ident $field: path) => {
         $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<feature!(getfieldtype@ $type)>,CommandError> {
@@ -588,6 +625,9 @@ macro_rules! entity {
     };
     (feature_class@ LakeEntity) => {
         LakeFeature
+    };
+    (feature_class@ BiomeEntity) => {
+        BiomeFeature
     };
     ($name: ident $entity_class: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]
@@ -1231,6 +1271,235 @@ impl<'lifetime> LakesLayer<'lifetime> {
 
 }
 
+#[derive(Clone)]
+pub(crate) enum BiomeCriteria {
+    Matrix(Vec<(usize,usize)>), // temperature band, moisture band
+    Wetland,
+    Glacier
+}
+
+impl TryFrom<String> for BiomeCriteria {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "wetland" => Ok(Self::Wetland),
+            "glacier" => Ok(Self::Glacier),
+            list => {
+                let mut result = Vec::new();
+                for value in list.split(',') {
+                    let value = value.splitn(2,':');
+                    let mut value = value.map(str::parse).map(|a| a.map_err(|_| CommandError::InvalidBiomeMatrixValue(list.to_owned())));
+                    let temperature = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
+                    let moisture = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
+                    result.push((temperature,moisture));
+                }
+                Ok(Self::Matrix(result))
+            }
+        }
+    }
+}
+
+impl Into<String> for &BiomeCriteria {
+
+    fn into(self) -> String {
+        match self {
+            BiomeCriteria::Wetland => "wetland".to_owned(),
+            BiomeCriteria::Glacier => "glacier".to_owned(),
+            BiomeCriteria::Matrix(list) => {
+                list.iter().map(|(temperature,moisture)| format!("{}:{}",temperature,moisture)).collect::<Vec<String>>().join(",")
+
+            }
+        }
+    }
+}
+
+struct BiomeMatrix<'lifetime> {
+    matrix: [[&'lifetime str; 26]; 5],
+    glacier: &'lifetime str,
+    wetland: &'lifetime str
+}
+
+pub(crate) struct BiomeFeature<'lifetime> {
+
+    feature: Feature<'lifetime>
+}
+
+impl<'lifetime> From<Feature<'lifetime>> for BiomeFeature<'lifetime> {
+
+    fn from(feature: Feature<'lifetime>) -> Self {
+        Self {
+            feature
+        }
+    }
+}
+
+// TODO: You know, that feature! and entity! macro could be joined together into one big layer! macro.
+impl<'lifetime> BiomeFeature<'lifetime> {
+
+    feature!(3; geometry: #[allow(dead_code)] {
+        #[allow(dead_code)] name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+        #[allow(dead_code)] habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
+        #[allow(dead_code)] criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
+    });
+
+    const HOT_DESERT: &str = "Hot desert";
+    const COLD_DESERT: &str = "Cold desert";
+    const SAVANNA: &str = "Savanna";
+    const GRASSLAND: &str = "Grassland";
+    const TROPICAL_SEASONAL_FOREST: &str = "Tropical seasonal forest";
+    const TEMPERATE_DECIDUOUS_FOREST: &str = "Temperate deciduous forest";
+    const TROPICAL_RAINFOREST: &str = "Tropical rainforest";
+    const TEMPERATE_RAINFOREST: &str = "Temperate rainforest";
+    const TAIGA: &str = "Taiga";
+    const TUNDRA: &str = "Tundra";
+    const GLACIER: &str = "Glacier";
+    const WETLAND: &str = "Wetland";
+    
+
+    const DEFAULT_BIOMES: [(&str, i32, BiomeCriteria); 12] = [
+        (Self::HOT_DESERT,4,BiomeCriteria::Matrix(vec![])),
+        (Self::COLD_DESERT,10,BiomeCriteria::Matrix(vec![])),
+        (Self::SAVANNA,22,BiomeCriteria::Matrix(vec![])),
+        (Self::GRASSLAND,30,BiomeCriteria::Matrix(vec![])),
+        (Self::TROPICAL_SEASONAL_FOREST,50,BiomeCriteria::Matrix(vec![])),
+        (Self::TEMPERATE_DECIDUOUS_FOREST,100,BiomeCriteria::Matrix(vec![])),
+        (Self::TROPICAL_RAINFOREST,80,BiomeCriteria::Matrix(vec![])),
+        (Self::TEMPERATE_RAINFOREST,90,BiomeCriteria::Matrix(vec![])),
+        (Self::TAIGA,12,BiomeCriteria::Matrix(vec![])),
+        (Self::TUNDRA,4,BiomeCriteria::Matrix(vec![])),
+        (Self::GLACIER,0,BiomeCriteria::Glacier),
+        (Self::WETLAND,12,BiomeCriteria::Wetland),
+    ];
+
+    //these constants make the default matrix easier to read.
+    const HDT: &str = Self::HOT_DESERT;
+    const CDT: &str = Self::COLD_DESERT;
+    const SAV: &str = Self::SAVANNA;
+    const GRA: &str = Self::GRASSLAND;
+    const TRF: &str = Self::TROPICAL_SEASONAL_FOREST;
+    const TEF: &str = Self::TEMPERATE_DECIDUOUS_FOREST;
+    const TRR: &str = Self::TROPICAL_RAINFOREST;
+    const TER: &str = Self::TEMPERATE_RAINFOREST;
+    const TAI: &str = Self::TAIGA;
+    const TUN: &str = Self::TUNDRA;
+
+    const DEFAULT_MATRIX: [[&str; 26]; 5] = [
+        // hot ↔ cold [>19°C; <-4°C]; dry ↕ wet
+        [Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::TUN],
+        [Self::SAV, Self::SAV, Self::SAV, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN, Self::TUN],
+        [Self::TRF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN, Self::TUN],
+        [Self::TRF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TEF, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN, Self::TUN],
+        [Self::TRR, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN]
+    ];
+
+    fn get_default_biomes() -> Vec<(&'static str, i32, BiomeCriteria)> {
+        let mut matrix_criteria = HashMap::new();
+        for (moisture,row) in Self::DEFAULT_MATRIX.iter().enumerate() {
+            for (temperature,id) in row.iter().enumerate() {
+                match matrix_criteria.entry(id) {
+                    Vacant(entry) => {
+                        entry.insert(vec![(temperature,moisture)]);
+                    },
+                    Occupied(mut entry) => entry.get_mut().push((temperature,moisture)),
+                }
+            }
+
+        }
+
+        let mut result = Vec::new();
+        for (name,habitability,criteria) in Self::DEFAULT_BIOMES.iter() {
+            let criteria = if let BiomeCriteria::Matrix(_) = criteria {
+                BiomeCriteria::Matrix(matrix_criteria.get(name).unwrap().clone())
+            } else {
+                criteria.clone()
+            };
+            result.push((*name,*habitability,criteria))
+
+
+        }
+
+        result
+
+    }
+
+    fn build_matrix_from_biomes(biomes: Vec<(&str, i32, BiomeCriteria)>) -> Result<BiomeMatrix,CommandError> {
+        let mut matrix: [[&str; 26]; 5] = Default::default();
+        let mut wetland = None;
+        let mut glacier = None;
+        for biome in biomes {
+            match biome.2 {
+                BiomeCriteria::Matrix(list) => {
+                    for (temp,moist) in list {
+                        matrix[moist][temp] = biome.0
+                    }
+                },
+                BiomeCriteria::Wetland => wetland = Some(biome.0),
+                BiomeCriteria::Glacier => glacier = Some(biome.0),
+            }
+
+        }
+        let wetland = wetland.ok_or_else(|| CommandError::MissingWetlandBiome)?;
+        let glacier = glacier.ok_or_else(|| CommandError::MissingGlacierBiome)?;
+        for moisture in 0..matrix.len() {
+            for temperature in 0..matrix[moisture].len() {
+                if matrix[moisture][temperature] == "" {
+                    return Err(CommandError::MissingBiomeMatrixSlot(moisture,temperature))
+                }
+            }
+        }
+        Ok(BiomeMatrix {
+            matrix,
+            glacier,
+            wetland,
+        })
+    }
+
+}
+
+pub(crate) trait BiomeEntity: Sized {
+
+    fn try_from_feature(feature: BiomeFeature) -> Result<Self,CommandError>;
+
+}
+
+pub(crate) struct BiomeEntityIterator<'lifetime, Data: BiomeEntity> {
+    features: TypedFeatureIterator<'lifetime,BiomeFeature<'lifetime>>,
+    data: std::marker::PhantomData<Data>
+}
+
+// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
+impl<'lifetime,Data: BiomeEntity> Iterator for BiomeEntityIterator<'lifetime,Data> {
+    type Item = Result<(u64,Data),CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(feature) = self.features.next() {
+            match (feature.fid(),Data::try_from_feature(feature)) {
+                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                (_, Err(e)) => Some(Err(e)),
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'lifetime,Data: BiomeEntity> From<TypedFeatureIterator<'lifetime,BiomeFeature<'lifetime>>> for BiomeEntityIterator<'lifetime,Data> {
+    fn from(features: TypedFeatureIterator<'lifetime,BiomeFeature<'lifetime>>) -> Self {
+        Self {
+            features,
+            data: std::marker::PhantomData
+        }
+    }
+}
+
+entity!(BiomeData BiomeEntity {
+    name: String,
+    habitability: i32,
+    criteria: BiomeCriteria
+});
+
 pub(crate) struct BiomeLayer<'lifetime> {
     biomes: WorldLayer<'lifetime>
 }
@@ -1238,12 +1507,6 @@ pub(crate) struct BiomeLayer<'lifetime> {
 impl<'lifetime> BiomeLayer<'lifetime> {
 
     pub(crate) const LAYER_NAME: &str = "biomes";
-
-    pub(crate) const FIELD_NAME: &str = "name";
-
-    const FIELD_DEFS: [(&str,OGRFieldType::Type); 1] = [
-        (Self::FIELD_NAME,OGRFieldType::OFTString),
-    ];
 
     fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
         let biomes = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
@@ -1254,7 +1517,7 @@ impl<'lifetime> BiomeLayer<'lifetime> {
     
 
     fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let biomes = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbNone, Some(&Self::FIELD_DEFS), overwrite)?;
+        let biomes = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbNone, Some(&BiomeFeature::FIELD_DEFS), overwrite)?;
 
         Ok(Self {
             biomes
@@ -1262,23 +1525,13 @@ impl<'lifetime> BiomeLayer<'lifetime> {
     }
 
 
-    pub(crate) fn add_biome(&mut self, name: String) -> Result<(),CommandError> {
+    pub(crate) fn add_biome(&mut self, biome: BiomeData) -> Result<(),CommandError> {
 
-        self.biomes.add_without_geometry(&[
-            Self::FIELD_NAME
-        ], &[
-            FieldValue::StringValue(name)
-        ])
+        let (field_names,field_values) = BiomeFeature::to_field_names_values(
+            &biome.name,biome.habitability,&biome.criteria);
+        self.biomes.add_without_geometry(&field_names, &field_values)
 
     }
-
-    pub(crate) fn list_biomes(&mut self) -> Result<Vec<String>,CommandError> {
-        Ok(self.biomes.layer.features().filter_map(|feature| {
-            feature.field_as_string_by_name(Self::FIELD_NAME).transpose()
-        }).collect::<Result<Vec<String>,gdal::errors::GdalError>>()?)
-    }
-
-
 
 
 }
@@ -1347,7 +1600,7 @@ impl WorldMap {
         TilesLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
+    #[allow(dead_code)] pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
         BiomeLayer::open_from_dataset(&self.dataset)
     }
 
@@ -1731,6 +1984,38 @@ impl WorldMap {
     
         Ok(())
 
+    }
+
+    pub(crate) fn fill_biome_defaults(&mut self, overwrite_layer: bool, progress: &mut crate::progress::ConsoleProgressBar) -> Result<(),CommandError> {
+
+        self.with_transaction(|target| {
+            let mut biomes = target.create_biomes_layer(overwrite_layer)?;
+
+            let default_biomes = BiomeFeature::get_default_biomes();
+    
+            progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
+
+            for (name,habitability,criteria) in &default_biomes {
+                biomes.add_biome(BiomeData {
+                    name: name.to_owned().to_owned(),
+                    habitability: *habitability,
+                    criteria: criteria.clone()
+                })?
+            }
+
+            let matrix = BiomeFeature::build_matrix_from_biomes(default_biomes)?;
+
+            println!("matrix {:?}",matrix.matrix);
+            println!("glacier {}",matrix.glacier);
+            println!("wetland {}",matrix.wetland);
+
+    
+            progress.finish(|| "Biomes written.");
+    
+            Ok(())
+        })?;
+    
+        Ok(())
     }
 
 

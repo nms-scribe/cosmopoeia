@@ -17,6 +17,10 @@ pub(crate) enum CommandError {
     MissingGeometry,
     InvalidValueForSegmentFrom(String),
     InvalidValueForSegmentTo(String),
+    InvalidBiomeMatrixValue(String),
+    MissingGlacierBiome,
+    MissingWetlandBiome,
+    MissingBiomeMatrixSlot(usize,usize),
     #[allow(dead_code)] RasterDatasetRequired,
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType),
 }
@@ -36,6 +40,10 @@ impl Display for CommandError {
             Self::MissingGeometry => write!(f,"While loading data, a record had no geometry"),
             Self::InvalidValueForSegmentFrom(a) => write!(f,"Invalid value ('{}') found for from_type in river segments layer.",a),
             Self::InvalidValueForSegmentTo(a) => write!(f,"Invalid value ('{}') found for to_type in river segments layer.",a),
+            Self::InvalidBiomeMatrixValue(a) => write!(f,"Invalid value ('{}') for biome matrix field.",a),
+            Self::MissingGlacierBiome => write!(f,"Glacier biome is not specified as criteria in table."),
+            Self::MissingWetlandBiome => write!(f,"Wetland biome is not specified as criteria in table."),
+            Self::MissingBiomeMatrixSlot(a, b) => write!(f,"Matrix criteria at ({},{}) not specified in biome table.",a,b),
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
         }
