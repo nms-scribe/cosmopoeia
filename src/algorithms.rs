@@ -29,6 +29,7 @@ use crate::world_map::TileEntityForRiverConnect;
 use crate::world_map::RiverSegmentFrom;
 use crate::world_map::RiverSegmentTo;
 use crate::world_map::NewRiver;
+use crate::world_map::BiomeMatrix;
 use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
@@ -1839,5 +1840,66 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
         }
     };
     (chosen_segment.unwrap().clone(),total_flow)
+}
+
+pub(crate) fn apply_biomes<Progress: ProgressObserver>(tiles_layer: &mut TilesLayer, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
+    // based on AFMG algorithm
+
+    entity!(BiomeSource TileEntity {
+        fid: u64,
+        temperature: f64,
+        elevation_scaled: i32,
+        water_flow: f64,
+        is_ocean: bool
+    });
+
+    let tiles = tiles_layer.read_entities_to_vec::<_,BiomeSource>(progress)?;
+    
+    progress.start_known_endpoint(|| ("Applying biomes.",tiles.len()));
+
+    for (i,tile) in tiles.iter().enumerate() {
+
+        let biome = if !tile.is_ocean {
+            if tile.temperature < -5.0 {
+                biomes.glacier.clone()
+            } else {
+                let water_flow_scaled = tile.water_flow;
+                // is it a wetland?
+                if (tile.temperature > -2.0) && // no wetlands in colder environments... that seems odd and unlikely (Alaska is full of wetlands)
+                   // FUTURE: AFMG assumed that if the land was below 25 it was near the coast. That seems inaccurate and I'm not sure what the point of
+                   // that is: it requires *more* water to make the coast a wetland? Maybe the problem is basing it off of waterflow instead of precipitation.
+                   (((water_flow_scaled > 40.0) && (tile.elevation_scaled < 25)) ||
+                    ((water_flow_scaled > 24.0) && (tile.elevation_scaled > 24) && (tile.elevation_scaled < 60))) {
+                    biomes.wetland.clone()
+                } else {
+                    let moisture_band = ((water_flow_scaled/5.0).floor() as usize).min(4); // 0-4
+                    // Math.min(Math.max(20 - temperature, 0), 25)
+                    let temperature_band = ((20.0 - tile.temperature).max(0.0).floor() as usize).min(25);
+                    biomes.matrix[moisture_band][temperature_band].clone()
+                }
+
+              
+            }
+
+        } else {
+            "Ocean".to_owned()
+        };
+
+        if let Some(mut tile) = tiles_layer.feature_by_id(&tile.fid) {
+
+            tile.set_biome(&biome)?;
+
+            tiles_layer.update_feature(tile)?;
+
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Biomes applied.");
+
+    Ok(())
+
 }
 

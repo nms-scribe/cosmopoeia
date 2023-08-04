@@ -10,7 +10,7 @@ use crate::progress::ConsoleProgressBar;
 use crate::progress::ProgressObserver;
 
 subcommand_def!{
-    /// Generates precipitation data (requires wind and temperatures)
+    /// Creates default biome layer
     pub(crate) struct GenBiomeData {
 
         /// The path to the world map GeoPackage file
@@ -32,6 +32,40 @@ impl Task for GenBiomeData {
         let mut target = WorldMap::edit(self.target)?;
 
         target.fill_biome_defaults(self.overwrite,&mut progress)?;
+
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        target.save()?;
+
+        progress.finish(|| "Layer Saved.");
+
+        Ok(())
+
+
+    }
+}
+
+subcommand_def!{
+    /// Applies data from biomes layer to the tiles
+    pub(crate) struct GenBiomeApply {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenBiomeApply {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        let biomes = target.get_biome_matrix(&mut progress)?;
+
+        target.apply_biomes(biomes,&mut progress)?;
 
         progress.start_unknown_endpoint(|| "Saving Layer..."); 
         

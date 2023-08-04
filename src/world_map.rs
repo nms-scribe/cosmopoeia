@@ -34,6 +34,7 @@ use crate::algorithms::generate_precipitation;
 use crate::algorithms::generate_water_flow;
 use crate::algorithms::generate_water_fill;
 use crate::algorithms::generate_water_rivers;
+use crate::algorithms::apply_biomes;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -664,7 +665,7 @@ impl<'lifetime> From<Feature<'lifetime>> for TileFeature<'lifetime> {
 
 impl<'lifetime> TileFeature<'lifetime> {
 
-    feature!(14; to_values: #[allow(dead_code)] {
+    feature!(15; to_values: #[allow(dead_code)] {
         site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
         site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
         elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
@@ -679,6 +680,7 @@ impl<'lifetime> TileFeature<'lifetime> {
         #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
         #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
         #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
+        #[allow(dead_code)] biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
         // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
         // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
         // to store it. In any way, you never know when I might support outlet from multiple points.
@@ -1273,7 +1275,7 @@ impl<'lifetime> LakesLayer<'lifetime> {
 
 #[derive(Clone)]
 pub(crate) enum BiomeCriteria {
-    Matrix(Vec<(usize,usize)>), // temperature band, moisture band
+    Matrix(Vec<(usize,usize)>), // moisture band, temperature band
     Wetland,
     Glacier
 }
@@ -1290,9 +1292,9 @@ impl TryFrom<String> for BiomeCriteria {
                 for value in list.split(',') {
                     let value = value.splitn(2,':');
                     let mut value = value.map(str::parse).map(|a| a.map_err(|_| CommandError::InvalidBiomeMatrixValue(list.to_owned())));
-                    let temperature = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
                     let moisture = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
-                    result.push((temperature,moisture));
+                    let temperature = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
+                    result.push((moisture,temperature));
                 }
                 Ok(Self::Matrix(result))
             }
@@ -1307,17 +1309,17 @@ impl Into<String> for &BiomeCriteria {
             BiomeCriteria::Wetland => "wetland".to_owned(),
             BiomeCriteria::Glacier => "glacier".to_owned(),
             BiomeCriteria::Matrix(list) => {
-                list.iter().map(|(temperature,moisture)| format!("{}:{}",temperature,moisture)).collect::<Vec<String>>().join(",")
+                list.iter().map(|(moisture,temperature)| format!("{}:{}",moisture,temperature)).collect::<Vec<String>>().join(",")
 
             }
         }
     }
 }
 
-struct BiomeMatrix<'lifetime> {
-    matrix: [[&'lifetime str; 26]; 5],
-    glacier: &'lifetime str,
-    wetland: &'lifetime str
+pub(crate) struct BiomeMatrix {
+    pub(crate) matrix: [[String; 26]; 5],
+    pub(crate) glacier: String,
+    pub(crate) wetland: String
 }
 
 pub(crate) struct BiomeFeature<'lifetime> {
@@ -1393,49 +1395,63 @@ impl<'lifetime> BiomeFeature<'lifetime> {
         [Self::TRR, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN]
     ];
 
-    fn get_default_biomes() -> Vec<(&'static str, i32, BiomeCriteria)> {
+    fn get_default_biomes() -> Vec<BiomeData> {
         let mut matrix_criteria = HashMap::new();
         for (moisture,row) in Self::DEFAULT_MATRIX.iter().enumerate() {
             for (temperature,id) in row.iter().enumerate() {
                 match matrix_criteria.entry(id) {
                     Vacant(entry) => {
-                        entry.insert(vec![(temperature,moisture)]);
+                        entry.insert(vec![(moisture,temperature)]);
                     },
-                    Occupied(mut entry) => entry.get_mut().push((temperature,moisture)),
+                    Occupied(mut entry) => entry.get_mut().push((moisture,temperature)),
                 }
             }
 
         }
 
-        let mut result = Vec::new();
-        for (name,habitability,criteria) in Self::DEFAULT_BIOMES.iter() {
+        Self::DEFAULT_BIOMES.iter().map(|(name,habitability,criteria)| {
             let criteria = if let BiomeCriteria::Matrix(_) = criteria {
                 BiomeCriteria::Matrix(matrix_criteria.get(name).unwrap().clone())
             } else {
                 criteria.clone()
             };
-            result.push((*name,*habitability,criteria))
+            BiomeData {
+                name: (*name).to_owned(),
+                habitability: *habitability,
+                criteria,
+            }
 
-
-        }
-
-        result
+        }).collect()
 
     }
 
-    fn build_matrix_from_biomes(biomes: Vec<(&str, i32, BiomeCriteria)>) -> Result<BiomeMatrix,CommandError> {
-        let mut matrix: [[&str; 26]; 5] = Default::default();
+    fn build_matrix_from_biomes(biomes: &[BiomeData]) -> Result<BiomeMatrix,CommandError> {
+        let mut matrix: [[String; 26]; 5] = Default::default();
         let mut wetland = None;
         let mut glacier = None;
         for biome in biomes {
-            match biome.2 {
+            match &biome.criteria {
                 BiomeCriteria::Matrix(list) => {
-                    for (temp,moist) in list {
-                        matrix[moist][temp] = biome.0
+                    for (moist,temp) in list {
+                        let (moist,temp) = (*moist,*temp);
+                        if matrix[moist][temp] != "" {
+                            Err(CommandError::DuplicateBiomeMatrixSlot(moist,temp))?
+                        } else {
+                            matrix[moist][temp] = biome.name.clone()
+
+                        }
                     }
                 },
-                BiomeCriteria::Wetland => wetland = Some(biome.0),
-                BiomeCriteria::Glacier => glacier = Some(biome.0),
+                BiomeCriteria::Wetland => if wetland.is_some() {
+                    Err(CommandError::DuplicateWetlandBiome)?
+                } else {
+                    wetland = Some(biome.name.clone())
+                },
+                BiomeCriteria::Glacier => if glacier.is_some() {
+                    Err(CommandError::DuplicateGlacierBiome)?
+                } else {
+                    glacier = Some(biome.name.clone())
+                }
             }
 
         }
@@ -1525,7 +1541,7 @@ impl<'lifetime> BiomeLayer<'lifetime> {
     }
 
 
-    pub(crate) fn add_biome(&mut self, biome: BiomeData) -> Result<(),CommandError> {
+    pub(crate) fn add_biome(&mut self, biome: &BiomeData) -> Result<(),CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
             &biome.name,biome.habitability,&biome.criteria);
@@ -1533,6 +1549,17 @@ impl<'lifetime> BiomeLayer<'lifetime> {
 
     }
 
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<BiomeFeature> {
+        self.biomes.layer.features().into()
+    }
+
+    pub(crate) fn read_entities<Data: BiomeEntity>(&mut self) -> BiomeEntityIterator<Data> {
+        self.read_features().into()
+    }
+
+    pub(crate) fn feature_count(&self) -> usize {
+        self.biomes.layer.feature_count() as usize
+    }
 
 }
 
@@ -1995,25 +2022,49 @@ impl WorldMap {
     
             progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
 
-            for (name,habitability,criteria) in &default_biomes {
-                biomes.add_biome(BiomeData {
-                    name: name.to_owned().to_owned(),
-                    habitability: *habitability,
-                    criteria: criteria.clone()
-                })?
+            for data in &default_biomes {
+                biomes.add_biome(data)?
             }
 
-            let matrix = BiomeFeature::build_matrix_from_biomes(default_biomes)?;
-
-            println!("matrix {:?}",matrix.matrix);
-            println!("glacier {}",matrix.glacier);
-            println!("wetland {}",matrix.wetland);
-
-    
             progress.finish(|| "Biomes written.");
     
             Ok(())
         })?;
+    
+        Ok(())
+    }
+
+    pub(crate) fn get_biome_matrix<Progress: ProgressObserver>(&self, progress: &mut Progress) -> Result<BiomeMatrix,CommandError> {
+        let mut biomes = self.biomes_layer()?;
+
+        let mut result = Vec::new();
+
+        progress.start_known_endpoint(|| ("Reading biome data.",biomes.feature_count()));
+
+        for (i,biome) in biomes.read_entities().enumerate() {
+            result.push(biome?.1);
+            progress.update(|| i);
+        }
+
+        progress.finish(|| "Biome data read.");
+
+        BiomeFeature::build_matrix_from_biomes(&result)
+
+    }
+
+    pub(crate) fn apply_biomes<Progress: ProgressObserver>(&mut self, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
+        self.with_transaction(|target| {
+            let mut tiles_layer = target.edit_tile_layer()?;
+
+            apply_biomes(&mut tiles_layer,biomes,progress)
+            
+        })?;
+    
+        progress.start_unknown_endpoint(|| "Saving layer."); 
+        
+        self.save()?;
+    
+        progress.finish(|| "Layer saved.");
     
         Ok(())
     }

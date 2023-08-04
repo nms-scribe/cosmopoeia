@@ -69,6 +69,7 @@ command!{
     gen_water::GenWaterRivers;
     gen_biome::GenBiome;
     gen_biome::GenBiomeData;
+    gen_biome::GenBiomeApply;
 }
 
 
