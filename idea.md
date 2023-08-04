@@ -671,9 +671,9 @@ To proceed on this, I can break it down into the following steps:
         [X] Need to work on polylinization of the bezier curve.
     [X] Draw lake polygons
     [X] Draw river polygons - This can all be done in QGIS
-[ ] `gen-biomes` command
+[X] `gen-biomes` command
     [X] Review AFMG biome generation algorithms
-    [ ] Create command (requires water, temperature, precipitation, rivers and lakes)
+    [X] Create command (requires water, temperature, precipitation, rivers and lakes)
 [ ] `gen-people` command
     [ ] various auxiliary files
     [ ] Review AFMG people generation algorithms -- again, wait on improvements until later

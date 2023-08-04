@@ -394,7 +394,7 @@ macro_rules! feature {
     (count@ $prop: ident, $($props: ident),+) => {
         $(feature!(count@ $props)+)+ feature!(count@ $prop)
     };
-    ($struct_name:ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
+    ($struct_name:ident $iterator: ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
         $(#[$get_attr: meta])* $prop: ident 
         $(#[$set_attr: meta])* $set_prop: ident 
         $prop_type: ident 
@@ -476,6 +476,38 @@ macro_rules! feature {
             )*
         }
 
+        pub(crate) struct $iterator<'lifetime, Data: TryFrom<$struct_name<'lifetime>,Error=CommandError>> {
+            features: TypedFeatureIterator<'lifetime,$struct_name<'lifetime>>,
+            data: std::marker::PhantomData<Data>
+        }
+        
+        // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
+        impl<'lifetime,Data: TryFrom<$struct_name<'lifetime>,Error=CommandError>> Iterator for $iterator<'lifetime,Data> {
+            type Item = Result<(u64,Data),CommandError>;
+        
+            fn next(&mut self) -> Option<Self::Item> {
+                if let Some(feature) = self.features.next() {
+                    match (feature.fid(),Data::try_from(feature)) {
+                        (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                        (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                        (_, Err(e)) => Some(Err(e)),
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+        
+        impl<'lifetime,Data: TryFrom<$struct_name<'lifetime>,Error=CommandError>> From<TypedFeatureIterator<'lifetime,$struct_name<'lifetime>>> for $iterator<'lifetime,Data> {
+            fn from(features: TypedFeatureIterator<'lifetime,$struct_name<'lifetime>>) -> Self {
+                Self {
+                    features,
+                    data: std::marker::PhantomData
+                }
+            }
+        }
+
+
     };
 }
 
@@ -500,51 +532,6 @@ impl<'lifetime, TypedFeature: From<Feature<'lifetime>>> From<FeatureIterator<'li
             _phantom: std::marker::PhantomData::default()
         }
     }
-}
-
-macro_rules! entity_base {
-    ($name: ident $feature: ident $iterator: ident) => {
-
-        // NOTE: I tried using a TryFrom, but because Feature requires a lifetime, I had to add that in as well, and it started to propagate. 
-        // This is a much easier version of the same thing.
-        pub(crate) trait $name: Sized {
-
-            fn try_from_feature(feature: $feature) -> Result<Self,CommandError>;
-        
-        }
-        
-        pub(crate) struct $iterator<'lifetime, Data: $name> {
-            features: TypedFeatureIterator<'lifetime,$feature<'lifetime>>,
-            data: std::marker::PhantomData<Data>
-        }
-        
-        // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-        impl<'lifetime,Data: $name> Iterator for $iterator<'lifetime,Data> {
-            type Item = Result<(u64,Data),CommandError>;
-        
-            fn next(&mut self) -> Option<Self::Item> {
-                if let Some(feature) = self.features.next() {
-                    match (feature.fid(),Data::try_from_feature(feature)) {
-                        (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                        (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
-                        (_, Err(e)) => Some(Err(e)),
-                    }
-                } else {
-                    None
-                }
-            }
-        }
-        
-        impl<'lifetime,Data: $name> From<TypedFeatureIterator<'lifetime,$feature<'lifetime>>> for $iterator<'lifetime,Data> {
-            fn from(features: TypedFeatureIterator<'lifetime,$feature<'lifetime>>) -> Self {
-                Self {
-                    features,
-                    data: std::marker::PhantomData
-                }
-            }
-        }
-                
-    };
 }
 
 #[macro_export]
@@ -584,18 +571,18 @@ macro_rules! entity {
         $type
     };
     (feature_class@ TileEntity) => { // FUTURE: This is so I don't have to respecify the feature type. I don't have any other way of doing this.
-        TileFeature
+        TileFeature<'_>
     };
     (feature_class@ RiverEntity) => {
-        RiverFeature
+        RiverFeature<'_>
     };
     (feature_class@ LakeEntity) => {
-        LakeFeature
+        LakeFeature<'_>
     };
     (feature_class@ BiomeEntity) => {
-        BiomeFeature
+        BiomeFeature<'_>
     };
-    ($name: ident $entity_class: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
+    ($name: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]
         pub(crate) struct $name {
             $(
@@ -603,21 +590,27 @@ macro_rules! entity {
             ),*
         }
 
-        impl $entity_class for $name {
+        impl TryFrom<$feature<'_>> for $name {
 
-            fn try_from_feature(feature: entity!(feature_class@ $entity_class)) -> Result<Self,CommandError> {
-                entity!(from_data@ $name feature, $($field: $type $(= $function)?),*)
+            type Error = CommandError;
+
+            fn try_from(value: $feature) -> Result<Self,Self::Error> {
+                entity!(from_data@ $name value, $($field: $type $(= $function)?),*)
             }
-
         }
 
     };
 }
 
 
-// TODO: This could be a generic thing, but attempts to do so led to lifetime issues. If I can switch it incrementally (method by method), then I might be able to figure out the problems.
+// FUTURE: I attempted to make this a struct with generic parameters. Unfortunately, the way this is designed I need to be able
+// to pass lifetimes and types to the type parameters for some of the methods. For example, for the read_entities function, I need
+// a type that takes an Entity (Data) parameter, as well as the local_lifetime. However, as far as I can see, I can't specify
+// that the generic parameters to the struct require certain other parameters. Without this capability, I have to specify the
+// type of the iterator in the function call, but that still doesn't help the lifetime issues. This could be an X-Y problem.
+// This could also be a solvable problem, but I don't know enough to fix it.
 macro_rules! layer {
-    (method@ open_from_dataset $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ open_from_dataset $feature_type: ident $entity_iter_type: ident) => {
         fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
             
             let layer = dataset.layer_by_name($feature_type::LAYER_NAME)?;
@@ -628,12 +621,12 @@ macro_rules! layer {
         }
         
     };
-    (method@ read_entities_to_vec $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
-        pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+    (method@ read_entities_to_vec $feature_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_entities_to_vec<'local_lifetime, Progress: ProgressObserver, Data: TryFrom<$feature_type<'local_lifetime>,Error=CommandError>>(&'local_lifetime mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
             progress.start_known_endpoint(|| (format!("Reading {}.",$feature_type::LAYER_NAME),self.layer.feature_count() as usize));
             let mut result = Vec::new();
             for (i,feature) in self.read_features().enumerate() {
-                result.push(Data::try_from_feature(feature)?);
+                result.push(Data::try_from(feature)?);
                 progress.update(|| i);
             }
             progress.finish(|| "Layer read.");
@@ -642,12 +635,12 @@ macro_rules! layer {
     
     
     };
-    (method@ read_entities_to_index $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
-        pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+    (method@ read_entities_to_index $feature_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_entities_to_index<'local_lifetime, Progress: ProgressObserver, Data: TryFrom<$feature_type<'local_lifetime>,Error=CommandError>>(&'local_lifetime mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
             progress.start_known_endpoint(|| (format!("Indexing {}.",$feature_type::LAYER_NAME),self.layer.feature_count() as usize));
             let mut result = HashMap::new();
             for (i,feature) in self.read_features().enumerate() {
-                result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+                result.insert(entity!(fieldassign@ feature fid u64),Data::try_from(feature)?);
                 progress.update(|| i);
             }
             progress.finish(|| "Layer indexed.");
@@ -656,54 +649,54 @@ macro_rules! layer {
 
     
     };
-    (method@ feature_by_id $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ feature_by_id $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<$feature_type> {
             self.layer.feature(*fid).map($feature_type::from)
         }
     
     };
-    (method@ entity_by_id $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ entity_by_id $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn entity_by_id<Data: $entity_type>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
             self.feature_by_id(fid).map(Data::try_from_feature).transpose()
         }
     };
-    (method@ update_feature $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ update_feature $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn update_feature(&self, feature: $feature_type) -> Result<(),CommandError> {
             Ok(self.layer.set_feature(feature.feature)?)
         }
     };
-    (method@ set_spatial_filter_rect $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ set_spatial_filter_rect $feature_type: ident $entity_iter_type: ident) => {
         // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
         pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
             self.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
         }
     };
-    (method@ read_features $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ read_features $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<$feature_type> {
             self.layer.features().into()
         }
     };
-    (method@ read_entities $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
-        pub(crate) fn read_entities<Data: $entity_type>(&mut self) -> $entity_iter_type<Data> {
+    (method@ read_entities $feature_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_entities<'local_lifetime, Data: TryFrom<$feature_type<'local_lifetime>,Error=CommandError>>(&'local_lifetime mut self) -> $entity_iter_type<'local_lifetime, Data> {
             self.read_features().into()
         }
     };
-    (method@ clear_spatial_filter $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ clear_spatial_filter $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn clear_spatial_filter(&mut self) {
             self.layer.clear_spatial_filter()
         }
     };
-    (method@ feature_count $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ feature_count $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn feature_count(&self) -> usize {
             self.layer.feature_count() as usize
         }
     };
-    (method@ read_geometries $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ read_geometries $feature_type: ident $entity_iter_type: ident) => {
         pub(crate) fn read_geometries(&mut self) -> LayerGeometryIterator {
             LayerGeometryIterator::new(&mut self.layer)
         }
     };
-    (method@ add_feature $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ add_feature $feature_type: ident $entity_iter_type: ident) => {
         fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
             // I dug out the source to get this. I wanted to be able to return the feature being created.
             let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
@@ -717,7 +710,7 @@ macro_rules! layer {
     
     
     };
-    (method@ add_feature_without_geometry $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+    (method@ add_feature_without_geometry $feature_type: ident $entity_iter_type: ident) => {
         fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
             // This function is used for lookup tables, like biomes.
 
@@ -731,7 +724,7 @@ macro_rules! layer {
 
         }
     };
-    ($name: ident $feature_type: ident $entity_type: ident $entity_iter_type: ident $($method: ident)*) => {
+    ($name: ident $feature_type: ident $entity_iter_type: ident $($method: ident)*) => {
         pub(crate) struct $name<'lifetime> {
             layer: Layer<'lifetime>
         }
@@ -761,7 +754,7 @@ macro_rules! layer {
             }
         
             $(
-                layer!(method@ $method $feature_type $entity_type $entity_iter_type);
+                layer!(method@ $method $feature_type $entity_iter_type);
             )*
         
         
@@ -771,12 +764,11 @@ macro_rules! layer {
 }
 
 
-feature!(PointFeature "points" wkbPoint geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
-entity_base!(PointEntity PointFeature PointEntityIterator);
-layer!(PointsLayer PointFeature PointEntity PointEntityIterator  
-open_from_dataset
+feature!(PointFeature PointEntityIterator "points" wkbPoint geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
+layer!(PointsLayer  PointFeature PointEntityIterator
+add_feature
 read_geometries
-add_feature);
+open_from_dataset);
 
 
 impl<'lifetime> PointsLayer<'lifetime> {
@@ -790,12 +782,12 @@ impl<'lifetime> PointsLayer<'lifetime> {
 
 }
 
-feature!(TriangleFeature "triangles" wkbPolygon geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
-entity_base!(TriangleEntity TriangleFeature TriangleEntityIterator);
-layer!(TrianglesLayer TriangleFeature TriangleEntity TriangleEntityIterator  
-open_from_dataset
+feature!(TriangleFeature TriangleEntityIterator "triangles" wkbPolygon geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
+layer!(TrianglesLayer  TriangleFeature TriangleEntityIterator
 read_geometries
-add_feature);
+add_feature
+open_from_dataset);
+
 
 
 impl<'lifetime> TrianglesLayer<'lifetime> {
@@ -810,7 +802,7 @@ impl<'lifetime> TrianglesLayer<'lifetime> {
 
 }
 
-feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
+feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
     site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
     elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
@@ -847,7 +839,6 @@ impl<'lifetime> TileFeature<'lifetime> {
 
 }
 
-entity_base!(TileEntity TileFeature TileEntityIterator);
 
 pub(crate) trait TileEntityWithNeighborsElevation {
 
@@ -857,33 +848,33 @@ pub(crate) trait TileEntityWithNeighborsElevation {
 }
 
 
-entity!(NewTileEntity TileEntity {
+entity!(NewTileEntity TileFeature {
     geometry: Geometry,
     site_x: f64, 
     site_y: f64
 }); 
-entity!(TileEntitySite TileEntity {
+entity!(TileEntitySite TileFeature {
     fid: u64, 
     site_x: f64, 
     site_y: f64
 });
-entity!(TileEntitySiteGeo TileEntity {
+entity!(TileEntitySiteGeo TileFeature {
     fid: u64, 
     geometry: Geometry, 
     site_x: f64, 
     site_y: f64
 });
-entity!(TileEntityLatElevOcean TileEntity {
+entity!(TileEntityLatElevOcean TileFeature {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
     is_ocean: bool
 });
-entity!(TileEntityLat TileEntity {
+entity!(TileEntityLat TileFeature {
     fid: u64, 
     site_y: f64
 });
-entity!(TileEntityForWaterFlow TileEntity {
+entity!(TileEntityForWaterFlow TileFeature {
     elevation: f64, 
     is_ocean: bool, 
     neighbors: Vec<(u64,i32)>,
@@ -907,7 +898,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
 // just use a different function because it's based on a trait. I could take this one out
 // of the macro and figure something out, but this is easier.
-entity!(TileEntityForWaterFill TileEntity {
+entity!(TileEntityForWaterFill TileFeature {
     elevation: f64, 
     is_ocean: bool, 
     neighbors: Vec<(u64,i32)>,
@@ -918,7 +909,7 @@ entity!(TileEntityForWaterFill TileEntity {
     lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileEntityForRiverConnect TileEntity {
+entity!(TileEntityForRiverConnect TileFeature {
     water_flow: f64,
     flow_to: Vec<u64>,
     outlet_from: Vec<u64>
@@ -951,7 +942,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
     }
 }
 
-layer!(TilesLayer TileFeature TileEntity TileEntityIterator
+layer!(TilesLayer TileFeature TileEntityIterator
 open_from_dataset 
 read_entities_to_vec
 read_entities_to_index
@@ -990,7 +981,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
 }
 
 
-feature!(RiverFeature "rivers" wkbLineString geometry: #[allow(dead_code)] {
+feature!(RiverFeature RiverEntityIterator "rivers" wkbLineString geometry: #[allow(dead_code)] {
     from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
     from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
     from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
@@ -999,9 +990,8 @@ feature!(RiverFeature "rivers" wkbLineString geometry: #[allow(dead_code)] {
     to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow" OGRFieldType::OFTReal;
 });
 
-entity_base!(RiverEntity RiverFeature RiverEntityIterator);
 
-entity!(NewRiver RiverEntity {
+entity!(NewRiver RiverFeature {
     from_tile: i64,
     from_type: RiverSegmentFrom,
     from_flow: f64,
@@ -1011,7 +1001,7 @@ entity!(NewRiver RiverEntity {
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
-layer!(RiversLayer RiverFeature RiverEntity RiverEntityIterator
+layer!(RiversLayer RiverFeature RiverEntityIterator
 add_feature);
 
 impl<'lifetime> RiversLayer<'lifetime> {
@@ -1031,18 +1021,16 @@ impl<'lifetime> RiversLayer<'lifetime> {
 }
 
 
-feature!(LakeFeature "lakes" wkbPolygon geometry: #[allow(dead_code)] {
+feature!(LakeFeature LakeEntityIterator "lakes" wkbPolygon geometry: #[allow(dead_code)] {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
 });
 
-entity_base!(LakeEntity LakeFeature LakeEntityIterator);
-
-entity!(NewLake LakeEntity {
+entity!(NewLake LakeFeature {
     elevation: f64,
     geometry: Geometry
 });
 
-layer!(LakesLayer LakeFeature LakeEntity LakeEntityIterator
+layer!(LakesLayer LakeFeature LakeEntityIterator
 add_feature);
 
 impl<'lifetime> LakesLayer<'lifetime> {
@@ -1104,7 +1092,7 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature "biomes" wkbNone geometry: #[allow(dead_code)] {
+feature!(BiomeFeature BiomeEntityIterator "biomes" wkbNone geometry: #[allow(dead_code)] {
     #[allow(dead_code)] name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     #[allow(dead_code)] habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     #[allow(dead_code)] criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
@@ -1240,15 +1228,13 @@ impl<'lifetime> BiomeFeature<'lifetime> {
 
 }
 
-entity_base!(BiomeEntity BiomeFeature BiomeEntityIterator);
-
-entity!(BiomeData BiomeEntity {
+entity!(BiomeData BiomeFeature {
     name: String,
     habitability: i32,
     criteria: BiomeCriteria
 });
 
-layer!(BiomeLayer BiomeFeature BiomeEntity BiomeEntityIterator 
+layer!(BiomeLayer BiomeFeature BiomeEntityIterator 
 open_from_dataset
 feature_count
 read_entities

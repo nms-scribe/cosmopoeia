@@ -34,7 +34,6 @@ use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
 use crate::entity;
-use crate::world_map::TileEntity;
 use crate::utils::PolyBezier;
 use crate::world_map::NewLake;
 use crate::world_map::TypedFeature;
@@ -801,7 +800,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     let prec_input_modifier = moisture as f64/100.0;
     let modifier = cells_number_modifier * prec_input_modifier;
 
-    entity!(TileDataForPrecipitation TileEntity {
+    entity!(TileDataForPrecipitation TileFeature {
         elevation_scaled: i32, 
         wind: i32, 
         is_ocean: bool, 
@@ -1846,7 +1845,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
 pub(crate) fn apply_biomes<Progress: ProgressObserver>(tiles_layer: &mut TilesLayer, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
     // based on AFMG algorithm
 
-    entity!(BiomeSource TileEntity {
+    entity!(BiomeSource TileFeature {
         fid: u64,
         temperature: f64,
         elevation_scaled: i32,
