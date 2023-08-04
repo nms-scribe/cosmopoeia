@@ -134,7 +134,7 @@ impl Task for DevTrianglesFromPoints {
 
         let mut points = target.points_layer()?;
     
-        let mut generator = DelaunayGenerator::new(points.read_points().to_geometry_collection(&mut progress)?);
+        let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(&mut progress)?);
     
         progress.start_unknown_endpoint(|| "Generating triangles.");
         
@@ -180,7 +180,7 @@ impl Task for DevVoronoiFromTriangles {
 
         let mut triangles = target.triangles_layer()?;
     
-        let mut generator = VoronoiGenerator::new(triangles.read_triangles(),extent)?;
+        let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
     
         progress.start_unknown_endpoint(|| "Generating voronoi.");
         

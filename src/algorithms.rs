@@ -37,6 +37,7 @@ use crate::entity;
 use crate::world_map::TileEntity;
 use crate::utils::PolyBezier;
 use crate::world_map::NewLake;
+use crate::world_map::TypedFeature;
 
 enum PointGeneratorPhase {
     NortheastInfinity,

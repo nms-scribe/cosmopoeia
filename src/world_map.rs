@@ -42,160 +42,6 @@ use crate::algorithms::apply_biomes;
 // A fairly easy solution is to present a struct Geometry<Type>, where Type is an empty struct or a const numeric type parameter. Then, impl Geometry<Polygon> or Geometry<Point>, etc. This is actually an improvement over the geo_types crate as well. When creating new values of the type, the geometry_type of the inner pointer would have to be validated, possibly causing an error. But it would happen early in the program, and wouldn't have to be checked again.
 
 
-pub(crate) struct WorldLayer<'lifetime> {
-    layer: Layer<'lifetime>
-}
-
-impl<'lifetime> WorldLayer<'lifetime> {
-
-    fn open_from_dataset(dataset: &'lifetime Dataset, name: &str) -> Result<Self,CommandError> {
-        let layer = dataset.layer_by_name(name)?;
-        Ok(Self {
-            layer
-        })
-    }
-    
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, name: &str, geometry_type: OGRwkbGeometryType::Type, field_defs: Option<&[(&str, OGRFieldType::Type)]>, overwrite: bool) -> Result<Self,CommandError> {
-        let layer = dataset.create_layer(LayerOptions {
-            name,
-            ty: geometry_type,
-            options: if overwrite {
-                Some(&["OVERWRITE=YES"])
-            } else {
-                None
-            },
-            ..Default::default()
-        })?;
-        if let Some(field_defs) = field_defs {
-            layer.create_defn_fields(field_defs)?;
-        }
-        // NOTE: I'm specifying the field value as real for now. Eventually I might want to allow it to choose a type based on the raster type, but there
-        // really isn't much choice, just three numeric types (int, int64, and real)
-
-        Ok(Self {
-            layer
-        })
-    }
-
-    fn add(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
-        // I dug out the source to get this. I wanted to be able to return the feature being created.
-        let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
-        feature.set_geometry(geometry)?;
-        for (field, value) in field_names.iter().zip(field_values.iter()) {
-            feature.set_field(&field, value)?;
-        }
-        feature.create(&self.layer)?;
-        Ok(())
-    }
-
-    fn add_without_geometry(&mut self, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
-        // This function is used for lookup tables, like biomes.
-
-        // I had to dig into the source to get this stuff...
-        let feature = gdal::vector::Feature::new(self.layer.defn())?;
-        for (field, value) in field_names.iter().zip(field_values.iter()) {
-            feature.set_field(field, value)?;
-        }
-        feature.create(&self.layer)?;
-        Ok(())
-
-    }
-
-
-    fn read_geometries(&mut self) -> LayerGeometryIterator {
-        LayerGeometryIterator::new(&mut self.layer)
-
-    }
-
-
-
-
-}
-
-pub(crate) struct PointsLayer<'lifetime> {
-    points: WorldLayer<'lifetime>
-}
-
-impl<'lifetime> PointsLayer<'lifetime> {
-
-    const LAYER_NAME: &str = "points";
-    
-
-    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let points = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-        Ok(Self {
-            points
-        })
-    }
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let points = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPoint, None, overwrite)?;
-
-        Ok(Self {
-            points
-        })
-    }
-
-    pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
-
-        self.points.add(point,&[],&[])?;
-        Ok(())
-
-    }
-
-    pub(crate) fn read_points(&mut self) -> LayerGeometryIterator {
-        self.points.read_geometries()
-
-    }
-
-
-}
-
-
-
-pub(crate) struct TrianglesLayer<'lifetime> {
-    tiles: WorldLayer<'lifetime>
-}
-
-impl<'lifetime> TrianglesLayer<'lifetime> {
-
-    const LAYER_NAME: &str = "triangles";
-
-
-    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-        Ok(Self {
-            tiles
-        })
-    }
-    
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPolygon, None, overwrite)?;
-
-        Ok(Self {
-            tiles
-        })
-    }
-
-    pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
-
-        self.tiles.add(geo,&[],&[])?;
-        Ok(())
-
-    }
-
-
-    pub(crate) fn read_triangles(&mut self) -> LayerGeometryIterator {
-        self.tiles.read_geometries()
-
-    }
-
-
-
-}
-
 #[derive(Clone)]
 pub(crate) enum RiverSegmentFrom {
     Source,
@@ -524,14 +370,38 @@ macro_rules! feature_to_value {
     }};
 }
 
+pub(crate) trait TypedFeature<'lifetime>  {
+
+    const GEOMETRY_TYPE: OGRwkbGeometryType::Type;
+
+    const LAYER_NAME: &'static str;
+
+    fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)];
+
+    fn fid(&self) -> Option<u64>;
+
+    fn into_feature(self) -> Feature<'lifetime>;
+
+}
+
 macro_rules! feature {
+    (count@) => {
+        0
+    };
     (count@ $prop: ident) => {
         1
     };
     (count@ $prop: ident, $($props: ident),+) => {
         $(feature!(count@ $props)+)+ feature!(count@ $prop)
     };
-    ($struct_name:ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_values: #[$to_values_attr: meta])? {$($(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $prop_type: ident $field: ident $name: literal $field_type: path;)*}) => {
+    ($struct_name:ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
+        $(#[$get_attr: meta])* $prop: ident 
+        $(#[$set_attr: meta])* $set_prop: ident 
+        $prop_type: ident 
+        $field: ident 
+        $name: literal 
+        $field_type: path;
+    )*}) => {
 
         pub(crate) struct $struct_name<'lifetime> {
 
@@ -546,6 +416,27 @@ macro_rules! feature {
                 }
             }
         }
+
+        impl<'lifetime> TypedFeature<'lifetime> for $struct_name<'lifetime> {
+
+            const GEOMETRY_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::$geometry_type;
+
+            const LAYER_NAME: &'static str = $layer_name;
+
+            fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)] {
+                &Self::FIELD_DEFS
+            }
+
+            // fid field
+            fn fid(&self) -> Option<u64> {
+                self.feature.fid()
+            }
+
+            fn into_feature(self) -> Feature<'lifetime> {
+                self.feature
+            }
+
+        }
         
         impl<'lifetime> $struct_name<'lifetime> {
 
@@ -557,11 +448,6 @@ macro_rules! feature {
                 $((Self::$field,$field_type)),*
             ];
     
-            // fid field
-            $(#[$fid_attr])? pub(crate) fn fid(&self) -> Option<u64> {
-                self.feature.fid()
-            }
-        
             // geometry field
             $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Option<&Geometry> {
                 self.feature.geometry()
@@ -728,7 +614,203 @@ macro_rules! entity {
     };
 }
 
-feature!(TileFeature to_values: #[allow(dead_code)] {
+
+// TODO: This could be a generic thing, but attempts to do so led to lifetime issues. If I can switch it incrementally (method by method), then I might be able to figure out the problems.
+macro_rules! layer {
+    (method@ open_from_dataset $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+            
+            let layer = dataset.layer_by_name($feature_type::LAYER_NAME)?;
+            Ok(Self {
+                layer
+            })
+
+        }
+        
+    };
+    (method@ read_entities_to_vec $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+            progress.start_known_endpoint(|| (format!("Reading {}.",$feature_type::LAYER_NAME),self.layer.feature_count() as usize));
+            let mut result = Vec::new();
+            for (i,feature) in self.read_features().enumerate() {
+                result.push(Data::try_from_feature(feature)?);
+                progress.update(|| i);
+            }
+            progress.finish(|| "Layer read.");
+            Ok(result)
+        }
+    
+    
+    };
+    (method@ read_entities_to_index $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+            progress.start_known_endpoint(|| (format!("Indexing {}.",$feature_type::LAYER_NAME),self.layer.feature_count() as usize));
+            let mut result = HashMap::new();
+            for (i,feature) in self.read_features().enumerate() {
+                result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+                progress.update(|| i);
+            }
+            progress.finish(|| "Layer indexed.");
+            Ok(result)
+        }
+
+    
+    };
+    (method@ feature_by_id $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<$feature_type> {
+            self.layer.feature(*fid).map($feature_type::from)
+        }
+    
+    };
+    (method@ entity_by_id $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn entity_by_id<Data: $entity_type>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
+            self.feature_by_id(fid).map(Data::try_from_feature).transpose()
+        }
+    };
+    (method@ update_feature $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn update_feature(&self, feature: $feature_type) -> Result<(),CommandError> {
+            Ok(self.layer.set_feature(feature.feature)?)
+        }
+    };
+    (method@ set_spatial_filter_rect $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
+        pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
+            self.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
+        }
+    };
+    (method@ read_features $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<$feature_type> {
+            self.layer.features().into()
+        }
+    };
+    (method@ read_entities $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_entities<Data: $entity_type>(&mut self) -> $entity_iter_type<Data> {
+            self.read_features().into()
+        }
+    };
+    (method@ clear_spatial_filter $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn clear_spatial_filter(&mut self) {
+            self.layer.clear_spatial_filter()
+        }
+    };
+    (method@ feature_count $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn feature_count(&self) -> usize {
+            self.layer.feature_count() as usize
+        }
+    };
+    (method@ read_geometries $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        pub(crate) fn read_geometries(&mut self) -> LayerGeometryIterator {
+            LayerGeometryIterator::new(&mut self.layer)
+        }
+    };
+    (method@ add_feature $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
+            // I dug out the source to get this. I wanted to be able to return the feature being created.
+            let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
+            feature.set_geometry(geometry)?;
+            for (field, value) in field_names.iter().zip(field_values.iter()) {
+                feature.set_field(&field, value)?;
+            }
+            feature.create(&self.layer)?;
+            Ok(())
+        }
+    
+    
+    };
+    (method@ add_feature_without_geometry $feature_type: ident $entity_type: ident $entity_iter_type: ident) => {
+        fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
+            // This function is used for lookup tables, like biomes.
+
+            // I had to dig into the source to get this stuff...
+            let feature = gdal::vector::Feature::new(self.layer.defn())?;
+            for (field, value) in field_names.iter().zip(field_values.iter()) {
+                feature.set_field(field, value)?;
+            }
+            feature.create(&self.layer)?;
+            Ok(())
+
+        }
+    };
+    ($name: ident $feature_type: ident $entity_type: ident $entity_iter_type: ident $($method: ident)*) => {
+        pub(crate) struct $name<'lifetime> {
+            layer: Layer<'lifetime>
+        }
+        
+        impl<'lifetime> $name<'lifetime> {
+        
+
+            fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+
+                let layer = dataset.create_layer(LayerOptions {
+                    name: $feature_type::LAYER_NAME,
+                    ty: $feature_type::GEOMETRY_TYPE,
+                    options: if overwrite { 
+                        Some(&["OVERWRITE=YES"])
+                    } else {
+                        None
+                    },
+                    ..Default::default()
+                })?;
+                if let Some(field_defs) = Some(&$feature_type::FIELD_DEFS) {
+                    layer.create_defn_fields(field_defs)?;
+                }        
+                
+                Ok(Self {
+                    layer
+                })
+            }
+        
+            $(
+                layer!(method@ $method $feature_type $entity_type $entity_iter_type);
+            )*
+        
+        
+        }
+        
+    }
+}
+
+
+feature!(PointFeature "points" wkbPoint geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
+entity_base!(PointEntity PointFeature PointEntityIterator);
+layer!(PointsLayer PointFeature PointEntity PointEntityIterator  
+open_from_dataset
+read_geometries
+add_feature);
+
+
+impl<'lifetime> PointsLayer<'lifetime> {
+
+    pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
+
+        self.add_feature(point,&[],&[])?;
+        Ok(())
+    
+    }
+
+}
+
+feature!(TriangleFeature "triangles" wkbPolygon geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
+entity_base!(TriangleEntity TriangleFeature TriangleEntityIterator);
+layer!(TrianglesLayer TriangleFeature TriangleEntity TriangleEntityIterator  
+open_from_dataset
+read_geometries
+add_feature);
+
+
+impl<'lifetime> TrianglesLayer<'lifetime> {
+
+    pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
+
+        self.add_feature(geo,&[],&[])?;
+        Ok(())
+
+    }
+
+
+}
+
+feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
     site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
     elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
@@ -869,100 +951,24 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
     }
 }
 
-macro_rules! layer {
-    ($name: ident $feature_type: ident $entity_type: ident $entity_iter_type: ident $internal_name: literal $geometry_type: expr ) => {
-        pub(crate) struct $name<'lifetime> {
-            layer: WorldLayer<'lifetime>
-        }
-        
-        impl<'lifetime> $name<'lifetime> {
-        
-            pub(crate) const LAYER_NAME: &str = $internal_name;
-        
-            fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-                let layer = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-                Ok(Self {
-                    layer
-                })
-            }
-            
-        
-            fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-                let layer = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, $geometry_type, Some(&$feature_type::FIELD_DEFS), overwrite)?;
-        
-                Ok(Self {
-                    layer
-                })
-            }
-        
-            pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-                progress.start_known_endpoint(|| (concat!("Reading ",$internal_name,"."),self.layer.layer.feature_count() as usize));
-                let mut result = Vec::new();
-                for (i,feature) in self.read_features().enumerate() {
-                    result.push(Data::try_from_feature(feature)?);
-                    progress.update(|| i);
-                }
-                progress.finish(|| "Layer read.");
-                Ok(result)
-            }
-        
-            pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
-                progress.start_known_endpoint(|| (concat!("Indexing ",$internal_name,"."),self.layer.layer.feature_count() as usize));
-                let mut result = HashMap::new();
-                for (i,feature) in self.read_features().enumerate() {
-                    result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
-                    progress.update(|| i);
-                }
-                progress.finish(|| "Layer indexed.");
-                Ok(result)
-            }
-        
-            pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<$feature_type> {
-                self.layer.layer.feature(*fid).map($feature_type::from)
-            }
-        
-            // TODO: Add a 'features' option to the macro which adds these functions that aren't used.
-            pub(crate) fn entity_by_id<Data: $entity_type>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
-                self.feature_by_id(fid).map(Data::try_from_feature).transpose()
-            }
-        
-            pub(crate) fn update_feature(&self, feature: $feature_type) -> Result<(),CommandError> {
-                Ok(self.layer.layer.set_feature(feature.feature)?)
-            }
-        
-            // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
-            pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
-                self.layer.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
-            }
-        
-            pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<$feature_type> {
-                self.layer.layer.features().into()
-            }
-        
-            pub(crate) fn read_entities<Data: $entity_type>(&mut self) -> $entity_iter_type<Data> {
-                self.read_features().into()
-            }
-        
-            pub(crate) fn clear_spatial_filter(&mut self) {
-                self.layer.layer.clear_spatial_filter()
-            }
-        
-            pub(crate) fn feature_count(&self) -> usize {
-                self.layer.layer.feature_count() as usize
-            }
-        
-        }
-        
-    }
-}
-
-layer!(TilesLayer TileFeature TileEntity TileEntityIterator "tiles" OGRwkbGeometryType::wkbPolygon);
+layer!(TilesLayer TileFeature TileEntity TileEntityIterator
+open_from_dataset 
+read_entities_to_vec
+read_entities_to_index
+feature_by_id
+update_feature
+set_spatial_filter_rect
+read_features
+clear_spatial_filter
+feature_count
+read_entities
+add_feature);
 
 impl<'lifetime> TilesLayer<'lifetime> {
 
     pub(crate) fn add_tile(&mut self, tile: NewTileEntity) -> Result<(),CommandError> {
 
-        self.layer.add(tile.geometry,&[
+        self.add_feature(tile.geometry,&[
                 TileFeature::FIELD_SITE_X,
                 TileFeature::FIELD_SITE_Y,
             ],&[
@@ -974,7 +980,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
     }
 
     pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
-        let extent = self.layer.layer.get_extent()?;
+        let extent = self.layer.get_extent()?;
         let width = extent.MaxX - extent.MinX;
         let height = extent.MaxY - extent.MinY;
         let tiles = self.feature_count();
@@ -984,7 +990,7 @@ impl<'lifetime> TilesLayer<'lifetime> {
 }
 
 
-feature!(RiverFeature geometry: #[allow(dead_code)] {
+feature!(RiverFeature "rivers" wkbLineString geometry: #[allow(dead_code)] {
     from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
     from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
     from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
@@ -1005,8 +1011,8 @@ entity!(NewRiver RiverEntity {
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
-
-layer!(RiversLayer RiverFeature RiverEntity RiverEntityIterator "rivers" OGRwkbGeometryType::wkbLineString);
+layer!(RiversLayer RiverFeature RiverEntity RiverEntityIterator
+add_feature);
 
 impl<'lifetime> RiversLayer<'lifetime> {
 
@@ -1019,13 +1025,13 @@ impl<'lifetime> RiversLayer<'lifetime> {
             segment.to_tile, 
             &segment.to_type,
             segment.to_flow);
-        self.layer.add(geometry, &field_names, &field_values)
+        self.add_feature(geometry, &field_names, &field_values)
     }
 
 }
 
 
-feature!(LakeFeature geometry: #[allow(dead_code)] {
+feature!(LakeFeature "lakes" wkbPolygon geometry: #[allow(dead_code)] {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
 });
 
@@ -1036,14 +1042,15 @@ entity!(NewLake LakeEntity {
     geometry: Geometry
 });
 
-layer!(LakesLayer LakeFeature LakeEntity LakeEntityIterator "lakes" OGRwkbGeometryType::wkbPolygon);
+layer!(LakesLayer LakeFeature LakeEntity LakeEntityIterator
+add_feature);
 
 impl<'lifetime> LakesLayer<'lifetime> {
 
     pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<(),CommandError> {
         let (field_names,field_values) = LakeFeature::to_field_names_values(
             lake.elevation);
-        self.layer.add(lake.geometry, &field_names, &field_values)
+        self.add_feature(lake.geometry, &field_names, &field_values)
     }
 
 }
@@ -1097,7 +1104,7 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature geometry: #[allow(dead_code)] {
+feature!(BiomeFeature "biomes" wkbNone geometry: #[allow(dead_code)] {
     #[allow(dead_code)] name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     #[allow(dead_code)] habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     #[allow(dead_code)] criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
@@ -1241,7 +1248,12 @@ entity!(BiomeData BiomeEntity {
     criteria: BiomeCriteria
 });
 
-layer!(BiomeLayer BiomeFeature BiomeEntity BiomeEntityIterator "biomes" OGRwkbGeometryType::wkbNone);
+layer!(BiomeLayer BiomeFeature BiomeEntity BiomeEntityIterator 
+open_from_dataset
+feature_count
+read_entities
+read_features
+add_feature_without_geometry);
 
 impl<'lifetime> BiomeLayer<'lifetime> {
 
@@ -1249,7 +1261,7 @@ impl<'lifetime> BiomeLayer<'lifetime> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
             &biome.name,biome.habitability,&biome.criteria);
-        self.layer.add_without_geometry(&field_names, &field_values)
+        self.add_feature_without_geometry(&field_names, &field_values)
 
     }
 
