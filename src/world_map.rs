@@ -277,101 +277,105 @@ impl Into<&str> for &RiverSegmentTo {
 }
 
 
-
-
-macro_rules! feature {
-    (bool_to_int@ $value: ident) => {
-        if $value { 1 } else { 0 }
-    };
+macro_rules! feature_conv {
     (id_list_to_string@ $value: ident) => {
         $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",")
     };
     (neighbor_directions_to_string@ $value: ident) => {
         $value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",")
     };
-    (getfieldtype@ f64) => {
+}
+
+macro_rules! feature_get_field_type {
+    (f64) => {
         f64
     };
-    (getfieldtype@ i64) => {
+    (i64) => {
         i64
     };
-    (getfieldtype@ i32) => {
+    (i32) => {
         i32
     };
-    (getfieldtype@ bool) => {
+    (bool) => {
         bool
     };
-    (getfieldtype@ option_f64) => {
+    (option_f64) => {
         f64 // this is the same because everything's an option, the option tag only means it can accept options
     };
-    (getfieldtype@ neighbor_directions) => {
+    (neighbor_directions) => {
         Vec<(u64,i32)>
     };
-    (getfieldtype@ id_list) => {
+    (id_list) => {
         Vec<u64>
     };
-    (getfieldtype@ river_segment_from) => {
+    (river_segment_from) => {
         RiverSegmentFrom
     };
-    (getfieldtype@ river_segment_to) => {
+    (river_segment_to) => {
         RiverSegmentTo
     };
-    (getfieldtype@ string) => {
+    (string) => {
         String
     };
-    (getfieldtype@ biome_criteria) => {
+    (biome_criteria) => {
         BiomeCriteria
     };
-    (setfieldtype@ f64) => {
+}
+
+macro_rules! feature_set_field_type {
+    (f64) => {
         f64
     };
-    (setfieldtype@ option_f64) => {
+    (option_f64) => {
         Option<f64>
     };
-    (setfieldtype@ i64) => {
+    (i64) => {
         i64
     };
-    (setfieldtype@ i32) => {
+    (i32) => {
         i32
     };
-    (setfieldtype@ bool) => {
+    (bool) => {
         bool
     };
-    (setfieldtype@ neighbor_directions) => {
+    (neighbor_directions) => {
         &Vec<(u64,i32)>
     };
-    (setfieldtype@ id_list) => {
+    (id_list) => {
         &Vec<u64>
     };
-    (setfieldtype@ river_segment_from) => {
+    (river_segment_from) => {
         &RiverSegmentFrom
     };
-    (setfieldtype@ river_segment_to) => {
+    (river_segment_to) => {
         &RiverSegmentTo
     };
-    (setfieldtype@ string) => {
+    (string) => {
         &str
     };
-    (setfieldtype@ biome_criteria) => {
+    (biome_criteria) => {
         &BiomeCriteria
     };
-    (getfield@ $self: ident f64 $field: path) => {
+}
+
+macro_rules! feature_get_field {
+    ($self: ident f64 $field: path) => {
         Ok($self.feature.field_as_double_by_name($field)?)
     };
-    (getfield@ $self: ident option_f64 $field: path) => {
+    ($self: ident option_f64 $field: path) => {
         // see above for getfieldtype option_f64
         Ok($self.feature.field_as_double_by_name($field)?)
     };
-    (getfield@ $self: ident i64 $field: path) => {
+    ($self: ident i64 $field: path) => {
         Ok($self.feature.field_as_integer64_by_name($field)?)
     };
-    (getfield@ $self: ident i32 $field: path) => {
+    ($self: ident i32 $field: path) => {
         Ok($self.feature.field_as_integer_by_name($field)?)
     };
-    (getfield@ $self: ident bool $field: path) => {
+    ($self: ident bool $field: path) => {
         Ok($self.feature.field_as_integer_by_name($field)?.map(|n| n != 0))
     };
-    (getfield@ $self: ident neighbor_directions $field: path) => {
+    ($self: ident neighbor_directions $field: path) => {
         if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(neighbors.split(',').filter_map(|a| {
                 let mut a = a.splitn(2, ':');
@@ -395,7 +399,7 @@ macro_rules! feature {
         }
 
     };
-    (getfield@ $self: ident id_list $field: path) => {
+    ($self: ident id_list $field: path) => {
         if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(neighbors.split(',').filter_map(|a| {
                 a.parse().ok()
@@ -405,7 +409,7 @@ macro_rules! feature {
         }
 
     };
-    (getfield@ $self: ident river_segment_from $field: path) => {
+    ($self: ident river_segment_from $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(RiverSegmentFrom::try_from(value)?))
         } else {
@@ -413,7 +417,7 @@ macro_rules! feature {
         }
 
     };
-    (getfield@ $self: ident river_segment_to $field: path) => {
+    ($self: ident river_segment_to $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(RiverSegmentTo::try_from(value)?))
         } else {
@@ -421,10 +425,10 @@ macro_rules! feature {
         }
 
     };
-    (getfield@ $self: ident string $field: path) => {
+    ($self: ident string $field: path) => {
         Ok($self.feature.field_as_string_by_name($field)?)
     };
-    (getfield@ $self: ident biome_criteria $field: path) => {
+    ($self: ident biome_criteria $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
             Ok(Some(BiomeCriteria::try_from(value)?))
         } else {
@@ -432,10 +436,13 @@ macro_rules! feature {
         }
 
     };
-    (setfield@ $self: ident $value: ident f64 $field: path) => {
+}
+
+macro_rules! feature_set_field {
+    ($self: ident $value: ident f64 $field: path) => {
         Ok($self.feature.set_field_double($field, $value)?)
     };
-    (setfield@ $self: ident $value: ident option_f64 $field: path) => {
+    ($self: ident $value: ident option_f64 $field: path) => {
         if let Some(value) = $value {
             Ok($self.feature.set_field_double($field, value)?)
         } else {
@@ -444,45 +451,48 @@ macro_rules! feature {
             Ok($self.feature.set_field_double($field,f64::NAN)?)
         }
     };
-    (setfield@ $self: ident $value: ident i32 $field: path) => {
+    ($self: ident $value: ident i32 $field: path) => {
         Ok($self.feature.set_field_integer($field, $value)?)
     };
-    (setfield@ $self: ident $value: ident i64 $field: path) => {
+    ($self: ident $value: ident i64 $field: path) => {
         Ok($self.feature.set_field_integer64($field, $value)?)
     };
-    (setfield@ $self: ident $value: ident bool $field: path) => {
-        Ok($self.feature.set_field_integer($field, feature!(bool_to_int@ $value))?)
+    ($self: ident $value: ident bool $field: path) => {
+        Ok($self.feature.set_field_integer($field, $value.into())?)
     };
-    (setfield@ $self: ident $value: ident neighbor_directions $field: path) => {{
-        let neighbors = feature!(neighbor_directions_to_string@ $value);
+    ($self: ident $value: ident neighbor_directions $field: path) => {{
+        let neighbors = feature_conv!(neighbor_directions_to_string@ $value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
-    (setfield@ $self: ident $value: ident id_list $field: path) => {{
-        let neighbors = feature!(id_list_to_string@ $value);
+    ($self: ident $value: ident id_list $field: path) => {{
+        let neighbors = feature_conv!(id_list_to_string@ $value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
-    (setfield@ $self: ident $value: ident river_segment_from $field: path) => {{
+    ($self: ident $value: ident river_segment_from $field: path) => {{
         Ok($self.feature.set_field_string($field, $value.into())?)
     }};
-    (setfield@ $self: ident $value: ident river_segment_to $field: path) => {{
+    ($self: ident $value: ident river_segment_to $field: path) => {{
         Ok($self.feature.set_field_string($field, $value.into())?)
     }};
-    (setfield@ $self: ident $value: ident string $field: path) => {{
+    ($self: ident $value: ident string $field: path) => {{
         Ok($self.feature.set_field_string($field, $value)?)
     }};
-    (setfield@ $self: ident $value: ident biome_criteria $field: path) => {{
+    ($self: ident $value: ident biome_criteria $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
-    (to_value@ $prop: ident f64) => {
+}
+
+macro_rules! feature_to_value {
+    ($prop: ident f64) => {
         FieldValue::RealValue($prop)
     };
-    (to_value@ $prop: ident i32) => {
+    ($prop: ident i32) => {
         FieldValue::IntegerValue($prop)
     };
-    (to_value@ $prop: ident bool) => {
-        FieldValue::IntegerValue(feature!(bool_to_int@ $prop))
+    ($prop: ident bool) => {
+        FieldValue::IntegerValue($prop.into())
     };
-    (to_value@ $prop: ident option_f64) => {
+    ($prop: ident option_f64) => {
         if let Some(value) = $prop {
             FieldValue::RealValue(value)
         } else {
@@ -491,71 +501,95 @@ macro_rules! feature {
             FieldValue::RealValue(f64::NAN)
         }
     };
-    (to_value@ $prop: ident id_list) => {
-        FieldValue::StringValue(feature!(id_list_to_string@ $prop))
+    ($prop: ident id_list) => {
+        FieldValue::StringValue(feature_conv!(id_list_to_string@ $prop))
     };
-    (to_value@ $prop: ident neighbor_directions) => {
-        FieldValue::StringValue(feature!(neighbor_directions_to_string@ $prop))
+    ($prop: ident neighbor_directions) => {
+        FieldValue::StringValue(feature_conv!(neighbor_directions_to_string@ $prop))
     };
-    (to_value@ $prop: ident i64) => {
+    ($prop: ident i64) => {
         FieldValue::Integer64Value($prop)
     };
-    (to_value@ $prop: ident river_segment_from) => {{
+    ($prop: ident river_segment_from) => {{
         FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
     }};
-    (to_value@ $prop: ident river_segment_to) => {{
+    ($prop: ident river_segment_to) => {{
         FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
     }};
-    (to_value@ $prop: ident string) => {{
+    ($prop: ident string) => {{
         FieldValue::StringValue($prop.to_owned())
     }};
-    (to_value@ $prop: ident biome_criteria) => {{
+    ($prop: ident biome_criteria) => {{
         FieldValue::StringValue(Into::<String>::into($prop))
     }};
-    (get@ $(#[$attr: meta])* $prop: ident $type: ident $field: path) => {
-        $(#[$attr])* pub(crate) fn $prop(&self) -> Result<Option<feature!(getfieldtype@ $type)>,CommandError> {
-            feature!(getfield@ self $type $field)
+}
+
+macro_rules! feature {
+    (count@ $prop: ident) => {
+        1
+    };
+    (count@ $prop: ident, $($props: ident),+) => {
+        $(feature!(count@ $props)+)+ feature!(count@ $prop)
+    };
+    ($struct_name:ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_values: #[$to_values_attr: meta])? {$($(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $prop_type: ident $field: ident $name: literal $field_type: path;)*}) => {
+
+        pub(crate) struct $struct_name<'lifetime> {
+
+            feature: Feature<'lifetime>
         }
-    };
-    (set@ $(#[$attr: meta])* $set_prop: ident $type: ident $field: path) => {
-        $(#[$attr])* pub(crate) fn $set_prop(&mut self, value: feature!(setfieldtype@ $type)) -> Result<(),CommandError> {
-            feature!(setfield@ self value $type $field)
-        }            
-    };
-    (props@ $(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $type: ident $field: path) => {
-        feature!(get@ $(#[$get_attr])* $prop $type $field);
-
-        feature!(set@ $(#[$set_attr])* $set_prop $type $field);
-
-    };
-    ($field_count: literal; $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_values: #[$to_values_attr: meta])? {$($(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])* $set_prop: ident $prop_type: ident $field: ident $name: literal $field_type: path;)*}) => {
-
-        $(pub(crate) const $field: &str = $name;)*
-
-        const FIELD_DEFS: [(&str,OGRFieldType::Type); $field_count] = [
-            $((Self::$field,$field_type)),*
-        ];
-
-        $(#[$fid_attr])? pub(crate) fn fid(&self) -> Option<u64> {
-            self.feature.fid()
+        
+        impl<'lifetime> From<Feature<'lifetime>> for $struct_name<'lifetime> {
+        
+            fn from(feature: Feature<'lifetime>) -> Self {
+                Self {
+                    feature
+                }
+            }
         }
+        
+        impl<'lifetime> $struct_name<'lifetime> {
+
+            // constant field names
+            $(pub(crate) const $field: &str = $name;)*
+
+            // field definitions
+            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature!(count@ $($field),*)] = [
+                $((Self::$field,$field_type)),*
+            ];
     
-        $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Option<&Geometry> {
-            self.feature.geometry()
-        }
-
-        $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature!(setfieldtype@ $prop_type)),*) -> ([&'static str; $field_count],[FieldValue; $field_count]) {
-            ([
-                $(Self::$field),*
-            ],[
-                $(feature!(to_value@ $prop $prop_type)),*
-            ])
-
-        }
+            // fid field
+            $(#[$fid_attr])? pub(crate) fn fid(&self) -> Option<u64> {
+                self.feature.fid()
+            }
+        
+            // geometry field
+            $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Option<&Geometry> {
+                self.feature.geometry()
+            }
     
-        $(
-            feature!(props@ $(#[$get_attr])* $prop $(#[$set_attr])* $set_prop $prop_type Self::$field);
-        )*
+            // feature initializer function
+            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature!(count@ $($field),*)],[FieldValue; feature!(count@ $($field),*)]) {
+                ([
+                    $(Self::$field),*
+                ],[
+                    $(feature_to_value!($prop $prop_type)),*
+                ])
+    
+            }
+        
+            // property functions
+            $(
+                $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<Option<feature_get_field_type!($prop_type)>,CommandError> {
+                    feature_get_field!(self $prop_type Self::$field)
+                }
+        
+                $(#[$set_attr])* pub(crate) fn $set_prop(&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
+                    feature_set_field!(self value $prop_type Self::$field)
+                }            
+        
+            )*
+        }
+
     };
 }
 
@@ -580,6 +614,51 @@ impl<'lifetime, TypedFeature: From<Feature<'lifetime>>> From<FeatureIterator<'li
             _phantom: std::marker::PhantomData::default()
         }
     }
+}
+
+macro_rules! entity_base {
+    ($name: ident $feature: ident $iterator: ident) => {
+
+        // NOTE: I tried using a TryFrom, but because Feature requires a lifetime, I had to add that in as well, and it started to propagate. 
+        // This is a much easier version of the same thing.
+        pub(crate) trait $name: Sized {
+
+            fn try_from_feature(feature: $feature) -> Result<Self,CommandError>;
+        
+        }
+        
+        pub(crate) struct $iterator<'lifetime, Data: $name> {
+            features: TypedFeatureIterator<'lifetime,$feature<'lifetime>>,
+            data: std::marker::PhantomData<Data>
+        }
+        
+        // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
+        impl<'lifetime,Data: $name> Iterator for $iterator<'lifetime,Data> {
+            type Item = Result<(u64,Data),CommandError>;
+        
+            fn next(&mut self) -> Option<Self::Item> {
+                if let Some(feature) = self.features.next() {
+                    match (feature.fid(),Data::try_from_feature(feature)) {
+                        (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                        (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                        (_, Err(e)) => Some(Err(e)),
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+        
+        impl<'lifetime,Data: $name> From<TypedFeatureIterator<'lifetime,$feature<'lifetime>>> for $iterator<'lifetime,Data> {
+            fn from(features: TypedFeatureIterator<'lifetime,$feature<'lifetime>>) -> Self {
+                Self {
+                    features,
+                    data: std::marker::PhantomData
+                }
+            }
+        }
+                
+    };
 }
 
 #[macro_export]
@@ -618,7 +697,7 @@ macro_rules! entity {
     (fielddef@ $type: ty) => {
         $type
     };
-    (feature_class@ TileEntity) => {
+    (feature_class@ TileEntity) => { // FUTURE: This is so I don't have to respecify the feature type. I don't have any other way of doing this.
         TileFeature
     };
     (feature_class@ RiverEntity) => {
@@ -649,45 +728,32 @@ macro_rules! entity {
     };
 }
 
-pub(crate) struct TileFeature<'lifetime> {
+feature!(TileFeature to_values: #[allow(dead_code)] {
+    site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
+    site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
+    elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+    // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
+    // If I ever get rid of those algorithms, this field can go away.
+    elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
+    is_ocean set_is_ocean bool FIELD_IS_OCEAN "is_ocean" OGRFieldType::OFTInteger;
+    temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
+    wind set_wind i32 FIELD_WIND "wind_dir" OGRFieldType::OFTInteger;
+    precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation" OGRFieldType::OFTReal;
+    #[allow(dead_code)] water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
+    #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
+    #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
+    #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
+    #[allow(dead_code)] biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
+    // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
+    // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
+    // to store it. In any way, you never know when I might support outlet from multiple points.
+    #[allow(dead_code)] outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
+    neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles" OGRFieldType::OFTString;
 
-    feature: Feature<'lifetime>
-}
+});
 
-impl<'lifetime> From<Feature<'lifetime>> for TileFeature<'lifetime> {
-
-    fn from(feature: Feature<'lifetime>) -> Self {
-        Self {
-            feature
-        }
-    }
-}
 
 impl<'lifetime> TileFeature<'lifetime> {
-
-    feature!(15; to_values: #[allow(dead_code)] {
-        site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
-        site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
-        elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
-        // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
-        // If I ever get rid of those algorithms, this field can go away.
-        elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
-        is_ocean set_is_ocean bool FIELD_IS_OCEAN "is_ocean" OGRFieldType::OFTInteger;
-        temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
-        wind set_wind i32 FIELD_WIND "wind_dir" OGRFieldType::OFTInteger;
-        precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation" OGRFieldType::OFTReal;
-        #[allow(dead_code)] water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
-        #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
-        #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
-        #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
-        #[allow(dead_code)] biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
-        // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
-        // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
-        // to store it. In any way, you never know when I might support outlet from multiple points.
-        #[allow(dead_code)] outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
-        neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles" OGRFieldType::OFTString;
-
-    });
 
     pub(crate) fn site_point(&self) -> Result<Point,CommandError> {
         if let (Some(x),Some(y)) = (self.site_x()?,self.site_y()?) {
@@ -699,13 +765,7 @@ impl<'lifetime> TileFeature<'lifetime> {
 
 }
 
-// NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
-// This is a much easier version of the same thing.
-pub(crate) trait TileEntity: Sized {
-
-    fn try_from_feature(feature: TileFeature) -> Result<Self,CommandError>;
-
-}
+entity_base!(TileEntity TileFeature TileEntityIterator);
 
 pub(crate) trait TileEntityWithNeighborsElevation {
 
@@ -809,67 +869,100 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
     }
 }
 
-
-pub(crate) struct TileEntityIterator<'lifetime, Data: TileEntity> {
-    features: TypedFeatureIterator<'lifetime,TileFeature<'lifetime>>,
-    data: std::marker::PhantomData<Data>
-}
-
-// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-impl<'lifetime,Data: TileEntity> Iterator for TileEntityIterator<'lifetime,Data> {
-    type Item = Result<(u64,Data),CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(feature) = self.features.next() {
-            match (feature.fid(),Data::try_from_feature(feature)) {
-                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
-                (_, Err(e)) => Some(Err(e)),
+macro_rules! layer {
+    ($name: ident $feature_type: ident $entity_type: ident $entity_iter_type: ident $internal_name: literal $geometry_type: expr ) => {
+        pub(crate) struct $name<'lifetime> {
+            layer: WorldLayer<'lifetime>
+        }
+        
+        impl<'lifetime> $name<'lifetime> {
+        
+            pub(crate) const LAYER_NAME: &str = $internal_name;
+        
+            fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
+                let layer = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
+                Ok(Self {
+                    layer
+                })
             }
-        } else {
-            None
+            
+        
+            fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+                let layer = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, $geometry_type, Some(&$feature_type::FIELD_DEFS), overwrite)?;
+        
+                Ok(Self {
+                    layer
+                })
+            }
+        
+            pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+                progress.start_known_endpoint(|| (concat!("Reading ",$internal_name,"."),self.layer.layer.feature_count() as usize));
+                let mut result = Vec::new();
+                for (i,feature) in self.read_features().enumerate() {
+                    result.push(Data::try_from_feature(feature)?);
+                    progress.update(|| i);
+                }
+                progress.finish(|| "Layer read.");
+                Ok(result)
+            }
+        
+            pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: $entity_type>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+                progress.start_known_endpoint(|| (concat!("Indexing ",$internal_name,"."),self.layer.layer.feature_count() as usize));
+                let mut result = HashMap::new();
+                for (i,feature) in self.read_features().enumerate() {
+                    result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
+                    progress.update(|| i);
+                }
+                progress.finish(|| "Layer indexed.");
+                Ok(result)
+            }
+        
+            pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<$feature_type> {
+                self.layer.layer.feature(*fid).map($feature_type::from)
+            }
+        
+            // TODO: Add a 'features' option to the macro which adds these functions that aren't used.
+            pub(crate) fn entity_by_id<Data: $entity_type>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
+                self.feature_by_id(fid).map(Data::try_from_feature).transpose()
+            }
+        
+            pub(crate) fn update_feature(&self, feature: $feature_type) -> Result<(),CommandError> {
+                Ok(self.layer.layer.set_feature(feature.feature)?)
+            }
+        
+            // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
+            pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
+                self.layer.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
+            }
+        
+            pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<$feature_type> {
+                self.layer.layer.features().into()
+            }
+        
+            pub(crate) fn read_entities<Data: $entity_type>(&mut self) -> $entity_iter_type<Data> {
+                self.read_features().into()
+            }
+        
+            pub(crate) fn clear_spatial_filter(&mut self) {
+                self.layer.layer.clear_spatial_filter()
+            }
+        
+            pub(crate) fn feature_count(&self) -> usize {
+                self.layer.layer.feature_count() as usize
+            }
+        
         }
+        
     }
 }
 
-impl<'lifetime,Data: TileEntity> From<TypedFeatureIterator<'lifetime,TileFeature<'lifetime>>> for TileEntityIterator<'lifetime,Data> {
-    fn from(features: TypedFeatureIterator<'lifetime,TileFeature<'lifetime>>) -> Self {
-        Self {
-            features,
-            data: std::marker::PhantomData
-        }
-    }
-}
-
-
-
-pub(crate) struct TilesLayer<'lifetime> {
-    tiles: WorldLayer<'lifetime>
-}
+layer!(TilesLayer TileFeature TileEntity TileEntityIterator "tiles" OGRwkbGeometryType::wkbPolygon);
 
 impl<'lifetime> TilesLayer<'lifetime> {
 
-    pub(crate) const LAYER_NAME: &str = "tiles";
-
-    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-        Ok(Self {
-            tiles
-        })
-    }
-    
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let tiles = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPolygon, Some(&TileFeature::FIELD_DEFS), overwrite)?;
-
-        Ok(Self {
-            tiles
-        })
-    }
-
     pub(crate) fn add_tile(&mut self, tile: NewTileEntity) -> Result<(),CommandError> {
 
-        self.tiles.add(tile.geometry,&[
+        self.layer.add(tile.geometry,&[
                 TileFeature::FIELD_SITE_X,
                 TileFeature::FIELD_SITE_Y,
             ],&[
@@ -880,63 +973,8 @@ impl<'lifetime> TilesLayer<'lifetime> {
 
     }
 
-    pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: TileEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Reading tiles.",self.tiles.layer.feature_count() as usize));
-        let mut result = Vec::new();
-        for (i,feature) in self.read_features().enumerate() {
-            result.push(Data::try_from_feature(feature)?);
-            progress.update(|| i);
-        }
-        progress.finish(|| "Tiles read.");
-        Ok(result)
-    }
-
-    pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: TileEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Indexing tiles.",self.tiles.layer.feature_count() as usize));
-        let mut result = HashMap::new();
-        for (i,feature) in self.read_features().enumerate() {
-            result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
-            progress.update(|| i);
-        }
-        progress.finish(|| "Tiles indexed.");
-        Ok(result)
-    }
-
-    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<TileFeature> {
-        self.tiles.layer.feature(*fid).map(TileFeature::from)
-    }
-
-    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: TileEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
-        self.feature_by_id(fid).map(Data::try_from_feature).transpose()
-    }
-
-    pub(crate) fn update_feature(&self, feature: TileFeature) -> Result<(),CommandError> {
-        Ok(self.tiles.layer.set_feature(feature.feature)?)
-    }
-
-    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
-    pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
-        self.tiles.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
-    }
-
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TileFeature> {
-        self.tiles.layer.features().into()
-    }
-
-    pub(crate) fn read_entities<Data: TileEntity>(&mut self) -> TileEntityIterator<Data> {
-        self.read_features().into()
-    }
-
-    pub(crate) fn clear_spatial_filter(&mut self) {
-        self.tiles.layer.clear_spatial_filter()
-    }
-
-    pub(crate) fn feature_count(&self) -> usize {
-        self.tiles.layer.feature_count() as usize
-    }
-
     pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
-        let extent = self.tiles.layer.get_extent()?;
+        let extent = self.layer.layer.get_extent()?;
         let width = extent.MaxX - extent.MinX;
         let height = extent.MaxY - extent.MinY;
         let tiles = self.feature_count();
@@ -946,71 +984,16 @@ impl<'lifetime> TilesLayer<'lifetime> {
 }
 
 
-pub(crate) struct RiverFeature<'lifetime> {
+feature!(RiverFeature geometry: #[allow(dead_code)] {
+    from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
+    from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
+    from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
+    to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile" OGRFieldType::OFTInteger64;
+    to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type" OGRFieldType::OFTString;
+    to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow" OGRFieldType::OFTReal;
+});
 
-    feature: Feature<'lifetime>
-}
-
-impl<'lifetime> From<Feature<'lifetime>> for RiverFeature<'lifetime> {
-
-    fn from(feature: Feature<'lifetime>) -> Self {
-        Self {
-            feature
-        }
-    }
-}
-
-impl<'lifetime> RiverFeature<'lifetime> {
-
-    feature!(6; geometry: #[allow(dead_code)] {
-        from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
-        from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
-        from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
-        to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile" OGRFieldType::OFTInteger64;
-        to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type" OGRFieldType::OFTString;
-        to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow" OGRFieldType::OFTReal;
-    });
-
-}
-
-// NOTE: I tried using a TryFrom, but because TileFeature requires a lifetime, I had to add that in as well, and it started to propagate. 
-// This is a much easier version of the same thing.
-pub(crate) trait RiverEntity: Sized {
-
-    fn try_from_feature(feature: RiverFeature) -> Result<Self,CommandError>;
-
-}
-
-pub(crate) struct RiverEntityIterator<'lifetime, Data: RiverEntity> {
-    features: TypedFeatureIterator<'lifetime,RiverFeature<'lifetime>>,
-    data: std::marker::PhantomData<Data>
-}
-
-// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-impl<'lifetime,Data: RiverEntity> Iterator for RiverEntityIterator<'lifetime,Data> {
-    type Item = Result<(u64,Data),CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(feature) = self.features.next() {
-            match (feature.fid(),Data::try_from_feature(feature)) {
-                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
-                (_, Err(e)) => Some(Err(e)),
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl<'lifetime,Data: RiverEntity> From<TypedFeatureIterator<'lifetime,RiverFeature<'lifetime>>> for RiverEntityIterator<'lifetime,Data> {
-    fn from(features: TypedFeatureIterator<'lifetime,RiverFeature<'lifetime>>) -> Self {
-        Self {
-            features,
-            data: std::marker::PhantomData
-        }
-    }
-}
+entity_base!(RiverEntity RiverFeature RiverEntityIterator);
 
 entity!(NewRiver RiverEntity {
     from_tile: i64,
@@ -1023,30 +1006,9 @@ entity!(NewRiver RiverEntity {
 });
 
 
-
-pub(crate) struct RiversLayer<'lifetime> {
-    segments: WorldLayer<'lifetime>
-}
+layer!(RiversLayer RiverFeature RiverEntity RiverEntityIterator "rivers" OGRwkbGeometryType::wkbLineString);
 
 impl<'lifetime> RiversLayer<'lifetime> {
-
-    pub(crate) const LAYER_NAME: &str = "rivers";
-
-    #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let segments = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-        Ok(Self {
-            segments
-        })
-    }
-    
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let segments = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbLineString, Some(&RiverFeature::FIELD_DEFS), overwrite)?;
-
-        Ok(Self {
-            segments
-        })
-    }
 
     pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<(),CommandError> {
         let geometry = create_line(&segment.line)?;
@@ -1057,219 +1019,32 @@ impl<'lifetime> RiversLayer<'lifetime> {
             segment.to_tile, 
             &segment.to_type,
             segment.to_flow);
-        self.segments.add(geometry, &field_names, &field_values)
+        self.layer.add(geometry, &field_names, &field_values)
     }
-
-
-    #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: RiverEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Reading river segments.",self.segments.layer.feature_count() as usize));
-        let mut result = Vec::new();
-        for (i,feature) in self.read_features().enumerate() {
-            result.push(Data::try_from_feature(feature)?);
-            progress.update(|| i);
-        }
-        progress.finish(|| "River segments read.");
-        Ok(result)
-    }
-
-    #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: RiverEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Indexing river segments.",self.segments.layer.feature_count() as usize));
-        let mut result = HashMap::new();
-        for (i,feature) in self.read_features().enumerate() {
-            result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
-            progress.update(|| i);
-        }
-        progress.finish(|| "River segments indexed.");
-        Ok(result)
-    }
-
-    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<RiverFeature> {
-        self.segments.layer.feature(*fid).map(RiverFeature::from)
-    }
-
-    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: RiverEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
-        self.feature_by_id(fid).map(Data::try_from_feature).transpose()
-    }
-
-    #[allow(dead_code)] pub(crate) fn update_feature(&self, feature: RiverFeature) -> Result<(),CommandError> {
-        Ok(self.segments.layer.set_feature(feature.feature)?)
-    }
-
-    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
-    #[allow(dead_code)] pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
-        self.segments.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
-    }
-
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<RiverFeature> {
-        self.segments.layer.features().into()
-    }
-
-    #[allow(dead_code)] pub(crate) fn read_entities<Data: RiverEntity>(&mut self) -> RiverEntityIterator<Data> {
-        self.read_features().into()
-    }
-
-    #[allow(dead_code)] pub(crate) fn clear_spatial_filter(&mut self) {
-        self.segments.layer.clear_spatial_filter()
-    }
-
-    #[allow(dead_code)] pub(crate) fn feature_count(&self) -> usize {
-        self.segments.layer.feature_count() as usize
-    }
-
 
 }
 
 
-pub(crate) struct LakeFeature<'lifetime> {
+feature!(LakeFeature geometry: #[allow(dead_code)] {
+    #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+});
 
-    feature: Feature<'lifetime>
-}
-
-impl<'lifetime> From<Feature<'lifetime>> for LakeFeature<'lifetime> {
-
-    fn from(feature: Feature<'lifetime>) -> Self {
-        Self {
-            feature
-        }
-    }
-}
-
-impl<'lifetime> LakeFeature<'lifetime> {
-
-    feature!(1; geometry: #[allow(dead_code)] {
-        #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
-    });
-
-}
-
-pub(crate) trait LakeEntity: Sized {
-
-    fn try_from_feature(feature: LakeFeature) -> Result<Self,CommandError>;
-
-}
-
-pub(crate) struct LakeEntityIterator<'lifetime, Data: LakeEntity> {
-    features: TypedFeatureIterator<'lifetime,LakeFeature<'lifetime>>,
-    data: std::marker::PhantomData<Data>
-}
-
-// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-impl<'lifetime,Data: LakeEntity> Iterator for LakeEntityIterator<'lifetime,Data> {
-    type Item = Result<(u64,Data),CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(feature) = self.features.next() {
-            match (feature.fid(),Data::try_from_feature(feature)) {
-                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
-                (_, Err(e)) => Some(Err(e)),
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl<'lifetime,Data: LakeEntity> From<TypedFeatureIterator<'lifetime,LakeFeature<'lifetime>>> for LakeEntityIterator<'lifetime,Data> {
-    fn from(features: TypedFeatureIterator<'lifetime,LakeFeature<'lifetime>>) -> Self {
-        Self {
-            features,
-            data: std::marker::PhantomData
-        }
-    }
-}
+entity_base!(LakeEntity LakeFeature LakeEntityIterator);
 
 entity!(NewLake LakeEntity {
     elevation: f64,
     geometry: Geometry
 });
 
-
-pub(crate) struct LakesLayer<'lifetime> {
-    lakes: WorldLayer<'lifetime>
-}
+layer!(LakesLayer LakeFeature LakeEntity LakeEntityIterator "lakes" OGRwkbGeometryType::wkbPolygon);
 
 impl<'lifetime> LakesLayer<'lifetime> {
-
-    pub(crate) const LAYER_NAME: &str = "lakes";
-
-    #[allow(dead_code)] fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let lakes = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-        Ok(Self {
-            lakes
-        })
-    }
-    
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let lakes = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbPolygon, Some(&LakeFeature::FIELD_DEFS), overwrite)?;
-
-        Ok(Self {
-            lakes
-        })
-    }
 
     pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<(),CommandError> {
         let (field_names,field_values) = LakeFeature::to_field_names_values(
             lake.elevation);
-        self.lakes.add(lake.geometry, &field_names, &field_values)
+        self.layer.add(lake.geometry, &field_names, &field_values)
     }
-
-    #[allow(dead_code)] pub(crate) fn read_entities_to_vec<Progress: ProgressObserver, Data: LakeEntity>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Reading lakes.",self.lakes.layer.feature_count() as usize));
-        let mut result = Vec::new();
-        for (i,feature) in self.read_features().enumerate() {
-            result.push(Data::try_from_feature(feature)?);
-            progress.update(|| i);
-        }
-        progress.finish(|| "Lakes read.");
-        Ok(result)
-    }
-
-    #[allow(dead_code)] pub(crate) fn read_entities_to_index<Progress: ProgressObserver, Data: LakeEntity>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
-        progress.start_known_endpoint(|| ("Indexing lakes.",self.lakes.layer.feature_count() as usize));
-        let mut result = HashMap::new();
-        for (i,feature) in self.read_features().enumerate() {
-            result.insert(entity!(fieldassign@ feature fid u64),Data::try_from_feature(feature)?);
-            progress.update(|| i);
-        }
-        progress.finish(|| "Lakes indexed.");
-        Ok(result)
-    }
-
-    pub(crate) fn feature_by_id(&self, fid: &u64) -> Option<LakeFeature> {
-        self.lakes.layer.feature(*fid).map(LakeFeature::from)
-    }
-
-    #[allow(dead_code)] pub(crate) fn entity_by_id<Data: LakeEntity>(&mut self, fid: &u64) -> Result<Option<Data>,CommandError> {
-        self.feature_by_id(fid).map(Data::try_from_feature).transpose()
-    }
-
-    #[allow(dead_code)] pub(crate) fn update_feature(&self, feature: LakeFeature) -> Result<(),CommandError> {
-        Ok(self.lakes.layer.set_feature(feature.feature)?)
-    }
-
-    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
-    #[allow(dead_code)] pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
-        self.lakes.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
-    }
-
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<LakeFeature> {
-        self.lakes.layer.features().into()
-    }
-
-    #[allow(dead_code)] pub(crate) fn read_entities<Data: LakeEntity>(&mut self) -> LakeEntityIterator<Data> {
-        self.read_features().into()
-    }
-
-    #[allow(dead_code)] pub(crate) fn clear_spatial_filter(&mut self) {
-        self.lakes.layer.clear_spatial_filter()
-    }
-
-    #[allow(dead_code)] pub(crate) fn feature_count(&self) -> usize {
-        self.lakes.layer.feature_count() as usize
-    }
-
 
 }
 
@@ -1322,28 +1097,13 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-pub(crate) struct BiomeFeature<'lifetime> {
+feature!(BiomeFeature geometry: #[allow(dead_code)] {
+    #[allow(dead_code)] name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    #[allow(dead_code)] habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
+    #[allow(dead_code)] criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
+});
 
-    feature: Feature<'lifetime>
-}
-
-impl<'lifetime> From<Feature<'lifetime>> for BiomeFeature<'lifetime> {
-
-    fn from(feature: Feature<'lifetime>) -> Self {
-        Self {
-            feature
-        }
-    }
-}
-
-// TODO: You know, that feature! and entity! macro could be joined together into one big layer! macro.
 impl<'lifetime> BiomeFeature<'lifetime> {
-
-    feature!(3; geometry: #[allow(dead_code)] {
-        #[allow(dead_code)] name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-        #[allow(dead_code)] habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
-        #[allow(dead_code)] criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
-    });
 
     const HOT_DESERT: &str = "Hot desert";
     const COLD_DESERT: &str = "Cold desert";
@@ -1473,42 +1233,7 @@ impl<'lifetime> BiomeFeature<'lifetime> {
 
 }
 
-pub(crate) trait BiomeEntity: Sized {
-
-    fn try_from_feature(feature: BiomeFeature) -> Result<Self,CommandError>;
-
-}
-
-pub(crate) struct BiomeEntityIterator<'lifetime, Data: BiomeEntity> {
-    features: TypedFeatureIterator<'lifetime,BiomeFeature<'lifetime>>,
-    data: std::marker::PhantomData<Data>
-}
-
-// This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-impl<'lifetime,Data: BiomeEntity> Iterator for BiomeEntityIterator<'lifetime,Data> {
-    type Item = Result<(u64,Data),CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(feature) = self.features.next() {
-            match (feature.fid(),Data::try_from_feature(feature)) {
-                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
-                (_, Err(e)) => Some(Err(e)),
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl<'lifetime,Data: BiomeEntity> From<TypedFeatureIterator<'lifetime,BiomeFeature<'lifetime>>> for BiomeEntityIterator<'lifetime,Data> {
-    fn from(features: TypedFeatureIterator<'lifetime,BiomeFeature<'lifetime>>) -> Self {
-        Self {
-            features,
-            data: std::marker::PhantomData
-        }
-    }
-}
+entity_base!(BiomeEntity BiomeFeature BiomeEntityIterator);
 
 entity!(BiomeData BiomeEntity {
     name: String,
@@ -1516,49 +1241,16 @@ entity!(BiomeData BiomeEntity {
     criteria: BiomeCriteria
 });
 
-pub(crate) struct BiomeLayer<'lifetime> {
-    biomes: WorldLayer<'lifetime>
-}
+layer!(BiomeLayer BiomeFeature BiomeEntity BiomeEntityIterator "biomes" OGRwkbGeometryType::wkbNone);
 
 impl<'lifetime> BiomeLayer<'lifetime> {
-
-    pub(crate) const LAYER_NAME: &str = "biomes";
-
-    fn open_from_dataset(dataset: &'lifetime Dataset) -> Result<Self,CommandError> {
-        let biomes = WorldLayer::open_from_dataset(dataset, Self::LAYER_NAME)?;
-        Ok(Self {
-            biomes
-        })
-    }
-    
-
-    fn create_from_dataset(dataset: &'lifetime mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
-        let biomes = WorldLayer::create_from_dataset(dataset, Self::LAYER_NAME, OGRwkbGeometryType::wkbNone, Some(&BiomeFeature::FIELD_DEFS), overwrite)?;
-
-        Ok(Self {
-            biomes
-        })
-    }
-
 
     pub(crate) fn add_biome(&mut self, biome: &BiomeData) -> Result<(),CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
             &biome.name,biome.habitability,&biome.criteria);
-        self.biomes.add_without_geometry(&field_names, &field_values)
+        self.layer.add_without_geometry(&field_names, &field_values)
 
-    }
-
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<BiomeFeature> {
-        self.biomes.layer.features().into()
-    }
-
-    pub(crate) fn read_entities<Data: BiomeEntity>(&mut self) -> BiomeEntityIterator<Data> {
-        self.read_features().into()
-    }
-
-    pub(crate) fn feature_count(&self) -> usize {
-        self.biomes.layer.feature_count() as usize
     }
 
 }

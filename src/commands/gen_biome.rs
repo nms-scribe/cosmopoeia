@@ -101,6 +101,18 @@ impl Task for GenBiome {
 
         let mut target = WorldMap::edit(self.target)?;
 
+        target.fill_biome_defaults(self.overwrite,&mut progress)?;
+
+        progress.start_unknown_endpoint(|| "Saving Layer..."); 
+        
+        target.save()?;
+
+        progress.finish(|| "Layer Saved.");
+
+        let biomes = target.get_biome_matrix(&mut progress)?;
+
+        target.apply_biomes(biomes,&mut progress)?;
+
         progress.start_unknown_endpoint(|| "Saving Layer..."); 
         
         target.save()?;
@@ -108,7 +120,6 @@ impl Task for GenBiome {
         progress.finish(|| "Layer Saved.");
 
         Ok(())
-
 
     }
 }
