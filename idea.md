@@ -623,6 +623,14 @@ function isWetLand(moisture, temperature, height) {
 
 **NOTE:** It appears that I need to have rivers and lakes before I can do this, which is part of the moisture.
 
+# Testing Commands:
+
+```sh
+cargo run -- convert-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif testing_output/Inannak.world.gpkg --overwrite --ocean /home/neil/Cartography/Inannak/Inannak-Ocean.tif --seed 9543572450198918714
+cargo run -- gen-climate testing_output/Inannak.world.gpkg 
+cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
+cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
+```
 
 # Tasks
 
@@ -679,7 +687,7 @@ To proceed on this, I can break it down into the following steps:
     [ ] Review AFMG people generation algorithms -- again, wait on improvements until later
     [ ] Figure out how to break the task apart into sub commands and create those commands.
 [ ] `curve-borders` command
-    [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal.
+    [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
     [ ] is_ocean
     [ ] biomes
     [ ] nations and provinces
@@ -688,8 +696,11 @@ To proceed on this, I can break it down into the following steps:
 [ ] `create-terrain` commands
     [ ] terrain template files
     [ ] Review AFMG terrain generation algorithms
+[ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well?
 [ ] Documentation
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
+    [ ] Include explanation of all commands
+    [ ] Include explanation of the data in the output file.
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, a few other places), and start updating those places when changes are made.
     -- I feel like having all the above is enough to announce, as long as "creating terrain", a large task, will be the next thing on the list.

@@ -34,6 +34,7 @@ use crate::progress::ProgressObserver;
 use crate::raster::RasterMap;
 use crate::world_map::TilesLayer;
 use crate::entity;
+use crate::entity_field_assign;
 use crate::utils::PolyBezier;
 use crate::world_map::NewLake;
 use crate::world_map::TypedFeature;
@@ -500,7 +501,7 @@ pub(crate) fn sample_elevations<Progress: ProgressObserver>(layer: &mut TilesLay
 
     progress.finish(|| "Raster read.");
 
-    let features = layer.read_entities_to_vec::<_,TileEntitySite>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileEntitySite>(progress)?;
 
     progress.start_known_endpoint(|| ("Sampling elevations.",features.len()));
 
@@ -561,7 +562,7 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, r
 
     progress.finish(|| "Raster read.");
 
-    let features = layer.read_entities_to_vec::<_,TileEntitySite>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileEntitySite>(progress)?;
 
     progress.start_known_endpoint(|| ("Sampling oceans.",features.len()));
 
@@ -634,7 +635,7 @@ pub(crate) fn sample_ocean<Progress: ProgressObserver>(layer: &mut TilesLayer, r
 
 pub(crate) fn calculate_neighbors<Progress: ProgressObserver>(layer: &mut TilesLayer, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let features = layer.read_entities_to_vec::<_,TileEntitySiteGeo>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileEntitySiteGeo>(progress)?;
 
     progress.start_known_endpoint(|| ("Calculating neighbors.",features.len()));
 
@@ -718,7 +719,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(layer: &mut Tile
         })/2.0
     }
 
-    let features = layer.read_entities_to_vec::<_,TileEntityLatElevOcean>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileEntityLatElevOcean>(progress)?;
 
     progress.start_known_endpoint(|| ("Generating temperatures.",features.len()));
 
@@ -758,7 +759,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(layer: &mut TilesLayer,
     // Algorithm borrowed from AFMG with some modifications
 
 
-    let features = layer.read_entities_to_vec::<_,TileEntityLat>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileEntityLat>(progress)?;
 
     progress.start_known_endpoint(|| ("Generating winds.",features.len()));
 
@@ -811,7 +812,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
             Ok::<_,CommandError>(0.0)
         },
         lat_modifier: f64 = |feature: &TileFeature| {
-            let site_y = entity!(fieldassign@ feature site_y f64);
+            let site_y = entity_field_assign!(feature site_y f64);
             let lat_band = ((site_y.abs() - 1.0) / 5.0).floor() as usize;
             let lat_modifier = LATITUDE_MODIFIERS[lat_band];
             Ok::<_,CommandError>(lat_modifier)
@@ -819,7 +820,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(layer: &mut Til
     });
 
     // I need to trace the data across the map, so I can't just do quick read and writes to the database.
-    let mut tile_map = layer.read_entities_to_index::<_,TileDataForPrecipitation>(progress)?;
+    let mut tile_map = layer.read_features().to_entities_index::<_,TileDataForPrecipitation>(progress)?;
 
     // I can't work on the tiles map while also iterating it, so I have to copy the keys
     let mut working_tiles: Vec<u64> = tile_map.keys().copied().collect();
@@ -1854,7 +1855,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(tiles_layer: &mut TilesLa
         is_ocean: bool
     });
 
-    let tiles = tiles_layer.read_entities_to_vec::<_,BiomeSource>(progress)?;
+    let tiles = tiles_layer.read_features().to_entities_vec::<_,BiomeSource>(progress)?;
     
     progress.start_known_endpoint(|| ("Applying biomes.",tiles.len()));
 
