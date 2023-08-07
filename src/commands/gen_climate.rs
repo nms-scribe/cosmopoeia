@@ -7,6 +7,9 @@ use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
+use crate::algorithms::climate::generate_temperatures;
+use crate::algorithms::climate::generate_winds;
+use crate::algorithms::climate::generate_precipitation;
 
 
 subcommand_def!{
@@ -34,8 +37,13 @@ impl Task for GenClimateTemperature {
         let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            generate_temperatures(target, self.equator_temp,self.polar_temp,&mut progress)
+        })?;
+
+        target.save(&mut progress)
         
-        target.generate_temperatures(self.equator_temp,self.polar_temp,&mut progress)
     
     }
 }
@@ -93,7 +101,13 @@ impl Task for GenClimateWind {
             self.south_polar as i32
         ];
 
-        target.generate_winds(winds,&mut progress)
+        target.with_transaction(|target| {
+
+            generate_winds(target, winds, &mut progress)
+
+        })?;
+
+        target.save(&mut progress)
     
     }
 }
@@ -122,7 +136,12 @@ impl Task for GenClimatePrecipitation {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.generate_precipitation(self.moisture,&mut progress)
+        target.with_transaction(|target| {
+            generate_precipitation(target, self.moisture, &mut progress)
+
+        })?;
+
+        target.save(&mut progress)
     
     }
 }
@@ -183,9 +202,7 @@ impl Task for GenClimate {
         let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
-        
-        target.generate_temperatures(self.equator_temp,self.polar_temp,&mut progress)?;
-    
+
         let winds = [
             self.north_polar_wind as i32,
             self.north_middle_wind as i32,
@@ -195,9 +212,15 @@ impl Task for GenClimate {
             self.south_polar_wind as i32
         ];
 
-        target.generate_winds(winds,&mut progress)?;
+        target.with_transaction(|target| {
+            generate_temperatures(target, self.equator_temp, self.polar_temp, &mut progress)?;
 
-        target.generate_precipitation(self.moisture_factor,&mut progress)
+            generate_winds(target, winds, &mut progress)?;
+
+            generate_precipitation(target, self.moisture_factor, &mut progress)
+        })?;
+        
+        target.save(&mut progress)
     
 
 

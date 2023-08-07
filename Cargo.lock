@@ -401,6 +401,7 @@ dependencies = [
  "adaptive-bezier",
  "clap",
  "gdal",
+ "heck",
  "indicatif",
  "ordered-float",
  "rand 0.8.5",

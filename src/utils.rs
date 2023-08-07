@@ -548,5 +548,13 @@ impl PolyBezier {
 
 }
 
-
-
+pub(crate) fn find_curve_making_point(start_point: &Point, end_point: &Point) -> Point {
+    // This function creates a phantom point which can be used to give an otherwise straight ending segment a bit of a curve.
+    let parallel = start_point.subtract(end_point);
+    // I want to switch the direction of the curve in some way that looks random, but is reproducible.
+    // The easiest way I can think of is basically to base it off of whether the integral part of a value is even.
+    let is_even = start_point.x.rem_euclid(2.0) < 1.0;
+    let perpendicular = parallel.perpendicular(is_even);
+    let normalized = perpendicular.normalized();
+    end_point.add(&normalized)
+}

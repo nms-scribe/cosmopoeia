@@ -21,8 +21,8 @@ pub(crate) trait ProgressObserver {
 }
 
 
-
-impl ProgressObserver for Option<()> {
+// This one allows for not observing when you don't need it.
+impl ProgressObserver for () {
 
     fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, _: Callback) {
     }
@@ -43,47 +43,6 @@ impl ProgressObserver for Option<()> {
     }
 }
 
-
-impl<OtherProgressObserver: ProgressObserver> ProgressObserver for Option<&mut OtherProgressObserver> {
-
-    fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback) {
-        if let Some(me) = self {
-            me.start_known_endpoint(callback)
-        }
-    }
-
-    fn start_unknown_endpoint<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
-        if let Some(me) = self {
-            me.start_unknown_endpoint(callback)
-        }
-    }
-
-    fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
-        if let Some(me) = self {
-            me.start(callback)
-        }
-    }
-
-
-
-    fn update<Callback: FnOnce() -> usize>(&self, callback: Callback) {
-        if let Some(me) = self {
-            me.update(callback)
-        }
-    }
-
-    fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
-        if let Some(me) = self {
-            me.message(callback)
-        }
-    }
-
-    fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
-        if let Some(me) = self {
-            me.finish(callback)
-        }
-    }
-}
 
 pub(crate) struct ConsoleProgressBar {
 

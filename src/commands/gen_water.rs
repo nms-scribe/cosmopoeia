@@ -7,6 +7,9 @@ use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
+use crate::algorithms::water_flow::generate_water_flow;
+use crate::algorithms::water_fill::generate_water_fill;
+use crate::algorithms::rivers::generate_water_rivers;
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -26,10 +29,11 @@ impl Task for GenWaterFlow {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.generate_water_flow(&mut progress)?;
+        target.with_transaction(|target| {
+            generate_water_flow(target, &mut progress)
+        })?;
 
-        Ok(())
-
+        target.save(&mut progress)
 
     }
 }
@@ -66,14 +70,14 @@ impl Task for GenWaterFill {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let (tile_map,tile_queue) = target.get_tile_map_and_queue_for_water_fill(&mut progress)?;
+        let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(&mut progress)?;
 
-        let lakes = target.generate_water_fill(tile_map,tile_queue,self.bezier_scale,self.buffer_scale,&mut progress)?;
+        target.with_transaction(|target| {
+            generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, &mut progress)
 
-        target.load_lakes(lakes,self.overwrite,&mut progress)?;
+        })?;
 
-        Ok(())
-
+        target.save(&mut progress)
     }
 }
 
@@ -103,11 +107,11 @@ impl Task for GenWaterRivers {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let segments = target.generate_water_rivers(self.bezier_scale,&mut progress)?;
+        target.with_transaction(|target| {
+            generate_water_rivers(target, self.bezier_scale, self.overwrite, &mut progress)
+        })?;
 
-        target.load_rivers(segments,self.overwrite,&mut progress)?;
-
-        Ok(())
+        target.save(&mut progress)
 
     }
 }
@@ -153,15 +157,17 @@ impl Task for GenWater {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let (tile_map,tile_queue) = target.generate_water_flow(&mut progress)?;
+        target.with_transaction(|target| {
 
-        let lakes = target.generate_water_fill(tile_map,tile_queue,self.bezier_scale,self.buffer_scale,&mut progress)?;
+            let (tile_map,tile_queue) = generate_water_flow(target, &mut progress)?;
 
-        target.load_lakes(lakes,self.overwrite_lakes || self.overwrite,&mut progress)?;
+            generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite_lakes || self.overwrite, &mut progress)?;
 
-        let segments = target.generate_water_rivers(self.bezier_scale,&mut progress)?;
+            generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, &mut progress)
 
-        target.load_rivers(segments,self.overwrite_rivers || self.overwrite,&mut progress)?;
+        })?;
+
+        target.save(&mut progress)?;
 
         Ok(())
 

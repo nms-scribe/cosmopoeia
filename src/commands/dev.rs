@@ -10,11 +10,14 @@ use crate::utils::Extent;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
-use crate::algorithms::PointGenerator;
+use crate::algorithms::random_points::PointGenerator;
 use crate::progress::ProgressObserver;
-use crate::algorithms::DelaunayGenerator;
+use crate::algorithms::triangles::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
-use crate::algorithms::VoronoiGenerator;
+use crate::algorithms::voronoi::VoronoiGenerator;
+use crate::algorithms::random_points::load_points_layer;
+use crate::algorithms::triangles::load_triangles_layer;
+use crate::algorithms::tiles::load_tile_layer;
 use crate::world_map::NewTileEntity;
 
 
@@ -51,9 +54,13 @@ impl Task for DevPointsFromHeightmap {
         let random = random_number_generator(self.seed);
         let mut progress = ConsoleProgressBar::new();
         let generator = PointGenerator::new(random, extent, self.points);
-        
-        target.load_points_layer(self.overwrite, generator, &mut Some(&mut progress))?;
 
+        target.with_transaction(|target| {
+            load_points_layer(target, self.overwrite, generator, &mut progress)
+        })?;
+
+        target.save(&mut progress)?;
+        
         Ok(())
     }
 }
@@ -104,7 +111,11 @@ impl Task for DevPointsFromExtent {
         let mut progress = ConsoleProgressBar::new();
         let generator = PointGenerator::new(random, extent, self.points);
         
-        target.load_points_layer(self.overwrite, generator, &mut Some(&mut progress))?;
+        target.with_transaction(|target| {
+            load_points_layer(target, self.overwrite, generator, &mut progress)
+        })?;
+
+        target.save(&mut progress)?;
 
         Ok(())
     }
@@ -136,15 +147,15 @@ impl Task for DevTrianglesFromPoints {
     
         let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(&mut progress)?);
     
-        progress.start_unknown_endpoint(|| "Generating triangles.");
+        generator.start(&mut progress)?;
+    
+        target.with_transaction(|target| {
+            load_triangles_layer(target, self.overwrite, generator, &mut progress)
+        })?;
+
+        target.save(&mut progress)
         
-        generator.start()?;
-    
-        progress.finish(|| "Triangles generated.");
-    
-        target.load_triangles_layer(self.overwrite, generator, &mut progress)
-    
-    
+        
     }
 }
 
@@ -182,17 +193,19 @@ impl Task for DevVoronoiFromTriangles {
     
         let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
     
-        progress.start_unknown_endpoint(|| "Generating voronoi.");
-        
-        generator.start()?;
+        generator.start(&mut progress)?;
     
-        progress.finish(|| "Voronoi generated.");
-
         progress.start(|| ("Copying voronoi.",generator.size_hint().1));
         
         let voronoi: Vec<Result<NewTileEntity,CommandError>> = generator.collect();
-    
-        target.load_tile_layer(self.overwrite, voronoi.into_iter(), &mut progress)
+
+        progress.finish(|| "Voronoi copied.");
+
+        target.with_transaction(|target| {
+            load_tile_layer(target,self.overwrite,voronoi.into_iter(),&mut progress)
+        })?;
+
+        target.save(&mut progress)
     
     
     }

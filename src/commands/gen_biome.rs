@@ -7,7 +7,8 @@ use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
-use crate::progress::ProgressObserver;
+use crate::algorithms::biomes::fill_biome_defaults;
+use crate::algorithms::biomes::apply_biomes;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -31,17 +32,13 @@ impl Task for GenBiomeData {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.fill_biome_defaults(self.overwrite,&mut progress)?;
+        target.with_transaction(|target| {
 
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        target.save()?;
+            fill_biome_defaults(target, self.overwrite, &mut progress)
 
-        progress.finish(|| "Layer Saved.");
+        })?;
 
-        Ok(())
-
-
+        target.save(&mut progress)
     }
 }
 
@@ -63,17 +60,14 @@ impl Task for GenBiomeApply {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let biomes = target.get_biome_matrix(&mut progress)?;
+        let biomes = target.biomes_layer()?.get_matrix(&mut progress)?;
 
-        target.apply_biomes(biomes,&mut progress)?;
+        target.with_transaction(|target| {
+            apply_biomes(target, biomes, &mut progress)
 
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        target.save()?;
+        })?;
 
-        progress.finish(|| "Layer Saved.");
-
-        Ok(())
+        target.save(&mut progress)
 
 
     }
@@ -101,25 +95,16 @@ impl Task for GenBiome {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.fill_biome_defaults(self.overwrite,&mut progress)?;
+        target.with_transaction(|target| {
+            fill_biome_defaults(target, self.overwrite, &mut progress)
+        })?;
 
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        target.save()?;
+        let biomes = target.biomes_layer()?.get_matrix(&mut progress)?;
 
-        progress.finish(|| "Layer Saved.");
+        target.with_transaction(|target| {
+            apply_biomes(target, biomes, &mut progress)
+        })?;
 
-        let biomes = target.get_biome_matrix(&mut progress)?;
-
-        target.apply_biomes(biomes,&mut progress)?;
-
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        target.save()?;
-
-        progress.finish(|| "Layer Saved.");
-
-        Ok(())
-
+        target.save(&mut progress)
     }
 }

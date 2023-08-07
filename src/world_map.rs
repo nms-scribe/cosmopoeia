@@ -17,111 +17,25 @@ use gdal::vector::Layer;
 use gdal::vector::Feature;
 use gdal::vector::FeatureIterator;
 use gdal::Transaction;
+use heck::ToTitleCase;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::utils::create_line;
-use crate::raster::RasterMap;
-use crate::algorithms::OceanSamplingMethod;
-use crate::algorithms::sample_elevations;
-use crate::algorithms::sample_ocean;
-use crate::algorithms::calculate_neighbors;
-use crate::algorithms::generate_temperatures;
-use crate::algorithms::generate_winds;
-use crate::algorithms::generate_precipitation;
-use crate::algorithms::generate_water_flow;
-use crate::algorithms::generate_water_fill;
-use crate::algorithms::generate_water_rivers;
-use crate::algorithms::apply_biomes;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
 // The solution to this would probably require rewriting the gdal crate, so I'm not going to bother with this at this time, I'll just have to be more careful. 
 // A fairly easy solution is to present a struct Geometry<Type>, where Type is an empty struct or a const numeric type parameter. Then, impl Geometry<Polygon> or Geometry<Point>, etc. This is actually an improvement over the geo_types crate as well. When creating new values of the type, the geometry_type of the inner pointer would have to be validated, possibly causing an error. But it would happen early in the program, and wouldn't have to be checked again.
 
-
-#[derive(Clone)]
-pub(crate) enum RiverSegmentFrom {
-    Source,
-    Lake,
-    Branch,
-    Continuing,
-    BranchingLake,
-    BranchingConfluence,
-    Confluence,
-}
-
-impl TryFrom<String> for RiverSegmentFrom {
-    type Error = CommandError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "source" => Ok(Self::Source),
-            "lake" => Ok(Self::Lake),
-            "branch" => Ok(Self::Branch),
-            "continuing" => Ok(Self::Continuing),
-            "lake-branch" => Ok(Self::BranchingLake),
-            "branch-confluence" => Ok(Self::BranchingConfluence),
-            "confluence" => Ok(Self::Confluence),
-            a => Err(CommandError::InvalidValueForSegmentFrom(a.to_owned()))
-        }
-    }
-}
-
-impl Into<&str> for &RiverSegmentFrom {
-
-    fn into(self) -> &'static str {
-        match self {
-            RiverSegmentFrom::Source => "source",
-            RiverSegmentFrom::Lake => "lake",
-            RiverSegmentFrom::Branch => "branch",
-            RiverSegmentFrom::Continuing => "continuing",
-            RiverSegmentFrom::BranchingLake => "lake-branch",
-            RiverSegmentFrom::BranchingConfluence => "branch-confluence",
-            RiverSegmentFrom::Confluence => "confluence",
-        }
-    }
-}
-
-#[derive(Clone)]
-pub(crate) enum RiverSegmentTo {
-    Mouth,
-    Confluence,
-    Continuing,
-    Branch,
-    BranchingConfluence,
-}
-
-impl TryFrom<String> for RiverSegmentTo {
-    type Error = CommandError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "mouth" => Ok(Self::Mouth),
-            "confluence" => Ok(Self::Confluence),
-            "continuing" => Ok(Self::Continuing),
-            "branch" => Ok(Self::Branch),
-            "branch-confluence" => Ok(Self::BranchingConfluence),
-            a => Err(CommandError::InvalidValueForSegmentTo(a.to_owned()))
-        }
-    }
-}
-
-impl Into<&str> for &RiverSegmentTo {
-
-    fn into(self) -> &'static str {
-        match self {
-            RiverSegmentTo::Mouth => "mouth",
-            RiverSegmentTo::Confluence => "confluence",
-            RiverSegmentTo::Continuing => "continuing",
-            RiverSegmentTo::Branch => "branch",
-            RiverSegmentTo::BranchingConfluence => "branch-confluence",
-        }
-    }
-}
-
+// FUTURE: Another problem with the gdal crate is the lifetimes. Feature, for example, only requires the lifetimes because it holds a reference to 
+// a field definition pointer, which is never used except in the constructor. Once the feature is created, this reference could easily be forgotten. Layer is
+// a little more complex, it holds a phantom value of the type of a reference to its dataset. On the one hand, it also doesn't do anything with it at all,
+// on the other this reference might keep it from outliving it's dataset reference. Which, I guess, is the same with Feature, so maybe that's what they're 
+// doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
+// the gdal crate, maybe it would be better.
 
 macro_rules! feature_conv {
     (id_list_to_string@ $value: ident) => {
@@ -511,7 +425,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
             result.push(Data::try_from(entity)?);
             progress.update(|| i);
         }
-        progress.finish(|| "Layer read.");
+        progress.finish(|| format!("{} read.",Feature::LAYER_NAME.to_title_case()));
         Ok(result)
     }
 
@@ -528,7 +442,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
             result.insert(fid,entity);
             progress.update(|| i);
         }
-        progress.finish(|| "Layer indexed.");
+        progress.finish(|| format!("{} indexed.",Feature::LAYER_NAME.to_title_case()));
         Ok(result)
     }
 
@@ -935,6 +849,112 @@ impl TilesLayer<'_> {
         Ok((width*height)/tiles as f64)
     }
 
+   // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
+   pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
+
+        let mut tile_map = HashMap::new();
+        let mut tile_queue = Vec::new();
+
+        progress.start_known_endpoint(|| ("Indexing data.",self.feature_count() as usize));
+
+        for (i,data) in self.read_entities::<TileEntityForWaterFill>().enumerate() {
+            let (fid,entity) = data?;
+            if entity.water_accumulation > 0.0 {
+                tile_queue.push((fid,entity.water_accumulation));
+            }
+            tile_map.insert(fid, entity);
+            progress.update(|| i);
+
+        }
+        progress.finish(|| "Data indexed.");
+
+        Ok((tile_map,tile_queue))
+        
+
+    }
+
+
+}
+
+
+#[derive(Clone)]
+pub(crate) enum RiverSegmentFrom {
+    Source,
+    Lake,
+    Branch,
+    Continuing,
+    BranchingLake,
+    BranchingConfluence,
+    Confluence,
+}
+
+impl TryFrom<String> for RiverSegmentFrom {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "source" => Ok(Self::Source),
+            "lake" => Ok(Self::Lake),
+            "branch" => Ok(Self::Branch),
+            "continuing" => Ok(Self::Continuing),
+            "lake-branch" => Ok(Self::BranchingLake),
+            "branch-confluence" => Ok(Self::BranchingConfluence),
+            "confluence" => Ok(Self::Confluence),
+            a => Err(CommandError::InvalidValueForSegmentFrom(a.to_owned()))
+        }
+    }
+}
+
+impl Into<&str> for &RiverSegmentFrom {
+
+    fn into(self) -> &'static str {
+        match self {
+            RiverSegmentFrom::Source => "source",
+            RiverSegmentFrom::Lake => "lake",
+            RiverSegmentFrom::Branch => "branch",
+            RiverSegmentFrom::Continuing => "continuing",
+            RiverSegmentFrom::BranchingLake => "lake-branch",
+            RiverSegmentFrom::BranchingConfluence => "branch-confluence",
+            RiverSegmentFrom::Confluence => "confluence",
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) enum RiverSegmentTo {
+    Mouth,
+    Confluence,
+    Continuing,
+    Branch,
+    BranchingConfluence,
+}
+
+impl TryFrom<String> for RiverSegmentTo {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "mouth" => Ok(Self::Mouth),
+            "confluence" => Ok(Self::Confluence),
+            "continuing" => Ok(Self::Continuing),
+            "branch" => Ok(Self::Branch),
+            "branch-confluence" => Ok(Self::BranchingConfluence),
+            a => Err(CommandError::InvalidValueForSegmentTo(a.to_owned()))
+        }
+    }
+}
+
+impl Into<&str> for &RiverSegmentTo {
+
+    fn into(self) -> &'static str {
+        match self {
+            RiverSegmentTo::Mouth => "mouth",
+            RiverSegmentTo::Confluence => "confluence",
+            RiverSegmentTo::Continuing => "continuing",
+            RiverSegmentTo::Branch => "branch",
+            RiverSegmentTo::BranchingConfluence => "branch-confluence",
+        }
+    }
 }
 
 
@@ -1104,7 +1124,7 @@ impl BiomeFeature<'_> {
         [Self::TRR, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN]
     ];
 
-    fn get_default_biomes() -> Vec<BiomeData> {
+    pub(crate) fn get_default_biomes() -> Vec<BiomeData> {
         let mut matrix_criteria = HashMap::new();
         for (moisture,row) in Self::DEFAULT_MATRIX.iter().enumerate() {
             for (temperature,id) in row.iter().enumerate() {
@@ -1134,7 +1154,7 @@ impl BiomeFeature<'_> {
 
     }
 
-    fn build_matrix_from_biomes(biomes: &[BiomeData]) -> Result<BiomeMatrix,CommandError> {
+    pub(crate) fn build_matrix_from_biomes(biomes: &[BiomeData]) -> Result<BiomeMatrix,CommandError> {
         let mut matrix: [[String; 26]; 5] = Default::default();
         let mut wetland = None;
         let mut glacier = None;
@@ -1204,7 +1224,14 @@ impl BiomeLayer<'_> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
-
+    pub(crate) fn get_matrix<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<BiomeMatrix,CommandError> {
+        let result = self.read_features().to_entities_vec(progress)?;
+    
+        BiomeFeature::build_matrix_from_biomes(&result)
+    
+    }
+    
+    
 
 }
 
@@ -1246,17 +1273,19 @@ impl WorldMap {
 
     }
 
-    pub(crate) fn with_transaction<Callback: FnOnce(&mut WorldMapTransaction) -> Result<(),CommandError>>(&mut self, callback: Callback) -> Result<(),CommandError> {
+    pub(crate) fn with_transaction<ResultType, Callback: FnOnce(&mut WorldMapTransaction) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
         let transaction = self.dataset.start_transaction()?;
         let mut transaction = WorldMapTransaction::new(transaction);
-        callback(&mut transaction)?;
+        let result = callback(&mut transaction)?;
         transaction.dataset.commit()?;    
-        Ok(())
+        Ok(result)
 
     }
 
-    pub(crate) fn save(&mut self) -> Result<(),CommandError> {
+    pub(crate) fn save<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
+        progress.start_unknown_endpoint(|| "Saving map."); 
         self.dataset.flush_cache()?;
+        progress.finish(|| "Map saved."); 
         Ok(())
     }
 
@@ -1268,444 +1297,15 @@ impl WorldMap {
         TrianglesLayer::open_from_dataset(&self.dataset)
     }
 
-    #[allow(dead_code)] pub(crate) fn tiles_layer(&self) -> Result<TilesLayer,CommandError> {
+    pub(crate) fn tiles_layer(&self) -> Result<TilesLayer,CommandError> {
         TilesLayer::open_from_dataset(&self.dataset)
     }
 
-    #[allow(dead_code)] pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
         BiomeLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Option<&mut Progress>) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut target_points = target.create_points_layer(overwrite_layer)?;
-        
-            // boundary points    
-    
-            progress.start(|| ("Writing points.",generator.size_hint().1));
-    
-            for (i,point) in generator.enumerate() {
-                target_points.add_point(point?)?;
-                progress.update(|| i);
-            }
-    
-            progress.finish(|| "Points written.");
-    
-            Ok(())
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving layer."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer saved.");
-    
-        Ok(())
-    
-    }
-
-    pub(crate) fn load_triangles_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut target = target.create_triangles_layer(overwrite_layer)?;
-        
-            // boundary points    
-    
-            progress.start(|| ("Writing triangles.",generator.size_hint().1));
-    
-            for (i,triangle) in generator.enumerate() {
-                target.add_triangle(triangle?.to_owned())?;
-                progress.update(|| i);
-            }
-    
-            progress.finish(|| "Triangles written.");
-    
-            Ok(())
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-    }
-
-    pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileEntity,CommandError>>, Progress: ProgressObserver>(&mut self, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut target = target.create_tile_layer(overwrite_layer)?;
-        
-            // boundary points    
-    
-            progress.start(|| ("Writing tiles.",generator.size_hint().1));
-    
-            for (i,tile) in generator.enumerate() {
-                target.add_tile(tile?)?;
-                progress.update(|| i);
-            }
-    
-            progress.finish(|| "Tiles written.");
-    
-            Ok(())
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-    }
-
-    pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            calculate_neighbors(&mut tiles,progress)?;
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-
-    }
-
-    pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(&mut self, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            sample_elevations(&mut tiles,raster,progress)?;
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-
-    }
-
-    pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(&mut self, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            sample_ocean(&mut tiles,raster,method,progress)?;
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-
-    }
-
-    pub(crate) fn generate_temperatures<Progress: ProgressObserver>(&mut self, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            generate_temperatures(&mut tiles, equator_temp,polar_temp,progress)?;
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-
-    }
-
-
-    pub(crate) fn generate_winds<Progress: ProgressObserver>(&mut self, winds: [i32; 6], progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            generate_winds(&mut tiles, winds, progress)?;
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-
-    }
-
-
-    pub(crate) fn generate_precipitation<Progress: ProgressObserver>(&mut self, moisture: u16, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            generate_precipitation(&mut tiles, moisture, progress)?;
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(())
-
-
-    }
-
-    pub(crate) fn generate_water_flow<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
-
-        let mut result = None;
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            result = Some(generate_water_flow(&mut tiles, progress)?);
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(result.unwrap()) // the only way it wouldn't be Some is if there was an error.
-
-
-    }
-
-    pub(crate) fn get_tile_map_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
-
-        let mut tile_map = HashMap::new();
-        let mut tile_queue = Vec::new();
-
-        let mut tiles = self.tiles_layer()?;
-
-        progress.start_known_endpoint(|| ("Indexing data.",tiles.feature_count() as usize));
-
-        for (i,data) in tiles.read_entities::<TileEntityForWaterFill>().enumerate() {
-            let (fid,entity) = data?;
-            if entity.water_accumulation > 0.0 {
-                tile_queue.push((fid,entity.water_accumulation));
-            }
-            tile_map.insert(fid, entity);
-            progress.update(|| i);
-    
-        }
-        progress.finish(|| "Data indexed.");
-
-        Ok((tile_map,tile_queue))
-        
-    
-    }
-
-
-    pub(crate) fn generate_water_fill<Progress: ProgressObserver>(&mut self, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, progress: &mut Progress) -> Result<Vec<NewLake>,CommandError> {
-
-        let mut result = None;
-
-        self.with_transaction(|target| {
-            let mut tiles = target.edit_tile_layer()?;
-
-
-            result = Some(generate_water_fill(&mut tiles, tile_map, tile_queue, lake_bezier_scale, lake_buffer_scale, progress)?);
-
-            Ok(())
-    
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving Layer..."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer Saved.");
-    
-        Ok(result.unwrap())
-
-    }
-
-    pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(&mut self, bezier_scale: f64, progress: &mut Progress) -> Result<Vec<NewRiver>,CommandError> {
-
-        let mut result = None;
-
-        self.with_transaction(|target| {
-            // FUTURE: I don't really need this to be in a transaction. The layer shouldn't need to be edited. However,
-            // a feature iterator function requires the layer to be mutable. So, to avoid confusion, I'm marking this as
-            // in a transaction as well.
-
-            let mut tiles = target.edit_tile_layer()?;
-
-            result = Some(generate_water_rivers(&mut tiles, bezier_scale, progress)?);
-
-            Ok(())
-    
-        })?;
-    
-        Ok(result.unwrap())
-
-    }
-
-    pub(crate) fn load_rivers<Progress: ProgressObserver>(&mut self, segments: Vec<NewRiver>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut segments_layer = target.create_rivers_layer(overwrite_layer)?;
-
-        
-            // boundary points    
-    
-            progress.start_known_endpoint(|| ("Writing rivers.",segments.len()));
-    
-            for (i,segment) in segments.iter().enumerate() {
-                segments_layer.add_segment(segment)?;
-                progress.update(|| i);
-            }
-    
-            progress.finish(|| "Rivers written.");
-    
-            Ok(())
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving layer."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer saved.");
-    
-        Ok(())
-
-    }
-
-    pub(crate) fn load_lakes<Progress: ProgressObserver>(&mut self, lakes: Vec<NewLake>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut lakes_layer = target.create_lakes_layer(overwrite_layer)?;
-
-        
-            // boundary points    
-    
-            progress.start_known_endpoint(|| ("Writing lakes.",lakes.len()));
-    
-            for (i,lake) in lakes.into_iter().enumerate() {
-                lakes_layer.add_lake(lake)?;
-                progress.update(|| i);
-            }
-    
-            progress.finish(|| "Lakes written.");
-    
-            Ok(())
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving layer."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer saved.");
-    
-        Ok(())
-
-    }
-
-    pub(crate) fn fill_biome_defaults(&mut self, overwrite_layer: bool, progress: &mut crate::progress::ConsoleProgressBar) -> Result<(),CommandError> {
-
-        self.with_transaction(|target| {
-            let mut biomes = target.create_biomes_layer(overwrite_layer)?;
-
-            let default_biomes = BiomeFeature::get_default_biomes();
-    
-            progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
-
-            for data in &default_biomes {
-                biomes.add_biome(data)?
-            }
-
-            progress.finish(|| "Biomes written.");
-    
-            Ok(())
-        })?;
-    
-        Ok(())
-    }
-
-    pub(crate) fn get_biome_matrix<Progress: ProgressObserver>(&self, progress: &mut Progress) -> Result<BiomeMatrix,CommandError> {
-        let mut biomes = self.biomes_layer()?;
-
-        let result = biomes.read_features().to_entities_vec(progress)?;
-
-        BiomeFeature::build_matrix_from_biomes(&result)
-
-    }
-
-    pub(crate) fn apply_biomes<Progress: ProgressObserver>(&mut self, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
-        self.with_transaction(|target| {
-            let mut tiles_layer = target.edit_tile_layer()?;
-
-            apply_biomes(&mut tiles_layer,biomes,progress)
-            
-        })?;
-    
-        progress.start_unknown_endpoint(|| "Saving layer."); 
-        
-        self.save()?;
-    
-        progress.finish(|| "Layer saved.");
-    
-        Ok(())
-    }
-
-
+ 
 
 }
 
@@ -1741,11 +1341,9 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakesLayer,CommandError> {
+    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakesLayer,CommandError> {
         Ok(LakesLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
     }
-
-
 
     pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {
         Ok(TilesLayer::open_from_dataset(&mut self.dataset)?)

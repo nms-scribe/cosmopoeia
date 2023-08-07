@@ -1,0 +1,95 @@
+use crate::entity;
+use crate::world_map::TypedFeature;
+use crate::world_map::TileFeature;
+use crate::world_map::Entity;
+
+use crate::world_map::BiomeMatrix;
+
+use crate::progress::ProgressObserver;
+
+use crate::world_map::BiomeFeature;
+
+use crate::errors::CommandError;
+
+use crate::world_map::WorldMapTransaction;
+
+pub(crate) fn fill_biome_defaults(target: &mut WorldMapTransaction, overwrite_layer: bool, progress: &mut crate::progress::ConsoleProgressBar) -> Result<(),CommandError> {
+
+    let mut biomes = target.create_biomes_layer(overwrite_layer)?;
+
+    let default_biomes = BiomeFeature::get_default_biomes();
+
+    progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
+
+    for data in &default_biomes {
+        biomes.add_biome(data)?
+    }
+
+    progress.finish(|| "Biomes written.");
+
+    Ok(())
+}
+
+pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTransaction, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
+
+    let mut tiles_layer = target.edit_tile_layer()?; 
+
+    // based on AFMG algorithm
+
+    entity!(BiomeSource TileFeature {
+        fid: u64,
+        temperature: f64,
+        elevation_scaled: i32,
+        water_flow: f64,
+        is_ocean: bool
+    });
+
+    let tiles = tiles_layer.read_features().to_entities_vec::<_,BiomeSource>(progress)?;
+
+    progress.start_known_endpoint(|| ("Applying biomes.",tiles.len()));
+
+    for (i,tile) in tiles.iter().enumerate() {
+
+        let biome = if !tile.is_ocean {
+            if tile.temperature < -5.0 {
+                biomes.glacier.clone()
+            } else {
+                let water_flow_scaled = tile.water_flow;
+                // is it a wetland?
+                if (tile.temperature > -2.0) && // no wetlands in colder environments... that seems odd and unlikely (Alaska is full of wetlands)
+                   // FUTURE: AFMG assumed that if the land was below 25 it was near the coast. That seems inaccurate and I'm not sure what the point of
+                   // that is: it requires *more* water to make the coast a wetland? Maybe the problem is basing it off of waterflow instead of precipitation.
+                   (((water_flow_scaled > 40.0) && (tile.elevation_scaled < 25)) ||
+                    ((water_flow_scaled > 24.0) && (tile.elevation_scaled > 24) && (tile.elevation_scaled < 60))) {
+                    biomes.wetland.clone()
+                } else {
+                    let moisture_band = ((water_flow_scaled/5.0).floor() as usize).min(4); // 0-4
+                    // Math.min(Math.max(20 - temperature, 0), 25)
+                    let temperature_band = ((20.0 - tile.temperature).max(0.0).floor() as usize).min(25);
+                    biomes.matrix[moisture_band][temperature_band].clone()
+                }
+
+          
+            }
+
+        } else {
+            "Ocean".to_owned()
+        };
+
+        if let Some(mut tile) = tiles_layer.feature_by_id(&tile.fid) {
+
+            tile.set_biome(&biome)?;
+
+            tiles_layer.update_feature(tile)?;
+
+        }
+
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Biomes applied.");
+
+    Ok(())
+
+}

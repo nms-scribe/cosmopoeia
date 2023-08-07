@@ -9,12 +9,15 @@ use crate::utils::random_number_generator;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
-use crate::algorithms::PointGenerator;
-use crate::progress::ProgressObserver;
-use crate::algorithms::DelaunayGenerator;
+use crate::algorithms::random_points::PointGenerator;
+use crate::algorithms::triangles::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
-use crate::algorithms::VoronoiGenerator;
-use crate::algorithms::OceanSamplingMethod;
+use crate::algorithms::voronoi::VoronoiGenerator;
+use crate::algorithms::raster_sampling::OceanSamplingMethod;
+use crate::algorithms::tiles::load_tile_layer;
+use crate::algorithms::tiles::calculate_tile_neighbors;
+use crate::algorithms::raster_sampling::sample_elevations_on_tiles;
+use crate::algorithms::raster_sampling::sample_ocean_on_tiles;
 
 
 subcommand_def!{
@@ -69,6 +72,7 @@ impl Task for ConvertHeightmap {
 
         let random = random_number_generator(self.seed);
 
+
         // point generator
 
         let mut points = PointGenerator::new(random, extent.clone(), self.tiles);
@@ -77,56 +81,52 @@ impl Task for ConvertHeightmap {
 
         let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(&mut progress)?);
     
-        progress.start_unknown_endpoint(|| "Generating triangles.");
-        
-        triangles.start()?;
-    
-        progress.finish(|| "Triangles generated.");
+        triangles.start(&mut progress)?;
     
         // voronoi calculator
 
         let mut voronois = VoronoiGenerator::new(triangles,extent)?;
     
-        progress.start_unknown_endpoint(|| "Generating voronoi.");
-        
-        voronois.start()?;
+        voronois.start(&mut progress)?;
     
-        progress.finish(|| "Voronoi generated.");
+        target.with_transaction(|target| {
+            load_tile_layer(target, self.overwrite, voronois, &mut progress)?;
 
-        target.load_tile_layer(self.overwrite, voronois, &mut progress)?;
-
-        // TODO: Some of the following could be done at the same time. Instead of iterating through all the tiles
-        // three times, just iterate once and 1) sample elevations, 2) sample ocean and 3) calculate neighbors.
-        // I just have to find a way to do that all at once while still being able to keep it separate for testing.
-
-        // sample elevations
-        target.sample_elevations_on_tiles(&source,&mut progress)?;
-
-        // ocean layer
-        let (ocean,ocean_method) = if let Some(ocean) = self.ocean {
-            (RasterMap::open(ocean)?,
-            match (self.ocean_no_data,self.ocean_below) {
-                (true, None) => OceanSamplingMethod::NoData,
-                (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
-                (false, None) => OceanSamplingMethod::AllData,
-                (false, Some(a)) => OceanSamplingMethod::Below(a),
-            })
-        } else {
-            (source,match (self.ocean_no_data,self.ocean_below) {
-                (true, None) => OceanSamplingMethod::NoData,
-                (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
-                (false, None) => OceanSamplingMethod::NoData,
-                (false, Some(a)) => OceanSamplingMethod::Below(a),
-            })
-        };
+            // TODO: Some of the following could be done at the same time. Instead of iterating through all the tiles
+            // three times, just iterate once and 1) sample elevations, 2) sample ocean and 3) calculate neighbors.
+            // I just have to find a way to do that all at once while still being able to keep it separate for testing.
 
 
-        target.sample_ocean_on_tiles(&ocean,ocean_method,&mut progress)?;
+            sample_elevations_on_tiles(target, &source, &mut progress)?;
+
+            // ocean layer, need to do this here because we might be moving source
+            let (ocean,ocean_method) = if let Some(ocean) = self.ocean {
+                (RasterMap::open(ocean)?,
+                match (self.ocean_no_data,self.ocean_below) {
+                    (true, None) => OceanSamplingMethod::NoData,
+                    (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
+                    (false, None) => OceanSamplingMethod::AllData,
+                    (false, Some(a)) => OceanSamplingMethod::Below(a),
+                })
+            } else {
+                (source,match (self.ocean_no_data,self.ocean_below) {
+                    (true, None) => OceanSamplingMethod::NoData,
+                    (true, Some(a)) => OceanSamplingMethod::NoDataAndBelow(a),
+                    (false, None) => OceanSamplingMethod::NoData,
+                    (false, Some(a)) => OceanSamplingMethod::Below(a),
+                })
+            };
+
+
+
+            sample_ocean_on_tiles(target, &ocean, ocean_method, &mut progress)?;
     
+            // calculate neighbors
 
-        // calculate neighbors
+            calculate_tile_neighbors(target, &mut progress)
+        })?;
 
-        target.calculate_tile_neighbors(&mut progress)
+        target.save(&mut progress)
 
     
     }
@@ -182,24 +182,20 @@ impl Task for ConvertHeightmapVoronoi {
 
         let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(&mut progress)?);
     
-        progress.start_unknown_endpoint(|| "Generating triangles.");
-        
-        triangles.start()?;
-    
-        progress.finish(|| "Triangles generated.");
+        triangles.start(&mut progress)?;
     
         // voronoi calculator
 
         let mut voronois = VoronoiGenerator::new(triangles,extent)?;
     
-        progress.start_unknown_endpoint(|| "Generating voronoi.");
-        
-        voronois.start()?;
+        voronois.start(&mut progress)?;
     
-        progress.finish(|| "Voronoi generated.");
+        target.with_transaction(|target| {
+            load_tile_layer(target, self.overwrite, voronois, &mut progress)
+        })?;
 
-        target.load_tile_layer(self.overwrite, voronois, &mut progress)
 
+        target.save(&mut progress)
     
     }
 }
@@ -228,7 +224,11 @@ impl Task for ConvertHeightmapSample {
         let mut target = WorldMap::open(self.target)?;
 
         // sample elevations
-        target.sample_elevations_on_tiles(&source,&mut progress)
+        target.with_transaction(|target| {
+            sample_elevations_on_tiles(target, &source, &mut progress)
+        })?;
+
+        target.save(&mut progress)
     
     }
 }
@@ -290,12 +290,16 @@ impl Task for ConvertHeightmapOcean {
         };
 
 
-        target.sample_ocean_on_tiles(&ocean,ocean_method,&mut progress)?;
-    
-
         // calculate neighbors
 
-        target.calculate_tile_neighbors(&mut progress)
+        target.with_transaction(|target| {
+
+            sample_ocean_on_tiles(target, &ocean, ocean_method, &mut progress)?;
+
+            calculate_tile_neighbors(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
 
     
     }
@@ -322,7 +326,11 @@ impl Task for ConvertHeightmapNeighbors {
 
         let mut target = WorldMap::open(self.target)?;
 
-        target.calculate_tile_neighbors(&mut progress)
+        target.with_transaction(|target| {
+            calculate_tile_neighbors(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
 
     
     }
