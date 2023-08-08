@@ -86,6 +86,12 @@ macro_rules! feature_get_field_type {
     (biome_criteria) => {
         BiomeCriteria
     };
+    (lake_type) => {
+        LakeType
+    };
+    (option_lake_type) => {
+        LakeType // this is the same because everything's an option, the option tag only means it can accept options
+    }
 }
 
 macro_rules! feature_set_field_type {
@@ -128,6 +134,12 @@ macro_rules! feature_set_field_type {
     (biome_criteria) => {
         &BiomeCriteria
     };
+    (lake_type) => {
+        &LakeType
+    };
+    (option_lake_type) => {
+        Option<&LakeType>
+    }
 }
 
 macro_rules! feature_get_field {
@@ -214,6 +226,22 @@ macro_rules! feature_get_field {
         }
 
     };
+    ($self: ident lake_type $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(Some(LakeType::try_from(value)?))
+        } else {
+            Ok(None)
+        }
+
+    };
+    ($self: ident option_lake_type $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(Some(LakeType::try_from(value)?))
+        } else {
+            Ok(None)
+        }
+
+    };
 }
 
 macro_rules! feature_set_field {
@@ -276,6 +304,19 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident biome_criteria $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
+    ($self: ident $value: ident lake_type $field: path) => {{
+        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
+    }};
+    ($self: ident $value: ident option_lake_type $field: path) => {{
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_string($field, &Into::<String>::into(value))?)
+        } else {
+            // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
+            // so this is the best I can do.
+            // FUTURE: I've put in a feature request to gdal crate.
+            Ok($self.feature.set_field_string($field,"")?)
+        }        
+    }};
 }
 
 macro_rules! feature_to_value {
@@ -336,6 +377,20 @@ macro_rules! feature_to_value {
     ($prop: ident biome_criteria) => {{
         FieldValue::StringValue(Into::<String>::into($prop))
     }};
+    ($prop: ident lake_type) => {{
+        FieldValue::StringValue(Into::<String>::into($prop))
+    }};
+    ($prop: ident option_lake_type) => {
+        if let Some(value) = $prop {
+            FieldValue::StringValue(Into::<String>::into(value))
+        } else {
+            // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
+            // so this is the best I can do.
+            // FUTURE: I've put in a feature request to gdal crate.
+            FieldValue::StringValue("".to_owned())
+        }
+    };
+
 }
 
 pub(crate) trait TypedFeature<'data_life>: From<Feature<'data_life>>  {
@@ -751,6 +806,8 @@ feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values
     #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
     /// if the tile is in a lake, this is the elevation of the lake's surface, if not a lake then this will be null.
     #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
+    /// if the tile is in a lake, this is the type of lake it is, if not a lake then this will be blank or null.
+    #[allow(dead_code)] lake_type set_lake_type option_lake_type FIELD_LAKE_LAKE_TYPE "lake_type" OGRFieldType::OFTString;
     /// id of neighboring tile which water flows to
     #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
@@ -824,6 +881,7 @@ entity!(TileEntityForWaterFlow TileFeature {
     is_ocean: bool, 
     neighbors: Vec<(u64,i32)>,
     precipitation: f64,
+    temperature: f64,
     water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
     water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
     flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new())
@@ -850,6 +908,7 @@ entity!(TileEntityForWaterFill TileFeature {
     water_flow: f64,
     water_accumulation: f64,
     flow_to: Vec<u64>,
+    temperature: f64,
     outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
     lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
 });
@@ -865,6 +924,7 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
     fn from(value: TileEntityForWaterFlow) -> Self {
         Self {
             elevation: value.elevation,
+            temperature: value.temperature,
             is_ocean: value.is_ocean,
             neighbors: value.neighbors,
             water_flow: value.water_flow,
@@ -1091,15 +1151,62 @@ impl RiversLayer<'_> {
 
 }
 
+#[derive(Clone)]
+pub(crate) enum LakeType {
+    Fresh,
+    Salt,
+    Frozen,
+    Pluvial, // lake forms intermittently, it's also salty
+    Dry,
+    Marsh,
+}
+
+
+impl Into<String> for &LakeType {
+
+    fn into(self) -> String {
+        match self {
+            LakeType::Fresh => "fresh",
+            LakeType::Salt => "salt",
+            LakeType::Frozen => "frozen",
+            LakeType::Pluvial => "pluvial", 
+            LakeType::Dry => "dry",
+            LakeType::Marsh => "marsh"
+        }.to_owned()
+    }
+}
+
+impl TryFrom<String> for LakeType {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "fresh" => Ok(Self::Fresh),
+            "salt" => Ok(Self::Salt),
+            "frozen" => Ok(Self::Frozen),
+            "pluvial" => Ok(Self::Pluvial),
+            "dry" => Ok(Self::Dry),
+            "marsh" => Ok(Self::Marsh),
+            _ => Err(CommandError::InvalidValueForLakeType(value))
+        }
+    }
+}
 
 feature!(LakeFeature LakeEntityIterator "lakes" wkbPolygon geometry: #[allow(dead_code)] {
-    #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+    elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+    type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
+    flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
+    temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
+    evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
-
 
 
 entity!(NewLake LakeFeature {
     elevation: f64,
+    type_: LakeType,
+    flow: f64,
+    temperature: f64,
+    evaporation: f64,
     geometry: Geometry
 });
 
@@ -1109,7 +1216,12 @@ impl LakesLayer<'_> {
 
     pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<(),CommandError> {
         let (field_names,field_values) = LakeFeature::to_field_names_values(
-            lake.elevation);
+            lake.elevation,
+            &lake.type_,
+            lake.flow,
+            lake.temperature,
+            lake.evaporation
+        );
         self.add_feature(lake.geometry, &field_names, &field_values)
     }
 
