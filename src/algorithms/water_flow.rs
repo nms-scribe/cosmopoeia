@@ -1,15 +1,10 @@
+use std::collections::HashMap;
 use std::cmp::Ordering;
 
 use crate::world_map::TileEntityForWaterFlow;
-
 use crate::errors::CommandError;
-
 use crate::world_map::TileEntityForWaterFill;
-
-use std::collections::HashMap;
-
 use crate::world_map::WorldMapTransaction;
-
 use crate::progress::ProgressObserver;
 
 pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {

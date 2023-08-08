@@ -14,6 +14,8 @@ use gdal::vector::OGRwkbGeometryType::wkbGeometryCollection;
 use gdal::vector::OGRwkbGeometryType::wkbPolygon;
 use gdal::vector::OGRwkbGeometryType::wkbLinearRing;
 use gdal::vector::OGRwkbGeometryType::wkbLineString;
+use adaptive_bezier::adaptive_bezier_curve; 
+use adaptive_bezier::Vector2;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -221,6 +223,10 @@ impl Point {
         } else {
             Self::new(-self.y,self.x)
         }
+    }
+
+    pub(crate) fn distance(&self, other: &Self) -> f64 {
+        ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt()
     }
 
     
@@ -511,12 +517,11 @@ impl PolyBezier {
         // I don't just want to put equally spaced points, I want what appears to be called an adaptive bezier:
         // https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html 
         // I found a Javascript translation of that here: https://github.com/mattdesl/adaptive-bezier-curve, 
-        // I also found a rust translation of that javascript translation (https://crates.io/crates/adaptive-bezier)
-        // One issue is that this uses it's own vector structure, which means I need to translate.
+        // I also found a rust translation of that javascript translation (https://crates.io/crates/adaptive-bezier).
+        // I'm not comfortable with it, since it uses it's own vector structure which pulls in a huge library,
+        // but it works, so.... 
         // TODO: However, it might be nice to use this Vector2 structure for points anyway. I'm basically reproducing
         // a lot of it anyway.
-        use adaptive_bezier::adaptive_bezier_curve; // was 4.6M
-        use adaptive_bezier::Vector2;
         let mut result = Vec::new();
         let mut vertices = self.vertices.iter();
         let mut controls = self.controls.iter();
@@ -532,6 +537,7 @@ impl PolyBezier {
                         Vector2::new(*vertex2.x,*vertex2.y),
                         scale
                     );
+                    // convert back to points.
                     for point in curve.iter().take(curve.len() - 2).skip(1) {
                         result.push(Point::from_f64(point[0], point[1])?);
                     }

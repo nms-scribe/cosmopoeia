@@ -10,6 +10,7 @@ use crate::progress::ConsoleProgressBar;
 use crate::algorithms::water_flow::generate_water_flow;
 use crate::algorithms::water_fill::generate_water_fill;
 use crate::algorithms::rivers::generate_water_rivers;
+use crate::algorithms::water_distance::generate_water_distance;
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -117,6 +118,35 @@ impl Task for GenWaterRivers {
 }
 
 subcommand_def!{
+    /// Calculates shortest distance to shoreline and some other water information for every tile, in count of tiles
+    pub(crate) struct GenWaterDistance {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenWaterDistance {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            generate_water_distance(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
+
+subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     pub(crate) struct GenWater {
 
@@ -163,7 +193,9 @@ impl Task for GenWater {
 
             generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite_lakes || self.overwrite, &mut progress)?;
 
-            generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, &mut progress)
+            generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, &mut progress)?;
+
+            generate_water_distance(target, &mut progress)
 
         })?;
 

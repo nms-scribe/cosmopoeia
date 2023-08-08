@@ -62,6 +62,12 @@ macro_rules! feature_get_field_type {
     (option_f64) => {
         f64 // this is the same because everything's an option, the option tag only means it can accept options
     };
+    (option_i64) => {
+        i64 // this is the same because everything's an option, the option tag only means it can accept options
+    };
+    (option_i32) => {
+        i32 // this is the same because everything's an option, the option tag only means it can accept options
+    };
     (neighbor_directions) => {
         Vec<(u64,i32)>
     };
@@ -92,8 +98,14 @@ macro_rules! feature_set_field_type {
     (i64) => {
         i64
     };
+    (option_i64) => {
+        Option<i64>
+    };
     (i32) => {
         i32
+    };
+    (option_i32) => {
+        Option<i32>
     };
     (bool) => {
         bool
@@ -129,7 +141,13 @@ macro_rules! feature_get_field {
     ($self: ident i64 $field: path) => {
         Ok($self.feature.field_as_integer64_by_name($field)?)
     };
+    ($self: ident option_i64 $field: path) => {
+        Ok($self.feature.field_as_integer64_by_name($field)?)
+    };
     ($self: ident i32 $field: path) => {
+        Ok($self.feature.field_as_integer_by_name($field)?)
+    };
+    ($self: ident option_i32 $field: path) => {
         Ok($self.feature.field_as_integer_by_name($field)?)
     };
     ($self: ident bool $field: path) => {
@@ -214,8 +232,26 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident i32 $field: path) => {
         Ok($self.feature.set_field_integer($field, $value)?)
     };
+    ($self: ident $value: ident option_i32 $field: path) => {
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_integer($field, value)?)
+        } else {
+            // There's no unsetfield, but this should have the same effect.
+            // FUTURE: I've put in a feature request to gdal crate.
+            Ok($self.feature.set_field_double($field,f64::NAN)?)
+        }
+    };
     ($self: ident $value: ident i64 $field: path) => {
         Ok($self.feature.set_field_integer64($field, $value)?)
+    };
+    ($self: ident $value: ident option_i64 $field: path) => {
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_integer64($field, value)?)
+        } else {
+            // There's no unsetfield, but this should have the same effect.
+            // FUTURE: I've put in a feature request to gdal crate.
+            Ok($self.feature.set_field_double($field,f64::NAN)?)
+        }
     };
     ($self: ident $value: ident bool $field: path) => {
         Ok($self.feature.set_field_integer($field, $value.into())?)
@@ -255,6 +291,24 @@ macro_rules! feature_to_value {
     ($prop: ident option_f64) => {
         if let Some(value) = $prop {
             FieldValue::RealValue(value)
+        } else {
+            // There's no unsetfield, but this should have the same effect.
+            // FUTURE: I've put in a feature request to gdal crate.
+            FieldValue::RealValue(f64::NAN)
+        }
+    };
+    ($prop: ident option_i32) => {
+        if let Some(value) = $prop {
+            FieldValue::IntegerValue(value)
+        } else {
+            // There's no unsetfield, but this should have the same effect.
+            // FUTURE: I've put in a feature request to gdal crate.
+            FieldValue::RealValue(f64::NAN)
+        }
+    };
+    ($prop: ident option_i64) => {
+        if let Some(value) = $prop {
+            FieldValue::Integer64Value(value)
         } else {
             // There's no unsetfield, but this should have the same effect.
             // FUTURE: I've put in a feature request to gdal crate.
@@ -673,25 +727,46 @@ impl TrianglesLayer<'_> {
 }
 
 feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
+    /// longitude of the node point for the tile's voronoi
     site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
+    /// latitude of the node point for the tile's voronoi
     site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
+    /// elevation in meters of the node point for the tile's voronoi
     elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
     // If I ever get rid of those algorithms, this field can go away.
+    /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
     elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
+    /// whether the tile is marked as ocean
     is_ocean set_is_ocean bool FIELD_IS_OCEAN "is_ocean" OGRFieldType::OFTInteger;
+    /// average annual temperature of tile in imaginary units
     temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
+    /// roughly estimated average wind direction for tile
     wind set_wind i32 FIELD_WIND "wind_dir" OGRFieldType::OFTInteger;
+    /// average annual precipitation of tile in imaginary units
     precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation" OGRFieldType::OFTReal;
+    /// amount of water flow through tile in imaginary units
     #[allow(dead_code)] water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
+    /// amount of water accumulating (because it couldn't flow on) in imaginary units
     #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
+    /// if the tile is in a lake, this is the elevation of the lake's surface, if not a lake then this will be null.
     #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
+    /// id of neighboring tile which water flows to
     #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
+    /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
+    #[allow(dead_code)] shore_distance set_shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance" OGRFieldType::OFTInteger;
+    /// If this is a land tile neighboring a water body, this is the id of the closest tile
+    #[allow(dead_code)] closest_water set_closest_water option_i64 FIELD_CLOSEST_WATER "closest_water" OGRFieldType::OFTInteger64;
+    /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
+    #[allow(dead_code)] water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count" OGRFieldType::OFTInteger;
+    /// The biome for this tile
     #[allow(dead_code)] biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
+    /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
     #[allow(dead_code)] outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
+    /// A list of all tile neighbors and their angular directions (tile_id:direction)
     neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles" OGRFieldType::OFTString;
 
 });
@@ -800,6 +875,26 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
         }
     }
 }
+
+entity!(TileEntityForWaterDistance TileFeature {
+    site: Point = |feature: &TileFeature| Ok::<_,CommandError>(
+        Point::try_from(
+            (
+                feature.site_x()?.ok_or_else(|| CommandError::MissingField("site_x"))?,
+                feature.site_y()?.ok_or_else(|| CommandError::MissingField("site_y"))?
+            )
+        )?
+    ),
+    is_ocean: bool, 
+    lake_elevation: Option<f64> = |feature: &TileFeature| feature.lake_elevation(),
+    neighbors: Vec<(u64,i32)>,
+    shore_distance: Option<i32> = |_| Ok::<_,CommandError>(None),
+    closest_water: Option<u64> = |_| Ok::<_,CommandError>(None),
+    water_count: Option<i32>  = |_| Ok::<_,CommandError>(None)
+});
+
+// entities containing is_ocean, lake_elevation, site, neighbors, and new values tile_distance, water_tile, and water_count, all set to None.
+
 
 impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
 
@@ -1000,6 +1095,8 @@ impl RiversLayer<'_> {
 feature!(LakeFeature LakeEntityIterator "lakes" wkbPolygon geometry: #[allow(dead_code)] {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
 });
+
+
 
 entity!(NewLake LakeFeature {
     elevation: f64,

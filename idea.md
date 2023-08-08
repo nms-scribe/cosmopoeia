@@ -97,7 +97,7 @@ There may be numerous other options, including some numbers set under `Options` 
 
 # Algorithm Improvements
 
-For the most part, AFMG is open source, and I can use some of the same algorithms as a basis for my code. However, there are a few things I know I will change:
+For the most part, AFMG is open source, and I can use some of the same algorithms as a basis for my code. However, there are a few things I know I will change. Note that most of these are not there yet, these are just part of the ideas so I can add them later.
 
 ## Equal-Area Voronoi Cells
 
@@ -142,488 +142,3575 @@ I'm wondering if generating river flow would be better done with a heightmap ins
 
 # AFMG Algorithms
 
-## Temperature
+## People
 
 ```js
-function calculateTemperatures() {
-  TIME && console.time("calculateTemperatures");
-  const cells = grid.cells;
-  cells.temp = new Int8Array(cells.i.length); // temperature array
 
-  const tEq = +temperatureEquatorInput.value;
-  const tPole = +temperaturePoleInput.value;
-  const tDelta = tEq - tPole;
-  const int = d3.easePolyInOut.exponent(0.5); // interpolation function
+rankCells
+Cultures.generate(); 
+Cultures.expand(); 
+BurgsAndStates.generate();
+Religions.generate(); 
+BurgsAndStates.defineStateForms(); 
+BurgsAndStates.generateProvinces(); 
+BurgsAndStates.defineBurgFeatures(); 
 
-  d3.range(0, cells.i.length, grid.cellsX).forEach(function (r) {
-    const y = grid.points[r][1];
-    const lat = Math.abs(mapCoordinates.latN - (y / graphHeight) * mapCoordinates.latT); // [0; 90]
-    const initTemp = tEq - int(lat / 90) * tDelta;
-    for (let i = r; i < r + grid.cellsX; i++) {
-      cells.temp[i] = minmax(initTemp - convertToFriendly(cells.h[i]), -128, 127);
+drawStates();
+drawBorders(); 
+BurgsAndStates.drawStateLabels(); -- TODO:
+
+//---
+
+function rankCells() {
+  TIME && console.time("rankCells");
+  const {cells, features} = pack;
+  cells.s = new Int16Array(cells.i.length); // cell suitability array
+  cells.pop = new Float32Array(cells.i.length); // cell population array
+
+  const flMean = d3.median(cells.fl.filter(f => f)) || 0,
+    flMax = d3.max(cells.fl) + d3.max(cells.conf); // to normalize flux
+  const areaMean = d3.mean(cells.area); // to adjust population by cell area
+
+  for (const i of cells.i) {
+    if (cells.h[i] < 20) continue; // no population in water
+    let s = +biomesData.habitability[cells.biome[i]]; // base suitability derived from biome habitability
+    if (!s) continue; // uninhabitable biomes has 0 suitability
+    if (flMean) s += normalize(cells.fl[i] + cells.conf[i], flMean, flMax) * 250; // big rivers and confluences are valued
+    s -= (cells.h[i] - 50) / 5; // low elevation is valued, high is not;
+
+    if (cells.t[i] === 1) {
+      if (cells.r[i]) s += 15; // estuary is valued
+      const feature = features[cells.f[cells.haven[i]]];
+      if (feature.type === "lake") {
+        if (feature.group === "freshwater") s += 30;
+        else if (feature.group == "salt") s += 10;
+        else if (feature.group == "frozen") s += 1;
+        else if (feature.group == "dry") s -= 5;
+        else if (feature.group == "sinkhole") s -= 5;
+        else if (feature.group == "lava") s -= 30;
+      } else {
+        s += 5; // ocean coast is valued
+        if (cells.harbor[i] === 1) s += 20; // safe sea harbor is valued
+      }
     }
-  });
 
-  // temperature decreases by 6.5 degree C per 1km
-  function convertToFriendly(h) {
-    if (h < 20) return 0;
-    const exponent = +heightExponentInput.value;
-    const height = Math.pow(h - 18, exponent);
-    return rn((height / 1000) * 6.5);
+    cells.s[i] = s / 5; // general population rate
+    // cell rural population is suitability adjusted by cell area
+    cells.pop[i] = cells.s[i] > 0 ? (cells.s[i] * cells.area[i]) / areaMean : 0;
   }
 
-  TIME && console.timeEnd("calculateTemperatures");
+  TIME && console.timeEnd("rankCells");
 }
-```
 
-Analysis:
 
-* temp_equator = input (default 26, degrees in celsius, no noticeable limits)
-* temp_pole = input (default -29)
-* temp_delta = temp_equator - temp_pole
-* int = `d3.easePolyInOut.exponent(0.5)` -- comments say interpolation function. But the docs talk about easing. It returns a function "which takes a normalized time t and returns the corresponding “eased” time tʹ". Further exploration indicates it is used to change the "speed" of animation over the time that the animation is taking place. So, in effect, it creates a "curve" function. The 0.5 is the exponent. 
-  * This is the function returned from that, where e = 0.5 from the argument:
-    ```js
-    function polyInOut(t) {
-      return ((t *= 2) <= 1 ? Math.pow(t, e) : 2 - Math.pow(2 - t, e)) / 2;
+window.Cultures = (function () {
+  let cells;
+
+  const generate = function () {
+    TIME && console.time("generateCultures");
+    cells = pack.cells;
+
+    const cultureIds = new Uint16Array(cells.i.length); // cell cultures
+    let count = Math.min(+culturesInput.value, +culturesSet.selectedOptions[0].dataset.max);
+
+    const populated = cells.i.filter(i => cells.s[i]); // populated cells
+    if (populated.length < count * 25) {
+      count = Math.floor(populated.length / 50);
+      if (!count) {
+        WARN && console.warn(`There are no populated cells. Cannot generate cultures`);
+        pack.cultures = [{name: "Wildlands", i: 0, base: 1, shield: "round"}];
+        cells.culture = cultureIds;
+
+        alertMessage.innerHTML = /* html */ `The climate is harsh and people cannot live in this world.<br />
+          No cultures, states and burgs will be created.<br />
+          Please consider changing climate settings in the World Configurator`;
+
+        $("#alert").dialog({
+          resizable: false,
+          title: "Extreme climate warning",
+          buttons: {
+            Ok: function () {
+              $(this).dialog("close");
+            }
+          }
+        });
+        return;
+      } else {
+        WARN && console.warn(`Not enough populated cells (${populated.length}). Will generate only ${count} cultures`);
+        alertMessage.innerHTML = /* html */ ` There are only ${populated.length} populated cells and it's insufficient livable area.<br />
+          Only ${count} out of ${culturesInput.value} requested cultures will be generated.<br />
+          Please consider changing climate settings in the World Configurator`;
+        $("#alert").dialog({
+          resizable: false,
+          title: "Extreme climate warning",
+          buttons: {
+            Ok: function () {
+              $(this).dialog("close");
+            }
+          }
+        });
+      }
     }
-    ```
-  * `t` is supposed to be a value from 0 to 1. If t <= 0.5 (`(t *= 2) <= 1`) then the function above is `y = ((2x)^(1/2))/2`. If t is greater, then the function is `y = (2 - (2-x)^(1/2))/2`. The two functions both create a sort of parabola. The first one starts curving up steep at 0 (the pole) and then flattens out to almost diagonal at 0.5. The second one continues the diagonal that curves more steeply up towards 1 (the equator). I'm not sure whey this curve was chosen, I would have expected a flatter curve at the equator.
-* for each tile (I'm assuming that's what the "range" function is doing here)
-  * lat = latitude of cell
-  * init_temp = temp_equator - int(lat/90) * temp_delta;
-  * tile.temperature = clamp(init_temp - convertToFriendly(tile.elevation),-128,127)
-* convertToFriendly(elevation) -- this is really just an adabiatic temperature reduction.
-  * if is_ocean return 0; 
-  * exponent = input (value from 1.5 to 2.2, configured in the Units dialog)
-  * return round((elevation/1000)*6.5,2);
-  * -- NOTE: Unlike AFMG, our temperature change can be negative as well. So, if you go below sea-level, it can get hotter.
 
-This algorithm is fairly straightforward, even if I might disagree with some of it.
+    const cultures = (pack.cultures = selectCultures(count));
+    const centers = d3.quadtree();
+    const colors = getColors(count);
+    const emblemShape = document.getElementById("emblemShape").value;
 
-## Precipitation
+    const codes = [];
 
-```js
-function generatePrecipitation() {
-  TIME && console.time("generatePrecipitation");
-  prec.selectAll("*").remove();
-  const {cells, cellsX, cellsY} = grid;
-  cells.prec = new Uint8Array(cells.i.length); // precipitation array
+    cultures.forEach(function (c, i) {
+      const newId = i + 1;
 
-  const cellsNumberModifier = (pointsInput.dataset.cells / 10000) ** 0.25;
-  const precInputModifier = precInput.value / 100;
-  const modifier = cellsNumberModifier * precInputModifier;
+      if (c.lock) {
+        codes.push(c.code);
+        centers.add(c.center);
 
-  const westerly = [];
-  const easterly = [];
-  let southerly = 0;
-  let northerly = 0;
+        for (const i of cells.i) {
+          if (cells.culture[i] === c.i) cultureIds[i] = newId;
+        }
 
-  // precipitation modifier per latitude band
-  // x4 = 0-5 latitude: wet through the year (rising zone)
-  // x2 = 5-20 latitude: wet summer (rising zone), dry winter (sinking zone)
-  // x1 = 20-30 latitude: dry all year (sinking zone)
-  // x2 = 30-50 latitude: wet winter (rising zone), dry summer (sinking zone)
-  // x3 = 50-60 latitude: wet all year (rising zone)
-  // x2 = 60-70 latitude: wet summer (rising zone), dry winter (sinking zone)
-  // x1 = 70-85 latitude: dry all year (sinking zone)
-  // x0.5 = 85-90 latitude: dry all year (sinking zone)
-  const latitudeModifier = [4, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0.5];
-  const MAX_PASSABLE_ELEVATION = 85;
-
-  // define wind directions based on cells latitude and prevailing winds there
-  d3.range(0, cells.i.length, cellsX).forEach(function (c, i) {
-    const lat = mapCoordinates.latN - (i / cellsY) * mapCoordinates.latT;
-    const latBand = ((Math.abs(lat) - 1) / 5) | 0;
-    const latMod = latitudeModifier[latBand];
-    const windTier = (Math.abs(lat - 89) / 30) | 0; // 30d tiers from 0 to 5 from N to S
-    const {isWest, isEast, isNorth, isSouth} = getWindDirections(windTier);
-
-    if (isWest) westerly.push([c, latMod, windTier]);
-    if (isEast) easterly.push([c + cellsX - 1, latMod, windTier]);
-    if (isNorth) northerly++;
-    if (isSouth) southerly++;
-  });
-
-  // distribute winds by direction
-  if (westerly.length) passWind(westerly, 120 * modifier, 1, cellsX);
-  if (easterly.length) passWind(easterly, 120 * modifier, -1, cellsX);
-
-  const vertT = southerly + northerly;
-  if (northerly) {
-    const bandN = ((Math.abs(mapCoordinates.latN) - 1) / 5) | 0;
-    const latModN = mapCoordinates.latT > 60 ? d3.mean(latitudeModifier) : latitudeModifier[bandN];
-    const maxPrecN = (northerly / vertT) * 60 * modifier * latModN;
-    passWind(d3.range(0, cellsX, 1), maxPrecN, cellsX, cellsY);
-  }
-
-  if (southerly) {
-    const bandS = ((Math.abs(mapCoordinates.latS) - 1) / 5) | 0;
-    const latModS = mapCoordinates.latT > 60 ? d3.mean(latitudeModifier) : latitudeModifier[bandS];
-    const maxPrecS = (southerly / vertT) * 60 * modifier * latModS;
-    passWind(d3.range(cells.i.length - cellsX, cells.i.length, 1), maxPrecS, -cellsX, cellsY);
-  }
-
-  function getWindDirections(tier) {
-    const angle = options.winds[tier];
-
-    const isWest = angle > 40 && angle < 140;
-    const isEast = angle > 220 && angle < 320;
-    const isNorth = angle > 100 && angle < 260;
-    const isSouth = angle > 280 || angle < 80;
-
-    return {isWest, isEast, isNorth, isSouth};
-  }
-
-  function passWind(source, maxPrec, next, steps) {
-    const maxPrecInit = maxPrec;
-
-    for (let first of source) {
-      if (first[0]) {
-        maxPrec = Math.min(maxPrecInit * first[1], 255);
-        first = first[0];
+        c.i = newId;
+        return;
       }
 
-      let humidity = maxPrec - cells.h[first]; // initial water amount
-      if (humidity <= 0) continue; // if first cell in row is too elevated consider wind dry
+      const cell = (c.center = placeCenter(c.sort ? c.sort : i => cells.s[i]));
+      centers.add(cells.p[cell]);
+      c.i = newId;
+      delete c.odd;
+      delete c.sort;
+      c.color = colors[i];
+      c.type = defineCultureType(cell);
+      c.expansionism = defineCultureExpansionism(c.type);
+      c.origins = [0];
+      c.code = abbreviate(c.name, codes);
+      codes.push(c.code);
+      cultureIds[cell] = newId;
+      if (emblemShape === "random") c.shield = getRandomShield();
+    });
 
-      for (let s = 0, current = first; s < steps; s++, current += next) {
-        if (cells.temp[current] < -5) continue; // no flux in permafrost
+    cells.culture = cultureIds;
 
-        if (cells.h[current] < 20) {
-          // water cell
-          if (cells.h[current + next] >= 20) {
-            cells.prec[current + next] += Math.max(humidity / rand(10, 20), 1); // coastal precipitation
-          } else {
-            humidity = Math.min(humidity + 5 * modifier, maxPrec); // wind gets more humidity passing water cell
-            cells.prec[current] += 5 * modifier; // water cells precipitation (need to correctly pour water through lakes)
+    function placeCenter(v) {
+      let spacing = (graphWidth + graphHeight) / 2 / count;
+      const MAX_ATTEMPTS = 100;
+
+      const sorted = [...populated].sort((a, b) => v(b) - v(a));
+      const max = Math.floor(sorted.length / 2);
+
+      let cellId = 0;
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        cellId = sorted[biased(0, max, 5)];
+        spacing *= 0.9;
+        if (!cultureIds[cellId] && !centers.find(cells.p[cellId][0], cells.p[cellId][1], spacing)) break;
+      }
+
+      return cellId;
+    }
+
+    // the first culture with id 0 is for wildlands
+    cultures.unshift({name: "Wildlands", i: 0, base: 1, origins: [null], shield: "round"});
+
+    // make sure all bases exist in nameBases
+    if (!nameBases.length) {
+      ERROR && console.error("Name base is empty, default nameBases will be applied");
+      nameBases = Names.getNameBases();
+    }
+
+    cultures.forEach(c => (c.base = c.base % nameBases.length));
+
+    function selectCultures(culturesNumber) {
+      let def = getDefault(culturesNumber);
+      const cultures = [];
+
+      pack.cultures?.forEach(function (culture) {
+        if (culture.lock) cultures.push(culture);
+      });
+
+      if (!cultures.length) {
+        if (culturesNumber === def.length) return def;
+        if (def.every(d => d.odd === 1)) return def.splice(0, culturesNumber);
+      }
+
+      for (let culture, rnd, i = 0; cultures.length < culturesNumber && def.length > 0; ) {
+        do {
+          rnd = rand(def.length - 1);
+          culture = def[rnd];
+          i++;
+        } while (i < 200 && !P(culture.odd));
+        cultures.push(culture);
+        def.splice(rnd, 1);
+      }
+      return cultures;
+    }
+
+    // set culture type based on culture center position
+    function defineCultureType(i) {
+      if (cells.h[i] < 70 && [1, 2, 4].includes(cells.biome[i])) return "Nomadic"; // high penalty in forest biomes and near coastline
+      if (cells.h[i] > 50) return "Highland"; // no penalty for hills and moutains, high for other elevations
+      const f = pack.features[cells.f[cells.haven[i]]]; // opposite feature
+      if (f.type === "lake" && f.cells > 5) return "Lake"; // low water cross penalty and high for growth not along coastline
+      if (
+        (cells.harbor[i] && f.type !== "lake" && P(0.1)) ||
+        (cells.harbor[i] === 1 && P(0.6)) ||
+        (pack.features[cells.f[i]].group === "isle" && P(0.4))
+      )
+        return "Naval"; // low water cross penalty and high for non-along-coastline growth
+      if (cells.r[i] && cells.fl[i] > 100) return "River"; // no River cross penalty, penalty for non-River growth
+      if (cells.t[i] > 2 && [3, 7, 8, 9, 10, 12].includes(cells.biome[i])) return "Hunting"; // high penalty in non-native biomes
+      return "Generic";
+    }
+
+    function defineCultureExpansionism(type) {
+      let base = 1; // Generic
+      if (type === "Lake") base = 0.8;
+      else if (type === "Naval") base = 1.5;
+      else if (type === "River") base = 0.9;
+      else if (type === "Nomadic") base = 1.5;
+      else if (type === "Hunting") base = 0.7;
+      else if (type === "Highland") base = 1.2;
+      return rn(((Math.random() * powerInput.value) / 2 + 1) * base, 1);
+    }
+
+    TIME && console.timeEnd("generateCultures");
+  };
+
+  const add = function (center) {
+    const defaultCultures = getDefault();
+    let culture, base, name;
+
+    if (pack.cultures.length < defaultCultures.length) {
+      // add one of the default cultures
+      culture = pack.cultures.length;
+      base = defaultCultures[culture].base;
+      name = defaultCultures[culture].name;
+    } else {
+      // add random culture besed on one of the current ones
+      culture = rand(pack.cultures.length - 1);
+      name = Names.getCulture(culture, 5, 8, "");
+      base = pack.cultures[culture].base;
+    }
+    const code = abbreviate(
+      name,
+      pack.cultures.map(c => c.code)
+    );
+    const i = pack.cultures.length;
+    const color = d3.color(d3.scaleSequential(d3.interpolateRainbow)(Math.random())).hex();
+
+    // define emblem shape
+    let shield = culture.shield;
+    const emblemShape = document.getElementById("emblemShape").value;
+    if (emblemShape === "random") shield = getRandomShield();
+
+    pack.cultures.push({
+      name,
+      color,
+      base,
+      center,
+      i,
+      expansionism: 1,
+      type: "Generic",
+      cells: 0,
+      area: 0,
+      rural: 0,
+      urban: 0,
+      origins: [0],
+      code,
+      shield
+    });
+  };
+
+  const getDefault = function (count) {
+    // generic sorting functions
+    const cells = pack.cells,
+      s = cells.s,
+      sMax = d3.max(s),
+      t = cells.t,
+      h = cells.h,
+      temp = grid.cells.temp;
+    const n = cell => Math.ceil((s[cell] / sMax) * 3); // normalized cell score
+    const td = (cell, goal) => {
+      const d = Math.abs(temp[cells.g[cell]] - goal);
+      return d ? d + 1 : 1;
+    }; // temperature difference fee
+    const bd = (cell, biomes, fee = 4) => (biomes.includes(cells.biome[cell]) ? 1 : fee); // biome difference fee
+    const sf = (cell, fee = 4) =>
+      cells.haven[cell] && pack.features[cells.f[cells.haven[cell]]].type !== "lake" ? 1 : fee; // not on sea coast fee
+
+    if (culturesSet.value === "european") {
+      return [
+        {name: "Shwazen", base: 0, odd: 1, sort: i => n(i) / td(i, 10) / bd(i, [6, 8]), shield: "swiss"},
+        {name: "Angshire", base: 1, odd: 1, sort: i => n(i) / td(i, 10) / sf(i), shield: "wedged"},
+        {name: "Luari", base: 2, odd: 1, sort: i => n(i) / td(i, 12) / bd(i, [6, 8]), shield: "french"},
+        {name: "Tallian", base: 3, odd: 1, sort: i => n(i) / td(i, 15), shield: "horsehead"},
+        {name: "Astellian", base: 4, odd: 1, sort: i => n(i) / td(i, 16), shield: "spanish"},
+        {name: "Slovan", base: 5, odd: 1, sort: i => (n(i) / td(i, 6)) * t[i], shield: "polish"},
+        {name: "Norse", base: 6, odd: 1, sort: i => n(i) / td(i, 5), shield: "heater"},
+        {name: "Elladan", base: 7, odd: 1, sort: i => (n(i) / td(i, 18)) * h[i], shield: "boeotian"},
+        {name: "Romian", base: 8, odd: 0.2, sort: i => n(i) / td(i, 15) / t[i], shield: "roman"},
+        {name: "Soumi", base: 9, odd: 1, sort: i => (n(i) / td(i, 5) / bd(i, [9])) * t[i], shield: "pavise"},
+        {name: "Portuzian", base: 13, odd: 1, sort: i => n(i) / td(i, 17) / sf(i), shield: "renaissance"},
+        {name: "Vengrian", base: 15, odd: 1, sort: i => (n(i) / td(i, 11) / bd(i, [4])) * t[i], shield: "horsehead2"},
+        {name: "Turchian", base: 16, odd: 0.05, sort: i => n(i) / td(i, 14), shield: "round"},
+        {name: "Euskati", base: 20, odd: 0.05, sort: i => (n(i) / td(i, 15)) * h[i], shield: "oldFrench"},
+        {name: "Keltan", base: 22, odd: 0.05, sort: i => (n(i) / td(i, 11) / bd(i, [6, 8])) * t[i], shield: "oval"}
+      ];
+    }
+
+    if (culturesSet.value === "oriental") {
+      return [
+        {name: "Koryo", base: 10, odd: 1, sort: i => n(i) / td(i, 12) / t[i], shield: "round"},
+        {name: "Hantzu", base: 11, odd: 1, sort: i => n(i) / td(i, 13), shield: "banner"},
+        {name: "Yamoto", base: 12, odd: 1, sort: i => n(i) / td(i, 15) / t[i], shield: "round"},
+        {name: "Turchian", base: 16, odd: 1, sort: i => n(i) / td(i, 12), shield: "round"},
+        {
+          name: "Berberan",
+          base: 17,
+          odd: 0.2,
+          sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i],
+          shield: "oval"
+        },
+        {name: "Eurabic", base: 18, odd: 1, sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i], shield: "oval"},
+        {name: "Efratic", base: 23, odd: 0.1, sort: i => (n(i) / td(i, 22)) * t[i], shield: "round"},
+        {name: "Tehrani", base: 24, odd: 1, sort: i => (n(i) / td(i, 18)) * h[i], shield: "round"},
+        {name: "Maui", base: 25, odd: 0.2, sort: i => n(i) / td(i, 24) / sf(i) / t[i], shield: "vesicaPiscis"},
+        {name: "Carnatic", base: 26, odd: 0.5, sort: i => n(i) / td(i, 26), shield: "round"},
+        {name: "Vietic", base: 29, odd: 0.8, sort: i => n(i) / td(i, 25) / bd(i, [7], 7) / t[i], shield: "banner"},
+        {name: "Guantzu", base: 30, odd: 0.5, sort: i => n(i) / td(i, 17), shield: "banner"},
+        {name: "Ulus", base: 31, odd: 1, sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i], shield: "banner"}
+      ];
+    }
+
+    if (culturesSet.value === "english") {
+      const getName = () => Names.getBase(1, 5, 9, "", 0);
+      return [
+        {name: getName(), base: 1, odd: 1, shield: "heater"},
+        {name: getName(), base: 1, odd: 1, shield: "wedged"},
+        {name: getName(), base: 1, odd: 1, shield: "swiss"},
+        {name: getName(), base: 1, odd: 1, shield: "oldFrench"},
+        {name: getName(), base: 1, odd: 1, shield: "swiss"},
+        {name: getName(), base: 1, odd: 1, shield: "spanish"},
+        {name: getName(), base: 1, odd: 1, shield: "hessen"},
+        {name: getName(), base: 1, odd: 1, shield: "fantasy5"},
+        {name: getName(), base: 1, odd: 1, shield: "fantasy4"},
+        {name: getName(), base: 1, odd: 1, shield: "fantasy1"}
+      ];
+    }
+
+    if (culturesSet.value === "antique") {
+      return [
+        {name: "Roman", base: 8, odd: 1, sort: i => n(i) / td(i, 14) / t[i], shield: "roman"}, // Roman
+        {name: "Roman", base: 8, odd: 1, sort: i => n(i) / td(i, 15) / sf(i), shield: "roman"}, // Roman
+        {name: "Roman", base: 8, odd: 1, sort: i => n(i) / td(i, 16) / sf(i), shield: "roman"}, // Roman
+        {name: "Roman", base: 8, odd: 1, sort: i => n(i) / td(i, 17) / t[i], shield: "roman"}, // Roman
+        {name: "Hellenic", base: 7, odd: 1, sort: i => (n(i) / td(i, 18) / sf(i)) * h[i], shield: "boeotian"}, // Greek
+        {name: "Hellenic", base: 7, odd: 1, sort: i => (n(i) / td(i, 19) / sf(i)) * h[i], shield: "boeotian"}, // Greek
+        {name: "Macedonian", base: 7, odd: 0.5, sort: i => (n(i) / td(i, 12)) * h[i], shield: "round"}, // Greek
+        {name: "Celtic", base: 22, odd: 1, sort: i => n(i) / td(i, 11) ** 0.5 / bd(i, [6, 8]), shield: "round"},
+        {name: "Germanic", base: 0, odd: 1, sort: i => n(i) / td(i, 10) ** 0.5 / bd(i, [6, 8]), shield: "round"},
+        {name: "Persian", base: 24, odd: 0.8, sort: i => (n(i) / td(i, 18)) * h[i], shield: "oval"}, // Iranian
+        {name: "Scythian", base: 24, odd: 0.5, sort: i => n(i) / td(i, 11) ** 0.5 / bd(i, [4]), shield: "round"}, // Iranian
+        {name: "Cantabrian", base: 20, odd: 0.5, sort: i => (n(i) / td(i, 16)) * h[i], shield: "oval"}, // Basque
+        {name: "Estian", base: 9, odd: 0.2, sort: i => (n(i) / td(i, 5)) * t[i], shield: "pavise"}, // Finnic
+        {name: "Carthaginian", base: 42, odd: 0.3, sort: i => n(i) / td(i, 20) / sf(i), shield: "oval"}, // Levantine
+        {name: "Hebrew", base: 42, odd: 0.2, sort: i => (n(i) / td(i, 19)) * sf(i), shield: "oval"}, // Levantine
+        {name: "Mesopotamian", base: 23, odd: 0.2, sort: i => n(i) / td(i, 22) / bd(i, [1, 2, 3]), shield: "oval"} // Mesopotamian
+      ];
+    }
+
+    if (culturesSet.value === "highFantasy") {
+      return [
+        // fantasy races
+        {
+          name: "Quenian (Elfish)",
+          base: 33,
+          odd: 1,
+          sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i],
+          shield: "gondor"
+        }, // Elves
+        {
+          name: "Eldar (Elfish)",
+          base: 33,
+          odd: 1,
+          sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i],
+          shield: "noldor"
+        }, // Elves
+        {
+          name: "Trow (Dark Elfish)",
+          base: 34,
+          odd: 0.9,
+          sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i],
+          shield: "hessen"
+        }, // Dark Elves
+        {
+          name: "Lothian (Dark Elfish)",
+          base: 34,
+          odd: 0.3,
+          sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i],
+          shield: "wedged"
+        }, // Dark Elves
+        {name: "Dunirr (Dwarven)", base: 35, odd: 1, sort: i => n(i) + h[i], shield: "ironHills"}, // Dwarfs
+        {name: "Khazadur (Dwarven)", base: 35, odd: 1, sort: i => n(i) + h[i], shield: "erebor"}, // Dwarfs
+        {name: "Kobold (Goblin)", base: 36, odd: 1, sort: i => t[i] - s[i], shield: "moriaOrc"}, // Goblin
+        {name: "Uruk (Orkish)", base: 37, odd: 1, sort: i => h[i] * t[i], shield: "urukHai"}, // Orc
+        {
+          name: "Ugluk (Orkish)",
+          base: 37,
+          odd: 0.5,
+          sort: i => (h[i] * t[i]) / bd(i, [1, 2, 10, 11]),
+          shield: "moriaOrc"
+        }, // Orc
+        {name: "Yotunn (Giants)", base: 38, odd: 0.7, sort: i => td(i, -10), shield: "pavise"}, // Giant
+        {name: "Rake (Drakonic)", base: 39, odd: 0.7, sort: i => -s[i], shield: "fantasy2"}, // Draconic
+        {name: "Arago (Arachnid)", base: 40, odd: 0.7, sort: i => t[i] - s[i], shield: "horsehead2"}, // Arachnid
+        {name: "Aj'Snaga (Serpents)", base: 41, odd: 0.7, sort: i => n(i) / bd(i, [12], 10), shield: "fantasy1"}, // Serpents
+        // fantasy human
+        {name: "Anor (Human)", base: 32, odd: 1, sort: i => n(i) / td(i, 10), shield: "fantasy5"},
+        {name: "Dail (Human)", base: 32, odd: 1, sort: i => n(i) / td(i, 13), shield: "roman"},
+        {name: "Rohand (Human)", base: 16, odd: 1, sort: i => n(i) / td(i, 16), shield: "round"},
+        {
+          name: "Dulandir (Human)",
+          base: 31,
+          odd: 1,
+          sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i],
+          shield: "easterling"
+        }
+      ];
+    }
+
+    if (culturesSet.value === "darkFantasy") {
+      return [
+        // common real-world English
+        {name: "Angshire", base: 1, odd: 1, sort: i => n(i) / td(i, 10) / sf(i), shield: "heater"},
+        {name: "Enlandic", base: 1, odd: 1, sort: i => n(i) / td(i, 12), shield: "heater"},
+        {name: "Westen", base: 1, odd: 1, sort: i => n(i) / td(i, 10), shield: "heater"},
+        {name: "Nortumbic", base: 1, odd: 1, sort: i => n(i) / td(i, 7), shield: "heater"},
+        {name: "Mercian", base: 1, odd: 1, sort: i => n(i) / td(i, 9), shield: "heater"},
+        {name: "Kentian", base: 1, odd: 1, sort: i => n(i) / td(i, 12), shield: "heater"},
+        // rare real-world western
+        {name: "Norse", base: 6, odd: 0.7, sort: i => n(i) / td(i, 5) / sf(i), shield: "oldFrench"},
+        {name: "Schwarzen", base: 0, odd: 0.3, sort: i => n(i) / td(i, 10) / bd(i, [6, 8]), shield: "gonfalon"},
+        {name: "Luarian", base: 2, odd: 0.3, sort: i => n(i) / td(i, 12) / bd(i, [6, 8]), shield: "oldFrench"},
+        {name: "Hetallian", base: 3, odd: 0.3, sort: i => n(i) / td(i, 15), shield: "oval"},
+        {name: "Astellian", base: 4, odd: 0.3, sort: i => n(i) / td(i, 16), shield: "spanish"},
+        // rare real-world exotic
+        {
+          name: "Kiswaili",
+          base: 28,
+          odd: 0.05,
+          sort: i => n(i) / td(i, 29) / bd(i, [1, 3, 5, 7]),
+          shield: "vesicaPiscis"
+        },
+        {name: "Yoruba", base: 21, odd: 0.05, sort: i => n(i) / td(i, 15) / bd(i, [5, 7]), shield: "vesicaPiscis"},
+        {name: "Koryo", base: 10, odd: 0.05, sort: i => n(i) / td(i, 12) / t[i], shield: "round"},
+        {name: "Hantzu", base: 11, odd: 0.05, sort: i => n(i) / td(i, 13), shield: "banner"},
+        {name: "Yamoto", base: 12, odd: 0.05, sort: i => n(i) / td(i, 15) / t[i], shield: "round"},
+        {name: "Guantzu", base: 30, odd: 0.05, sort: i => n(i) / td(i, 17), shield: "banner"},
+        {
+          name: "Ulus",
+          base: 31,
+          odd: 0.05,
+          sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i],
+          shield: "banner"
+        },
+        {name: "Turan", base: 16, odd: 0.05, sort: i => n(i) / td(i, 12), shield: "round"},
+        {
+          name: "Berberan",
+          base: 17,
+          odd: 0.05,
+          sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i],
+          shield: "round"
+        },
+        {
+          name: "Eurabic",
+          base: 18,
+          odd: 0.05,
+          sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i],
+          shield: "round"
+        },
+        {name: "Slovan", base: 5, odd: 0.05, sort: i => (n(i) / td(i, 6)) * t[i], shield: "round"},
+        {
+          name: "Keltan",
+          base: 22,
+          odd: 0.1,
+          sort: i => n(i) / td(i, 11) ** 0.5 / bd(i, [6, 8]),
+          shield: "vesicaPiscis"
+        },
+        {name: "Elladan", base: 7, odd: 0.2, sort: i => (n(i) / td(i, 18) / sf(i)) * h[i], shield: "boeotian"},
+        {name: "Romian", base: 8, odd: 0.2, sort: i => n(i) / td(i, 14) / t[i], shield: "roman"},
+        // fantasy races
+        {name: "Eldar", base: 33, odd: 0.5, sort: i => (n(i) / bd(i, [6, 7, 8, 9], 10)) * t[i], shield: "fantasy5"}, // Elves
+        {name: "Trow", base: 34, odd: 0.8, sort: i => (n(i) / bd(i, [7, 8, 9, 12], 10)) * t[i], shield: "hessen"}, // Dark Elves
+        {name: "Durinn", base: 35, odd: 0.8, sort: i => n(i) + h[i], shield: "erebor"}, // Dwarven
+        {name: "Kobblin", base: 36, odd: 0.8, sort: i => t[i] - s[i], shield: "moriaOrc"}, // Goblin
+        {name: "Uruk", base: 37, odd: 0.8, sort: i => (h[i] * t[i]) / bd(i, [1, 2, 10, 11]), shield: "urukHai"}, // Orc
+        {name: "Yotunn", base: 38, odd: 0.8, sort: i => td(i, -10), shield: "pavise"}, // Giant
+        {name: "Drake", base: 39, odd: 0.9, sort: i => -s[i], shield: "fantasy2"}, // Draconic
+        {name: "Rakhnid", base: 40, odd: 0.9, sort: i => t[i] - s[i], shield: "horsehead2"}, // Arachnid
+        {name: "Aj'Snaga", base: 41, odd: 0.9, sort: i => n(i) / bd(i, [12], 10), shield: "fantasy1"} // Serpents
+      ];
+    }
+
+    if (culturesSet.value === "random") {
+      return d3.range(count).map(function () {
+        const rnd = rand(nameBases.length - 1);
+        const name = Names.getBaseShort(rnd);
+        return {name, base: rnd, odd: 1, shield: getRandomShield()};
+      });
+    }
+
+    // all-world
+    return [
+      {name: "Shwazen", base: 0, odd: 0.7, sort: i => n(i) / td(i, 10) / bd(i, [6, 8]), shield: "hessen"},
+      {name: "Angshire", base: 1, odd: 1, sort: i => n(i) / td(i, 10) / sf(i), shield: "heater"},
+      {name: "Luari", base: 2, odd: 0.6, sort: i => n(i) / td(i, 12) / bd(i, [6, 8]), shield: "oldFrench"},
+      {name: "Tallian", base: 3, odd: 0.6, sort: i => n(i) / td(i, 15), shield: "horsehead2"},
+      {name: "Astellian", base: 4, odd: 0.6, sort: i => n(i) / td(i, 16), shield: "spanish"},
+      {name: "Slovan", base: 5, odd: 0.7, sort: i => (n(i) / td(i, 6)) * t[i], shield: "round"},
+      {name: "Norse", base: 6, odd: 0.7, sort: i => n(i) / td(i, 5), shield: "heater"},
+      {name: "Elladan", base: 7, odd: 0.7, sort: i => (n(i) / td(i, 18)) * h[i], shield: "boeotian"},
+      {name: "Romian", base: 8, odd: 0.7, sort: i => n(i) / td(i, 15), shield: "roman"},
+      {name: "Soumi", base: 9, odd: 0.3, sort: i => (n(i) / td(i, 5) / bd(i, [9])) * t[i], shield: "pavise"},
+      {name: "Koryo", base: 10, odd: 0.1, sort: i => n(i) / td(i, 12) / t[i], shield: "round"},
+      {name: "Hantzu", base: 11, odd: 0.1, sort: i => n(i) / td(i, 13), shield: "banner"},
+      {name: "Yamoto", base: 12, odd: 0.1, sort: i => n(i) / td(i, 15) / t[i], shield: "round"},
+      {name: "Portuzian", base: 13, odd: 0.4, sort: i => n(i) / td(i, 17) / sf(i), shield: "spanish"},
+      {name: "Nawatli", base: 14, odd: 0.1, sort: i => h[i] / td(i, 18) / bd(i, [7]), shield: "square"},
+      {name: "Vengrian", base: 15, odd: 0.2, sort: i => (n(i) / td(i, 11) / bd(i, [4])) * t[i], shield: "wedged"},
+      {name: "Turchian", base: 16, odd: 0.2, sort: i => n(i) / td(i, 13), shield: "round"},
+      {
+        name: "Berberan",
+        base: 17,
+        odd: 0.1,
+        sort: i => (n(i) / td(i, 19) / bd(i, [1, 2, 3], 7)) * t[i],
+        shield: "round"
+      },
+      {name: "Eurabic", base: 18, odd: 0.2, sort: i => (n(i) / td(i, 26) / bd(i, [1, 2], 7)) * t[i], shield: "round"},
+      {name: "Inuk", base: 19, odd: 0.05, sort: i => td(i, -1) / bd(i, [10, 11]) / sf(i), shield: "square"},
+      {name: "Euskati", base: 20, odd: 0.05, sort: i => (n(i) / td(i, 15)) * h[i], shield: "spanish"},
+      {name: "Yoruba", base: 21, odd: 0.05, sort: i => n(i) / td(i, 15) / bd(i, [5, 7]), shield: "vesicaPiscis"},
+      {
+        name: "Keltan",
+        base: 22,
+        odd: 0.05,
+        sort: i => (n(i) / td(i, 11) / bd(i, [6, 8])) * t[i],
+        shield: "vesicaPiscis"
+      },
+      {name: "Efratic", base: 23, odd: 0.05, sort: i => (n(i) / td(i, 22)) * t[i], shield: "diamond"},
+      {name: "Tehrani", base: 24, odd: 0.1, sort: i => (n(i) / td(i, 18)) * h[i], shield: "round"},
+      {name: "Maui", base: 25, odd: 0.05, sort: i => n(i) / td(i, 24) / sf(i) / t[i], shield: "round"},
+      {name: "Carnatic", base: 26, odd: 0.05, sort: i => n(i) / td(i, 26), shield: "round"},
+      {name: "Inqan", base: 27, odd: 0.05, sort: i => h[i] / td(i, 13), shield: "square"},
+      {name: "Kiswaili", base: 28, odd: 0.1, sort: i => n(i) / td(i, 29) / bd(i, [1, 3, 5, 7]), shield: "vesicaPiscis"},
+      {name: "Vietic", base: 29, odd: 0.1, sort: i => n(i) / td(i, 25) / bd(i, [7], 7) / t[i], shield: "banner"},
+      {name: "Guantzu", base: 30, odd: 0.1, sort: i => n(i) / td(i, 17), shield: "banner"},
+      {name: "Ulus", base: 31, odd: 0.1, sort: i => (n(i) / td(i, 5) / bd(i, [2, 4, 10], 7)) * t[i], shield: "banner"},
+      {name: "Hebrew", base: 42, odd: 0.2, sort: i => (n(i) / td(i, 18)) * sf(i), shield: "oval"} // Levantine
+    ];
+  };
+
+  // expand cultures across the map (Dijkstra-like algorithm)
+  const expand = function () {
+    TIME && console.time("expandCultures");
+    const {cells, cultures} = pack;
+
+    const queue = new PriorityQueue({comparator: (a, b) => a.priority - b.priority});
+    const cost = [];
+
+    const neutralRate = byId("neutralRate")?.valueAsNumber || 1;
+    const maxExpansionCost = cells.i.length * 0.6 * neutralRate; // limit cost for culture growth
+
+    // remove culture from all cells except of locked
+    const hasLocked = cultures.some(c => !c.removed && c.lock);
+    if (hasLocked) {
+      for (const cellId of cells.i) {
+        const culture = cultures[cells.culture[cellId]];
+        if (culture.lock) continue;
+        cells.culture[cellId] = 0;
+      }
+    } else {
+      cells.culture = new Uint16Array(cells.i.length);
+    }
+
+    for (const culture of cultures) {
+      if (!culture.i || culture.removed || culture.lock) continue;
+      queue.queue({cellId: culture.center, cultureId: culture.i, priority: 0});
+    }
+
+    while (queue.length) {
+      const {cellId, priority, cultureId} = queue.dequeue();
+      const {type, expansionism} = cultures[cultureId];
+
+      cells.c[cellId].forEach(neibCellId => {
+        if (hasLocked) {
+          const neibCultureId = cells.culture[neibCellId];
+          if (neibCultureId && cultures[neibCultureId].lock) return; // do not overwrite cell of locked culture
+        }
+
+        const biome = cells.biome[neibCellId];
+        const biomeCost = getBiomeCost(cultureId, biome, type);
+        const biomeChangeCost = biome === cells.biome[neibCellId] ? 0 : 20; // penalty on biome change
+        const heightCost = getHeightCost(neibCellId, cells.h[neibCellId], type);
+        const riverCost = getRiverCost(cells.r[neibCellId], neibCellId, type);
+        const typeCost = getTypeCost(cells.t[neibCellId], type);
+
+        const cellCost = (biomeCost + biomeChangeCost + heightCost + riverCost + typeCost) / expansionism;
+        const totalCost = priority + cellCost;
+
+        if (totalCost > maxExpansionCost) return;
+
+        if (!cost[neibCellId] || totalCost < cost[neibCellId]) {
+          if (cells.pop[neibCellId] > 0) cells.culture[neibCellId] = cultureId; // assign culture to populated cell
+          cost[neibCellId] = totalCost;
+          queue.queue({cellId: neibCellId, cultureId, priority: totalCost});
+        }
+      });
+    }
+
+    function getBiomeCost(c, biome, type) {
+      if (cells.biome[cultures[c].center] === biome) return 10; // tiny penalty for native biome
+      if (type === "Hunting") return biomesData.cost[biome] * 5; // non-native biome penalty for hunters
+      if (type === "Nomadic" && biome > 4 && biome < 10) return biomesData.cost[biome] * 10; // forest biome penalty for nomads
+      return biomesData.cost[biome] * 2; // general non-native biome penalty
+    }
+
+    function getHeightCost(i, h, type) {
+      const f = pack.features[cells.f[i]],
+        a = cells.area[i];
+      if (type === "Lake" && f.type === "lake") return 10; // no lake crossing penalty for Lake cultures
+      if (type === "Naval" && h < 20) return a * 2; // low sea/lake crossing penalty for Naval cultures
+      if (type === "Nomadic" && h < 20) return a * 50; // giant sea/lake crossing penalty for Nomads
+      if (h < 20) return a * 6; // general sea/lake crossing penalty
+      if (type === "Highland" && h < 44) return 3000; // giant penalty for highlanders on lowlands
+      if (type === "Highland" && h < 62) return 200; // giant penalty for highlanders on lowhills
+      if (type === "Highland") return 0; // no penalty for highlanders on highlands
+      if (h >= 67) return 200; // general mountains crossing penalty
+      if (h >= 44) return 30; // general hills crossing penalty
+      return 0;
+    }
+
+    function getRiverCost(riverId, cellId, type) {
+      if (type === "River") return riverId ? 0 : 100; // penalty for river cultures
+      if (!riverId) return 0; // no penalty for others if there is no river
+      return minmax(cells.fl[cellId] / 10, 20, 100); // river penalty from 20 to 100 based on flux
+    }
+
+    function getTypeCost(t, type) {
+      if (t === 1) return type === "Naval" || type === "Lake" ? 0 : type === "Nomadic" ? 60 : 20; // penalty for coastline
+      if (t === 2) return type === "Naval" || type === "Nomadic" ? 30 : 0; // low penalty for land level 2 for Navals and nomads
+      if (t !== -1) return type === "Naval" || type === "Lake" ? 100 : 0; // penalty for mainland for navals
+      return 0;
+    }
+
+    TIME && console.timeEnd("expandCultures");
+  };
+
+  const getRandomShield = function () {
+    const type = rw(COA.shields.types);
+    return rw(COA.shields[type]);
+  };
+
+  return {generate, add, expand, getDefault, getRandomShield};
+})();
+
+window.BurgsAndStates = (function () {
+  const generate = function () {
+    const {cells, cultures} = pack;
+    const n = cells.i.length;
+
+    cells.burg = new Uint16Array(n); // cell burg
+    cells.road = new Uint16Array(n); // cell road power
+    cells.crossroad = new Uint16Array(n); // cell crossroad power
+
+    const burgs = (pack.burgs = placeCapitals());
+    pack.states = createStates();
+    const capitalRoutes = Routes.getRoads();
+
+    placeTowns();
+    expandStates();
+    normalizeStates();
+    const townRoutes = Routes.getTrails();
+    specifyBurgs();
+
+    const oceanRoutes = Routes.getSearoutes();
+
+    collectStatistics();
+    assignColors();
+
+    generateCampaigns();
+    generateDiplomacy();
+    Routes.draw(capitalRoutes, townRoutes, oceanRoutes);
+    drawBurgs();
+
+    function placeCapitals() {
+      TIME && console.time("placeCapitals");
+      let count = +regionsOutput.value;
+      let burgs = [0];
+
+      const rand = () => 0.5 + Math.random() * 0.5;
+      const score = new Int16Array(cells.s.map(s => s * rand())); // cell score for capitals placement
+      const sorted = cells.i.filter(i => score[i] > 0 && cells.culture[i]).sort((a, b) => score[b] - score[a]); // filtered and sorted array of indexes
+
+      if (sorted.length < count * 10) {
+        count = Math.floor(sorted.length / 10);
+        if (!count) {
+          WARN && console.warn("There is no populated cells. Cannot generate states");
+          return burgs;
+        } else {
+          WARN && console.warn(`Not enough populated cells (${sorted.length}). Will generate only ${count} states`);
+        }
+      }
+
+      let burgsTree = d3.quadtree();
+      let spacing = (graphWidth + graphHeight) / 2 / count; // min distance between capitals
+
+      for (let i = 0; burgs.length <= count; i++) {
+        const cell = sorted[i];
+        const [x, y] = cells.p[cell];
+
+        if (burgsTree.find(x, y, spacing) === undefined) {
+          burgs.push({cell, x, y});
+          burgsTree.add([x, y]);
+        }
+
+        if (i === sorted.length - 1) {
+          WARN && console.warn("Cannot place capitals with current spacing. Trying again with reduced spacing");
+          burgsTree = d3.quadtree();
+          i = -1;
+          burgs = [0];
+          spacing /= 1.2;
+        }
+      }
+
+      burgs[0] = burgsTree;
+      TIME && console.timeEnd("placeCapitals");
+      return burgs;
+    }
+
+    // For each capital create a state
+    function createStates() {
+      TIME && console.time("createStates");
+      const states = [{i: 0, name: "Neutrals"}];
+      const colors = getColors(burgs.length - 1);
+      const each5th = each(5);
+
+      burgs.forEach(function (b, i) {
+        if (!i) return; // skip first element
+
+        // burgs data
+        b.i = b.state = i;
+        b.culture = cells.culture[b.cell];
+        b.name = Names.getCultureShort(b.culture);
+        b.feature = cells.f[b.cell];
+        b.capital = 1;
+
+        // states data
+        const expansionism = rn(Math.random() * powerInput.value + 1, 1);
+        const basename = b.name.length < 9 && each5th(b.cell) ? b.name : Names.getCultureShort(b.culture);
+        const name = Names.getState(basename, b.culture);
+        const type = cultures[b.culture].type;
+
+        const coa = COA.generate(null, null, null, type);
+        coa.shield = COA.getShield(b.culture, null);
+        states.push({
+          i,
+          color: colors[i - 1],
+          name,
+          expansionism,
+          capital: i,
+          type,
+          center: b.cell,
+          culture: b.culture,
+          coa
+        });
+        cells.burg[b.cell] = i;
+      });
+
+      TIME && console.timeEnd("createStates");
+      return states;
+    }
+
+    // place secondary settlements based on geo and economical evaluation
+    function placeTowns() {
+      TIME && console.time("placeTowns");
+      const score = new Int16Array(cells.s.map(s => s * gauss(1, 3, 0, 20, 3))); // a bit randomized cell score for towns placement
+      const sorted = cells.i
+        .filter(i => !cells.burg[i] && score[i] > 0 && cells.culture[i])
+        .sort((a, b) => score[b] - score[a]); // filtered and sorted array of indexes
+
+      const desiredNumber =
+        manorsInput.value == 1000
+          ? rn(sorted.length / 5 / (grid.points.length / 10000) ** 0.8)
+          : manorsInput.valueAsNumber;
+      const burgsNumber = Math.min(desiredNumber, sorted.length); // towns to generate
+      let burgsAdded = 0;
+
+      const burgsTree = burgs[0];
+      let spacing = (graphWidth + graphHeight) / 150 / (burgsNumber ** 0.7 / 66); // min distance between towns
+
+      while (burgsAdded < burgsNumber && spacing > 1) {
+        for (let i = 0; burgsAdded < burgsNumber && i < sorted.length; i++) {
+          if (cells.burg[sorted[i]]) continue;
+          const cell = sorted[i],
+            x = cells.p[cell][0],
+            y = cells.p[cell][1];
+          const s = spacing * gauss(1, 0.3, 0.2, 2, 2); // randomize to make placement not uniform
+          if (burgsTree.find(x, y, s) !== undefined) continue; // to close to existing burg
+          const burg = burgs.length;
+          const culture = cells.culture[cell];
+          const name = Names.getCulture(culture);
+          burgs.push({cell, x, y, state: 0, i: burg, culture, name, capital: 0, feature: cells.f[cell]});
+          burgsTree.add([x, y]);
+          cells.burg[cell] = burg;
+          burgsAdded++;
+        }
+        spacing *= 0.5;
+      }
+
+      if (manorsInput.value != 1000 && burgsAdded < desiredNumber) {
+        ERROR && console.error(`Cannot place all burgs. Requested ${desiredNumber}, placed ${burgsAdded}`);
+      }
+
+      burgs[0] = {name: undefined}; // do not store burgsTree anymore
+      TIME && console.timeEnd("placeTowns");
+    }
+  };
+
+  // define burg coordinates, coa, port status and define details
+  const specifyBurgs = function () {
+    TIME && console.time("specifyBurgs");
+    const cells = pack.cells,
+      vertices = pack.vertices,
+      features = pack.features,
+      temp = grid.cells.temp;
+
+    for (const b of pack.burgs) {
+      if (!b.i || b.lock) continue;
+      const i = b.cell;
+
+      // asign port status to some coastline burgs with temp > 0 °C
+      const haven = cells.haven[i];
+      if (haven && temp[cells.g[i]] > 0) {
+        const f = cells.f[haven]; // water body id
+        // port is a capital with any harbor OR town with good harbor
+        const port = features[f].cells > 1 && ((b.capital && cells.harbor[i]) || cells.harbor[i] === 1);
+        b.port = port ? f : 0; // port is defined by water body id it lays on
+      } else b.port = 0;
+
+      // define burg population (keep urbanization at about 10% rate)
+      b.population = rn(Math.max((cells.s[i] + cells.road[i] / 2) / 8 + b.i / 1000 + (i % 100) / 1000, 0.1), 3);
+      if (b.capital) b.population = rn(b.population * 1.3, 3); // increase capital population
+
+      if (b.port) {
+        b.population = b.population * 1.3; // increase port population
+        const [x, y] = getMiddlePoint(i, haven);
+        b.x = x;
+        b.y = y;
+      }
+
+      // add random factor
+      b.population = rn(b.population * gauss(2, 3, 0.6, 20, 3), 3);
+
+      // shift burgs on rivers semi-randomly and just a bit
+      if (!b.port && cells.r[i]) {
+        const shift = Math.min(cells.fl[i] / 150, 1);
+        if (i % 2) b.x = rn(b.x + shift, 2);
+        else b.x = rn(b.x - shift, 2);
+        if (cells.r[i] % 2) b.y = rn(b.y + shift, 2);
+        else b.y = rn(b.y - shift, 2);
+      }
+
+      // define emblem
+      const state = pack.states[b.state];
+      const stateCOA = state.coa;
+      let kinship = 0.25;
+      if (b.capital) kinship += 0.1;
+      else if (b.port) kinship -= 0.1;
+      if (b.culture !== state.culture) kinship -= 0.25;
+      b.type = getType(i, b.port);
+      const type = b.capital && P(0.2) ? "Capital" : b.type === "Generic" ? "City" : b.type;
+      b.coa = COA.generate(stateCOA, kinship, null, type);
+      b.coa.shield = COA.getShield(b.culture, b.state);
+    }
+
+    // de-assign port status if it's the only one on feature
+    const ports = pack.burgs.filter(b => !b.removed && b.port > 0);
+    for (const f of features) {
+      if (!f.i || f.land || f.border) continue;
+      const featurePorts = ports.filter(b => b.port === f.i);
+      if (featurePorts.length === 1) featurePorts[0].port = 0;
+    }
+
+    TIME && console.timeEnd("specifyBurgs");
+  };
+
+  const getType = function (i, port) {
+    const cells = pack.cells;
+    if (port) return "Naval";
+    if (cells.haven[i] && pack.features[cells.f[cells.haven[i]]].type === "lake") return "Lake";
+    if (cells.h[i] > 60) return "Highland";
+    if (cells.r[i] && cells.r[i].length > 100 && cells.r[i].length >= pack.rivers[0].length) return "River";
+
+    if (!cells.burg[i] || pack.burgs[cells.burg[i]].population < 6) {
+      if (population < 5 && [1, 2, 3, 4].includes(cells.biome[i])) return "Nomadic";
+      if (cells.biome[i] > 4 && cells.biome[i] < 10) return "Hunting";
+    }
+
+    return "Generic";
+  };
+
+  const defineBurgFeatures = function (newburg) {
+    const cells = pack.cells;
+    pack.burgs
+      .filter(b => (newburg ? b.i == newburg.i : b.i && !b.removed))
+      .forEach(b => {
+        const pop = b.population;
+        b.citadel = b.capital || (pop > 50 && P(0.75)) || P(0.5) ? 1 : 0;
+        b.plaza = pop > 50 || (pop > 30 && P(0.75)) || (pop > 10 && P(0.5)) || P(0.25) ? 1 : 0;
+        b.walls = b.capital || pop > 30 || (pop > 20 && P(0.75)) || (pop > 10 && P(0.5)) || P(0.2) ? 1 : 0;
+        b.shanty = pop > 60 || (pop > 40 && P(0.75)) || (pop > 20 && b.walls && P(0.4)) ? 1 : 0;
+        const religion = cells.religion[b.cell];
+        const theocracy = pack.states[b.state].form === "Theocracy";
+        b.temple = (religion && theocracy) || pop > 50 || (pop > 35 && P(0.75)) || (pop > 20 && P(0.5)) ? 1 : 0;
+      });
+  };
+
+  const drawBurgs = function () {
+    TIME && console.time("drawBurgs");
+
+    // remove old data
+    burgIcons.selectAll("circle").remove();
+    burgLabels.selectAll("text").remove();
+    icons.selectAll("use").remove();
+
+    // capitals
+    const capitals = pack.burgs.filter(b => b.capital && !b.removed);
+    const capitalIcons = burgIcons.select("#cities");
+    const capitalLabels = burgLabels.select("#cities");
+    const capitalSize = capitalIcons.attr("size") || 1;
+    const capitalAnchors = anchors.selectAll("#cities");
+    const caSize = capitalAnchors.attr("size") || 2;
+
+    capitalIcons
+      .selectAll("circle")
+      .data(capitals)
+      .enter()
+      .append("circle")
+      .attr("id", d => "burg" + d.i)
+      .attr("data-id", d => d.i)
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y)
+      .attr("r", capitalSize);
+
+    capitalLabels
+      .selectAll("text")
+      .data(capitals)
+      .enter()
+      .append("text")
+      .attr("id", d => "burgLabel" + d.i)
+      .attr("data-id", d => d.i)
+      .attr("x", d => d.x)
+      .attr("y", d => d.y)
+      .attr("dy", `${capitalSize * -1.5}px`)
+      .text(d => d.name);
+
+    capitalAnchors
+      .selectAll("use")
+      .data(capitals.filter(c => c.port))
+      .enter()
+      .append("use")
+      .attr("xlink:href", "#icon-anchor")
+      .attr("data-id", d => d.i)
+      .attr("x", d => rn(d.x - caSize * 0.47, 2))
+      .attr("y", d => rn(d.y - caSize * 0.47, 2))
+      .attr("width", caSize)
+      .attr("height", caSize);
+
+    // towns
+    const towns = pack.burgs.filter(b => b.i && !b.capital && !b.removed);
+    const townIcons = burgIcons.select("#towns");
+    const townLabels = burgLabels.select("#towns");
+    const townSize = townIcons.attr("size") || 0.5;
+    const townsAnchors = anchors.selectAll("#towns");
+    const taSize = townsAnchors.attr("size") || 1;
+
+    townIcons
+      .selectAll("circle")
+      .data(towns)
+      .enter()
+      .append("circle")
+      .attr("id", d => "burg" + d.i)
+      .attr("data-id", d => d.i)
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y)
+      .attr("r", townSize);
+
+    townLabels
+      .selectAll("text")
+      .data(towns)
+      .enter()
+      .append("text")
+      .attr("id", d => "burgLabel" + d.i)
+      .attr("data-id", d => d.i)
+      .attr("x", d => d.x)
+      .attr("y", d => d.y)
+      .attr("dy", `${townSize * -1.5}px`)
+      .text(d => d.name);
+
+    townsAnchors
+      .selectAll("use")
+      .data(towns.filter(c => c.port))
+      .enter()
+      .append("use")
+      .attr("xlink:href", "#icon-anchor")
+      .attr("data-id", d => d.i)
+      .attr("x", d => rn(d.x - taSize * 0.47, 2))
+      .attr("y", d => rn(d.y - taSize * 0.47, 2))
+      .attr("width", taSize)
+      .attr("height", taSize);
+
+    TIME && console.timeEnd("drawBurgs");
+  };
+
+  // expand cultures across the map (Dijkstra-like algorithm)
+  const expandStates = function () {
+    TIME && console.time("expandStates");
+    const {cells, states, cultures, burgs} = pack;
+
+    cells.state = cells.state || new Uint16Array(cells.i.length);
+    const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
+    const cost = [];
+
+    const globalNeutralRate = byId("neutralInput")?.valueAsNumber || 1;
+    const statesNeutralRate = byId("statesNeutral")?.valueAsNumber || 1;
+    const neutral = (cells.i.length / 2) * globalNeutralRate * statesNeutralRate; // limit cost for state growth
+
+    // remove state from all cells except of locked
+    for (const cellId of cells.i) {
+      const state = states[cells.state[cellId]];
+      if (state.lock) continue;
+      cells.state[cellId] = 0;
+    }
+
+    for (const state of states) {
+      if (!state.i || state.removed) continue;
+
+      const capitalCell = burgs[state.capital].cell;
+      cells.state[capitalCell] = state.i;
+      const cultureCenter = cultures[state.culture].center;
+      const b = cells.biome[cultureCenter]; // state native biome
+      queue.queue({e: state.center, p: 0, s: state.i, b});
+      cost[state.center] = 1;
+    }
+
+    while (queue.length) {
+      const next = queue.dequeue();
+      const {e, p, s, b} = next;
+      const {type, culture} = states[s];
+
+      cells.c[e].forEach(e => {
+        const state = states[cells.state[e]];
+        if (state.lock) return; // do not overwrite cell of locked states
+        if (cells.state[e] && e === state.center) return; // do not overwrite capital cells
+
+        const cultureCost = culture === cells.culture[e] ? -9 : 100;
+        const populationCost = cells.h[e] < 20 ? 0 : cells.s[e] ? Math.max(20 - cells.s[e], 0) : 5000;
+        const biomeCost = getBiomeCost(b, cells.biome[e], type);
+        const heightCost = getHeightCost(pack.features[cells.f[e]], cells.h[e], type);
+        const riverCost = getRiverCost(cells.r[e], e, type);
+        const typeCost = getTypeCost(cells.t[e], type);
+        const cellCost = Math.max(cultureCost + populationCost + biomeCost + heightCost + riverCost + typeCost, 0);
+        const totalCost = p + 10 + cellCost / states[s].expansionism;
+
+        if (totalCost > neutral) return;
+
+        if (!cost[e] || totalCost < cost[e]) {
+          if (cells.h[e] >= 20) cells.state[e] = s; // assign state to cell
+          cost[e] = totalCost;
+          queue.queue({e, p: totalCost, s, b});
+        }
+      });
+    }
+
+    burgs.filter(b => b.i && !b.removed).forEach(b => (b.state = cells.state[b.cell])); // assign state to burgs
+
+    function getBiomeCost(b, biome, type) {
+      if (b === biome) return 10; // tiny penalty for native biome
+      if (type === "Hunting") return biomesData.cost[biome] * 2; // non-native biome penalty for hunters
+      if (type === "Nomadic" && biome > 4 && biome < 10) return biomesData.cost[biome] * 3; // forest biome penalty for nomads
+      return biomesData.cost[biome]; // general non-native biome penalty
+    }
+
+    function getHeightCost(f, h, type) {
+      if (type === "Lake" && f.type === "lake") return 10; // low lake crossing penalty for Lake cultures
+      if (type === "Naval" && h < 20) return 300; // low sea crossing penalty for Navals
+      if (type === "Nomadic" && h < 20) return 10000; // giant sea crossing penalty for Nomads
+      if (h < 20) return 1000; // general sea crossing penalty
+      if (type === "Highland" && h < 62) return 1100; // penalty for highlanders on lowlands
+      if (type === "Highland") return 0; // no penalty for highlanders on highlands
+      if (h >= 67) return 2200; // general mountains crossing penalty
+      if (h >= 44) return 300; // general hills crossing penalty
+      return 0;
+    }
+
+    function getRiverCost(r, i, type) {
+      if (type === "River") return r ? 0 : 100; // penalty for river cultures
+      if (!r) return 0; // no penalty for others if there is no river
+      return minmax(cells.fl[i] / 10, 20, 100); // river penalty from 20 to 100 based on flux
+    }
+
+    function getTypeCost(t, type) {
+      if (t === 1) return type === "Naval" || type === "Lake" ? 0 : type === "Nomadic" ? 60 : 20; // penalty for coastline
+      if (t === 2) return type === "Naval" || type === "Nomadic" ? 30 : 0; // low penalty for land level 2 for Navals and nomads
+      if (t !== -1) return type === "Naval" || type === "Lake" ? 100 : 0; // penalty for mainland for navals
+      return 0;
+    }
+
+    TIME && console.timeEnd("expandStates");
+  };
+
+  const normalizeStates = function () {
+    TIME && console.time("normalizeStates");
+    const cells = pack.cells,
+      burgs = pack.burgs;
+
+    for (const i of cells.i) {
+      if (cells.h[i] < 20 || cells.burg[i]) continue; // do not overwrite burgs
+      if (pack.states[cells.state[i]]?.lock) continue; // do not overwrite cells of locks states
+      if (cells.c[i].some(c => burgs[cells.burg[c]].capital)) continue; // do not overwrite near capital
+      const neibs = cells.c[i].filter(c => cells.h[c] >= 20);
+      const adversaries = neibs.filter(c => !pack.states[cells.state[c]]?.lock && cells.state[c] !== cells.state[i]);
+      if (adversaries.length < 2) continue;
+      const buddies = neibs.filter(c => !pack.states[cells.state[c]]?.lock && cells.state[c] === cells.state[i]);
+      if (buddies.length > 2) continue;
+      if (adversaries.length <= buddies.length) continue;
+      cells.state[i] = cells.state[adversaries[0]];
+    }
+    TIME && console.timeEnd("normalizeStates");
+  };
+
+  // Resets the cultures of all burgs and states to their
+  // cell or center cell's (respectively) culture.
+  const updateCultures = function () {
+    TIME && console.time("updateCulturesForBurgsAndStates");
+
+    // Assign the culture associated with the burgs cell.
+    pack.burgs = pack.burgs.map((burg, index) => {
+      // Ignore metadata burg
+      if (index === 0) {
+        return burg;
+      }
+      return {...burg, culture: pack.cells.culture[burg.cell]};
+    });
+
+    // Assign the culture associated with the states' center cell.
+    pack.states = pack.states.map((state, index) => {
+      // Ignore neutrals state
+      if (index === 0) {
+        return state;
+      }
+      return {...state, culture: pack.cells.culture[state.center]};
+    });
+
+    TIME && console.timeEnd("updateCulturesForBurgsAndStates");
+  };
+
+  // calculate and draw curved state labels for a list of states
+  const drawStateLabels = function (list) {
+    TIME && console.time("drawStateLabels");
+    const {cells, features, states} = pack;
+    const paths = []; // text paths
+    lineGen.curve(d3.curveBundle.beta(1));
+    const mode = options.stateLabelsMode || "auto";
+
+    for (const s of states) {
+      if (!s.i || s.removed || s.lock || !s.cells || (list && !list.includes(s.i))) continue;
+
+      const used = [];
+      const visualCenter = findCell(s.pole[0], s.pole[1]);
+      const start = cells.state[visualCenter] === s.i ? visualCenter : s.center;
+      const hull = getHull(start, s.i, s.cells / 10);
+      const points = [...hull].map(v => pack.vertices.p[v]);
+      const delaunay = Delaunator.from(points);
+      const voronoi = new Voronoi(delaunay, points, points.length);
+      const chain = connectCenters(voronoi.vertices, s.pole[1]);
+      const relaxed = chain.map(i => voronoi.vertices.p[i]).filter((p, i) => i % 15 === 0 || i + 1 === chain.length);
+      paths.push([s.i, relaxed]);
+
+      function getHull(start, state, maxLake) {
+        const queue = [start];
+        const hull = new Set();
+
+        while (queue.length) {
+          const q = queue.pop();
+          const sameStateNeibs = cells.c[q].filter(c => cells.state[c] === state);
+
+          cells.c[q].forEach(function (c, d) {
+            const passableLake = features[cells.f[c]].type === "lake" && features[cells.f[c]].cells < maxLake;
+            if (cells.b[c] || (cells.state[c] !== state && !passableLake)) return hull.add(cells.v[q][d]);
+
+            const hasCoadjacentSameStateCells = sameStateNeibs.some(neib => cells.c[c].includes(neib));
+            if (hull.size > 20 && !hasCoadjacentSameStateCells && !passableLake) return hull.add(cells.v[q][d]);
+
+            if (used[c]) return;
+            used[c] = 1;
+            queue.push(c);
+          });
+        }
+
+        return hull;
+      }
+
+      function connectCenters(c, y) {
+        // check if vertex is inside the area
+        const inside = c.p.map(function (p) {
+          if (p[0] <= 0 || p[1] <= 0 || p[0] >= graphWidth || p[1] >= graphHeight) return false; // out of the screen
+          return used[findCell(p[0], p[1])];
+        });
+
+        const pointsInside = d3.range(c.p.length).filter(i => inside[i]);
+        if (!pointsInside.length) return [0];
+        const h = c.p.length < 200 ? 0 : c.p.length < 600 ? 0.5 : 1; // power of horyzontality shift
+        const end =
+          pointsInside[
+            d3.scan(
+              pointsInside,
+              (a, b) => c.p[a][0] - c.p[b][0] + (Math.abs(c.p[a][1] - y) - Math.abs(c.p[b][1] - y)) * h
+            )
+          ]; // left point
+        const start =
+          pointsInside[
+            d3.scan(
+              pointsInside,
+              (a, b) => c.p[b][0] - c.p[a][0] - (Math.abs(c.p[b][1] - y) - Math.abs(c.p[a][1] - y)) * h
+            )
+          ]; // right point
+
+        // connect leftmost and rightmost points with shortest path
+        const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
+        const cost = [],
+          from = [];
+        queue.queue({e: start, p: 0});
+
+        while (queue.length) {
+          const next = queue.dequeue(),
+            n = next.e,
+            p = next.p;
+          if (n === end) break;
+
+          for (const v of c.v[n]) {
+            if (v === -1) continue;
+            const totalCost = p + (inside[v] ? 1 : 100);
+            if (from[v] || totalCost >= cost[v]) continue;
+            cost[v] = totalCost;
+            from[v] = n;
+            queue.queue({e: v, p: totalCost});
           }
+        }
+
+        // restore path
+        const chain = [end];
+        let cur = end;
+        while (cur !== start) {
+          cur = from[cur];
+          if (inside[cur]) chain.push(cur);
+        }
+        return chain;
+      }
+    }
+
+    void (function drawLabels() {
+      const g = labels.select("#states");
+      const t = defs.select("#textPaths");
+      const displayed = layerIsOn("toggleLabels");
+      if (!displayed) toggleLabels();
+
+      // remove state labels to be redrawn
+      for (const state of pack.states) {
+        if (!state.i || state.removed || state.lock) continue;
+        if (list && !list.includes(state.i)) continue;
+
+        byId(`stateLabel${state.i}`)?.remove();
+        byId(`textPath_stateLabel${state.i}`)?.remove();
+      }
+
+      const example = g.append("text").attr("x", 0).attr("x", 0).text("Average");
+      const letterLength = example.node().getComputedTextLength() / 7; // average length of 1 letter
+
+      paths.forEach(p => {
+        const id = p[0];
+        const state = states[p[0]];
+        const {name, fullName} = state;
+
+        const path = p[1].length > 1 ? round(lineGen(p[1])) : `M${p[1][0][0] - 50},${p[1][0][1]}h${100}`;
+        const textPath = t
+          .append("path")
+          .attr("d", path)
+          .attr("id", "textPath_stateLabel" + id);
+        const pathLength = p[1].length > 1 ? textPath.node().getTotalLength() / letterLength : 0; // path length in letters
+
+        const [lines, ratio] = getLines(mode, name, fullName, pathLength);
+
+        // prolongate path if it's too short
+        if (pathLength && pathLength < lines[0].length) {
+          const points = p[1];
+          const f = points[0];
+          const l = points[points.length - 1];
+          const [dx, dy] = [l[0] - f[0], l[1] - f[1]];
+          const mod = Math.abs((letterLength * lines[0].length) / dx) / 2;
+          points[0] = [rn(f[0] - dx * mod), rn(f[1] - dy * mod)];
+          points[points.length - 1] = [rn(l[0] + dx * mod), rn(l[1] + dy * mod)];
+          textPath.attr("d", round(lineGen(points)));
+        }
+
+        example.attr("font-size", ratio + "%");
+        const top = (lines.length - 1) / -2; // y offset
+        const spans = lines.map((l, d) => {
+          example.text(l);
+          const left = example.node().getBBox().width / -2; // x offset
+          return `<tspan x=${rn(left, 1)} dy="${d ? 1 : top}em">${l}</tspan>`;
+        });
+
+        const el = g
+          .append("text")
+          .attr("id", "stateLabel" + id)
+          .append("textPath")
+          .attr("xlink:href", "#textPath_stateLabel" + id)
+          .attr("startOffset", "50%")
+          .attr("font-size", ratio + "%")
+          .node();
+
+        el.insertAdjacentHTML("afterbegin", spans.join(""));
+        if (mode === "full" || lines.length === 1) return;
+
+        // check whether multilined label is generally inside the state. If no, replace with short name label
+        const cs = pack.cells.state;
+        const b = el.parentNode.getBBox();
+        const c1 = () => +cs[findCell(b.x, b.y)] === id;
+        const c2 = () => +cs[findCell(b.x + b.width / 2, b.y)] === id;
+        const c3 = () => +cs[findCell(b.x + b.width, b.y)] === id;
+        const c4 = () => +cs[findCell(b.x + b.width, b.y + b.height)] === id;
+        const c5 = () => +cs[findCell(b.x + b.width / 2, b.y + b.height)] === id;
+        const c6 = () => +cs[findCell(b.x, b.y + b.height)] === id;
+        if (c1() + c2() + c3() + c4() + c5() + c6() > 3) return; // generally inside => exit
+
+        // move to one-line name
+        const text = pathLength > fullName.length * 1.8 ? fullName : name;
+        example.text(text);
+        const left = example.node().getBBox().width / -2; // x offset
+        el.innerHTML = `<tspan x="${left}px">${text}</tspan>`;
+
+        const correctedRatio = minmax(rn((pathLength / text.length) * 60), 40, 130);
+        el.setAttribute("font-size", correctedRatio + "%");
+      });
+
+      example.remove();
+      if (!displayed) toggleLabels();
+    })();
+
+    function getLines(mode, name, fullName, pathLength) {
+      // short name
+      if (mode === "short" || (mode === "auto" && pathLength < name.length)) {
+        const lines = splitInTwo(name);
+        const ratio = pathLength / lines[0].length;
+        return [lines, minmax(rn(ratio * 60), 50, 150)];
+      }
+
+      // full name: one line
+      if (pathLength > fullName.length * 2.5) {
+        const lines = [fullName];
+        const ratio = pathLength / lines[0].length;
+        return [lines, minmax(rn(ratio * 70), 70, 170)];
+      }
+
+      // full name: two lines
+      const lines = splitInTwo(fullName);
+      const ratio = pathLength / lines[0].length;
+      return [lines, minmax(rn(ratio * 60), 70, 150)];
+    }
+
+    TIME && console.timeEnd("drawStateLabels");
+  };
+
+  // calculate states data like area, population etc.
+  const collectStatistics = function () {
+    TIME && console.time("collectStatistics");
+    const {cells, states} = pack;
+
+    states.forEach(s => {
+      if (s.removed) return;
+      s.cells = s.area = s.burgs = s.rural = s.urban = 0;
+      s.neighbors = new Set();
+    });
+
+    for (const i of cells.i) {
+      if (cells.h[i] < 20) continue;
+      const s = cells.state[i];
+
+      // check for neighboring states
+      cells.c[i]
+        .filter(c => cells.h[c] >= 20 && cells.state[c] !== s)
+        .forEach(c => states[s].neighbors.add(cells.state[c]));
+
+      // collect stats
+      states[s].cells += 1;
+      states[s].area += cells.area[i];
+      states[s].rural += cells.pop[i];
+      if (cells.burg[i]) {
+        states[s].urban += pack.burgs[cells.burg[i]].population;
+        states[s].burgs++;
+      }
+    }
+
+    // convert neighbors Set object into array
+    states.forEach(s => {
+      if (!s.neighbors) return;
+      s.neighbors = Array.from(s.neighbors);
+    });
+
+    TIME && console.timeEnd("collectStatistics");
+  };
+
+  const assignColors = function () {
+    TIME && console.time("assignColors");
+    const colors = ["#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f"]; // d3.schemeSet2;
+
+    // assign basic color using greedy coloring algorithm
+    pack.states.forEach(s => {
+      if (!s.i || s.removed || s.lock) return;
+      const neibs = s.neighbors;
+      s.color = colors.find(c => neibs.every(n => pack.states[n].color !== c));
+      if (!s.color) s.color = getRandomColor();
+      colors.push(colors.shift());
+    });
+
+    // randomize each already used color a bit
+    colors.forEach(c => {
+      const sameColored = pack.states.filter(s => s.color === c && !s.lock);
+      sameColored.forEach((s, d) => {
+        if (!d) return;
+        s.color = getMixedColor(s.color);
+      });
+    });
+
+    TIME && console.timeEnd("assignColors");
+  };
+
+  const wars = {
+    War: 6,
+    Conflict: 2,
+    Campaign: 4,
+    Invasion: 2,
+    Rebellion: 2,
+    Conquest: 2,
+    Intervention: 1,
+    Expedition: 1,
+    Crusade: 1
+  };
+  const generateCampaign = state => {
+    const neighbors = state.neighbors.length ? state.neighbors : [0];
+    return neighbors
+      .map(i => {
+        const name = i && P(0.8) ? pack.states[i].name : Names.getCultureShort(state.culture);
+        const start = gauss(options.year - 100, 150, 1, options.year - 6);
+        const end = start + gauss(4, 5, 1, options.year - start - 1);
+        return {name: getAdjective(name) + " " + rw(wars), start, end};
+      })
+      .sort((a, b) => a.start - b.start);
+  };
+
+  // generate historical conflicts of each state
+  const generateCampaigns = function () {
+    pack.states.forEach(s => {
+      if (!s.i || s.removed) return;
+      s.campaigns = generateCampaign(s);
+    });
+  };
+
+  // generate Diplomatic Relationships
+  const generateDiplomacy = function () {
+    TIME && console.time("generateDiplomacy");
+    const cells = pack.cells,
+      states = pack.states;
+    const chronicle = (states[0].diplomacy = []);
+    const valid = states.filter(s => s.i && !states.removed);
+
+    const neibs = {Ally: 1, Friendly: 2, Neutral: 1, Suspicion: 10, Rival: 9}; // relations to neighbors
+    const neibsOfNeibs = {Ally: 10, Friendly: 8, Neutral: 5, Suspicion: 1}; // relations to neighbors of neighbors
+    const far = {Friendly: 1, Neutral: 12, Suspicion: 2, Unknown: 6}; // relations to other
+    const navals = {Neutral: 1, Suspicion: 2, Rival: 1, Unknown: 1}; // relations of naval powers
+
+    valid.forEach(s => (s.diplomacy = new Array(states.length).fill("x"))); // clear all relationships
+    if (valid.length < 2) return; // no states to renerate relations with
+    const areaMean = d3.mean(valid.map(s => s.area)); // average state area
+
+    // generic relations
+    for (let f = 1; f < states.length; f++) {
+      if (states[f].removed) continue;
+
+      if (states[f].diplomacy.includes("Vassal")) {
+        // Vassals copy relations from their Suzerains
+        const suzerain = states[f].diplomacy.indexOf("Vassal");
+
+        for (let i = 1; i < states.length; i++) {
+          if (i === f || i === suzerain) continue;
+          states[f].diplomacy[i] = states[suzerain].diplomacy[i];
+          if (states[suzerain].diplomacy[i] === "Suzerain") states[f].diplomacy[i] = "Ally";
+          for (let e = 1; e < states.length; e++) {
+            if (e === f || e === suzerain) continue;
+            if (states[e].diplomacy[suzerain] === "Suzerain" || states[e].diplomacy[suzerain] === "Vassal") continue;
+            states[e].diplomacy[f] = states[e].diplomacy[suzerain];
+          }
+        }
+        continue;
+      }
+
+      for (let t = f + 1; t < states.length; t++) {
+        if (states[t].removed) continue;
+
+        if (states[t].diplomacy.includes("Vassal")) {
+          const suzerain = states[t].diplomacy.indexOf("Vassal");
+          states[f].diplomacy[t] = states[f].diplomacy[suzerain];
           continue;
         }
 
-        // land cell
-        const isPassable = cells.h[current + next] <= MAX_PASSABLE_ELEVATION;
-        const precipitation = isPassable ? getPrecipitation(humidity, current, next) : humidity;
-        cells.prec[current] += precipitation;
-        const evaporation = precipitation > 1.5 ? 1 : 0; // some humidity evaporates back to the atmosphere
-        humidity = isPassable ? minmax(humidity - precipitation + evaporation, 0, maxPrec) : 0;
+        const naval =
+          states[f].type === "Naval" &&
+          states[t].type === "Naval" &&
+          cells.f[states[f].center] !== cells.f[states[t].center];
+        const neib = naval ? false : states[f].neighbors.includes(t);
+        const neibOfNeib =
+          naval || neib
+            ? false
+            : states[f].neighbors
+                .map(n => states[n].neighbors)
+                .join("")
+                .includes(t);
+
+        let status = naval ? rw(navals) : neib ? rw(neibs) : neibOfNeib ? rw(neibsOfNeibs) : rw(far);
+
+        // add Vassal
+        if (
+          neib &&
+          P(0.8) &&
+          states[f].area > areaMean &&
+          states[t].area < areaMean &&
+          states[f].area / states[t].area > 2
+        )
+          status = "Vassal";
+        states[f].diplomacy[t] = status === "Vassal" ? "Suzerain" : status;
+        states[t].diplomacy[f] = status;
       }
     }
-  }
 
-  function getPrecipitation(humidity, i, n) {
-    const normalLoss = Math.max(humidity / (10 * modifier), 1); // precipitation in normal conditions
-    const diff = Math.max(cells.h[i + n] - cells.h[i], 0); // difference in height
-    const mod = (cells.h[i + n] / 70) ** 2; // 50 stands for hills, 70 for mountains
-    return minmax(normalLoss + diff * mod, 1, humidity);
-  }
+    // declare wars
+    for (let attacker = 1; attacker < states.length; attacker++) {
+      const ad = states[attacker].diplomacy; // attacker relations;
+      if (states[attacker].removed) continue;
+      if (!ad.includes("Rival")) continue; // no rivals to attack
+      if (ad.includes("Vassal")) continue; // not independent
+      if (ad.includes("Enemy")) continue; // already at war
 
-  void (function drawWindDirection() {
-    const wind = prec.append("g").attr("id", "wind");
+      // random independent rival
+      const defender = ra(
+        ad.map((r, d) => (r === "Rival" && !states[d].diplomacy.includes("Vassal") ? d : 0)).filter(d => d)
+      );
+      let ap = states[attacker].area * states[attacker].expansionism,
+        dp = states[defender].area * states[defender].expansionism;
+      if (ap < dp * gauss(1.6, 0.8, 0, 10, 2)) continue; // defender is too strong
+      const an = states[attacker].name,
+        dn = states[defender].name; // names
+      const attackers = [attacker],
+        defenders = [defender]; // attackers and defenders array
+      const dd = states[defender].diplomacy; // defender relations;
 
-    d3.range(0, 6).forEach(function (t) {
-      if (westerly.length > 1) {
-        const west = westerly.filter(w => w[2] === t);
-        if (west && west.length > 3) {
-          const from = west[0][0],
-            to = west[west.length - 1][0];
-          const y = (grid.points[from][1] + grid.points[to][1]) / 2;
-          wind.append("text").attr("x", 20).attr("y", y).text("\u21C9");
+      // start a war
+      const war = [`${an}-${trimVowels(dn)}ian War`, `${an} declared a war on its rival ${dn}`];
+      const end = options.year;
+      const start = end - gauss(2, 2, 0, 5);
+      states[attacker].campaigns.push({name: `${trimVowels(dn)}ian War`, start, end});
+      states[defender].campaigns.push({name: `${trimVowels(an)}ian War`, start, end});
+
+      // attacker vassals join the war
+      ad.forEach((r, d) => {
+        if (r === "Suzerain") {
+          attackers.push(d);
+          war.push(`${an}'s vassal ${states[d].name} joined the war on attackers side`);
         }
+      });
+
+      // defender vassals join the war
+      dd.forEach((r, d) => {
+        if (r === "Suzerain") {
+          defenders.push(d);
+          war.push(`${dn}'s vassal ${states[d].name} joined the war on defenders side`);
+        }
+      });
+
+      ap = d3.sum(attackers.map(a => states[a].area * states[a].expansionism)); // attackers joined power
+      dp = d3.sum(defenders.map(d => states[d].area * states[d].expansionism)); // defender joined power
+
+      // defender allies join
+      dd.forEach((r, d) => {
+        if (r !== "Ally" || states[d].diplomacy.includes("Vassal")) return;
+        if (states[d].diplomacy[attacker] !== "Rival" && ap / dp > 2 * gauss(1.6, 0.8, 0, 10, 2)) {
+          const reason = states[d].diplomacy.includes("Enemy") ? "Being already at war," : `Frightened by ${an},`;
+          war.push(`${reason} ${states[d].name} severed the defense pact with ${dn}`);
+          dd[d] = states[d].diplomacy[defender] = "Suspicion";
+          return;
+        }
+        defenders.push(d);
+        dp += states[d].area * states[d].expansionism;
+        war.push(`${dn}'s ally ${states[d].name} joined the war on defenders side`);
+
+        // ally vassals join
+        states[d].diplomacy
+          .map((r, d) => (r === "Suzerain" ? d : 0))
+          .filter(d => d)
+          .forEach(v => {
+            defenders.push(v);
+            dp += states[v].area * states[v].expansionism;
+            war.push(`${states[d].name}'s vassal ${states[v].name} joined the war on defenders side`);
+          });
+      });
+
+      // attacker allies join if the defender is their rival or joined power > defenders power and defender is not an ally
+      ad.forEach((r, d) => {
+        if (r !== "Ally" || states[d].diplomacy.includes("Vassal") || defenders.includes(d)) return;
+        const name = states[d].name;
+        if (states[d].diplomacy[defender] !== "Rival" && (P(0.2) || ap <= dp * 1.2)) {
+          war.push(`${an}'s ally ${name} avoided entering the war`);
+          return;
+        }
+        const allies = states[d].diplomacy.map((r, d) => (r === "Ally" ? d : 0)).filter(d => d);
+        if (allies.some(ally => defenders.includes(ally))) {
+          war.push(`${an}'s ally ${name} did not join the war as its allies are in war on both sides`);
+          return;
+        }
+
+        attackers.push(d);
+        ap += states[d].area * states[d].expansionism;
+        war.push(`${an}'s ally ${name} joined the war on attackers side`);
+
+        // ally vassals join
+        states[d].diplomacy
+          .map((r, d) => (r === "Suzerain" ? d : 0))
+          .filter(d => d)
+          .forEach(v => {
+            attackers.push(v);
+            dp += states[v].area * states[v].expansionism;
+            war.push(`${states[d].name}'s vassal ${states[v].name} joined the war on attackers side`);
+          });
+      });
+
+      // change relations to Enemy for all participants
+      attackers.forEach(a => defenders.forEach(d => (states[a].diplomacy[d] = states[d].diplomacy[a] = "Enemy")));
+      chronicle.push(war); // add a record to diplomatical history
+    }
+
+    TIME && console.timeEnd("generateDiplomacy");
+    //console.table(states.map(s => s.diplomacy));
+  };
+
+  // select a forms for listed or all valid states
+  const defineStateForms = function (list) {
+    TIME && console.time("defineStateForms");
+    const states = pack.states.filter(s => s.i && !s.removed && !s.lock);
+    if (states.length < 1) return;
+
+    const generic = {Monarchy: 25, Republic: 2, Union: 1};
+    const naval = {Monarchy: 25, Republic: 8, Union: 3};
+
+    const median = d3.median(pack.states.map(s => s.area));
+    const empireMin = states.map(s => s.area).sort((a, b) => b - a)[Math.max(Math.ceil(states.length ** 0.4) - 2, 0)];
+    const expTiers = pack.states.map(s => {
+      let tier = Math.min(Math.floor((s.area / median) * 2.6), 4);
+      if (tier === 4 && s.area < empireMin) tier = 3;
+      return tier;
+    });
+
+    const monarchy = ["Duchy", "Grand Duchy", "Principality", "Kingdom", "Empire"]; // per expansionism tier
+    const republic = {
+      Republic: 75,
+      Federation: 4,
+      "Trade Company": 4,
+      "Most Serene Republic": 2,
+      Oligarchy: 2,
+      Tetrarchy: 1,
+      Triumvirate: 1,
+      Diarchy: 1,
+      Junta: 1
+    }; // weighted random
+    const union = {
+      Union: 3,
+      League: 4,
+      Confederation: 1,
+      "United Kingdom": 1,
+      "United Republic": 1,
+      "United Provinces": 2,
+      Commonwealth: 1,
+      Heptarchy: 1
+    }; // weighted random
+    const theocracy = {Theocracy: 20, Brotherhood: 1, Thearchy: 2, See: 1, "Holy State": 1};
+    const anarchy = {"Free Territory": 2, Council: 3, Commune: 1, Community: 1};
+
+    for (const s of states) {
+      if (list && !list.includes(s.i)) continue;
+      const tier = expTiers[s.i];
+
+      const religion = pack.cells.religion[s.center];
+      const isTheocracy =
+        (religion && pack.religions[religion].expansion === "state") ||
+        (P(0.1) && ["Organized", "Cult"].includes(pack.religions[religion].type));
+      const isAnarchy = P(0.01 - tier / 500);
+
+      if (isTheocracy) s.form = "Theocracy";
+      else if (isAnarchy) s.form = "Anarchy";
+      else s.form = s.type === "Naval" ? rw(naval) : rw(generic);
+      s.formName = selectForm(s, tier);
+      s.fullName = getFullName(s);
+    }
+
+    function selectForm(s, tier) {
+      const base = pack.cultures[s.culture].base;
+
+      if (s.form === "Monarchy") {
+        const form = monarchy[tier];
+        // Default name depends on exponent tier, some culture bases have special names for tiers
+        if (s.diplomacy) {
+          if (
+            form === "Duchy" &&
+            s.neighbors.length > 1 &&
+            rand(6) < s.neighbors.length &&
+            s.diplomacy.includes("Vassal")
+          )
+            return "Marches"; // some vassal duchies on borderland
+          if (base === 1 && P(0.3) && s.diplomacy.includes("Vassal")) return "Dominion"; // English vassals
+          if (P(0.3) && s.diplomacy.includes("Vassal")) return "Protectorate"; // some vassals
+        }
+
+        if (base === 16 && (form === "Empire" || form === "Kingdom")) return "Khaganate"; // Turkic
+        if (base === 5 && (form === "Empire" || form === "Kingdom")) return "Tsardom"; // Ruthenian
+        if ([16, 31].includes(base) && (form === "Empire" || form === "Kingdom")) return "Khaganate"; // Turkic, Mongolian
+        if (base === 12 && (form === "Kingdom" || form === "Grand Duchy")) return "Shogunate"; // Japanese
+        if ([18, 17].includes(base) && form === "Empire") return "Caliphate"; // Arabic, Berber
+        if (base === 18 && (form === "Grand Duchy" || form === "Duchy")) return "Emirate"; // Arabic
+        if (base === 7 && (form === "Grand Duchy" || form === "Duchy")) return "Despotate"; // Greek
+        if (base === 31 && (form === "Grand Duchy" || form === "Duchy")) return "Ulus"; // Mongolian
+        if (base === 16 && (form === "Grand Duchy" || form === "Duchy")) return "Horde"; // Turkic
+        if (base === 24 && (form === "Grand Duchy" || form === "Duchy")) return "Satrapy"; // Iranian
+        return form;
       }
-      if (easterly.length > 1) {
-        const east = easterly.filter(w => w[2] === t);
-        if (east && east.length > 3) {
-          const from = east[0][0],
-            to = east[east.length - 1][0];
-          const y = (grid.points[from][1] + grid.points[to][1]) / 2;
-          wind
-            .append("text")
-            .attr("x", graphWidth - 52)
-            .attr("y", y)
-            .text("\u21C7");
+
+      if (s.form === "Republic") {
+        // Default name is from weighted array, special case for small states with only 1 burg
+        if (tier < 2 && s.burgs === 1) {
+          if (trimVowels(s.name) === trimVowels(pack.burgs[s.capital].name)) {
+            s.name = pack.burgs[s.capital].name;
+            return "Free City";
+          }
+          if (P(0.3)) return "City-state";
         }
+        return rw(republic);
+      }
+
+      if (s.form === "Union") return rw(union);
+      if (s.form === "Anarchy") return rw(anarchy);
+
+      if (s.form === "Theocracy") {
+        // European
+        if ([0, 1, 2, 3, 4, 6, 8, 9, 13, 15, 20].includes(base)) {
+          if (P(0.1)) return "Divine " + monarchy[tier];
+          if (tier < 2 && P(0.5)) return "Diocese";
+          if (tier < 2 && P(0.5)) return "Bishopric";
+        }
+        if (P(0.9) && [7, 5].includes(base)) {
+          // Greek, Ruthenian
+          if (tier < 2) return "Eparchy";
+          if (tier === 2) return "Exarchate";
+          if (tier > 2) return "Patriarchate";
+        }
+        if (P(0.9) && [21, 16].includes(base)) return "Imamah"; // Nigerian, Turkish
+        if (tier > 2 && P(0.8) && [18, 17, 28].includes(base)) return "Caliphate"; // Arabic, Berber, Swahili
+        return rw(theocracy);
+      }
+    }
+
+    TIME && console.timeEnd("defineStateForms");
+  };
+
+  // state forms requiring Adjective + Name, all other forms use scheme Form + Of + Name
+  const adjForms = [
+    "Empire",
+    "Sultanate",
+    "Khaganate",
+    "Shogunate",
+    "Caliphate",
+    "Despotate",
+    "Theocracy",
+    "Oligarchy",
+    "Union",
+    "Confederation",
+    "Trade Company",
+    "League",
+    "Tetrarchy",
+    "Triumvirate",
+    "Diarchy",
+    "Horde",
+    "Marches"
+  ];
+
+  const getFullName = function (s) {
+    if (!s.formName) return s.name;
+    if (!s.name && s.formName) return "The " + s.formName;
+    const adjName = adjForms.includes(s.formName) && !/-| /.test(s.name);
+    return adjName ? `${getAdjective(s.name)} ${s.formName}` : `${s.formName} of ${s.name}`;
+  };
+
+  const generateProvinces = function (regenerate = false, regenerateInLockedStates = false) {
+    TIME && console.time("generateProvinces");
+    const localSeed = regenerate ? generateSeed() : seed;
+    Math.random = aleaPRNG(localSeed);
+
+    const {cells, states, burgs} = pack;
+    const provinces = [0];
+    const provinceIds = new Uint16Array(cells.i.length);
+
+    const isProvinceLocked = province => province.lock || (!regenerateInLockedStates && states[province.state]?.lock);
+    const isProvinceCellLocked = cell => provinceIds[cell] && isProvinceLocked(provinces[provinceIds[cell]]);
+
+    if (regenerate) {
+      pack.provinces.forEach(province => {
+        if (!province.i || province.removed || !isProvinceLocked(province)) return;
+
+        const newId = provinces.length;
+        for (const i of cells.i) {
+          if (cells.province[i] === province.i) provinceIds[i] = newId;
+        }
+
+        province.i = newId;
+        provinces.push(province);
+      });
+    }
+
+    const percentage = +provincesInput.value;
+
+    const max = percentage == 100 ? 1000 : gauss(20, 5, 5, 100) * percentage ** 0.5; // max growth
+
+    const forms = {
+      Monarchy: {County: 22, Earldom: 6, Shire: 2, Landgrave: 2, Margrave: 2, Barony: 2, Captaincy: 1, Seneschalty: 1},
+      Republic: {Province: 6, Department: 2, Governorate: 2, District: 1, Canton: 1, Prefecture: 1},
+      Theocracy: {Parish: 3, Deanery: 1},
+      Union: {Province: 1, State: 1, Canton: 1, Republic: 1, County: 1, Council: 1},
+      Anarchy: {Council: 1, Commune: 1, Community: 1, Tribe: 1},
+      Wild: {Territory: 10, Land: 5, Region: 2, Tribe: 1, Clan: 1, Dependency: 1, Area: 1}
+    };
+
+    // generate provinces for selected burgs
+    states.forEach(s => {
+      s.provinces = [];
+      if (!s.i || s.removed) return;
+      if (provinces.length) s.provinces = provinces.filter(p => p.state === s.i).map(p => p.i); // locked provinces ids
+      if (s.lock && !regenerateInLockedStates) return; // don't regenerate provinces of a locked state
+
+      const stateBurgs = burgs
+        .filter(b => b.state === s.i && !b.removed && !provinceIds[b.cell])
+        .sort((a, b) => b.population * gauss(1, 0.2, 0.5, 1.5, 3) - a.population)
+        .sort((a, b) => b.capital - a.capital);
+      if (stateBurgs.length < 2) return; // at least 2 provinces are required
+      const provincesNumber = Math.max(Math.ceil((stateBurgs.length * percentage) / 100), 2);
+
+      const form = Object.assign({}, forms[s.form]);
+
+      for (let i = 0; i < provincesNumber; i++) {
+        const provinceId = provinces.length;
+        const center = stateBurgs[i].cell;
+        const burg = stateBurgs[i].i;
+        const c = stateBurgs[i].culture;
+        const nameByBurg = P(0.5);
+        const name = nameByBurg ? stateBurgs[i].name : Names.getState(Names.getCultureShort(c), c);
+        const formName = rw(form);
+        form[formName] += 10;
+        const fullName = name + " " + formName;
+        const color = getMixedColor(s.color);
+        const kinship = nameByBurg ? 0.8 : 0.4;
+        const type = getType(center, burg.port);
+        const coa = COA.generate(stateBurgs[i].coa, kinship, null, type);
+        coa.shield = COA.getShield(c, s.i);
+
+        s.provinces.push(provinceId);
+        provinces.push({i: provinceId, state: s.i, center, burg, name, formName, fullName, color, coa});
       }
     });
 
-    if (northerly)
-      wind
-        .append("text")
-        .attr("x", graphWidth / 2)
-        .attr("y", 42)
-        .text("\u21CA");
-    if (southerly)
-      wind
-        .append("text")
-        .attr("x", graphWidth / 2)
-        .attr("y", graphHeight - 20)
-        .text("\u21C8");
-  })();
+    // expand generated provinces
+    const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
+    const cost = [];
 
-  TIME && console.timeEnd("generatePrecipitation");
-}
-```
+    provinces.forEach(p => {
+      if (!p.i || p.removed || isProvinceLocked(p)) return;
+      provinceIds[p.center] = p.i;
+      queue.queue({e: p.center, p: 0, province: p.i, state: p.state});
+      cost[p.center] = 1;
+    });
 
-### Analysis:
+    while (queue.length) {
+      const {e, p, province, state} = queue.dequeue();
 
-NOTE: I think a lot of this depends on the cells being arranged in a grid form, but I'm not certain.
+      cells.c[e].forEach(e => {
+        if (isProvinceCellLocked(e)) return; // do not overwrite cell of locked provinces
 
-* let cells_number_modifier = (initial number of points/10000)^0.25 TODO: What is this for?
-* let prec_input_modifier = (input value "Precipitation" 0-100)/100
-* let modifier = cells_number_modifier * prec_input_modifier
-  * Okay, what I believe this is calculating a "percent" of the cells that have precipitation.
-* let westerly = []
-* let easterly = []
-* let southerly = 0
-* let northerly = 0
-* let latitude_modifier = [4, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0.5]
-  * This bases itself on "bands" of rain. See the comments on this one above. Basically, represents things like ITCZ.
-* let max_passable_elevation =  85
-  * TODO: Now I'm wondering if the AFMG elevation scales aren't in meters.
-* for each tile:
-  * lat = tile.lat
-  * lat_band = ((lat.abs() - 1) / 5).floor()
-  * lat_mod = latitude_modifier[lat_band]
-  * wind_tier = ((lat - 89).abs() / 30).floor(); 
-    * Basically, like the lat_bnad, but the division is into five degrees
-  * (is_west, is_east, is_north, is_south) = get_wind_directions(wind_tier); 
-  * if is_west: westerly.push((tile.fid(),lat_mod,wind_tier))
-  * if is_east: easterly.push((tile.fid(),lat_mod,wind_tier)) 
-  * if is_north: northerly += 1
-  * if is_south: southerly += 1
-* if westerly.len > 0: pass_wind(westerly, 120 * modifier, 1, tile_count_x) 
-* if easterly.len > 0: pass_wind(easterly, 120 * modifier, -1, tile_count_x) 
-* let vert_t = southerly + northerly;
-* if northerly > 0:
-  * let band_north = ((northernmost_latitude.abs() - 1)/5).floor()
-  * let lat_mod_north = (latitude_range > 60) ? mean(latitude_modifier) : latitude_modifier[band_north]
-    * I don't know why they average it for wider worlds
-  * let max_prec_n = (northerly / vert_t) * 60 * modifier * lat_mod_north;
-  * pass_wind(cells,max_prec_n,tile_count_x,tile_count_y) 
-* if southerly > 0:
-  * let band_south = ((southernmost_latitude.abs() - 1)/5).floor()
-  * let lat_mod_south = (latitude_range > 60) ? mean(latitude_modifier) : latitude_modifier[band_south]
-    * I don't know why they average it for wider worlds
-  * let max_prec_s = (southerly / vert_t) * 60 * modifier * lat_mod_south;
-  * pass_wind(cells,max_prec_s,-tile_count_x,tile_count_y) 
+        const land = cells.h[e] >= 20;
+        if (!land && !cells.t[e]) return; // cannot pass deep ocean
+        if (land && cells.state[e] !== state) return;
+        const evevation = cells.h[e] >= 70 ? 100 : cells.h[e] >= 50 ? 30 : cells.h[e] >= 20 ? 10 : 100;
+        const totalCost = p + evevation;
 
-* get_wind_direction(tier):
-  * let angle = options.winds[tier] // This is part of the input
-  * let is_west = angle > 40 && angle < 140;
-  * let is_east = angle > 220 && angle < 320;
-  * let is_north = angle > 100 && angle < 260;
-  * let is_south = angle > 280 || angle < 80;
-  * return (is_west,is_east,is_north,is_south)
+        if (totalCost > max) return;
+        if (!cost[e] || totalCost < cost[e]) {
+          if (land) provinceIds[e] = province; // assign province to a cell
+          cost[e] = totalCost;
+          queue.queue({e, p: totalCost, province, state});
+        }
+      });
+    }
 
-* pass_wind(source,max_prec,next,steps)
-  * let max_prec_init = max_prec
-  * for first of source
-    * if first[0] -- I think this is what happens if we've been given an array of arrays instead of just an array.
-      * max_prec = (max_prec_init * first[1],255);
-      * first = first[0];
-    * let humidity = max_prec - tiles[first].elevation
-    * if humidity <= 0 continue;
-    * current = first
-    * for s in 0..steps
-      * if cells[current].temp < -5 continue;  // permafrost, no humidity change?
-      * if cells[current].is_ocean // water cell
-        * if cells[curren+next].is_ocean == false
-          * cells[current+next].precipitation += Math.max(humidity / rand(10, 20), 1); // coastal precipitation
-        * else
-          * humidity = Math.min(humidity + 5 * modifier, maxPrec); // wind gets more humidity passing water cell
-          * cells[current].precipitation += 5 * modifier; // water cells precipitation (need to correctly pour water through lakes)
-        * continue
-      * is_passable = cells[current + next].height < MAX_PASSABLE_ELEVATION
-      * precipitation = is_passable ? get_precipitation(humidity,current,next) : humidity
-      * cells[current].precipitation = precipitation;
-      * evaporation = precipitation > 1.5 ? 1 : 0;
-      * humidity = is_passable ? clamp(humidity - precipitation + evaporation, 0, max_prec) : 0
-      * current += next;
+    // justify provinces shapes a bit
+    for (const i of cells.i) {
+      if (cells.burg[i]) continue; // do not overwrite burgs
+      if (isProvinceCellLocked(i)) continue; // do not overwrite cell of locked provinces
 
-* get_precipitation(humidity,i,n)
-  * normal_loss = Math.max(humidity / (10 * modifier), 1); // precipitation in normal conditions
-  * diff_height = Math.max(cells.height[i + n] - cells.height[i], 0); // difference in height
-  * mod = (cells.height[i + n] / 70) ** 2; // 50 stands for hills, 70 for mountains
-  * return clamp(normal_loss + diff * mod, 1, humidity))
+      const neibs = cells.c[i]
+        .filter(c => cells.state[c] === cells.state[i] && !isProvinceCellLocked(c))
+        .map(c => provinceIds[c]);
+      const adversaries = neibs.filter(c => c !== provinceIds[i]);
+      if (adversaries.length < 2) continue;
 
-The huge problem with this algorithm is that AFMG seems to be able to keep the tiles in a grid. I don't have that luxury. I do think splitting between north, south, east and west winds is a good idea, and might help me, but I'd still have to sort them into rows and columns.
+      const buddies = neibs.filter(c => c === provinceIds[i]).length;
+      if (buddies.length > 2) continue;
 
-Okay, in re-thinking this: I don't need to worry about the grid if I do have the "directions". For westerly and easterly winds, every tile that has an appropriate wind is added to an array. So, the process is run on each of these tiles, extending their humidity based on the directions. The main issue is only that their algorithms use the location on the grid to find the "next" cell. If I can have the angles to the neighbors, then I can use that to find the appropriate neighbor for a cell. So, basically:
-* Any cell with wind gets added to a vector of cells to check.
-* We do the calculations as above, but when looking for the next cell, we need to look in that cell's neighbor IDs, not just going along the array. We continue following that chain of cells until all of the humidity is used up. 
-* We may also want to keep a list of "visited" tiles so that I don't revisit a tile in the path along the way. This prevents circles, just as a check.
+      const competitors = adversaries.map(p => adversaries.reduce((s, v) => (v === p ? s + 1 : s), 0));
+      const max = d3.max(competitors);
+      if (buddies >= max) continue;
 
-## Biomes
+      provinceIds[i] = adversaries[competitors.indexOf(max)];
+    }
 
-```js
-function defineBiomes() {
-  TIME && console.time("defineBiomes");
-  const {cells} = pack;
-  const {temp, prec} = grid.cells;
-  cells.biome = new Uint8Array(cells.i.length); // biomes array
+    // add "wild" provinces if some cells don't have a province assigned
+    const noProvince = Array.from(cells.i).filter(i => cells.state[i] && !provinceIds[i]); // cells without province assigned
+    states.forEach(s => {
+      if (!s.i || s.removed) return;
+      if (s.lock && !regenerateInLockedStates) return;
+      if (!s.provinces.length) return;
 
-  for (const i of cells.i) {
-    const temperature = temp[cells.g[i]];
-    const height = cells.h[i];
-    const moisture = height < 20 ? 0 : calculateMoisture(i);
-    cells.biome[i] = getBiomeId(moisture, temperature, height);
+      const coreProvinceNames = s.provinces.map(p => provinces[p]?.name);
+      const colonyNamePool = [s.name, ...coreProvinceNames].filter(name => name && !/new/i.test(name));
+      const getColonyName = () => {
+        if (colonyNamePool.length < 1) return null;
+
+        const index = rand(colonyNamePool.length - 1);
+        const spliced = colonyNamePool.splice(index, 1);
+        return spliced[0] ? `New ${spliced[0]}` : null;
+      };
+
+      let stateNoProvince = noProvince.filter(i => cells.state[i] === s.i && !provinceIds[i]);
+      while (stateNoProvince.length) {
+        // add new province
+        const provinceId = provinces.length;
+        const burgCell = stateNoProvince.find(i => cells.burg[i]);
+        const center = burgCell ? burgCell : stateNoProvince[0];
+        const burg = burgCell ? cells.burg[burgCell] : 0;
+        provinceIds[center] = provinceId;
+
+        // expand province
+        const cost = [];
+        cost[center] = 1;
+        queue.queue({e: center, p: 0});
+        while (queue.length) {
+          const {e, p} = queue.dequeue();
+
+          cells.c[e].forEach(nextCellId => {
+            if (provinceIds[nextCellId]) return;
+            const land = cells.h[nextCellId] >= 20;
+            if (cells.state[nextCellId] && cells.state[nextCellId] !== s.i) return;
+            const ter = land ? (cells.state[nextCellId] === s.i ? 3 : 20) : cells.t[nextCellId] ? 10 : 30;
+            const totalCost = p + ter;
+
+            if (totalCost > max) return;
+            if (!cost[nextCellId] || totalCost < cost[nextCellId]) {
+              if (land && cells.state[nextCellId] === s.i) provinceIds[nextCellId] = provinceId; // assign province to a cell
+              cost[nextCellId] = totalCost;
+              queue.queue({e: nextCellId, p: totalCost});
+            }
+          });
+        }
+
+        // generate "wild" province name
+        const c = cells.culture[center];
+        const f = pack.features[cells.f[center]];
+        const color = getMixedColor(s.color);
+
+        const provCells = stateNoProvince.filter(i => provinceIds[i] === provinceId);
+        const singleIsle = provCells.length === f.cells && !provCells.find(i => cells.f[i] !== f.i);
+        const isleGroup = !singleIsle && !provCells.find(i => pack.features[cells.f[i]].group !== "isle");
+        const colony = !singleIsle && !isleGroup && P(0.5) && !isPassable(s.center, center);
+
+        const name = (function () {
+          const colonyName = colony && P(0.8) && getColonyName();
+          if (colonyName) return colonyName;
+          if (burgCell && P(0.5)) return burgs[burg].name;
+          return Names.getState(Names.getCultureShort(c), c);
+        })();
+
+        const formName = (function () {
+          if (singleIsle) return "Island";
+          if (isleGroup) return "Islands";
+          if (colony) return "Colony";
+          return rw(forms["Wild"]);
+        })();
+
+        const fullName = name + " " + formName;
+
+        const dominion = colony ? P(0.95) : singleIsle || isleGroup ? P(0.7) : P(0.3);
+        const kinship = dominion ? 0 : 0.4;
+        const type = getType(center, burgs[burg]?.port);
+        const coa = COA.generate(s.coa, kinship, dominion, type);
+        coa.shield = COA.getShield(c, s.i);
+
+        provinces.push({i: provinceId, state: s.i, center, burg, name, formName, fullName, color, coa});
+        s.provinces.push(provinceId);
+
+        // check if there is a land way within the same state between two cells
+        function isPassable(from, to) {
+          if (cells.f[from] !== cells.f[to]) return false; // on different islands
+          const queue = [from],
+            used = new Uint8Array(cells.i.length),
+            state = cells.state[from];
+          while (queue.length) {
+            const current = queue.pop();
+            if (current === to) return true; // way is found
+            cells.c[current].forEach(c => {
+              if (used[c] || cells.h[c] < 20 || cells.state[c] !== state) return;
+              queue.push(c);
+              used[c] = 1;
+            });
+          }
+          return false; // way is not found
+        }
+
+        // re-check
+        stateNoProvince = noProvince.filter(i => cells.state[i] === s.i && !provinceIds[i]);
+      }
+    });
+
+    cells.province = provinceIds;
+    pack.provinces = provinces;
+
+    TIME && console.timeEnd("generateProvinces");
+  };
+
+  return {
+    generate,
+    expandStates,
+    normalizeStates,
+    assignColors,
+    drawBurgs,
+    specifyBurgs,
+    defineBurgFeatures,
+    getType,
+    drawStateLabels,
+    collectStatistics,
+    generateCampaign,
+    generateCampaigns,
+    generateDiplomacy,
+    defineStateForms,
+    getFullName,
+    generateProvinces,
+    updateCultures
+  };
+})();
+
+
+"use strict";
+
+window.Religions = (function () {
+  // name generation approach and relative chance to be selected
+  const approach = {
+    Number: 1,
+    Being: 3,
+    Adjective: 5,
+    "Color + Animal": 5,
+    "Adjective + Animal": 5,
+    "Adjective + Being": 5,
+    "Adjective + Genitive": 1,
+    "Color + Being": 3,
+    "Color + Genitive": 3,
+    "Being + of + Genitive": 2,
+    "Being + of the + Genitive": 1,
+    "Animal + of + Genitive": 1,
+    "Adjective + Being + of + Genitive": 2,
+    "Adjective + Animal + of + Genitive": 2
+  };
+
+  // turn weighted array into simple array
+  const approaches = [];
+  for (const a in approach) {
+    for (let j = 0; j < approach[a]; j++) {
+      approaches.push(a);
+    }
   }
 
-  function calculateMoisture(i) {
-    let moist = prec[cells.g[i]];
-    if (cells.r[i]) moist += Math.max(cells.fl[i] / 20, 2);
+  const base = {
+    number: ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"],
+    being: [
+      "Ancestor",
+      "Ancient",
+      "Avatar",
+      "Brother",
+      "Champion",
+      "Chief",
+      "Council",
+      "Creator",
+      "Deity",
+      "Divine One",
+      "Elder",
+      "Enlightened Being",
+      "Father",
+      "Forebear",
+      "Forefather",
+      "Giver",
+      "God",
+      "Goddess",
+      "Guardian",
+      "Guide",
+      "Hierach",
+      "Lady",
+      "Lord",
+      "Maker",
+      "Master",
+      "Mother",
+      "Numen",
+      "Oracle",
+      "Overlord",
+      "Protector",
+      "Reaper",
+      "Ruler",
+      "Sage",
+      "Seer",
+      "Sister",
+      "Spirit",
+      "Supreme Being",
+      "Transcendent",
+      "Virgin"
+    ],
+    animal: [
+      "Antelope",
+      "Ape",
+      "Badger",
+      "Basilisk",
+      "Bear",
+      "Beaver",
+      "Bison",
+      "Boar",
+      "Buffalo",
+      "Camel",
+      "Cat",
+      "Centaur",
+      "Cerberus",
+      "Chimera",
+      "Cobra",
+      "Cockatrice",
+      "Crane",
+      "Crocodile",
+      "Crow",
+      "Cyclope",
+      "Deer",
+      "Dog",
+      "Direwolf",
+      "Drake",
+      "Dragon",
+      "Eagle",
+      "Elephant",
+      "Elk",
+      "Falcon",
+      "Fox",
+      "Goat",
+      "Goose",
+      "Gorgon",
+      "Gryphon",
+      "Hare",
+      "Hawk",
+      "Heron",
+      "Hippogriff",
+      "Horse",
+      "Hound",
+      "Hyena",
+      "Ibis",
+      "Jackal",
+      "Jaguar",
+      "Kitsune",
+      "Kraken",
+      "Lark",
+      "Leopard",
+      "Lion",
+      "Manticore",
+      "Mantis",
+      "Marten",
+      "Minotaur",
+      "Moose",
+      "Mule",
+      "Narwhal",
+      "Owl",
+      "Ox",
+      "Panther",
+      "Pegasus",
+      "Phoenix",
+      "Python",
+      "Rat",
+      "Raven",
+      "Roc",
+      "Rook",
+      "Scorpion",
+      "Serpent",
+      "Shark",
+      "Sheep",
+      "Snake",
+      "Sphinx",
+      "Spider",
+      "Swan",
+      "Tiger",
+      "Turtle",
+      "Unicorn",
+      "Viper",
+      "Vulture",
+      "Walrus",
+      "Wolf",
+      "Wolverine",
+      "Worm",
+      "Wyvern",
+      "Yeti"
+    ],
+    adjective: [
+      "Aggressive",
+      "Almighty",
+      "Ancient",
+      "Beautiful",
+      "Benevolent",
+      "Big",
+      "Blind",
+      "Blond",
+      "Bloody",
+      "Brave",
+      "Broken",
+      "Brutal",
+      "Burning",
+      "Calm",
+      "Celestial",
+      "Cheerful",
+      "Crazy",
+      "Cruel",
+      "Dead",
+      "Deadly",
+      "Devastating",
+      "Distant",
+      "Disturbing",
+      "Divine",
+      "Dying",
+      "Eternal",
+      "Ethernal",
+      "Empyreal",
+      "Enigmatic",
+      "Enlightened",
+      "Evil",
+      "Explicit",
+      "Fair",
+      "Far",
+      "Fat",
+      "Fatal",
+      "Favorable",
+      "Flying",
+      "Friendly",
+      "Frozen",
+      "Giant",
+      "Good",
+      "Grateful",
+      "Great",
+      "Happy",
+      "High",
+      "Holy",
+      "Honest",
+      "Huge",
+      "Hungry",
+      "Illustrious",
+      "Immutable",
+      "Ineffable",
+      "Infallible",
+      "Inherent",
+      "Last",
+      "Latter",
+      "Lost",
+      "Loud",
+      "Lucky",
+      "Mad",
+      "Magical",
+      "Main",
+      "Major",
+      "Marine",
+      "Mythical",
+      "Mystical",
+      "Naval",
+      "New",
+      "Noble",
+      "Old",
+      "Otherworldly",
+      "Patient",
+      "Peaceful",
+      "Pregnant",
+      "Prime",
+      "Proud",
+      "Pure",
+      "Radiant",
+      "Resplendent",
+      "Sacred",
+      "Sacrosanct",
+      "Sad",
+      "Scary",
+      "Secret",
+      "Selected",
+      "Serene",
+      "Severe",
+      "Silent",
+      "Sleeping",
+      "Slumbering",
+      "Sovereign",
+      "Strong",
+      "Sunny",
+      "Superior",
+      "Supernatural",
+      "Sustainable",
+      "Transcendent",
+      "Transcendental",
+      "Troubled",
+      "Unearthly",
+      "Unfathomable",
+      "Unhappy",
+      "Unknown",
+      "Unseen",
+      "Waking",
+      "Wild",
+      "Wise",
+      "Worried",
+      "Young"
+    ],
+    genitive: [
+      "Cold",
+      "Day",
+      "Death",
+      "Doom",
+      "Fate",
+      "Fire",
+      "Fog",
+      "Frost",
+      "Gates",
+      "Heaven",
+      "Home",
+      "Ice",
+      "Justice",
+      "Life",
+      "Light",
+      "Lightning",
+      "Love",
+      "Nature",
+      "Night",
+      "Pain",
+      "Snow",
+      "Springs",
+      "Summer",
+      "Thunder",
+      "Time",
+      "Victory",
+      "War",
+      "Winter"
+    ],
+    theGenitive: [
+      "Abyss",
+      "Blood",
+      "Dawn",
+      "Earth",
+      "East",
+      "Eclipse",
+      "Fall",
+      "Harvest",
+      "Moon",
+      "North",
+      "Peak",
+      "Rainbow",
+      "Sea",
+      "Sky",
+      "South",
+      "Stars",
+      "Storm",
+      "Sun",
+      "Tree",
+      "Underworld",
+      "West",
+      "Wild",
+      "Word",
+      "World"
+    ],
+    color: [
+      "Amber",
+      "Black",
+      "Blue",
+      "Bright",
+      "Bronze",
+      "Brown",
+      "Coral",
+      "Crimson",
+      "Dark",
+      "Emerald",
+      "Golden",
+      "Green",
+      "Grey",
+      "Indigo",
+      "Lavender",
+      "Light",
+      "Magenta",
+      "Maroon",
+      "Orange",
+      "Pink",
+      "Plum",
+      "Purple",
+      "Red",
+      "Ruby",
+      "Sapphire",
+      "Teal",
+      "Turquoise",
+      "White",
+      "Yellow"
+    ]
+  };
 
-    const n = cells.c[i]
-      .filter(isLand)
-      .map(c => prec[cells.g[c]])
-      .concat([moist]);
-    return rn(4 + d3.mean(n));
+  const forms = {
+    Folk: {
+      Shamanism: 4,
+      Animism: 4,
+      Polytheism: 4,
+      "Ancestor Worship": 2,
+      "Nature Worship": 1,
+      Totemism: 1
+    },
+    Organized: {
+      Polytheism: 14,
+      Monotheism: 12,
+      Dualism: 6,
+      Pantheism: 6,
+      "Non-theism": 4
+    },
+    Cult: {
+      Cult: 5,
+      "Dark Cult": 5,
+      Sect: 1
+    },
+    Heresy: {
+      Heresy: 1
+    }
+  };
+
+  const namingMethods = {
+    Folk: {
+      "Culture + type": 1
+    },
+
+    Organized: {
+      "Random + type": 3,
+      "Random + ism": 1,
+      "Supreme + ism": 5,
+      "Faith of + Supreme": 5,
+      "Place + ism": 1,
+      "Culture + ism": 2,
+      "Place + ian + type": 6,
+      "Culture + type": 4
+    },
+
+    Cult: {
+      "Burg + ian + type": 2,
+      "Random + ian + type": 1,
+      "Type + of the + meaning": 2
+    },
+
+    Heresy: {
+      "Burg + ian + type": 3,
+      "Random + ism": 3,
+      "Random + ian + type": 2,
+      "Type + of the + meaning": 1
+    }
+  };
+
+  const types = {
+    Shamanism: {Beliefs: 3, Shamanism: 2, Druidism: 1, Spirits: 1},
+    Animism: {Spirits: 3, Beliefs: 1},
+    Polytheism: {Deities: 3, Faith: 1, Gods: 1, Pantheon: 1},
+    "Ancestor worship": {Beliefs: 1, Forefathers: 2, Ancestors: 2},
+    "Nature Worship": {Beliefs: 3, Druids: 1},
+    Totemism: {Beliefs: 2, Totems: 2, Idols: 1},
+
+    Monotheism: {Religion: 2, Church: 3, Faith: 1},
+    Dualism: {Religion: 3, Faith: 1, Cult: 1},
+    "Non-theism": {Beliefs: 3, Spirits: 1},
+
+    Cult: {Cult: 4, Sect: 2, Arcanum: 1, Order: 1, Worship: 1},
+    "Dark Cult": {Cult: 2, Blasphemy: 1, Circle: 1, Coven: 1, Idols: 1, Occultism: 1},
+    Sect: {Sect: 3, Society: 1},
+
+    Heresy: {
+      Heresy: 3,
+      Sect: 2,
+      Apostates: 1,
+      Brotherhood: 1,
+      Circle: 1,
+      Dissent: 1,
+      Dissenters: 1,
+      Iconoclasm: 1,
+      Schism: 1,
+      Society: 1
+    }
+  };
+
+  const expansionismMap = {
+    Folk: () => 0,
+    Organized: () => gauss(5, 3, 0, 10, 1),
+    Cult: () => gauss(0.5, 0.5, 0, 5, 1),
+    Heresy: () => gauss(1, 0.5, 0, 5, 1)
+  };
+
+  function generate() {
+    TIME && console.time("generateReligions");
+    const lockedReligions = pack.religions?.filter(r => r.i && r.lock && !r.removed) || [];
+
+    const folkReligions = generateFolkReligions();
+    const organizedReligions = generateOrganizedReligions(+religionsInput.value, lockedReligions);
+
+    const namedReligions = specifyReligions([...folkReligions, ...organizedReligions]);
+    const indexedReligions = combineReligions(namedReligions, lockedReligions);
+    const religionIds = expandReligions(indexedReligions);
+    const religions = defineOrigins(religionIds, indexedReligions);
+
+    pack.religions = religions;
+    pack.cells.religion = religionIds;
+
+    checkCenters();
+
+    TIME && console.timeEnd("generateReligions");
   }
 
-  TIME && console.timeEnd("defineBiomes");
-}
+  function generateFolkReligions() {
+    return pack.cultures
+      .filter(c => c.i && !c.removed)
+      .map(culture => ({type: "Folk", form: rw(forms.Folk), culture: culture.i, center: culture.center}));
+  }
 
-function getBiomeId(moisture, temperature, height) {
-  if (height < 20) return 0; // marine biome: all water cells
-  if (temperature < -5) return 11; // permafrost biome
-  if (isWetLand(moisture, temperature, height)) return 12; // wetland biome
+  function generateOrganizedReligions(desiredReligionNumber, lockedReligions) {
+    const cells = pack.cells;
+    const lockedReligionCount = lockedReligions.filter(({type}) => type !== "Folk").length || 0;
+    const requiredReligionsNumber = desiredReligionNumber - lockedReligionCount;
+    if (requiredReligionsNumber < 1) return [];
 
-  const moistureBand = Math.min((moisture / 5) | 0, 4); // [0-4]
-  const temperatureBand = Math.min(Math.max(20 - temperature, 0), 25); // [0-25]
-  return biomesData.biomesMartix[moistureBand][temperatureBand];
-}
+    const candidateCells = getCandidateCells();
+    const religionCores = placeReligions();
 
-let biomesData = applyDefaultBiomesSystem();
+    const cultsCount = Math.floor((rand(1, 4) / 10) * religionCores.length); // 10-40%
+    const heresiesCount = Math.floor((rand(0, 3) / 10) * religionCores.length); // 0-30%
+    const organizedCount = religionCores.length - cultsCount - heresiesCount;
 
-function applyDefaultBiomesSystem() {
-  const name = [
-    "Marine",
-    "Hot desert",
-    "Cold desert",
-    "Savanna",
-    "Grassland",
-    "Tropical seasonal forest",
-    "Temperate deciduous forest",
-    "Tropical rainforest",
-    "Temperate rainforest",
-    "Taiga",
-    "Tundra",
-    "Glacier",
-    "Wetland"
-  ];
-  const color = [
-    "#466eab",
-    "#fbe79f",
-    "#b5b887",
-    "#d2d082",
-    "#c8d68f",
-    "#b6d95d",
-    "#29bc56",
-    "#7dcb35",
-    "#409c43",
-    "#4b6b32",
-    "#96784b",
-    "#d5e7eb",
-    "#0b9131"
-  ];
-  const habitability = [0, 4, 10, 22, 30, 50, 100, 80, 90, 12, 4, 0, 12];
-  const iconsDensity = [0, 3, 2, 120, 120, 120, 120, 150, 150, 100, 5, 0, 150];
-  const icons = [
-    {},
-    {dune: 3, cactus: 6, deadTree: 1},
-    {dune: 9, deadTree: 1},
-    {acacia: 1, grass: 9},
-    {grass: 1},
-    {acacia: 8, palm: 1},
-    {deciduous: 1},
-    {acacia: 5, palm: 3, deciduous: 1, swamp: 1},
-    {deciduous: 6, swamp: 1},
-    {conifer: 1},
-    {grass: 1},
-    {},
-    {swamp: 1}
-  ];
-  const cost = [10, 200, 150, 60, 50, 70, 70, 80, 90, 200, 1000, 5000, 150]; // biome movement cost
-  const biomesMartix = [
-    // hot ↔ cold [>19°C; <-4°C]; dry ↕ wet
-    new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 10]),
-    new Uint8Array([3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 9, 9, 9, 9, 10, 10, 10]),
-    new Uint8Array([5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 9, 9, 9, 9, 9, 10, 10, 10]),
-    new Uint8Array([5, 6, 6, 6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 10, 10, 10]),
-    new Uint8Array([7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 10, 10])
-  ];
+    const getType = index => {
+      if (index < organizedCount) return "Organized";
+      if (index < organizedCount + cultsCount) return "Cult";
+      return "Heresy";
+    };
 
-  // parse icons weighted array into a simple array
-  for (let i = 0; i < icons.length; i++) {
-    const parsed = [];
-    for (const icon in icons[i]) {
-      for (let j = 0; j < icons[i][icon]; j++) {
-        parsed.push(icon);
+    return religionCores.map((cellId, index) => {
+      const type = getType(index);
+      const form = rw(forms[type]);
+      const cultureId = cells.culture[cellId];
+
+      return {type, form, culture: cultureId, center: cellId};
+    });
+
+    function placeReligions() {
+      const religionCells = [];
+      const religionsTree = d3.quadtree();
+
+      // pre-populate with locked centers
+      lockedReligions.forEach(({center}) => religionsTree.add(cells.p[center]));
+
+      // min distance between religion inceptions
+      const spacing = (graphWidth + graphHeight) / 2 / desiredReligionNumber;
+
+      for (const cellId of candidateCells) {
+        const [x, y] = cells.p[cellId];
+
+        if (religionsTree.find(x, y, spacing) === undefined) {
+          religionCells.push(cellId);
+          religionsTree.add([x, y]);
+
+          if (religionCells.length === requiredReligionsNumber) return religionCells;
+        }
+      }
+
+      WARN && console.warn(`Placed only ${religionCells.length} of ${requiredReligionsNumber} religions`);
+      return religionCells;
+    }
+
+    function getCandidateCells() {
+      const validBurgs = pack.burgs.filter(b => b.i && !b.removed);
+
+      if (validBurgs.length >= requiredReligionsNumber)
+        return validBurgs.sort((a, b) => b.population - a.population).map(burg => burg.cell);
+      return cells.i.filter(i => cells.s[i] > 2).sort((a, b) => cells.s[b] - cells.s[a]);
+    }
+  }
+
+  function specifyReligions(newReligions) {
+    const {cells, cultures} = pack;
+
+    const rawReligions = newReligions.map(({type, form, culture: cultureId, center}) => {
+      const supreme = getDeityName(cultureId);
+      const deity = form === "Non-theism" || form === "Animism" ? null : supreme;
+
+      const stateId = cells.state[center];
+
+      let [name, expansion] = generateReligionName(type, form, supreme, center);
+      if (expansion === "state" && !stateId) expansion = "global";
+
+      const expansionism = expansionismMap[type]();
+      const color = getReligionColor(cultures[cultureId], type);
+
+      return {name, type, form, culture: cultureId, center, deity, expansion, expansionism, color};
+    });
+
+    return rawReligions;
+
+    function getReligionColor(culture, type) {
+      if (!culture.i) return getRandomColor();
+
+      if (type === "Folk") return culture.color;
+      if (type === "Heresy") return getMixedColor(culture.color, 0.35, 0.2);
+      if (type === "Cult") return getMixedColor(culture.color, 0.5, 0);
+      return getMixedColor(culture.color, 0.25, 0.4);
+    }
+  }
+
+  // indexes, conditionally renames, and abbreviates religions
+  function combineReligions(namedReligions, lockedReligions) {
+    const indexedReligions = [{name: "No religion", i: 0}];
+
+    const {lockedReligionQueue, highestLockedIndex, codes, numberLockedFolk} = parseLockedReligions();
+    const maxIndex = Math.max(
+      highestLockedIndex,
+      namedReligions.length + lockedReligions.length + 1 - numberLockedFolk
+    );
+
+    for (let index = 1, progress = 0; index < maxIndex; index = indexedReligions.length) {
+      // place locked religion back at its old index
+      if (index === lockedReligionQueue[0]?.i) {
+        const nextReligion = lockedReligionQueue.shift();
+        indexedReligions.push(nextReligion);
+        continue;
+      }
+
+      // slot the new religions
+      if (progress < namedReligions.length) {
+        const nextReligion = namedReligions[progress];
+        progress++;
+
+        if (
+          nextReligion.type === "Folk" &&
+          lockedReligions.some(({type, culture}) => type === "Folk" && culture === nextReligion.culture)
+        )
+          continue; // when there is a locked Folk religion for this culture discard duplicate
+
+        const newName = renameOld(nextReligion);
+        const code = abbreviate(newName, codes);
+        codes.push(code);
+        indexedReligions.push({...nextReligion, i: index, name: newName, code});
+        continue;
+      }
+
+      indexedReligions.push({i: index, type: "Folk", culture: 0, name: "Removed religion", removed: true});
+    }
+    return indexedReligions;
+
+    function parseLockedReligions() {
+      // copy and sort the locked religions list
+      const lockedReligionQueue = lockedReligions
+        .map(religion => {
+          // and filter their origins to locked religions
+          let newOrigin = religion.origins.filter(n => lockedReligions.some(({i: index}) => index === n));
+          if (newOrigin === []) newOrigin = [0];
+          return {...religion, origins: newOrigin};
+        })
+        .sort((a, b) => a.i - b.i);
+
+      const highestLockedIndex = Math.max(...lockedReligions.map(r => r.i));
+      const codes = lockedReligions.length > 0 ? lockedReligions.map(r => r.code) : [];
+      const numberLockedFolk = lockedReligions.filter(({type}) => type === "Folk").length;
+
+      return {lockedReligionQueue, highestLockedIndex, codes, numberLockedFolk};
+    }
+
+    // prepend 'Old' to names of folk religions which have organized competitors
+    function renameOld({name, type, culture: cultureId}) {
+      if (type !== "Folk") return name;
+
+      const haveOrganized =
+        namedReligions.some(
+          ({type, culture, expansion}) => culture === cultureId && type === "Organized" && expansion === "culture"
+        ) ||
+        lockedReligions.some(
+          ({type, culture, expansion}) => culture === cultureId && type === "Organized" && expansion === "culture"
+        );
+      if (haveOrganized && name.slice(0, 3) !== "Old") return `Old ${name}`;
+      return name;
+    }
+  }
+
+  // finally generate and stores origins trees
+  function defineOrigins(religionIds, indexedReligions) {
+    const religionOriginsParamsMap = {
+      Organized: {clusterSize: 100, maxReligions: 2},
+      Cult: {clusterSize: 50, maxReligions: 3},
+      Heresy: {clusterSize: 50, maxReligions: 4}
+    };
+
+    const origins = indexedReligions.map(({i, type, culture: cultureId, expansion, center}) => {
+      if (i === 0) return null; // no religion
+      if (type === "Folk") return [0]; // folk religions originate from its parent culture only
+
+      const folkReligion = indexedReligions.find(({culture, type}) => type === "Folk" && culture === cultureId);
+      const isFolkBased = folkReligion && cultureId && expansion === "culture" && each(2)(center);
+      if (isFolkBased) return [folkReligion.i];
+
+      const {clusterSize, maxReligions} = religionOriginsParamsMap[type];
+      const fallbackOrigin = folkReligion?.i || 0;
+      return getReligionsInRadius(pack.cells.c, center, religionIds, i, clusterSize, maxReligions, fallbackOrigin);
+    });
+
+    return indexedReligions.map((religion, index) => ({...religion, origins: origins[index]}));
+  }
+
+  function getReligionsInRadius(neighbors, center, religionIds, religionId, clusterSize, maxReligions, fallbackOrigin) {
+    const foundReligions = new Set();
+    const queue = [center];
+    const checked = {};
+
+    for (let size = 0; queue.length && size < clusterSize; size++) {
+      const cellId = queue.shift();
+      checked[cellId] = true;
+
+      for (const neibId of neighbors[cellId]) {
+        if (checked[neibId]) continue;
+        checked[neibId] = true;
+
+        const neibReligion = religionIds[neibId];
+        if (neibReligion && neibReligion < religionId) foundReligions.add(neibReligion);
+        if (foundReligions.size >= maxReligions) return [...foundReligions];
+        queue.push(neibId);
       }
     }
-    icons[i] = parsed;
+
+    return foundReligions.size ? [...foundReligions] : [fallbackOrigin];
   }
 
-  return {i: d3.range(0, name.length), name, color, biomesMartix, habitability, iconsDensity, icons, cost};
+  // growth algorithm to assign cells to religions
+  function expandReligions(religions) {
+    const cells = pack.cells;
+    const religionIds = spreadFolkReligions(religions);
+
+    const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
+    const cost = [];
+
+    const maxExpansionCost = (cells.i.length / 20) * neutralInput.value; // limit cost for organized religions growth
+
+    const biomePassageCost = cellId => biomesData.cost[cells.biome[cellId]];
+
+    religions
+      .filter(r => r.i && !r.lock && r.type !== "Folk" && !r.removed)
+      .forEach(r => {
+        religionIds[r.center] = r.i;
+        queue.queue({e: r.center, p: 0, r: r.i, s: cells.state[r.center]});
+        cost[r.center] = 1;
+      });
+
+    const religionsMap = new Map(religions.map(r => [r.i, r]));
+
+    const isMainRoad = cellId => cells.road[cellId] - cells.crossroad[cellId] > 4;
+    const isTrail = cellId => cells.h[cellId] > 19 && cells.road[cellId] - cells.crossroad[cellId] === 1;
+    const isSeaRoute = cellId => cells.h[cellId] < 20 && cells.road[cellId];
+    const isWater = cellId => cells.h[cellId] < 20;
+
+    while (queue.length) {
+      const {e: cellId, p, r, s: state} = queue.dequeue();
+      const {culture, expansion, expansionism} = religionsMap.get(r);
+
+      cells.c[cellId].forEach(nextCell => {
+        if (expansion === "culture" && culture !== cells.culture[nextCell]) return;
+        if (expansion === "state" && state !== cells.state[nextCell]) return;
+        if (religionsMap.get(religionIds[nextCell])?.lock) return;
+
+        const cultureCost = culture !== cells.culture[nextCell] ? 10 : 0;
+        const stateCost = state !== cells.state[nextCell] ? 10 : 0;
+        const passageCost = getPassageCost(nextCell);
+
+        const cellCost = cultureCost + stateCost + passageCost;
+        const totalCost = p + 10 + cellCost / expansionism;
+        if (totalCost > maxExpansionCost) return;
+
+        if (!cost[nextCell] || totalCost < cost[nextCell]) {
+          if (cells.culture[nextCell]) religionIds[nextCell] = r; // assign religion to cell
+          cost[nextCell] = totalCost;
+
+          queue.queue({e: nextCell, p: totalCost, r, s: state});
+        }
+      });
+    }
+
+    return religionIds;
+
+    function getPassageCost(cellId) {
+      if (isWater(cellId)) return isSeaRoute ? 50 : 500;
+      if (isMainRoad(cellId)) return 1;
+      const biomeCost = biomePassageCost(cellId);
+      return isTrail(cellId) ? biomeCost / 1.5 : biomeCost;
+    }
+  }
+
+  // folk religions initially get all cells of their culture, and locked religions are retained
+  function spreadFolkReligions(religions) {
+    const cells = pack.cells;
+    const hasPrior = cells.religion && true;
+    const religionIds = new Uint16Array(cells.i.length);
+
+    const folkReligions = religions.filter(religion => religion.type === "Folk" && !religion.removed);
+    const cultureToReligionMap = new Map(folkReligions.map(({i, culture}) => [culture, i]));
+
+    for (const cellId of cells.i) {
+      const oldId = (hasPrior && cells.religion[cellId]) || 0;
+      if (oldId && religions[oldId]?.lock && !religions[oldId]?.removed) {
+        religionIds[cellId] = oldId;
+        continue;
+      }
+      const cultureId = cells.culture[cellId];
+      religionIds[cellId] = cultureToReligionMap.get(cultureId) || 0;
+    }
+
+    return religionIds;
+  }
+
+  function checkCenters() {
+    const cells = pack.cells;
+    pack.religions.forEach(r => {
+      if (!r.i) return;
+      // move religion center if it's not within religion area after expansion
+      if (cells.religion[r.center] === r.i) return; // in area
+      const firstCell = cells.i.find(i => cells.religion[i] === r.i);
+      const cultureHome = pack.cultures[r.culture]?.center;
+      if (firstCell) r.center = firstCell; // move center, othervise it's an extinct religion
+      else if (r.type === "Folk" && cultureHome) r.center = cultureHome; // reset extinct culture centers
+    });
+  }
+
+  function recalculate() {
+    const newReligionIds = expandReligions(pack.religions);
+    pack.cells.religion = newReligionIds;
+
+    checkCenters();
+  }
+
+  const add = function (center) {
+    const {cells, cultures, religions} = pack;
+    const religionId = cells.religion[center];
+    const i = religions.length;
+
+    const cultureId = cells.culture[center];
+    const missingFolk =
+      cultureId !== 0 &&
+      !religions.some(({type, culture, removed}) => type === "Folk" && culture === cultureId && !removed);
+    const color = missingFolk ? cultures[cultureId].color : getMixedColor(religions[religionId].color, 0.3, 0);
+
+    const type = missingFolk
+      ? "Folk"
+      : religions[religionId].type === "Organized"
+      ? rw({Organized: 4, Cult: 1, Heresy: 2})
+      : rw({Organized: 5, Cult: 2});
+    const form = rw(forms[type]);
+    const deity =
+      type === "Heresy"
+        ? religions[religionId].deity
+        : form === "Non-theism" || form === "Animism"
+        ? null
+        : getDeityName(cultureId);
+
+    const [name, expansion] = generateReligionName(type, form, deity, center);
+
+    const formName = type === "Heresy" ? religions[religionId].form : form;
+    const code = abbreviate(
+      name,
+      religions.map(r => r.code)
+    );
+    const influences = getReligionsInRadius(cells.c, center, cells.religion, i, 25, 3, 0);
+    const origins = type === "Folk" ? [0] : influences;
+
+    religions.push({
+      i,
+      name,
+      color,
+      culture: cultureId,
+      type,
+      form: formName,
+      deity,
+      expansion,
+      expansionism: expansionismMap[type](),
+      center,
+      cells: 0,
+      area: 0,
+      rural: 0,
+      urban: 0,
+      origins,
+      code
+    });
+    cells.religion[center] = i;
+  };
+
+  function updateCultures() {
+    pack.religions = pack.religions.map((religion, index) => {
+      if (index === 0) return religion;
+      return {...religion, culture: pack.cells.culture[religion.center]};
+    });
+  }
+
+  // get supreme deity name
+  const getDeityName = function (culture) {
+    if (culture === undefined) {
+      ERROR && console.error("Please define a culture");
+      return;
+    }
+    const meaning = generateMeaning();
+    const cultureName = Names.getCulture(culture, null, null, "", 0.8);
+    return cultureName + ", The " + meaning;
+  };
+
+  function generateMeaning() {
+    const a = ra(approaches); // select generation approach
+    if (a === "Number") return ra(base.number);
+    if (a === "Being") return ra(base.being);
+    if (a === "Adjective") return ra(base.adjective);
+    if (a === "Color + Animal") return `${ra(base.color)} ${ra(base.animal)}`;
+    if (a === "Adjective + Animal") return `${ra(base.adjective)} ${ra(base.animal)}`;
+    if (a === "Adjective + Being") return `${ra(base.adjective)} ${ra(base.being)}`;
+    if (a === "Adjective + Genitive") return `${ra(base.adjective)} ${ra(base.genitive)}`;
+    if (a === "Color + Being") return `${ra(base.color)} ${ra(base.being)}`;
+    if (a === "Color + Genitive") return `${ra(base.color)} ${ra(base.genitive)}`;
+    if (a === "Being + of + Genitive") return `${ra(base.being)} of ${ra(base.genitive)}`;
+    if (a === "Being + of the + Genitive") return `${ra(base.being)} of the ${ra(base.theGenitive)}`;
+    if (a === "Animal + of + Genitive") return `${ra(base.animal)} of ${ra(base.genitive)}`;
+    if (a === "Adjective + Being + of + Genitive")
+      return `${ra(base.adjective)} ${ra(base.being)} of ${ra(base.genitive)}`;
+    if (a === "Adjective + Animal + of + Genitive")
+      return `${ra(base.adjective)} ${ra(base.animal)} of ${ra(base.genitive)}`;
+
+    ERROR && console.error("Unkown generation approach");
+  }
+
+  function generateReligionName(variety, form, deity, center) {
+    const {cells, cultures, burgs, states} = pack;
+
+    const random = () => Names.getCulture(cells.culture[center], null, null, "", 0);
+    const type = rw(types[form]);
+    const supreme = deity.split(/[ ,]+/)[0];
+    const culture = cultures[cells.culture[center]].name;
+
+    const place = adj => {
+      const burgId = cells.burg[center];
+      const stateId = cells.state[center];
+
+      const base = burgId ? burgs[burgId].name : states[stateId].name;
+      let name = trimVowels(base.split(/[ ,]+/)[0]);
+      return adj ? getAdjective(name) : name;
+    };
+
+    const m = rw(namingMethods[variety]);
+    if (m === "Random + type") return [random() + " " + type, "global"];
+    if (m === "Random + ism") return [trimVowels(random()) + "ism", "global"];
+    if (m === "Supreme + ism" && deity) return [trimVowels(supreme) + "ism", "global"];
+    if (m === "Faith of + Supreme" && deity)
+      return [ra(["Faith", "Way", "Path", "Word", "Witnesses"]) + " of " + supreme, "global"];
+    if (m === "Place + ism") return [place() + "ism", "state"];
+    if (m === "Culture + ism") return [trimVowels(culture) + "ism", "culture"];
+    if (m === "Place + ian + type") return [place("adj") + " " + type, "state"];
+    if (m === "Culture + type") return [culture + " " + type, "culture"];
+    if (m === "Burg + ian + type") return [`${place("adj")} ${type}`, "global"];
+    if (m === "Random + ian + type") return [`${getAdjective(random())} ${type}`, "global"];
+    if (m === "Type + of the + meaning") return [`${type} of the ${generateMeaning()}`, "global"];
+    return [trimVowels(random()) + "ism", "global"]; // else
+  }
+
+  return {generate, add, getDeityName, updateCultures, recalculate};
+})();
+
+
+
+function drawStates() {
+  TIME && console.time("drawStates");
+  regions.selectAll("path").remove();
+
+  const {cells, vertices, features} = pack;
+  const states = pack.states;
+  const n = cells.i.length;
+
+  const used = new Uint8Array(cells.i.length);
+  const vArray = new Array(states.length); // store vertices array
+  const body = new Array(states.length).fill(""); // path around each state
+  const gap = new Array(states.length).fill(""); // path along water for each state to fill the gaps
+  const halo = new Array(states.length).fill(""); // path around states, but not lakes
+
+  const getStringPoint = v => vertices.p[v[0]].join(",");
+
+  // define inner-state lakes to omit on border render
+  const innerLakes = features.map(feature => {
+    if (feature.type !== "lake") return false;
+    if (!feature.shoreline) Lakes.getShoreline(feature);
+
+    const states = feature.shoreline.map(i => cells.state[i]);
+    return new Set(states).size > 1 ? false : true;
+  });
+
+  for (const i of cells.i) {
+    if (!cells.state[i] || used[i]) continue;
+    const state = cells.state[i];
+
+    const onborder = cells.c[i].some(n => cells.state[n] !== state);
+    if (!onborder) continue;
+
+    const borderWith = cells.c[i].map(c => cells.state[c]).find(n => n !== state);
+    const vertex = cells.v[i].find(v => vertices.c[v].some(i => cells.state[i] === borderWith));
+    const chain = connectVertices(vertex, state);
+
+    const noInnerLakes = chain.filter(v => v[1] !== "innerLake");
+    if (noInnerLakes.length < 3) continue;
+
+    // get path around the state
+    if (!vArray[state]) vArray[state] = [];
+    const points = noInnerLakes.map(v => vertices.p[v[0]]);
+    vArray[state].push(points);
+    body[state] += "M" + points.join("L");
+
+    // connect path for halo
+    let discontinued = true;
+    halo[state] += noInnerLakes
+      .map(v => {
+        if (v[1] === "border") {
+          discontinued = true;
+          return "";
+        }
+
+        const operation = discontinued ? "M" : "L";
+        discontinued = false;
+        return `${operation}${getStringPoint(v)}`;
+      })
+      .join("");
+
+    // connect gaps between state and water into a single path
+    discontinued = true;
+    gap[state] += chain
+      .map(v => {
+        if (v[1] === "land") {
+          discontinued = true;
+          return "";
+        }
+
+        const operation = discontinued ? "M" : "L";
+        discontinued = false;
+        return `${operation}${getStringPoint(v)}`;
+      })
+      .join("");
+  }
+
+  // find state visual center
+  vArray.forEach((ar, i) => {
+    const sorted = ar.sort((a, b) => b.length - a.length); // sort by points number
+    states[i].pole = polylabel(sorted, 1.0); // pole of inaccessibility
+  });
+
+  const bodyData = body.map((p, s) => [p.length > 10 ? p : null, s, states[s].color]).filter(d => d[0]);
+  const gapData = gap.map((p, s) => [p.length > 10 ? p : null, s, states[s].color]).filter(d => d[0]);
+  const haloData = halo.map((p, s) => [p.length > 10 ? p : null, s, states[s].color]).filter(d => d[0]);
+
+  const bodyString = bodyData.map(d => `<path id="state${d[1]}" d="${d[0]}" fill="${d[2]}" stroke="none"/>`).join("");
+  const gapString = gapData.map(d => `<path id="state-gap${d[1]}" d="${d[0]}" fill="none" stroke="${d[2]}"/>`).join("");
+  const clipString = bodyData
+    .map(d => `<clipPath id="state-clip${d[1]}"><use href="#state${d[1]}"/></clipPath>`)
+    .join("");
+  const haloString = haloData
+    .map(
+      d =>
+        `<path id="state-border${d[1]}" d="${d[0]}" clip-path="url(#state-clip${d[1]})" stroke="${
+          d3.color(d[2]) ? d3.color(d[2]).darker().hex() : "#666666"
+        }"/>`
+    )
+    .join("");
+
+  statesBody.html(bodyString + gapString);
+  defs.select("#statePaths").html(clipString);
+  statesHalo.html(haloString);
+
+  // connect vertices to chain
+  function connectVertices(start, state) {
+    const chain = []; // vertices chain to form a path
+    const getType = c => {
+      const borderCell = c.find(i => cells.b[i]);
+      if (borderCell) return "border";
+
+      const waterCell = c.find(i => cells.h[i] < 20);
+      if (!waterCell) return "land";
+      if (innerLakes[cells.f[waterCell]]) return "innerLake";
+      return features[cells.f[waterCell]].type;
+    };
+
+    for (let i = 0, current = start; i === 0 || (current !== start && i < 20000); i++) {
+      const prev = chain.length ? chain[chain.length - 1][0] : -1; // previous vertex in chain
+
+      const c = vertices.c[current]; // cells adjacent to vertex
+      chain.push([current, getType(c)]); // add current vertex to sequence
+
+      c.filter(c => cells.state[c] === state).forEach(c => (used[c] = 1));
+      const c0 = c[0] >= n || cells.state[c[0]] !== state;
+      const c1 = c[1] >= n || cells.state[c[1]] !== state;
+      const c2 = c[2] >= n || cells.state[c[2]] !== state;
+
+      const v = vertices.v[current]; // neighboring vertices
+
+      if (v[0] !== prev && c0 !== c1) current = v[0];
+      else if (v[1] !== prev && c1 !== c2) current = v[1];
+      else if (v[2] !== prev && c0 !== c2) current = v[2];
+
+      if (current === prev) {
+        ERROR && console.error("Next vertex is not found");
+        break;
+      }
+    }
+
+    if (chain.length) chain.push(chain[0]);
+    return chain;
+  }
+
+  invokeActiveZooming();
+  TIME && console.timeEnd("drawStates");
 }
 
-function isWetLand(moisture, temperature, height) {
-  if (moisture > 40 && temperature > -2 && height < 25) return true; //near coast
-  if (moisture > 24 && temperature > -2 && height > 24 && height < 60) return true; //off coast
-  return false;
-}
+// draw state and province borders
+function drawBorders() {
+  TIME && console.time("drawBorders");
+  borders.selectAll("path").remove();
 
+  const {cells, vertices} = pack;
+  const n = cells.i.length;
+
+  const sPath = [];
+  const pPath = [];
+
+  const sUsed = new Array(pack.states.length).fill("").map(_ => []);
+  const pUsed = new Array(pack.provinces.length).fill("").map(_ => []);
+
+  for (let i = 0; i < cells.i.length; i++) {
+    if (!cells.state[i]) continue;
+    const p = cells.province[i];
+    const s = cells.state[i];
+
+    // if cell is on province border
+    const provToCell = cells.c[i].find(
+      n => cells.state[n] === s && p > cells.province[n] && pUsed[p][n] !== cells.province[n]
+    );
+
+    if (provToCell) {
+      const provTo = cells.province[provToCell];
+      pUsed[p][provToCell] = provTo;
+      const vertex = cells.v[i].find(v => vertices.c[v].some(i => cells.province[i] === provTo));
+      const chain = connectVertices(vertex, p, cells.province, provTo, pUsed);
+
+      if (chain.length > 1) {
+        pPath.push("M" + chain.map(c => vertices.p[c]).join(" "));
+        i--;
+        continue;
+      }
+    }
+
+    // if cell is on state border
+    const stateToCell = cells.c[i].find(n => cells.h[n] >= 20 && s > cells.state[n] && sUsed[s][n] !== cells.state[n]);
+    if (stateToCell !== undefined) {
+      const stateTo = cells.state[stateToCell];
+      sUsed[s][stateToCell] = stateTo;
+      const vertex = cells.v[i].find(v => vertices.c[v].some(i => cells.h[i] >= 20 && cells.state[i] === stateTo));
+      const chain = connectVertices(vertex, s, cells.state, stateTo, sUsed);
+
+      if (chain.length > 1) {
+        sPath.push("M" + chain.map(c => vertices.p[c]).join(" "));
+        i--;
+        continue;
+      }
+    }
+  }
+
+  stateBorders.append("path").attr("d", sPath.join(" "));
+  provinceBorders.append("path").attr("d", pPath.join(" "));
+
+  // connect vertices to chain
+  function connectVertices(current, f, array, t, used) {
+    let chain = [];
+    const checkCell = c => c >= n || array[c] !== f;
+    const checkVertex = v =>
+      vertices.c[v].some(c => array[c] === f) && vertices.c[v].some(c => array[c] === t && cells.h[c] >= 20);
+
+    // find starting vertex
+    for (let i = 0; i < 1000; i++) {
+      if (i === 999) ERROR && console.error("Find starting vertex: limit is reached", current, f, t);
+      const p = chain[chain.length - 2] || -1; // previous vertex
+      const v = vertices.v[current],
+        c = vertices.c[current];
+
+      const v0 = checkCell(c[0]) !== checkCell(c[1]) && checkVertex(v[0]);
+      const v1 = checkCell(c[1]) !== checkCell(c[2]) && checkVertex(v[1]);
+      const v2 = checkCell(c[0]) !== checkCell(c[2]) && checkVertex(v[2]);
+      if (v0 + v1 + v2 === 1) break;
+      current = v0 && p !== v[0] ? v[0] : v1 && p !== v[1] ? v[1] : v[2];
+
+      if (current === chain[0]) break;
+      if (current === p) return [];
+      chain.push(current);
+    }
+
+    chain = [current]; // vertices chain to form a path
+    // find path
+    for (let i = 0; i < 1000; i++) {
+      if (i === 999) ERROR && console.error("Find path: limit is reached", current, f, t);
+      const p = chain[chain.length - 2] || -1; // previous vertex
+      const v = vertices.v[current],
+        c = vertices.c[current];
+      c.filter(c => array[c] === t).forEach(c => (used[f][c] = t));
+
+      const v0 = checkCell(c[0]) !== checkCell(c[1]) && checkVertex(v[0]);
+      const v1 = checkCell(c[1]) !== checkCell(c[2]) && checkVertex(v[1]);
+      const v2 = checkCell(c[0]) !== checkCell(c[2]) && checkVertex(v[2]);
+      current = v0 && p !== v[0] ? v[0] : v1 && p !== v[1] ? v[1] : v[2];
+
+      if (current === p) break;
+      if (current === chain[chain.length - 1]) break;
+      if (chain.length > 1 && v0 + v1 + v2 < 2) break;
+      chain.push(current);
+      if (current === chain[0]) break;
+    }
+
+    return chain;
+  }
+
+  TIME && console.timeEnd("drawBorders");
+}
 
 
 ```
 
 ### Analysis
 
-* **Input: Biomes Table** Input is a table with the following columns:
-  * key_name: string -- This is the name of the biome for referencing in the algorithm
-  * built_in: bool -- Indicates if the biome is built-in. Built-in biomes should not be deleted, nor their key_name changed, or biome generation isn't going to work anymore.
-  * habitability: integer - a value to be used later.
-  * movement_cost: integer - a value to be used later.
-* **Input: Biomes Matrix** This is a 2d array with x specifying hot to cold, and y specifying dry to wet. This is a lookup for what climate to put given a temperature and precipitation.
-  ```
-  // hot ↔ cold [>19°C; <-4°C]; dry ↕ wet
-    matrix: [[&str; 26]; 5] =
-    [["Marine", "Marine", "Marine", "Marine", "Marine", "Marine", "Marine", "Marine", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "hot desert", "taiga"],
-     ["cold desert", "cold desert", "cold desert", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "savanna", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga", "taiga"],
-     ["grassland", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga", "taiga"],
-     ["grassland", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical seasonal forest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga", "taiga"],
-     ["temperate deciduous forest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "tropical rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "temperate rainforest", "taiga", "taiga"]]
-  ```
+There are a few things I'm not doing that I'll need:
+* feature_type: found anywhere a lake was found.
+  * "frozen": temp of lake is < -3 -- how do I get that?
+  * "lava": scaled height of lake is > 60, cell count of lake is < 10 and first_cell % 10 = 0 -- first_cell is the id of the first cell that started the lake, I think this is just reducing the chance of this happening by only counting an ID that divides by 10.
+  * "dry": no inlets or outlets and evaporation of lake is greater than waterflow * 4.
+  * "sinkhole": no inlets or outlets and cell count < 3 and first_cell % 10 == 0
+  * "salt": no outlets and evaporation > water_flow
+  * "freshwater": everything else
+  * -- NOTE: I think I can get rid of lava and sinkhole. Dry and freshwater might be nice to have, but I'll then need:
+* lake.temperature 
+  * if number of cells < 6, then just take the temperature of the starting cell
+  * otherwise, round the average of the temperatures of the shoreline cells
+* lake.evaporation:
+  * height = lake_elevation (not scaled)
+  * evaporation = ((700 * (lake.temperature + 0.006 * height)) / 50 + 75) / (80 - lake_temperature); // based on Penman formula, [1-11]
+  * lake.evaporation = evaporation * lake.cell_count
 
-* for each tile
-  * let temperature = tile temperature
-  * let precipitation = tile precipitation
-  * let elevation = tile elevation_scale
-  * let moisture = if height < 20 ? 0 : calculate_moisture(tile)
-  * tile.biome = get_biome_id(moisture, temperature, elevation)
 
-* calculate_moisture
-  * let moist = tile.precipitation
-  * if (tile.is_river) moist += Math.max(tile.water_flux / 20, 2); 
-  * let n = [moist, ...precipitation of all neighboring cells]
-  * return 4 + n.average;
+cells.t = tile.shore_distance
+cells.haven = tile.closest_water
+cells.harbor = tile.water_count
 
-* get_biome_id(moisture,temperature,elevation)
-  * if elevation < 20 return "ocean"
-  * if temperature < -5 return "tundra"
-  * if is_wet_land(moisture,temperature,height) return "wetland"
-  * let moisture_band = ((moisture/5).floor()).min(4)
-  * let temperature_band = (20 - temperature).clamp(0,25)
-  * return biome_matrix[moisture_band][temperature_band]
+* Rank Cells
+* Generate cultures
+* Expand cultures
+* Generate Burgs and States
+* Generate Religions
+* Define State Forms (Burgs and States)
+* Generate Provinces (Burgs and States)
+* Define Burg Features (Burgs and States)
+* Draw States?
+* Draw Borders?
+* Draw State Labels (Burgs and States)
 
-* is_wet_land(moisture,temperature,height) 
-  * if moisture > 40 && temperature > -2 && height < 25: return true // near coast -- TODO: Except that we don't know that.
-  * if moisture > 24 && temperature > -2 && height > 24 && height < 60: return true -- TODO: Further from coast?
-  * return false
+### Analysis: Rank Cells
 
-**NOTE:** It appears that I need to have rivers and lakes before I can do this, which is part of the moisture.
+* let suitability = array of int the length of the tiles 
+* let population = array of float the length of the tiles -- TODO: Why is population a float?
+* let fl_mean = average water flow
+* let fl_max = max water flow
+* let area_mean = mean area of cell
+* for each cell
+  * if cell is ocean, continue
+  * let s = biomes_data.habitability(tile biome)
+  * if s == 0 then continue; // biome is uninhabitable
+  * if fl_mean > 0: s += normalize(tile waterflow + tile confluence, fl_mean, fl_max) * 250; -- "big rivers and confluences are valued" 
+    * normalize(value, min, max) = clamp((val - min)/max-min),0,1)
+  * s -= (tile.elevation_scaled - 50) / 5 -- "low elevation is valued"
+  * if cell is coast of ocean or lake: 
+    * if cell has a river (of subtantial flow): s += 15 -- "estuary is valued" -- Cell is in a river mouth. For me, I'll have to base it on waterflow instead.
+    * if cell is next to a lake:
+      * if lake is "freshwater": s += 30
+      * else if lake is salt: s += 10
+      * else if lake is frozen: s += 1
+      * else if lake is dry: s -= 5
+      * else if lake is sinkhole: s -= 5
+      * else if lake is lava: s -= 30 -- TODO: WTF? How do we get lava?
+    * else if cell is an ocean
+      * s += 5 -- "ocean coast is valued" 
+      * if cell is a harbor: s += 20 -- TODO: How do I determine this.
+  * tile.pop_scale (cells.s) = s/5 -- This is the general population rate
+  * tile.population = if tiles.pop_scale > 0 ? (cells.pop_scale * cells.area) / area_mean : 0 -- population is scaled by the area -- TODO: How do I find the area?
+
+### Analysis: Generate Cultures
+
+
+* *Input*: num_cultures (culturesInput.value = number of cultures)
+* *Input*: culture_set (culturesSet.selectedOptions[0].dataset = selected culture set to use (a choice of several))
+* let culture_ids = Create array of culture IDs for each cell (cells.i is an array of indexes)
+* let count = minimum of num_cultures and culture_set.length
+
+* let populated = filter of tiles where tile.pop_scale > 0
+* if populated.len < (count * 25):
+  * count (same var as above) = (populated.len / 50).floor
+  * if count == 0:
+    * report warning "The climate is too harsh and the people cannot live here, no cultures, nations, or cities can be created." -- TODO: Except, the problem could be that there's no land, or all the elevations are too high, or something else.
+    * list of cultures consists only of "Wildlands"
+    * map cultures to tiles
+    * return
+  * else:
+    * report warning "Not enough populated cells for requested number of cultures." -- TODO: This should also warn about why the cells can't be populated.
+
+* let cultures = select_cultures(count) 
+* let centers = d3.quadtree -- TODO: What does this do?
+* let colors = get_colors(count) -- I think this is just colors for the map and can safely be ignored
+* let codes = []
+* for culture in cultures:
+  * let new_id = generate a new idea
+  * let cell = culture.center = place_center(culture.sort ? culture.sort : |tile| tile.pop_scale) -- 
+  * centers.add(tile.site) 
+  * culture.id = new_id
+  * delete culture.odd
+  * delete culture.sort
+  * culture.type = define_culture_type(cell) 
+  * culture.expansionism = define_culture_expansionism(culture.type) 
+  * culture.origins = [0] 
+  * culture.code = abbreviate(culture.name,codes) -- This seems to generate a "code" to use for the culture. Not sure if I need this.
+  * codes.push(culture.code)
+  * culture_ids[cell] = new_id;
+
+* cells.culture = culture_ids -- This basically writes the culture_ids to the tiles. 
+* insert "Wildlands" culture into the beginning of cultures
+* name_bases = get the name base, either something provided or from default.
+* for each culture:
+  * culture.base = culture.base % name_bases.len -- This is assigning a name base for the culture by assigning an index into the name_bases.
+
+* place_center(v: closure for sorting the tiles by preference): -- I get that this is finding the "center" of the culture, but I don't get how it works.
+  * let spacing = (graph_width + graph_height) / 2 / count
+  * const MAX_ATTEMPTS = 100
+  * let sorted = [..populated].sort((a,b) => v(b) - v(a))
+  * let max = (sorted.length / 2).floor()
+  * let cell_id = 0;
+  * for i in 0..MAX_ATTEMPTS:
+    * cell_id = sorted[biased(0, max, 5)] -- TODO: What is biased?
+    * spacing *= 0.9
+    * if culture_ids[cell_id] == 0 and !centers.find(cells.p[cell_id][0], cells.p[cellId][1], spacing) break; -- TODO: The 'find' is from the quadtree thingie above.
+  * return cell_id
+
+* select_cultures(culture_number)
+  * let def = get_default(culture_number) 
+  * let cultures = [];
+  * -- a whole bunch of stuff revolving around "locked" cultures when regenerating
+  * let culture = 0;
+  * let rnd = 0;
+  * let i = 0;
+  * while cultures.length < culture_number && def.length > 0:
+    * loop:
+      * rnd = rand(def.length - 1)
+      * culture = def[rnd]
+      * i += 1;
+      * if i < 200 && !P(culture.odd): continue; -- TODO: What is that function P -- I think it's a random number generation thingie...
+      * break -- I'm just trying to emulate the process of a do..while loop
+    * cultures.push(culture)
+    * def.splice(rnd,1) -- remove that from the defaults
+  * return cultures
+
+* define_culture_type(tile)
+  * if tile.elevation_Scaled < 70 and biome is hot desert, cold desert or grassland: return "Nomadic" -- NOTE: This is fairly stereotyped for those environments, I don't think I should do this in the future
+  * if tile.elevation_scaled > 50: return "Highland"
+  * let f = -- I don't even know what this is, but I think it's checking for the feature in the "opposite" tile.
+  * if f.type == "lake" and f.cells > 5: return "Lake" -- f.cells is the count of cells in a feature, so the number of cells in the lake. TODO: I don't have this data readily available.
+  * if -- TODO: And now, I seem to need to know if there's a harbor here.
+     * tile.harbor and f.type != "lake" && P(0.1) ||
+     * tile.harbor == 1 && P(0.6) ||
+     * tile is an "isle" && P(0.4):
+       * return "Naval"
+  * if cell is a river with a water_flow > 100: return "River"
+  * if cells is land surrounded by land biome is savanna, TDF, TempRain, Taiga, Tundra, Wetland: return "Hunting"
+    -- Note that the code in AFMG syas cells.t[i] > 2, but 2 appears to be the highest value. so it should never be hunting. But yet it appears.
+  * return "Generic"
+
+* define_culture_expansionism(type):
+  * match type:
+    * "lake" -> base = 0.8
+    * "Naval" -> base = 1.5;
+    * "River" -> base = 0.9;
+    * "Nomadic" -> base = 1.5;
+    * "Hunting" -> base = 0.7;
+    * "Highland" -> base = 1.2;
+    * else -> base = 1
+  * return rn(((Math.random() * powerInput.value) / 2 + 1) * base, 1); // powerInput is a float from 0 to 10 that defines "how much states and cultures can vary in size"
+
+* get_default(count):
+  * cells = tiles
+  * s = tile suitabilities
+  * s_max = d3.max(s) -- TODO: What is this?
+  * t = cells.t -- This relates to whether the tile is land, on the coast, or on a shoreline of a water body
+  * temp = cells.temp -- temperature
+  * n = |cell| ((s[cell]/s_max) * 3).ceil()
+  * td = |cell,goal| (temp[cells.g[cell]] - goal).max(0) + 1
+  * bd = |cell,biomes,fee=4| biomes.includes(cell.biome) ? 1 : fee -- biome difference fee
+  * sf = |cell,fee=4| cells.haven[cell] && cell.feature !== "lake" ? 1 : fee -- fee for not on a sea coast
+  * given a culture_set input create a list of cultures, each has:
+    * name: a name:
+    * base: a number that seems to increase for each one in the set
+    * odd: a float from 0 to 1
+    * sort: a closure based on combinations of the closures above. -- I think this is a way of guaranteeing that the cultures are "different".
+
+### Analysis: Expand Cultures
+
+* queue = PriorityQueue -- some sort of object that includes a closure for sorting by priority, I'm thinking this is an auto-sorting vector that sorts with the higher priority towards the end so you always pop off the highest priority while processing..
+* cost = []
+* neutral_rate = This seems to be an input, but I can't find it. There is a neutralInput which is a number from 0 to 2, which is labelled as Growth rate and defines how many lands will remain neutral
+* max_expansion_cost = tiles.len() * 0.6 * neutral_rate
+* clear tile cultures
+* for cultur in cultures
+  * queue.add({cell_id: culture.center, culture_id: culture.i, priority: 0})
+* while queue.length:
+  * cell_id, culture_id, priority = queue.pop
+  * type, expansinism from cultures[culture_id]
+  * for each cell neighbor:
+    * biome = cell.biome
+    * biome_cost = get_biome_cost(culture_id,biome,type)
+    * biome_change_cost = if biome == neighbor.biome ? 0 : 20;
+    * height_cost = get_height_cost(neighbor,neighbor.height,type) -- TODO:
+    * river_cost = get_river_cost(neighbor.water_flow,neighbor,type) -- TODO:
+    * type_cost = get_type_cost(neighbor.type (cells.t), type) -- TODO:
+    * cell_cost = (all of those costs) / expansionism
+    * total_cost = priority + cell_cost
+    * if total_Cost > max_expansion_cost: return
+    * if cost[neighbor] || total_cost < cost[neighbor] 
+      * if neighbor.population > 0: neighbor.culture = culture_id;
+      * cost[neighbor] = total_cost
+      * queue.add(neighbor_cell,culture_id, priority: total_cost)
+
+* get_biome_cost(culture,biome,type):
+  * if culture.center.biome == biome return 10 // native penalty
+  * if type == "Hunting" return biomes_data.cost[biome] * 5;
+  * if type == "Nomadic" and biome > 4 and biome < 10 return biomes_data.cost[biome] * 10; -- forest penalty for nomads
+  * return biomes_data.cost[biome] * 2;
+
+* get height_cost(cell,elevation,type):
+  * f = cell.features
+  * a = cell.area
+  * if type is Lake and the tile is a lake: return 10
+  * if type is Naval and tile is ocean: return a * 2;
+  * if type is Nomadic and tile is ocean: return a * 50;
+  * if is ocean: return a * 6;
+  * if type is Highland and elevation < 44: return 3000
+  * if type is highland and elevation < 62: return 200
+  * if type is highland: return 0
+  * if elevation >= 67: return 200
+  * if elevation >= 44: return 30
+  * return 0
+
+* get_river_cost(river_id,cell_id,type):
+  * if type is River return 100 if river_id is not none
+  * if river_id is none return 0 -- Will need a "water_flow" means a river thing.
+  * return (tile.water_flow/10).clamp(20,100)
+
+* get_type_cost(t,type)
+  * if t === 1: 
+    * if Naval or Lake: 0
+    * if Nomadic 60
+    * else 20
+  * if t == 2:
+    * if Naval or Nomadic: 30
+    * else 0
+  * if t != -1:
+    * if Naval or Lake: 100
+    * else 0
+  * return 0
+
+TODO:
+
+### Analysis: Generate cultures
+
+TODO: 
+
+### Analysis: Expand cultures
+
+TODO: 
+
+### Analysis: Generate Burgs and States
+
+TODO: 
+
+### Analysis: Generate Religions
+
+TODO: 
+
+### Analysis: Define State Forms (Burgs and States)
+
+TODO: 
+
+### Analysis: Generate Provinces (Burgs and States)
+
+TODO: 
+
+### Analysis: Define Burg Features (Burgs and States)
+
+TODO: 
+
+### Analysis: Draw States?
+
+TODO: 
+
+### Analysis: Draw Borders?
+
+TODO: 
+
+### Analysis: Draw State Labels (Burgs and States)
+
+TODO: 
+
+
 
 # Testing Commands:
+
+The following commands were used, in this order, to generate the testing maps of Inannak during development.
 
 ```sh
 cargo run -- convert-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif testing_output/Inannak.world.gpkg --overwrite --ocean /home/neil/Cartography/Inannak/Inannak-Ocean.tif --seed 9543572450198918714
