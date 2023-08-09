@@ -130,6 +130,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     });
 
     // I need to trace the data across the map, so I can't just do quick read and writes to the database.
+    // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let mut tile_map = layer.read_features().to_entities_index::<_,TileDataForPrecipitation>(progress)?;
 
     // I can't work on the tiles map while also iterating it, so I have to copy the keys

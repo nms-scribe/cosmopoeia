@@ -1,24 +1,24 @@
-use std::collections::HashMap;
-
 use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
+use crate::world_map::TypedFeature;
 use crate::world_map::TileEntityForWaterDistance;
+use crate::world_map::TileEntityForWaterDistanceNeighbor;
+use crate::world_map::TileEntityForWaterDistanceOuter;
+use crate::world_map::TileEntityForWaterDistanceOuterNeighbor;
 use crate::errors::CommandError;
 
 pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let mut layer = target.edit_tile_layer()?;
+    let mut tiles = target.edit_tile_layer()?;
 
-    let mut tile_map = HashMap::new();
     let mut queue = Vec::new();
     let mut next_queue = Vec::new();
 
-    progress.start_known_endpoint(|| ("Indexing data.",layer.feature_count() as usize));
+    progress.start_known_endpoint(|| ("Indexing data.",tiles.feature_count() as usize));
 
-    for (i,data) in layer.read_entities::<TileEntityForWaterDistance>().enumerate() {
-        let (fid,entity) = data?;
+    for (i,feature) in tiles.read_features().enumerate() {
+        let fid = feature.fid()?;
         queue.push(fid);
-        tile_map.insert(fid, entity);
         progress.update(|| i);
 
     }
@@ -35,47 +35,42 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut water_distance = None;
         let mut water_count = 0;
 
-        {
-            let tile = tile_map.get(&fid).unwrap(); // We built the list from the same source, so it should always exist
-            let is_land = !tile.is_ocean && tile.lake_elevation.is_none();
+        let tile = tiles.try_entity_by_id::<TileEntityForWaterDistance>(&fid)?;
+        let is_land = !tile.is_ocean && tile.lake_elevation.is_none();
 
-            for (neighbor_fid,_) in &tile.neighbors {
-                if let Some(neighbor) = tile_map.get(&neighbor_fid) {
-                    if is_land && (neighbor.is_ocean || neighbor.lake_elevation.is_some()) {
-                        shore_distance.get_or_insert_with(|| 1);
-                        let neighbor_water_distance = tile.site.distance(&neighbor.site);
-                        if let Some(old_water_distance) = water_distance {
-                            if neighbor_water_distance < old_water_distance {
-                                water_distance = Some(neighbor_water_distance);
-                                closest_water = Some(*neighbor_fid);
-                            }
-                        } else {
-                            water_distance = Some(neighbor_water_distance);
-                            closest_water = Some(*neighbor_fid);
-                        }
-                        water_count += 1;
-                    } else if !is_land && !neighbor.is_ocean && neighbor.lake_elevation.is_none() {
-                        shore_distance.get_or_insert_with(|| -1);
+        for (neighbor_fid,_) in &tile.neighbors {
+            let neighbor = tiles.try_entity_by_id::<TileEntityForWaterDistanceNeighbor>(&neighbor_fid)?;
+            if is_land && (neighbor.is_ocean || neighbor.lake_elevation.is_some()) {
+                shore_distance.get_or_insert_with(|| 1);
+                let neighbor_water_distance = tile.site.distance(&neighbor.site);
+                if let Some(old_water_distance) = water_distance {
+                    if neighbor_water_distance < old_water_distance {
+                        water_distance = Some(neighbor_water_distance);
+                        closest_water = Some(*neighbor_fid);
                     }
+                } else {
+                    water_distance = Some(neighbor_water_distance);
+                    closest_water = Some(*neighbor_fid);
                 }
+                water_count += 1;
+            } else if !is_land && !neighbor.is_ocean && neighbor.lake_elevation.is_none() {
+                shore_distance.get_or_insert_with(|| -1);
             }
-    
-    
         }
 
         if (water_count > 0) || closest_water.is_some() || shore_distance.is_some() {
-            if let Some(tile) = tile_map.get_mut(&fid) {
-                if water_count > 0 {
-                    tile.water_count = Some(water_count);
-                }
-                if let Some(closest_water) = closest_water {
-                    tile.closest_water = Some(closest_water)
-                }
-                if let Some(shore_distance) = shore_distance {
-                    tile.shore_distance = Some(shore_distance)
-                }
+            let mut tile = tiles.try_feature_by_id(&fid)?;
 
+            if water_count > 0 {
+                tile.set_water_count(Some(water_count))?;
             }
+            tile.set_closest_water(closest_water.map(|n| n as i64))?;
+
+            if let Some(shore_distance) = shore_distance {
+                tile.set_shore_distance(shore_distance)?;
+                tiles.update_feature(tile)?;
+            }
+
             processed += 1;
     
         } else {
@@ -97,25 +92,24 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
             let mut shore_distance = None;
             {
-                let tile = tile_map.get(&fid).unwrap(); // In theory I won't have put something on the queue if it wasn't already in the tile map.
+                let tile = tiles.try_entity_by_id::<TileEntityForWaterDistanceOuter>(&fid)?; 
 
                 if tile.shore_distance.is_none() {
                     let is_land = !tile.is_ocean && tile.lake_elevation.is_none();
     
                     for (neighbor_fid,_) in &tile.neighbors {
-                        if let Some(neighbor) = tile_map.get(neighbor_fid) {
-                            if let Some(neighbor_shore_distance) = neighbor.shore_distance {
-                                if is_land {
-                                    if neighbor_shore_distance == (calc_distance - 1) {
-                                        shore_distance.get_or_insert_with(|| calc_distance);
-                                    }
-                                } else {
-                                    if neighbor_shore_distance == (-calc_distance + 1) {
-                                        shore_distance.get_or_insert_with(|| -calc_distance);
-                                    }
+                        let neighbor = tiles.try_entity_by_id::<TileEntityForWaterDistanceOuterNeighbor>(neighbor_fid)?; 
+                        
+                        if let Some(neighbor_shore_distance) = neighbor.shore_distance {
+                            if is_land {
+                                if neighbor_shore_distance == (calc_distance - 1) {
+                                    shore_distance.get_or_insert_with(|| calc_distance);
+                                }
+                            } else {
+                                if neighbor_shore_distance == (-calc_distance + 1) {
+                                    shore_distance.get_or_insert_with(|| -calc_distance);
                                 }
                             }
-    
                         }
     
                     }
@@ -128,8 +122,11 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             }
 
             // apply any changed shore distance
-            if shore_distance.is_some() {
-                tile_map.get_mut(&fid).unwrap().shore_distance = shore_distance;
+            if let Some(shore_distance) = shore_distance {
+                let mut tile = tiles.try_feature_by_id(&fid)?;
+                tile.set_shore_distance(shore_distance)?;
+                tiles.update_feature(tile)?;
+                
                 processed += 1;
                 progress.update(|| processed);
             } else {
@@ -146,43 +143,6 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
     }
     progress.finish(|| "Found distances for tiles.");
-
-
-
-    // update the distances:
-    progress.start_known_endpoint(|| ("Writing shore distances.",tile_map.len()));
-
-    for (i,(fid,tile)) in tile_map.iter().enumerate() {
-
-        if (tile.water_count.is_some()) || tile.closest_water.is_some() || tile.shore_distance.is_some() {
-
-            if let Some(mut feature) = layer.feature_by_id(fid) {
-
-                if let Some(water_count) = tile.water_count {
-                    feature.set_water_count(Some(water_count))?;
-                }
-                if let Some(closest_water) = tile.closest_water {
-                    feature.set_closest_water(Some(closest_water as i64))?;
-                }
-                if let Some(shore_distance) = tile.shore_distance {
-                    feature.set_shore_distance(shore_distance)?;
-                }
-
-                layer.update_feature(feature)?;
-
-
-            }
-    
-    
-        }
-
-
-
-        progress.update(|| i);
-    }
-
-    progress.finish(|| "Shore distances written.");
-
 
     Ok(())
 }

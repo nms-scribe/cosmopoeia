@@ -14,6 +14,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     // from the AFMG code, this is also done in calculating precipitation. I'm wondering if it's unscaling the precipitation somehow?
     let cells_number_modifier = ((layer.feature_count() / 10000) as f64).powf(0.25);
 
+    // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let mut tile_map = HashMap::new();
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();

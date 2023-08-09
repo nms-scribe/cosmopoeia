@@ -15,6 +15,7 @@ pub(crate) enum CommandError {
     FloatIsNan,
     MissingField(&'static str),
     MissingGeometry,
+    MissingFeature(&'static str,u64),
     InvalidValueForSegmentFrom(String),
     InvalidValueForSegmentTo(String),
     InvalidBiomeMatrixValue(String),
@@ -36,6 +37,23 @@ impl Error for CommandError {
 
 }
 
+pub(crate) trait MissingErrorToOption<ValueType> {
+
+    fn missing_to_option(self) -> Result<Option<ValueType>,CommandError>;
+    
+}
+
+impl<OkType> MissingErrorToOption<OkType> for Result<OkType,CommandError> {
+
+    fn missing_to_option(self) -> Result<Option<OkType>,CommandError> {
+        match self {
+            Ok(value) => Ok(Some(value)),
+            Err(CommandError::MissingField(_)) => Ok(None),
+            Err(err) => Err(err)
+        }
+    }
+}
+
 impl Display for CommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -45,6 +63,7 @@ impl Display for CommandError {
             Self::FloatIsNan => write!(f,"A float was not a number."),
             Self::MissingField(a) => write!(f,"While loading data, a record had no value in for '{}'",a),
             Self::MissingGeometry => write!(f,"While loading data, a record had no geometry"),
+            Self::MissingFeature(layer, id) => write!(f,"While loading data, layer '{}' had no feature id '{}'",layer,id),
             Self::InvalidValueForSegmentFrom(a) => write!(f,"Invalid value ('{}') found for from_type in river segments layer.",a),
             Self::InvalidValueForSegmentTo(a) => write!(f,"Invalid value ('{}') found for to_type in river segments layer.",a),
             Self::InvalidBiomeMatrixValue(a) => write!(f,"Invalid value ('{}') for biome matrix field.",a),

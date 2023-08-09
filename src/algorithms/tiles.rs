@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::world_map::TileEntitySiteGeo;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
@@ -31,56 +30,117 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileEntity,Comm
 
 pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let mut layer = target.edit_tile_layer()?;
+    //use std::time::Instant;
 
-    let features = layer.read_features().to_entities_vec::<_,TileEntitySiteGeo>(progress)?;
+    // let mut time_map = HashMap::new();
+
+    macro_rules! mark_time {
+        {$name: literal: $($block: tt)*} => {
+            // NOTE: Uncomment these lines to do some benchmarking
+            //let now = Instant::now();
+            $($block)*
+            //match time_map.entry($name) {
+            //    std::collections::hash_map::Entry::Occupied(mut entry) => *entry.get_mut() += now.elapsed().as_secs_f64(),
+            //    std::collections::hash_map::Entry::Vacant(entry) => {entry.insert(now.elapsed().as_secs_f64());},
+            //}
+            
+        };
+    }
+
+    // TODO: Memory usage for this isn't much more than other algorithms. The problem is almost entirely time.
+    // There's CPU usage as well, but the best way to reduce that is to reduce the time (I can reduce usage by sleeping for occasional milliseconds, but that
+    // slows the whole process down.)
+    let mut layer = target.edit_tile_layer()?;
+    
+    mark_time!{"reading tiles": 
+        progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count()));
+        let mut features = Vec::new();
+        for (i,feature) in layer.read_features().enumerate() {
+            features.push(feature.fid()?);
+            progress.update(|| i)
+        }
+        progress.finish(|| "Tiles read.");
+    };
 
     progress.start_known_endpoint(|| ("Calculating neighbors.",features.len()));
 
     // # Loop through all features and find features that touch each feature
     // for f in feature_dict.values():
-    for (i,feature) in features.iter().enumerate() {
+    for (i,working_fid) in features.iter().enumerate() {
 
-        let working_fid = feature.fid;
-        let working_geometry = &feature.geometry;
+        mark_time!{"feature geometry":
+            let (site_x,site_y,envelope,working_geometry) = { // shelter mutable borrow
 
-        let envelope = working_geometry.envelope();
-        layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
+                let feature = layer.feature_by_id(&working_fid).unwrap();
+                let working_geometry = feature.geometry().unwrap();
+                let envelope = working_geometry.envelope();
+                (feature.site_x()?,feature.site_y()?,envelope,working_geometry.clone())
 
+            };
+        }
+
+        mark_time!{"set_spatial_filter_rect":
+            layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
+        }
 
         let mut neighbors = Vec::new();
 
-        for intersecting_feature in layer.read_features() {
+        mark_time!{"intersecting features":
+            for intersecting_feature in layer.read_features() {
 
-            let intersecting_fid = intersecting_feature.fid()?;
-            if (working_fid != intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+                mark_time!{"intersecting features: get fid":
+                    let intersecting_fid = intersecting_feature.fid()?;
+                }
 
-                let neighbor_site_x = intersecting_feature.site_x()?;
-                let neighbor_site_y = intersecting_feature.site_y()?;
-                let neighbor_angle = {
-                    let (site_x,site_y,neighbor_site_x,neighbor_site_y) = (feature.site_x,feature.site_y,neighbor_site_x,neighbor_site_y);
-                    // needs to be clockwise, from the north, with a value from 0..360
-                    // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-                    let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
-                    // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-                    let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
-                    // And then, to get the values in the range from 0..360, mod it.
-                    let clamped = clockwise_from_north % 360.0;
-                    clamped
-                };
-        
-                neighbors.push((intersecting_fid,neighbor_angle.floor() as i32)) 
+                if working_fid != &intersecting_fid {
+
+                    // NOTE: this is by far the slowest part of the process, apart from updating the feature. I can think of nothing to do to optimize this.
+                    mark_time!{"intersecting features: disjoint check":
+                        let is_disjoint = intersecting_feature.geometry().unwrap().disjoint(&working_geometry);
+                    }
+
+                    if !is_disjoint {
+                        mark_time!{"intersecting features: neighbor geometry":
+                            let neighbor_site_x = intersecting_feature.site_x()?;
+                            let neighbor_site_y = intersecting_feature.site_y()?;
+                        }
+
+                        mark_time!{"intersecting features: neighbor angle":
+                            let neighbor_angle = {
+                                let (site_x,site_y,neighbor_site_x,neighbor_site_y) = (site_x,site_y,neighbor_site_x,neighbor_site_y);
+                                // needs to be clockwise, from the north, with a value from 0..360
+                                // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+                                let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                                // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+                                let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
+                                // And then, to get the values in the range from 0..360, mod it.
+                                let clamped = clockwise_from_north % 360.0;
+                                clamped
+                            };
+                        }
+                
+                        mark_time!{"intersecting features: push neighbor":
+                            neighbors.push((intersecting_fid,neighbor_angle.floor() as i32)); 
+                        }
+
+                    }
+
+                }
+
             }
-
         }
-    
-        layer.clear_spatial_filter();
 
-        if let Some(mut working_feature) = layer.feature_by_id(&working_fid) {
-            working_feature.set_neighbors(&neighbors)?;
+        mark_time!{"clear_spatial_filter":
+            layer.clear_spatial_filter();
+        }
 
-            layer.update_feature(working_feature)?;
+        mark_time!{"update feature":
+            if let Some(mut working_feature) = layer.feature_by_id(&working_fid) {
+                working_feature.set_neighbors(&neighbors)?;
 
+                layer.update_feature(working_feature)?;
+
+            }
         }
 
 
@@ -90,6 +150,8 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
     progress.finish(|| "Neighbors calculated.");
 
+    //println!("{:#?}",time_map);
+    
     Ok(())
 
 }

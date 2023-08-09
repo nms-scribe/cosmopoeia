@@ -24,6 +24,7 @@ use crate::progress::ProgressObserver;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::utils::create_line;
+use crate::errors::MissingErrorToOption;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -706,6 +707,10 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
         self.layer.feature(*fid).map(Feature::from)
     }
 
+    pub(crate) fn try_feature_by_id(&'impl_life self, fid: &u64) -> Result<Feature,CommandError> {
+        self.layer.feature(*fid).ok_or_else(|| CommandError::MissingFeature(Feature::LAYER_NAME,*fid)).map(Feature::from)
+    }
+
 
     pub(crate) fn update_feature(&self, feature: Feature) -> Result<(),CommandError> {
         Ok(self.layer.set_feature(feature.into_feature())?)
@@ -866,12 +871,6 @@ entity!(TileEntitySite TileFeature {
     site_x: f64, 
     site_y: f64
 });
-entity!(TileEntitySiteGeo TileFeature {
-    fid: u64, 
-    geometry: Geometry, 
-    site_x: f64, 
-    site_y: f64
-});
 entity!(TileEntityLatElevOcean TileFeature {
     fid: u64, 
     site_y: f64, 
@@ -945,11 +944,25 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 entity!(TileEntityForWaterDistance TileFeature {
     site: Point,
     is_ocean: bool, 
-    lake_elevation: Option<f64> = |feature: &TileFeature| feature.lake_elevation(),
+    lake_elevation: Option<f64>,
+    neighbors: Vec<(u64,i32)>
+});
+
+entity!(TileEntityForWaterDistanceNeighbor TileFeature {
+    site: Point,
+    is_ocean: bool, 
+    lake_elevation: Option<f64>
+});
+
+entity!(TileEntityForWaterDistanceOuter TileFeature {
+    is_ocean: bool, 
+    lake_elevation: Option<f64>,
     neighbors: Vec<(u64,i32)>,
-    shore_distance: Option<i32> = |_| Ok::<_,CommandError>(None),
-    closest_water: Option<u64> = |_| Ok::<_,CommandError>(None),
-    water_count: Option<i32>  = |_| Ok::<_,CommandError>(None)
+    shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
+});
+
+entity!(TileEntityForWaterDistanceOuterNeighbor TileFeature {
+    shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
 entity!(TileForPopulation TileFeature {
@@ -957,16 +970,17 @@ entity!(TileForPopulation TileFeature {
     elevation_scaled: i32,
     biome: String,
     shore_distance: i32,
-    is_ocean: bool,
-    water_count: Option<i32> = |feature: &TileFeature| feature.water_count(),
+    water_count: Option<i32>,
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry().map(|g| g.area()).unwrap_or_else(|| 0.0))
-
     },
-    closest_water: Option<i64>  = |feature: &TileFeature| feature.closest_water(),
-    lake_type: Option<LakeType>  = |feature: &TileFeature| feature.lake_type(),
-    habitability: f64 = |_| Ok::<_,CommandError>(0.0),
-    population: i32 = |_| Ok::<_,CommandError>(0)
+    closest_water: Option<i64>,
+    lake_type: Option<LakeType>
+});
+
+entity!(TileForPopulationNeighbor TileFeature {
+    is_ocean: bool,
+    lake_type: Option<LakeType>
 });
 
 // entities containing is_ocean, lake_elevation, site, neighbors, and new values tile_distance, water_tile, and water_count, all set to None.
@@ -997,6 +1011,12 @@ impl TilesLayer<'_> {
     // FUTURE: It would also be nice to get rid of the lifetimes
     pub(crate) fn read_entities<'local, Data: Entity<'local,TileFeature<'local>>>(&'local mut self) -> EntityIterator<'local,TileFeature<'local>, Data> {
         self.read_features().into()
+    }
+
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    // FUTURE: It would also be nice to get rid of the lifetimes
+    pub(crate) fn try_entity_by_id<'local, Data: Entity<'local,TileFeature<'local>>>(&'local mut self, fid: &u64) -> Result<Data,CommandError> {
+        self.try_feature_by_id(&fid)?.try_into()
     }
 
     pub(crate) fn add_tile(&mut self, tile: NewTileEntity) -> Result<(),CommandError> {

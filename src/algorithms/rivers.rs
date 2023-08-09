@@ -52,6 +52,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
 
     let segment_clean_queue = gen_water_rivers_find_segments(&mut tiles, progress)?;
 
+    // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let (tile_from_index, tile_to_index, segment_draw_queue) = generate_water_rivers_clean_and_index(segment_clean_queue, progress);
 
     progress.start_known_endpoint(|| ("Drawing segments.",segment_draw_queue.len()));

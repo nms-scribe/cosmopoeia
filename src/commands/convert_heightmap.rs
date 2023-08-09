@@ -221,7 +221,7 @@ impl Task for ConvertHeightmapSample {
 
         let source = RasterMap::open(self.source)?;
 
-        let mut target = WorldMap::open(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target)?;
 
         // sample elevations
         target.with_transaction(|target| {
@@ -269,7 +269,7 @@ impl Task for ConvertHeightmapOcean {
 
         let source = RasterMap::open(self.source)?;
 
-        let mut target = WorldMap::open(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target)?;
 
         // ocean layer
         let (ocean,ocean_method) = if let Some(ocean) = self.ocean {
@@ -324,7 +324,7 @@ impl Task for ConvertHeightmapNeighbors {
 
         let mut progress = ConsoleProgressBar::new();
 
-        let mut target = WorldMap::open(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target)?;
 
         target.with_transaction(|target| {
             calculate_tile_neighbors(target, &mut progress)

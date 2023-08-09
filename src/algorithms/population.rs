@@ -4,7 +4,9 @@ use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
 use crate::world_map::BiomeData;
+use crate::world_map::TypedFeature;
 use crate::world_map::TileForPopulation;
+use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
 
 
@@ -26,7 +28,6 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
 
     let mut tiles = target.edit_tile_layer()?;
 
-    let mut tile_map = HashMap::new();
     let mut work_queue = Vec::new();
     let mut flow_sum = 0.0;
     let mut flow_max: f64 = 0.0;
@@ -34,13 +35,13 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
 
     progress.start_known_endpoint(|| ("Indexing tiles.",tiles.feature_count()));
 
-    for (i,tile) in tiles.read_entities::<TileForPopulation>().enumerate() {
-        let (fid,tile) = tile?;
-        flow_sum += tile.water_flow;
-        flow_max = flow_max.max(tile.water_flow);
-        area_sum += tile.area;
+    for (i,feature) in tiles.read_features().enumerate() {
+        let fid = feature.fid()?;
+        let water_flow = feature.water_flow()?;
+        flow_sum += water_flow;
+        flow_max = flow_max.max(water_flow);
+        area_sum += feature.geometry().map(|g| g.area()).unwrap_or_default();
         work_queue.push(fid);
-        tile_map.insert(fid,tile);
         progress.update(|| i);
 
     }
@@ -55,7 +56,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     progress.start_known_endpoint(|| ("Calculating population.",total_work));
     while let Some(fid) = work_queue.pop() {
         let (habitability,population) = {
-            let tile = tile_map.get(&fid).unwrap(); // should exist, otherwise it wouldn't have been mapped.
+            let tile = tiles.try_entity_by_id::<TileForPopulation>(&fid)?; 
             let mut suitability = if tile.lake_type.is_some() {
                 0.0
             } else {
@@ -71,23 +72,22 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                         suitability += 15.0 // estuaries are liked
                     }
                     if let Some(water_cell) = tile.closest_water {
-                        if let Some(water_cell) = tile_map.get(&(water_cell as u64)) {
-                            if let Some(lake_type) = &water_cell.lake_type {
-                                match lake_type {
-                                    LakeType::Fresh => suitability += 30.0,
-                                    LakeType::Salt => suitability += 10.0,
-                                    LakeType::Frozen => suitability += 1.0,
-                                    LakeType::Pluvial => suitability -= 2.0,
-                                    LakeType::Dry => suitability -= 5.0,
-                                    LakeType::Marsh => suitability += 5.0,
-                                }
-                            } else if water_cell.is_ocean {
-                                suitability += 5.0;
-                                if let Some(1) = tile.water_count {
-                                    // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which
-                                    // probably makes a good harbor.
-                                    suitability += 20.0
-                                }
+                        let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&(water_cell as u64))?;
+                        if let Some(lake_type) = &water_cell.lake_type {
+                            match lake_type {
+                                LakeType::Fresh => suitability += 30.0,
+                                LakeType::Salt => suitability += 10.0,
+                                LakeType::Frozen => suitability += 1.0,
+                                LakeType::Pluvial => suitability -= 2.0,
+                                LakeType::Dry => suitability -= 5.0,
+                                LakeType::Marsh => suitability += 5.0,
+                            }
+                        } else if water_cell.is_ocean {
+                            suitability += 5.0;
+                            if let Some(1) = tile.water_count {
+                                // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which
+                                // probably makes a good harbor.
+                                suitability += 20.0
                             }
                         }
 
@@ -102,9 +102,12 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
             }
         };
 
-        let tile = tile_map.get_mut(&fid).unwrap();
-        tile.habitability = habitability;
-        tile.population = population;
+        let mut feature = tiles.try_feature_by_id(&fid)?;
+
+        feature.set_habitability(habitability)?;
+        feature.set_population(population)?;
+
+        tiles.update_feature(feature)?;
 
         progress.update(|| total_work - work_queue.len());
 
@@ -112,58 +115,5 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
 
     progress.finish(|| "Population calculated.");
 
-    progress.start_known_endpoint(|| ("Writing population.",tile_map.len()));
-
-    for (i,(fid,tile)) in tile_map.iter().enumerate() {
-
-        if let Some(mut feature) = tiles.feature_by_id(&fid) {
-
-            feature.set_habitability(tile.habitability)?;
-
-            feature.set_population(tile.population)?;
-
-            tiles.update_feature(feature)?;
-
-        }
-
-        progress.update(|| i)
-
-    }
-
-    progress.finish(|| "Population written.");
-
-
-/*
-
-* while fid = work_queue.pop:
-  * let habitability = 0;
-  * let population = 0;
-  * lifetime block:
-    * let tile = tile_map.get(fid)
-    * let suitability = biomes_data.get(tile.biome) or error
-    * if suitability > 0:
-      * if flow_mean > 0:
-        * suitability += ((tile.water_flow - flow_mean)/flow_divisor).clamp(0,1) * 250; // TODO: Is there a number I can just multiply by here?
-      * suitability -= (tile.elevation_scaled - 50) / 5 -- low elevation is better
-      * if cell.shore_distance == 1:
-        * if cell.water_flow > estuary_threshold: suitability += 15 -- estuary
-        * if cell.closest_water 
-          * if tile_map[cell.closest_water].lake_type:
-            * match lake_type
-              * lake_type is fresh: suitability += 30
-              * salt: suitability += 10
-              * frozen: suitability += 1
-              * pluvial or marsh: suitability -= 2
-              * dry: suitability -= 5
-          * else if tile_map[cell.closest_water].is_ocean:
-            * suitability += 5
-            * if cell.water_count == 1: suitability += 20 -- this means it's a single cell of ocean, which implies a small bay, which could be a harbor
-      * habitability = suitability / 5
-      * population = (habitability * tile.area) / area_mean
-  * let tile = tile_map.get_mut(&fid)
-    * tile.habitability = habitability;
-    * tile.population = population;
-* Write tile_map to layer.
- */    
     Ok(())
 }

@@ -112,6 +112,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     }
 
     let mut tile_queue = tile_queue;
+    // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let mut tile_map = tile_map;
     let mut next_lake_id = (0..).into_iter();
     let mut lake_map = HashMap::new();
