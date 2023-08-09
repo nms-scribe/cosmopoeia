@@ -412,16 +412,19 @@ pub(crate) trait TypedFeature<'data_life>: From<Feature<'data_life>>  {
 
 }
 
-macro_rules! feature {
-    (count@) => {
+macro_rules! feature_count_fields {
+    () => {
         0
     };
-    (count@ $prop: ident) => {
+    ($prop: ident) => {
         1
     };
-    (count@ $prop: ident, $($props: ident),+) => {
-        $(feature!(count@ $props)+)+ feature!(count@ $prop)
+    ($prop: ident, $($props: ident),+) => {
+        $(feature_count_fields!($props)+)+ feature_count_fields!($prop)
     };
+}
+
+macro_rules! feature {
     ($struct_name:ident $iterator: ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
         $(#[$get_attr: meta])* $prop: ident 
         $(#[$set_attr: meta])* $set_prop: ident 
@@ -472,7 +475,7 @@ macro_rules! feature {
             $(pub(crate) const $field: &str = $name;)*
 
             // field definitions
-            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature!(count@ $($field),*)] = [
+            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
                 $((Self::$field,$field_type)),*
             ];
     
@@ -482,7 +485,7 @@ macro_rules! feature {
             }
     
             // feature initializer function
-            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature!(count@ $($field),*)],[FieldValue; feature!(count@ $($field),*)]) {
+            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature_count_fields!($($field),*)],[FieldValue; feature_count_fields!($($field),*)]) {
                 ([
                     $(Self::$field),*
                 ],[
