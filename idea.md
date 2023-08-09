@@ -3511,9 +3511,7 @@ cells.harbor = tile.water_count
     * tile.population = population;
 * Write tile_map to layer.
 
-
 ### Analysis: Generate Cultures
-
 
 * *Input*: num_cultures (culturesInput.value = number of cultures)
 * *Input*: culture_set (culturesSet.selectedOptions[0].dataset = selected culture set to use (a choice of several))
@@ -3532,7 +3530,7 @@ cells.harbor = tile.water_count
     * report warning "Not enough populated cells for requested number of cultures." -- TODO: This should also warn about why the cells can't be populated.
 
 * let cultures = select_cultures(count) 
-* let centers = d3.quadtree -- TODO: What does this do?
+* let centers = d3.quadtree -- This seems to be some sort of graphical index thingie
 * let colors = get_colors(count) -- I think this is just colors for the map and can safely be ignored
 * let codes = []
 * for culture in cultures:
@@ -3621,11 +3619,164 @@ cells.harbor = tile.water_count
   * td = |cell,goal| (temp[cells.g[cell]] - goal).max(0) + 1
   * bd = |cell,biomes,fee=4| biomes.includes(cell.biome) ? 1 : fee -- biome difference fee
   * sf = |cell,fee=4| cells.haven[cell] && cell.feature !== "lake" ? 1 : fee -- fee for not on a sea coast
-  * given a culture_set input create a list of cultures, each has:
+  * given a culture_set input get a built-in list of cultures, each has:
     * name: a name:
     * base: a number that seems to increase for each one in the set
     * odd: a float from 0 to 1
     * sort: a closure based on combinations of the closures above. -- I think this is a way of guaranteeing that the cultures are "different".
+
+### My Algorithm: Generate Cultures
+
+I'm going to divide this into two parts, so the user can edit the chosen cultures before placing them. But first, I need culture sets.
+
+#### -1) Namebases
+
+TODO: How do we do this? I'd like to have the user just provide lists of names, but there are culture sets that require them as well. I could copy the name generator algorithm if it's not too difficult. However, the name bases will be provided by the user. As with culture sets, if I can get permission to copy AFMG, I will provide them, otherwise I'll keep the data on my own.
+
+#### 0) Culture Sets:
+
+At risk of avoiding copyright issues with AFMG, culture sets (which are information, not code) are not going to be stored in the application. The user will have to download or create their own. I will have my own versions on my computer, and once I have a release, perhaps I can get permission to copy AFMG, or perhaps I can create my own.
+
+Culture sets will be read in JSON format, probably using serde. I will also need a different serde to rust notation for the sort types.
+
+A culture set contains a list of basic cultures. Each culture has the following fields:
+* name: A string representing the name of the culture
+* base: an integer which links to a name base. TODO: Need to define this.
+* odd: a float from 0..1 indicating how unlikely it be that this culture should be chosen from the set.
+* sort: an enum which represents different "land preferences".
+
+In addition, there are two things you can do with culture sets to generate new ones:
+* Random_Rename: take a culture set and rename all the cultures according to a name_base.
+* Random: randomly generate names and the other fields for a set of specified number of cultures.
+
+The sort enum consists of the following possible values, some of which are self-referential. Basically, a function on it will return a number, which is compared between the two to find preferred tiles.
+
+by_habitability = s = |tile| tile.habitability
+by_shore_distance = t = |tile| tile.shore_distance
+by_elevation = h = |tile| tile.elevation
+by_normalized_habitability = n = |tile| ((tile.habitability / maximum of tiles habitability) * 3).ceil(); // normalized cell score
+by_temperature_difference(goal) = td = |tile,goal| (tile.temperature - goal).abs() + 1; // temperature difference fee
+by_biome(biomes,float) = bd = |tile,biomes,fee| if biomes.contains(tile.biome) { 1 } else { float }; // biome difference fee
+by_biome_default(biomes) = by_biome(biomes,4)
+by_sea_coast(float) = sf = |tile,fee| if tile.closest_water && closest_water.type != "lake" { 1 } else { float }; // not on sea coast fee
+by_sea_coast_default = by_sea_coast(4)
+negate(sort) = |tile| -sort(tile)
+multiply(sore,sort) = |tile| sort(tile) * sort(tile)
+divide(sort,sort) = |tile| sort(tile) / sort(tile) -- TODO: What to return if a value is 0? probably just return Infinity.
+add(sort,sort) = |tile| sort(tile) + sort(tile)
+pow(sort,float) = |tile| sort(tile)^float
+
+
+
+#### 1) Generate Cultures
+
+
+
+TODO: I'm going to have to define what a culture set is.
+TODO: I need an is_nomadic field on biome or something like that. It's true for hot desert, cold desert, and grassland.
+TODO: I need lake cell count on tiles, or a way to get the lake information for a given tile (in which case I lose some fields there)
+TODO: I need a land_type field on tiles: continent, isle, or island (look for definitions in AFMG)
+TODO: I need an is_hunting field on biome, it's true for savanna, TDF, TempRain, Taiga, Tundra, Wetland
+TODO: I'm going to need name_bases data in the layer. The user will have to load this in themselves somehow.
+
+* *Input*: culture_set = A culture set to use
+* *Input*: culture_count = number of cultures to use
+* *Input*: power_input = a float from 0 to 10 that defines "how much cultures can vary in size"
+* if culture_count > culture_set.len:
+  * print warning: The provided culture set is not large enough to produce the requested number of cultures. Culture count will be limited to the size of the culture set.
+* let populated = tile entities where tile.habitability > 0:
+* let cultures = []
+* if work_queue.len < culture_count * 25:
+  * culture_count = (work_queue.len() / 50).floor(); -- NOTE: It seems to me that this should be divided by 25 to match the previous condition.
+  * if culture_count == 0:
+    * print warning: There are not enough habitable tiles to support urban societies. No cultures, nations, or cities can be created.
+  * else:
+    * print warning: There are not enough habitable tiles to support the requested number of cultures. Culture count will be limited to {culture_count}.
+* if culture_count == 0:
+  * cultures = [wildlands culture] 
+* else:
+  * cultures = select_cultures(culture_set,culture_count)
+* let placed_centers = []
+
+* for culture in cultures:
+  * let culture_center = find_culture_center(populated,culture,culture_count,placed_centers)
+  * place_centers.push(culture_center)
+  * centers.add(culture_center.site)
+  * let culture_type = define_culture_type(culture_center)
+  * let expansionism = define_culture_expansionism(culture_type,power_input) 
+  * let name_base = select_name_base(culture,index)
+  * write culture to cultures table including the original culture plus the data above
+
+* select_cultures(culture_set,culture_count):
+  * let available_cultures = culture_set.get_default(culture_set)
+  * let cultures = []
+  * let i = 0;
+  * while (cultures.length < culture_count ) && (available_cultures.len > 0):
+    * loop: -- basically, there are two randoms here: first we pick a random spot in the cultures, then we give another chance if the culture is very strange, but we only do that sort of thing if we've made less than 200 attempts so far.
+      * let rnd = random(0..available_cultures.len() - 1)
+      * let culture = available_cultures[rnd]
+      * i += 1
+      * if !((i < 200) && !(random(0..1) < culture.odd)): break; 
+    * cultures.push(culture)
+    * available_cultures.remove(culture)
+  * return cultures
+
+* find_culture_center(populated,culture,culture_count,placed_centers):
+  * let spacing = map extent / 2 / culture_count;
+  * const MAX_ATTEMPTS = 100
+  * populated.sort(culture.sort)
+  * let max = (populated.length / 2).floor();
+  * let tile_id = None
+  * for i in 0..MAX_ATTEMPTS:
+    * tile_id = sorted[biased(0,max,5)]
+    * spacing *= 0.9 -- reduce the spacing in case that's what the problem was.
+    * if !center_placed(placed_centers,tile_id,tile.site,spacing): break;
+  * return tile_id
+
+* center_placed(list,tile_id,tile_site,spacing): AFMG used a quadtree structure to do this, however I couldn't find any simple implementation for rust (there are plenty of implementations, but none had an API that gave me a find(x,y,radius) function). Since I don't expect a lot of cultures, I didn't see the need for a separate structure, finds should be quick in placed_centers.
+  * for tile in list:
+    * if id == tile: return true;
+    * if tile_site.distance(tile) < spacing: return true;
+  * return false
+
+* biased(min,max,ex):
+  -- generates a random number between min and max the leans towards the beginning
+  * (min + ((max - min) * random(0..1).pow(ex))).round()
+
+* define_culture_type(tile):
+  * if tile.elevation_scaled < 70 and tile.biome.is_nomadic: return "Nomadic"
+  * if tile.elevation_scaled > 50: return "Highland"
+  * if tile.closest_water:
+    * if tile.closest_water is lake and lake cell count > 5: "Lake"
+    * if tile.water_count > 0 && tile.closest_water.is_ocean and (random() < 0.1) ||
+      tile.water_count == 1 && (random() < 0.6) ||
+      tile.is_isle && (random() < 0.4): return Naval 
+      and bigger than an island. There are numbers for this.
+  * if tile.flow > 100: return River
+  * if tile.shore_Distance > 2 and tile.biome.is_huntable: return "Hunting" 
+  * return "Generic"
+
+* define_culture_expansionism(power_input,type):
+  * let base = match type:
+    * "lake" -> 0.8
+    * "Naval" -> 1.5;
+    * "River" -> 0.9;
+    * "Nomadic" -> 1.5;
+    * "Hunting" -> 0.7;
+    * "Highland" -> 1.2;
+    * else -> 1
+  * return ((random() * powerInput) / 2 + 1) * base 
+
+#### 2) Place Cultures:
+
+* get list of cultures from cultures table
+* index the cultures by culture_center
+* for each tile:
+  * if the tile matches a culture, then place that culture by assigning the culture name to the field
+  * otherwise, mark the culture name as blank (we're re-writing any existing cultures)
+
+And that's it. I know it's simple, but it allows the user to go in and edit the cultures before placing, and re-place if they want to change something.    
+
 
 ### Analysis: Expand Cultures
 
@@ -3692,15 +3843,6 @@ cells.harbor = tile.water_count
     * else 0
   * return 0
 
-TODO:
-
-### Analysis: Generate cultures
-
-TODO: 
-
-### Analysis: Expand cultures
-
-TODO: 
 
 ### Analysis: Generate Burgs and States
 
