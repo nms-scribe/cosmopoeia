@@ -60,13 +60,13 @@ macro_rules! feature_get_field_type {
         bool
     };
     (option_f64) => {
-        f64 // this is the same because everything's an option, the option tag only means it can accept options
+        Option<f64> // this is the same because everything's an option, the option tag only means it can accept options
     };
     (option_i64) => {
-        i64 // this is the same because everything's an option, the option tag only means it can accept options
+        Option<i64> // this is the same because everything's an option, the option tag only means it can accept options
     };
     (option_i32) => {
-        i32 // this is the same because everything's an option, the option tag only means it can accept options
+        Option<i32> // this is the same because everything's an option, the option tag only means it can accept options
     };
     (neighbor_directions) => {
         Vec<(u64,i32)>
@@ -90,7 +90,7 @@ macro_rules! feature_get_field_type {
         LakeType
     };
     (option_lake_type) => {
-        LakeType // this is the same because everything's an option, the option tag only means it can accept options
+        Option<LakeType> // this is the same because everything's an option, the option tag only means it can accept options
     }
 }
 
@@ -143,31 +143,31 @@ macro_rules! feature_set_field_type {
 }
 
 macro_rules! feature_get_field {
-    ($self: ident f64 $field: path) => {
-        Ok($self.feature.field_as_double_by_name($field)?)
+    ($self: ident f64 $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_double_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
     };
-    ($self: ident option_f64 $field: path) => {
+    ($self: ident option_f64 $feature_name: literal $prop: ident $field: path) => {
         // see above for getfieldtype option_f64
         Ok($self.feature.field_as_double_by_name($field)?)
     };
-    ($self: ident i64 $field: path) => {
+    ($self: ident i64 $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_integer64_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
+    };
+    ($self: ident option_i64 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer64_by_name($field)?)
     };
-    ($self: ident option_i64 $field: path) => {
-        Ok($self.feature.field_as_integer64_by_name($field)?)
+    ($self: ident i32 $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_integer_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
     };
-    ($self: ident i32 $field: path) => {
+    ($self: ident option_i32 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer_by_name($field)?)
     };
-    ($self: ident option_i32 $field: path) => {
-        Ok($self.feature.field_as_integer_by_name($field)?)
+    ($self: ident bool $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_integer_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))? != 0)
     };
-    ($self: ident bool $field: path) => {
-        Ok($self.feature.field_as_integer_by_name($field)?.map(|n| n != 0))
-    };
-    ($self: ident neighbor_directions $field: path) => {
+    ($self: ident neighbor_directions $feature_name: literal $prop: ident $field: path) => {
         if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(neighbors.split(',').filter_map(|a| {
+            Ok(neighbors.split(',').filter_map(|a| {
                 let mut a = a.splitn(2, ':');
                 if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
                     if let Some(direction) = a.next().map(|d| d.parse().ok()).flatten() {
@@ -183,58 +183,58 @@ macro_rules! feature_get_field {
                     None
                 }
                 
-            }).collect()))
+            }).collect())
         } else {
-            Ok(Some(Vec::new()))
+            Ok(Vec::new())
         }
 
     };
-    ($self: ident id_list $field: path) => {
+    ($self: ident id_list $feature_name: literal $prop: ident $field: path) => {
         if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(neighbors.split(',').filter_map(|a| {
+            Ok(neighbors.split(',').filter_map(|a| {
                 a.parse().ok()
-            }).collect()))
+            }).collect())
         } else {
-            Ok(Some(Vec::new()))
+            Ok(Vec::new())
         }
 
     };
-    ($self: ident river_segment_from $field: path) => {
+    ($self: ident river_segment_from $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(RiverSegmentFrom::try_from(value)?))
+            Ok(RiverSegmentFrom::try_from(value)?)
         } else {
-            Ok(None)
+            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
         }
 
     };
-    ($self: ident river_segment_to $field: path) => {
+    ($self: ident river_segment_to $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(RiverSegmentTo::try_from(value)?))
+            Ok(RiverSegmentTo::try_from(value)?)
         } else {
-            Ok(None)
+            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
         }
 
     };
-    ($self: ident string $field: path) => {
-        Ok($self.feature.field_as_string_by_name($field)?)
+    ($self: ident string $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_string_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
     };
-    ($self: ident biome_criteria $field: path) => {
+    ($self: ident biome_criteria $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(BiomeCriteria::try_from(value)?))
+            Ok(BiomeCriteria::try_from(value)?)
         } else {
-            Ok(None)
+            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
         }
 
     };
-    ($self: ident lake_type $field: path) => {
+    ($self: ident lake_type $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(LakeType::try_from(value)?))
+            Ok(LakeType::try_from(value)?)
         } else {
-            Ok(None)
+            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
         }
 
     };
-    ($self: ident option_lake_type $field: path) => {
+    ($self: ident option_lake_type $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
             if value == "" {
                 // we're storing null strings as empty for now.
@@ -406,7 +406,7 @@ pub(crate) trait TypedFeature<'data_life>: From<Feature<'data_life>>  {
 
     fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)];
 
-    fn fid(&self) -> Option<u64>;
+    fn fid(&self) -> Result<u64,CommandError>;
 
     fn into_feature(self) -> Feature<'data_life>;
 
@@ -459,8 +459,8 @@ macro_rules! feature {
             }
 
             // fid field
-            fn fid(&self) -> Option<u64> {
-                self.feature.fid()
+            fn fid(&self) -> Result<u64,CommandError> {
+                self.feature.fid().ok_or_else(|| CommandError::MissingField(concat!($layer_name,".","fid")))
             }
 
             fn into_feature(self) -> Feature<'impl_life> {
@@ -496,8 +496,8 @@ macro_rules! feature {
         
             // property functions
             $(
-                $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<Option<feature_get_field_type!($prop_type)>,CommandError> {
-                    feature_get_field!(self $prop_type Self::$field)
+                $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
+                    feature_get_field!(self $prop_type $layer_name $prop Self::$field)
                 }
         
                 $(#[$set_attr])* pub(crate) fn $set_prop(&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
@@ -551,11 +551,9 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
         progress.start(|| (format!("Indexing {}.",Feature::LAYER_NAME),self.features.size_hint().1));
         let mut result = HashMap::new();
         for (i,feature) in self.enumerate() {
-            let (fid,entity) = match (feature.fid(),Data::try_from(feature)?) {
-                (Some(fid), entity) => (fid,entity),
-                (None, _) => Err(CommandError::MissingField("fid"))?
-            };
-
+            let fid = feature.fid()?;
+            let entity = Data::try_from(feature)?;
+ 
             result.insert(fid,entity);
             progress.update(|| i);
         }
@@ -583,8 +581,8 @@ impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Featu
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(feature) = self.features.next() {
             match (feature.fid(),Data::try_from(feature)) {
-                (Some(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                (None, Ok(_)) => Some(Err(CommandError::MissingField("fid"))),
+                (Ok(fid), Ok(entity)) => Some(Ok((fid,entity))),
+                (Err(e), Ok(_)) => Some(Err(e)),
                 (_, Err(e)) => Some(Err(e)),
             }
         } else {
@@ -608,10 +606,10 @@ macro_rules! entity_field_assign {
         $feature.geometry().cloned().ok_or_else(|| CommandError::MissingGeometry)?
     };
     ($feature: ident fid $type: ty) => {
-        $feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?
+        $feature.fid()?
     };
     ($feature: ident $field: ident $type: ty) => {
-        $feature.$field()?.ok_or_else(|| CommandError::MissingField(stringify!($field)))?
+        $feature.$field()?
     };
     ($feature: ident $field: ident $type: ty = $function: expr) => {
         $function(&$feature)?
@@ -843,12 +841,8 @@ feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values
 
 impl TileFeature<'_> {
 
-    pub(crate) fn site_point(&self) -> Result<Point,CommandError> {
-        if let (Some(x),Some(y)) = (self.site_x()?,self.site_y()?) {
-            Ok(Point::try_from((x,y))?)
-        } else {
-            Err(CommandError::MissingField("site"))
-        }
+    pub(crate) fn site(&self) -> Result<Point,CommandError> {
+        Ok(Point::try_from((self.site_x()?,self.site_y()?))?)
     }
 
 }
@@ -949,14 +943,7 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 }
 
 entity!(TileEntityForWaterDistance TileFeature {
-    site: Point = |feature: &TileFeature| Ok::<_,CommandError>(
-        Point::try_from(
-            (
-                feature.site_x()?.ok_or_else(|| CommandError::MissingField("site_x"))?,
-                feature.site_y()?.ok_or_else(|| CommandError::MissingField("site_y"))?
-            )
-        )?
-    ),
+    site: Point,
     is_ocean: bool, 
     lake_elevation: Option<f64> = |feature: &TileFeature| feature.lake_elevation(),
     neighbors: Vec<(u64,i32)>,

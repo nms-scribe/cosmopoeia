@@ -70,8 +70,8 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
             let from_lake = from_tile.lake_elevation()?;
             let to_lake = to_tile.lake_elevation()?;
             if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
-                let start_point = from_tile.site_point()?;
-                let end_point = to_tile.site_point()?;
+                let start_point = from_tile.site()?;
+                let end_point = to_tile.site()?;
                 // need previous and next points to give the thingy a curve.
                 let previous_point = find_tile_site_point(previous_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
                 let next_point = find_tile_site_point(next_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));

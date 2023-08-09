@@ -52,28 +52,24 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         for intersecting_feature in layer.read_features() {
 
-            if let Some(intersecting_fid) = intersecting_feature.fid() {
-                if (working_fid != intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
+            let intersecting_fid = intersecting_feature.fid()?;
+            if (working_fid != intersecting_fid) && (!intersecting_feature.geometry().unwrap().disjoint(&working_geometry)) {
 
-                    let neighbor_site_x = intersecting_feature.site_x()?;
-                    let neighbor_site_y = intersecting_feature.site_y()?;
-                    let neighbor_angle = if let (site_x,site_y,Some(neighbor_site_x),Some(neighbor_site_y)) = (feature.site_x,feature.site_y,neighbor_site_x,neighbor_site_y) {
-                        // needs to be clockwise, from the north, with a value from 0..360
-                        // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-                        let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
-                        // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-                        let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
-                        // And then, to get the values in the range from 0..360, mod it.
-                        let clamped = clockwise_from_north % 360.0;
-                        clamped
-                    } else {
-                        // in the off chance that we actually are missing data, this marks an appropriate angle.
-                        -360.0 
-                    };
-            
-                    neighbors.push((intersecting_fid,neighbor_angle.floor() as i32)) 
-                }
-
+                let neighbor_site_x = intersecting_feature.site_x()?;
+                let neighbor_site_y = intersecting_feature.site_y()?;
+                let neighbor_angle = {
+                    let (site_x,site_y,neighbor_site_x,neighbor_site_y) = (feature.site_x,feature.site_y,neighbor_site_x,neighbor_site_y);
+                    // needs to be clockwise, from the north, with a value from 0..360
+                    // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+                    let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                    // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+                    let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
+                    // And then, to get the values in the range from 0..360, mod it.
+                    let clamped = clockwise_from_north % 360.0;
+                    clamped
+                };
+        
+                neighbors.push((intersecting_fid,neighbor_angle.floor() as i32)) 
             }
 
         }
@@ -129,7 +125,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileEntityWithNeighborsElevation>(enti
 pub(crate) fn find_tile_site_point(previous_tile: Option<u64>, tiles: &TilesLayer<'_>) -> Result<Option<Point>, CommandError> {
     Ok(if let Some(x) = previous_tile {
         if let Some(x) = tiles.feature_by_id(&x) {
-            Some(x.site_point()?)
+            Some(x.site()?)
         } else {
             None
         }

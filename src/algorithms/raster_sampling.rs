@@ -130,11 +130,8 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
 
             };
 
-            if let Some(elevation) = feature.elevation()? {
-                if is_ocean && (elevation > 0.0) {
-                    bad_ocean_tile_found = true;
-                }
-
+            if is_ocean && (feature.elevation()? > 0.0) {
+                bad_ocean_tile_found = true;
             }
 
             feature.set_is_ocean(is_ocean)?;
