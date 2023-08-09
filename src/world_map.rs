@@ -236,7 +236,12 @@ macro_rules! feature_get_field {
     };
     ($self: ident option_lake_type $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Some(LakeType::try_from(value)?))
+            if value == "" {
+                // we're storing null strings as empty for now.
+                Ok(None)
+            } else {
+                Ok(Some(LakeType::try_from(value)?))
+            }
         } else {
             Ok(None)
         }
@@ -818,6 +823,10 @@ feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values
     #[allow(dead_code)] water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count" OGRFieldType::OFTInteger;
     /// The biome for this tile
     #[allow(dead_code)] biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
+    /// the factor used to generate population numbers, along with the area of the tile
+    #[allow(dead_code)] habitability set_habitability f64 FIELD_HABITABILITY "habitability" OGRFieldType::OFTReal;
+    /// base population of the cell outside of the towns.
+    #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
@@ -951,6 +960,23 @@ entity!(TileEntityForWaterDistance TileFeature {
     shore_distance: Option<i32> = |_| Ok::<_,CommandError>(None),
     closest_water: Option<u64> = |_| Ok::<_,CommandError>(None),
     water_count: Option<i32>  = |_| Ok::<_,CommandError>(None)
+});
+
+entity!(TileForPopulation TileFeature {
+    water_flow: f64,
+    elevation_scaled: i32,
+    biome: String,
+    shore_distance: i32,
+    is_ocean: bool,
+    water_count: Option<i32> = |feature: &TileFeature| feature.water_count(),
+    area: f64 = |feature: &TileFeature| {
+        Ok::<_,CommandError>(feature.geometry().map(|g| g.area()).unwrap_or_else(|| 0.0))
+
+    },
+    closest_water: Option<i64>  = |feature: &TileFeature| feature.closest_water(),
+    lake_type: Option<LakeType>  = |feature: &TileFeature| feature.lake_type(),
+    habitability: f64 = |_| Ok::<_,CommandError>(0.0),
+    population: i32 = |_| Ok::<_,CommandError>(0)
 });
 
 // entities containing is_ocean, lake_elevation, site, neighbors, and new values tile_distance, water_tile, and water_count, all set to None.
@@ -1231,7 +1257,8 @@ impl LakesLayer<'_> {
 pub(crate) enum BiomeCriteria {
     Matrix(Vec<(usize,usize)>), // moisture band, temperature band
     Wetland,
-    Glacier
+    Glacier,
+    Ocean
 }
 
 impl TryFrom<String> for BiomeCriteria {
@@ -1241,6 +1268,7 @@ impl TryFrom<String> for BiomeCriteria {
         match value.to_lowercase().as_str() {
             "wetland" => Ok(Self::Wetland),
             "glacier" => Ok(Self::Glacier),
+            "ocean" => Ok(Self::Ocean),
             list => {
                 let mut result = Vec::new();
                 for value in list.split(',') {
@@ -1262,6 +1290,7 @@ impl Into<String> for &BiomeCriteria {
         match self {
             BiomeCriteria::Wetland => "wetland".to_owned(),
             BiomeCriteria::Glacier => "glacier".to_owned(),
+            BiomeCriteria::Ocean => "ocean".to_owned(),
             BiomeCriteria::Matrix(list) => {
                 list.iter().map(|(moisture,temperature)| format!("{}:{}",moisture,temperature)).collect::<Vec<String>>().join(",")
             }
@@ -1271,6 +1300,7 @@ impl Into<String> for &BiomeCriteria {
 
 pub(crate) struct BiomeMatrix {
     pub(crate) matrix: [[String; 26]; 5],
+    pub(crate) ocean: String,
     pub(crate) glacier: String,
     pub(crate) wetland: String
 }
@@ -1283,6 +1313,7 @@ feature!(BiomeFeature BiomeEntityIterator "biomes" wkbNone geometry: #[allow(dea
 
 impl BiomeFeature<'_> {
 
+    const OCEAN: &str = "Ocean";
     const HOT_DESERT: &str = "Hot desert";
     const COLD_DESERT: &str = "Cold desert";
     const SAVANNA: &str = "Savanna";
@@ -1297,7 +1328,8 @@ impl BiomeFeature<'_> {
     const WETLAND: &str = "Wetland";
     
 
-    const DEFAULT_BIOMES: [(&str, i32, BiomeCriteria); 12] = [
+    const DEFAULT_BIOMES: [(&str, i32, BiomeCriteria); 13] = [
+        (Self::OCEAN,0,BiomeCriteria::Ocean),
         (Self::HOT_DESERT,4,BiomeCriteria::Matrix(vec![])),
         (Self::COLD_DESERT,10,BiomeCriteria::Matrix(vec![])),
         (Self::SAVANNA,22,BiomeCriteria::Matrix(vec![])),
@@ -1333,7 +1365,7 @@ impl BiomeFeature<'_> {
         [Self::TRR, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN]
     ];
 
-    pub(crate) fn get_default_biomes() -> Vec<BiomeData> {
+    pub(crate) fn get_default_biomes() -> Vec<NewBiome> {
         let mut matrix_criteria = HashMap::new();
         for (moisture,row) in Self::DEFAULT_MATRIX.iter().enumerate() {
             for (temperature,id) in row.iter().enumerate() {
@@ -1353,7 +1385,7 @@ impl BiomeFeature<'_> {
             } else {
                 criteria.clone()
             };
-            BiomeData {
+            NewBiome {
                 name: (*name).to_owned(),
                 habitability: *habitability,
                 criteria,
@@ -1363,10 +1395,11 @@ impl BiomeFeature<'_> {
 
     }
 
-    pub(crate) fn build_matrix_from_biomes(biomes: &[BiomeData]) -> Result<BiomeMatrix,CommandError> {
+    pub(crate) fn build_matrix_from_biomes(biomes: &[NewBiome]) -> Result<BiomeMatrix,CommandError> {
         let mut matrix: [[String; 26]; 5] = Default::default();
         let mut wetland = None;
         let mut glacier = None;
+        let mut ocean = None;
         for biome in biomes {
             match &biome.criteria {
                 BiomeCriteria::Matrix(list) => {
@@ -1389,12 +1422,18 @@ impl BiomeFeature<'_> {
                     Err(CommandError::DuplicateGlacierBiome)?
                 } else {
                     glacier = Some(biome.name.clone())
+                },
+                BiomeCriteria::Ocean => if ocean.is_some() {
+                    Err(CommandError::DuplicateOceanBiome)?
+                } else {
+                    ocean = Some(biome.name.clone())
                 }
             }
 
         }
         let wetland = wetland.ok_or_else(|| CommandError::MissingWetlandBiome)?;
         let glacier = glacier.ok_or_else(|| CommandError::MissingGlacierBiome)?;
+        let ocean = ocean.ok_or_else(|| CommandError::MissingOceanBiome)?;
         for moisture in 0..matrix.len() {
             for temperature in 0..matrix[moisture].len() {
                 if matrix[moisture][temperature] == "" {
@@ -1405,23 +1444,29 @@ impl BiomeFeature<'_> {
         Ok(BiomeMatrix {
             matrix,
             glacier,
+            ocean,
             wetland,
         })
     }
 
 }
 
-entity!(BiomeData BiomeFeature {
+entity!(NewBiome BiomeFeature {
     name: String,
     habitability: i32,
     criteria: BiomeCriteria
+});
+
+entity!(BiomeData BiomeFeature {
+    name: String,
+    habitability: i32
 });
 
 pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_life>>;
 
 impl BiomeLayer<'_> {
 
-    pub(crate) fn add_biome(&mut self, biome: &BiomeData) -> Result<(),CommandError> {
+    pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<(),CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
             &biome.name,biome.habitability,&biome.criteria);
@@ -1439,7 +1484,12 @@ impl BiomeLayer<'_> {
         BiomeFeature::build_matrix_from_biomes(&result)
     
     }
-    
+
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    // FUTURE: It would also be nice to get rid of the lifetimes
+    pub(crate) fn read_entities<'local, Data: Entity<'local,BiomeFeature<'local>>>(&'local mut self) -> EntityIterator<'local,BiomeFeature<'local>, Data> {
+        self.read_features().into()
+    }
     
 
 }

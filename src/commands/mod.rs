@@ -9,6 +9,7 @@ mod convert_heightmap;
 mod gen_climate;
 mod gen_water;
 mod gen_biome;
+mod gen_people;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -71,6 +72,7 @@ command!{
     gen_biome::GenBiome;
     gen_biome::GenBiomeData;
     gen_biome::GenBiomeApply;
+    gen_people::GenPeoplePopulation;
 }
 
 

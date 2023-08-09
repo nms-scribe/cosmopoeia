@@ -3421,22 +3421,6 @@ function drawBorders() {
 
 ### Analysis
 
-There are a few things I'm not doing that I'll need:
-* feature_type: found anywhere a lake was found.
-  * "frozen": temp of lake is < -3 -- how do I get that?
-  * "lava": scaled height of lake is > 60, cell count of lake is < 10 and first_cell % 10 = 0 -- first_cell is the id of the first cell that started the lake, I think this is just reducing the chance of this happening by only counting an ID that divides by 10.
-  * "dry": no inlets or outlets and evaporation of lake is greater than waterflow * 4.
-  * "sinkhole": no inlets or outlets and cell count < 3 and first_cell % 10 == 0
-  * "salt": no outlets and evaporation > water_flow
-  * "freshwater": everything else
-  * -- NOTE: I think I can get rid of lava and sinkhole. Dry and freshwater might be nice to have, but I'll then need:
-* lake.temperature 
-  * if number of cells < 6, then just take the temperature of the starting cell
-  * otherwise, round the average of the temperatures of the shoreline cells
-* lake.evaporation:
-  * height = lake_elevation (not scaled)
-  * evaporation = ((700 * (lake.temperature + 0.006 * height)) / 50 + 75) / (80 - lake_temperature); // based on Penman formula, [1-11]
-  * lake.evaporation = evaporation * lake.cell_count
 
 
 cells.t = tile.shore_distance
@@ -3459,9 +3443,9 @@ cells.harbor = tile.water_count
 
 * let suitability = array of int the length of the tiles 
 * let population = array of float the length of the tiles -- TODO: Why is population a float?
-* let fl_mean = average water flow
-* let fl_max = max water flow
-* let area_mean = mean area of cell
+* let fl_mean = average of water flow on tiles
+* let fl_max = max of water flow on tiles
+* let area_mean = mean area of cells
 * for each cell
   * if cell is ocean, continue
   * let s = biomes_data.habitability(tile biome)
@@ -3483,6 +3467,50 @@ cells.harbor = tile.water_count
       * if cell is a harbor: s += 20 -- TODO: How do I determine this.
   * tile.pop_scale (cells.s) = s/5 -- This is the general population rate
   * tile.population = if tiles.pop_scale > 0 ? (cells.pop_scale * cells.area) / area_mean : 0 -- population is scaled by the area -- TODO: How do I find the area?
+
+### My Algorithm: Rank Cells
+
+* *Input*: estuary_threshold -- amount of flow on a coastal tile to consider it an estuary, which increases population
+* New Field on Tiles: Habitability: f64
+* New Field on Tiles: Population: f64
+* let biomes_data = map of biomes_data by name
+* let flow_sum = 0;
+* let flow_max = 0;
+* let (tile_map,work_queue) = map and vec of all tiles, while creating:
+  * flow_sum += tile.water_flow
+  * flow_max = flow_max.max(tile.water_flow)
+* let flow_mean = flow_sum / tile.count
+* let flow_divisor = flow_max - flow_mean
+* while fid = work_queue.pop:
+  * let habitability = 0;
+  * let population = 0;
+  * lifetime block:
+    * let tile = tile_map.get(fid)
+    * let suitability = biomes_data.get(tile.biome) or error
+    * if suitability > 0:
+      * if flow_mean > 0:
+        * suitability += ((tile.water_flow - flow_mean)/flow_divisor).clamp(0,1) * 250; // TODO: Is there a number I can just multiply by here?
+      * suitability -= (tile.elevation_scaled - 50) / 5 -- low elevation is better
+      * if cell.shore_distance == 1:
+        * if cell.water_flow > estuary_threshold: suitability += 15 -- estuary
+        * if cell.closest_water 
+          * if tile_map[cell.closest_water].lake_type:
+            * match lake_type
+              * lake_type is fresh: suitability += 30
+              * salt: suitability += 10
+              * frozen: suitability += 1
+              * pluvial or marsh: suitability -= 2
+              * dry: suitability -= 5
+          * else if tile_map[cell.closest_water].is_ocean:
+            * suitability += 5
+            * if cell.water_count == 1: suitability += 20 -- this means it's a single cell of ocean, which implies a small bay, which could be a harbor
+      * habitability = suitability / 5
+      * population = (habitability * tile.area) / area_mean
+  * let tile = tile_map.get_mut(&fid)
+    * tile.habitability = habitability;
+    * tile.population = population;
+* Write tile_map to layer.
+
 
 ### Analysis: Generate Cultures
 

@@ -9,4 +9,5 @@ pub(crate) mod water_fill;
 pub(crate) mod rivers;
 pub(crate) mod water_distance;
 pub(crate) mod biomes;
+pub(crate) mod population;
 
