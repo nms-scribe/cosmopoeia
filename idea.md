@@ -3956,6 +3956,8 @@ I'm going to divide this into two parts, so the user can edit the chosen culture
 
 #### -1) Namebases
 
+TODO: I'm not going to load namers into the database. Instead, if you have a step that requires them, you can load them from files on disk. I'll include options to load multiple files so you can merge them. At best, I'll have some simple defaults.
+
 For this one, I think I'll start by just trying to port the name generator code into what I want. Hopefully I can just do something that will work. Then I'll fix it so the name_base data is stored in a table and the name files are imported from a command.
 
 The result will be a command: names-base, which adds names-base to a names-base table, under the specified name. The user will have to enter their own names here, I'm not providing them until I get some sort of permission from Azgaar. When you need name generators, you need to load the names_base table data and build name generators out of it.

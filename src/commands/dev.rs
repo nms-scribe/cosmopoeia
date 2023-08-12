@@ -1,6 +1,4 @@
 use std::path::PathBuf;
-use std::fs::File;
-use std::io::BufReader;
 
 use clap::Args;
 use rand::Rng;
@@ -221,7 +219,7 @@ subcommand_def!{
     #[command(hide=true)]
     pub(crate) struct DevNamers {
 
-        namer_data: PathBuf,
+        namer_data: Vec<PathBuf>,
 
         #[arg(long)]
         /// The name of a namer to generate from. If not specified, all namers will be tested.
@@ -244,16 +242,15 @@ impl Task for DevNamers {
         fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, rng: &mut Random) {
             let namer = namers.load(language).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
             println!("language: {language}");
-            println!("    name: {}",namer.make_name(rng,None,None));
-            println!("   short: {}",namer.make_short_name(rng));
-            println!("   state: {}",namer.make_state_name(rng, None, None));
+            println!("    name: {}",namer.make_name(rng));
+            println!("   state: {}",namer.make_state_name(rng));
         
         }
         
-        let namer_source = File::open(self.namer_data).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
-        let reader = BufReader::new(namer_source);
-
-        let mut namers = NamerSet::from_json(reader).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        let mut namers = NamerSet::empty();
+        for file in self.namer_data {
+            namers.extend_from_file(file)?;
+        }
 
         let mut random = random_number_generator(self.seed);
 

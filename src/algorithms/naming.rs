@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::io::BufReader;
+use std::io::BufRead;
+use std::path::Path;
+use std::ffi::OsStr;
+use std::fs::File;
 
 use rand::Rng;
 use serde::Serialize;
@@ -8,23 +12,11 @@ use serde::Deserialize;
 use serde_json;
 
 // TODO: *** I'M NOT GOING TO LOAD THE NAMER STUFF INTO THE DATABASE. The user simply has to get a hold of a namer list.
-// TODO: But, what I do want to do is add on another option, below, where the user just supplies a list of words to use.
-// - there are new structs:
-//   MarkovSource: min_len: usize, cutoff_len: usize,  duplicatable_letters: Vec<char>, seed_words
-//   MarkovGenerator: min_len: usize, cutoff_len: usize,  duplicatable_letters: Vec<char>, seed_words, chain,
-// - There are two new enums:
-//   NameSource:
-//     Markov(MarkovSource)
-//     List(Vec<String>)
-//   NameGenerator
-//     Markov(MarkovGenerator)
-//     List(Vec<String>,usize) // the list and the next index to choose from
-// - the Namers and the NamerSource now use these enums to define their things.
-// - make_word is redesigned so that if the namer is a list, it chooses the next one from the list instead... TODO: Or do I want it to choose randomly?
-// TODO: Also need a way to load multiple files
-// TODO: Also need a way to load just a text file with a list of words, the name of the file is the name of the language
-// TODO: I may want to supply a set of namer sources of my own design. Just a little simplified from AFMG.
+// TODO: Create some of my own readers and make them available in the file for later.
+
+
 // TODO: Make sure to ask AFMG about accessing the lists there, I'm not sure what their source is or if they're copyrighted.
+
 
 
     
@@ -32,6 +24,7 @@ use serde_json;
 
 use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
+use crate::errors::CommandError;
 
 // This was almost directly ported from AFMG.
 
@@ -152,31 +145,40 @@ impl StateSuffixBehavior {
     }
 }
 
+#[derive(Serialize,Deserialize)]
+struct MarkovSource {
+    min_len: usize,
+    cutoff_len: usize,
+    duplicatable_letters: Vec<char>,
+    seed_words: Vec<String>,
+}
+
+
+#[derive(Serialize,Deserialize)]
+enum NamerMethodSource {
+    Markov(MarkovSource),
+    ListPicker(Vec<String>)
+}
 
 
 #[derive(Serialize,Deserialize)] 
 struct NamerSource {
     name: String,
-    min_len: usize,
-    cutoff_len: usize,
-    duplicatable_letters: Vec<char>,
-    seed_words: Vec<String>,
+    method: NamerMethodSource,
     state_name: Vec<StateNameBehavior>,
     state_suffix: StateSuffixBehavior,
 }
 
-
-pub(crate) struct Namer {
+struct MarkovGenerator {
     chain: HashMap<Option<char>, Vec<String>>,
     min_len: usize,
     cutoff_len: usize,
     duplicatable_letters: Vec<char>,
-    state_name: Vec<StateNameBehavior>,
-    state_suffix: StateSuffixBehavior,
-    seed_words: Vec<String>
+    seed_words: Vec<String>,
+
 }
 
-impl Namer {
+impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
     fn calculate_chain(array: &Vec<String>) -> HashMap<Option<char>, Vec<std::string::String>> {
@@ -261,19 +263,8 @@ impl Namer {
         return chain;
     }
 
-    fn default_state_name_behavior() -> Vec<StateNameBehavior> {
-        vec![
-            // remove -berg for any // FUTURE:  NMS: This should be language dependent 
-            StateNameBehavior::TrimSuffixesIfLonger(vec!["berg".to_owned()], 6),
-            // remove -ton for any // FUTURE:  NMS: This should be language dependent
-            StateNameBehavior::TrimSuffixesIfLonger(vec!["ton".to_owned()], 5)
-        ]
-     
-    }
 
-    fn new(base: NamerSource) -> Self {
-        let mut state_name = Self::default_state_name_behavior();
-        state_name.extend(base.state_name.iter().cloned());
+    fn new(base: MarkovSource) -> Self {
         let chain = Self::calculate_chain(&base.seed_words);
 
         Self {
@@ -281,8 +272,6 @@ impl Namer {
             min_len: base.min_len,
             cutoff_len: base.cutoff_len,
             duplicatable_letters: base.duplicatable_letters,
-            state_name,
-            state_suffix: base.state_suffix,
             seed_words: base.seed_words
         }
     }
@@ -374,18 +363,100 @@ impl Namer {
         return name;
     }
 
-    pub(crate) fn make_name<Random: Rng>(&mut self, rng: &mut Random, min_len: Option<usize>, cutoff_len: Option<usize>) -> String {
-        self.make_word(rng, min_len, cutoff_len).to_title_case()
+
+}
+
+struct ListPicker {
+    available: Vec<String>,
+    picked: Vec<String>
+}
+
+impl ListPicker {
+
+    fn new(list: Vec<String>) -> Self {
+        Self {
+            available: list,
+            picked: Vec::new()
+        }
     }
 
-    pub(crate) fn make_short_name<Random: Rng>(&mut self, rng: &mut Random) -> String {
-        let min = self.min_len  - 1;
-        let cutoff = (self.cutoff_len - 2).max(min);
-        self.make_word(rng, Some(min), Some(cutoff)).to_title_case()
+    fn pick_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
+        // TODO: Test this...
+        if self.available.len() == 0 {
+            self.available = std::mem::replace(&mut self.picked, Vec::new())
+        }
+
+        let picked = self.available.remove(rng.gen_range(0..self.available.len()));
+        self.picked.push(picked.clone());
+        picked
+    }
+}
+
+enum NamerMethod {
+    Markov(MarkovGenerator),
+    ListPicker(ListPicker)
+}
+
+impl NamerMethod {
+
+    pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
+        match self {
+            NamerMethod::Markov(markov) => markov.make_word(rng, None, None),
+            NamerMethod::ListPicker(picker) => picker.pick_word(rng)
+        }
     }
 
-    pub(crate) fn make_state_name<Random: Rng>(&mut self, rng: &mut Random, min: Option<usize>, cutoff: Option<usize>) -> String {
-        let mut name = self.make_word(rng, min, cutoff);
+    fn new(method: NamerMethodSource) -> Self {
+        match method {
+            NamerMethodSource::Markov(markov) => Self::Markov(MarkovGenerator::new(markov)),
+            NamerMethodSource::ListPicker(list) => Self::ListPicker(ListPicker::new(list))
+        }
+    }
+
+}
+
+pub(crate) struct Namer {
+    method: NamerMethod,
+    state_name: Vec<StateNameBehavior>,
+    state_suffix: StateSuffixBehavior
+}
+
+impl Namer {
+
+
+    fn default_state_name_behavior() -> Vec<StateNameBehavior> {
+        vec![
+            // remove -berg for any // FUTURE:  NMS: This should be language dependent 
+            StateNameBehavior::TrimSuffixesIfLonger(vec!["berg".to_owned()], 6),
+            // remove -ton for any // FUTURE:  NMS: This should be language dependent
+            StateNameBehavior::TrimSuffixesIfLonger(vec!["ton".to_owned()], 5)
+        ]
+     
+    }
+
+    fn new(base: NamerSource) -> Self {
+        let mut state_name = Self::default_state_name_behavior();
+        state_name.extend(base.state_name.iter().cloned());
+        let method = NamerMethod::new(base.method);
+
+        Self {
+            method,
+            state_name,
+            state_suffix: base.state_suffix
+        }
+    }
+
+    pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
+
+        self.method.make_word(rng)
+    }
+
+    pub(crate) fn make_name<Random: Rng>(&mut self, rng: &mut Random) -> String {
+        self.make_word(rng).to_title_case()
+    }
+
+    pub(crate) fn make_state_name<Random: Rng>(&mut self, rng: &mut Random) -> String {
+        let mut name = self.make_word(rng);
 
         if name.contains(" ") {
             // don't allow multiword state names // TODO: NMS: Why not? There are or were places like "Saudi Arabia", "Papua New Guinea", "Saint Kitts", and all of the caribbean saints, "West Germany" -- In any case, I'm seeing some such names from Vietnamese.
@@ -484,24 +555,31 @@ impl Namer {
 
 pub(crate) struct NamerSet {
     source: HashMap<String,NamerSource>,
-    loaded: HashMap<String,Namer>
+    compiled: HashMap<String,Namer>
 }
 
 impl NamerSet {
 
+    pub(crate) fn empty() -> Self {
+        Self {
+            source: HashMap::new(),
+            compiled: HashMap::new()
+        }
+    }
+
     pub(crate) fn load(&mut self, name: &str) -> Option<&mut Namer> { // TODO: Should be an error if this one doesn't exist, once we get this hooked up to the database
-        if let Entry::Vacant(entry) = self.loaded.entry(name.to_owned()) {
+        if let Entry::Vacant(entry) = self.compiled.entry(name.to_owned()) {
             if let Some(name_base) = self.source.remove(name)  { 
                 entry.insert(Namer::new(name_base));
             }
 
         }
-        self.loaded.get_mut(name)
+        self.compiled.get_mut(name)
 
     }
 
     pub(crate) fn list_languages(&self) -> Vec<String>  {
-        self.loaded.keys().chain(self.source.keys()).cloned().collect()
+        self.compiled.keys().chain(self.source.keys()).cloned().collect()
     }
 
     #[allow(dead_code)] pub(crate) fn to_json(&self) -> Result<String,serde_json::Error> {
@@ -512,20 +590,69 @@ impl NamerSet {
         self.source.serialize(&mut ser)?;
         Ok(format!("{}", String::from_utf8(buf).unwrap()))
     }
-    
-    pub(crate) fn from_json<Reader: std::io::Read>(source: BufReader<Reader>) -> Result<Self,serde_json::Error> {
-        let data = serde_json::from_reader::<_,Vec<NamerSource>>(source)?;
-        let mut source = HashMap::new();
-        for base in data {
-            let name = base.name.clone();
-            source.insert(name, base);
+
+    fn add_language(&mut self, data: NamerSource) {
+        let name = data.name.clone();
+        // if the name already exists, then we're replacing the existing one.
+        if self.compiled.contains_key(&name) {
+            // uncompile it, we'll get a new one
+            self.compiled.remove(&name);
         }
-        Ok(Self {
-            source,
-            loaded: HashMap::new()
-        })
+        self.source.insert(name, data);
+    }
+    
+    pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
+        let data = serde_json::from_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        for data in data {
+            self.add_language(data)
+        }
+
+        Ok(())
 
         
+    }
+
+    pub(crate) fn extend_from_text<Reader: std::io::Read>(&mut self, language: String, source: BufReader<Reader>) -> Result<(),CommandError> {
+        let mut list = Vec::new();
+        for line in source.lines() {
+            list.push(line.map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?)
+        }
+
+        self.add_language(NamerSource {
+            name: language,
+            method: NamerMethodSource::ListPicker(list),
+            state_name: Vec::new(),
+            state_suffix: StateSuffixBehavior::Default,
+        });
+
+        Ok(())
+
+        
+    }
+
+    pub(crate) fn extend_from_file<AsPath: AsRef<Path>>(&mut self, file: AsPath) -> Result<(),CommandError> {
+
+        enum Format {
+            JSON,
+            TextList(String)
+        }
+
+        let format = match file.as_ref().extension().and_then(OsStr::to_str) {
+            Some("json") => Format::JSON,
+            Some("txt") => Format::TextList(file.as_ref().file_stem().and_then(OsStr::to_str).unwrap_or_else(||"").to_owned()),
+            Some(_) | None => Format::JSON, // this is the default, although perhaps the 'txt' should be the default?
+        };
+
+        let namer_source = File::open(file).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        let reader = BufReader::new(namer_source);
+
+        match format {
+            Format::JSON => self.extend_from_json(reader),
+            Format::TextList(name) => self.extend_from_text(name, reader),
+        }
+
+
+
     }
     
 
