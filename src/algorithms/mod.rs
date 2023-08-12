@@ -10,4 +10,5 @@ pub(crate) mod rivers;
 pub(crate) mod water_distance;
 pub(crate) mod biomes;
 pub(crate) mod population;
+pub(crate) mod naming;
 

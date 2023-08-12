@@ -55,6 +55,7 @@ command!{
     dev::DevPointsFromExtent;
     dev::DevTrianglesFromPoints;
     dev::DevVoronoiFromTriangles;
+    dev::DevNamers;
     convert_heightmap::ConvertHeightmap;
     convert_heightmap::ConvertHeightmapVoronoi;
     convert_heightmap::ConvertHeightmapSample;

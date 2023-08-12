@@ -17,7 +17,6 @@ use gdal::vector::Layer;
 use gdal::vector::Feature;
 use gdal::vector::FeatureIterator;
 use gdal::Transaction;
-use heck::ToTitleCase;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -25,6 +24,7 @@ use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::utils::create_line;
 use crate::errors::MissingErrorToOption;
+use crate::utils::ToTitleCase;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 

@@ -1,6 +1,9 @@
 use std::path::PathBuf;
+use std::fs::File;
+use std::io::BufReader;
 
 use clap::Args;
+use rand::Rng;
 
 use super::Task;
 use crate::errors::CommandError;
@@ -19,6 +22,7 @@ use crate::algorithms::random_points::load_points_layer;
 use crate::algorithms::triangles::load_triangles_layer;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::world_map::NewTileEntity;
+use crate::algorithms::naming::NamerSet;
 
 
 subcommand_def!{
@@ -206,6 +210,66 @@ impl Task for DevVoronoiFromTriangles {
         })?;
 
         target.save(&mut progress)
+    
+    
+    }
+}
+
+
+subcommand_def!{
+    /// Generates names to test the name generators
+    #[command(hide=true)]
+    pub(crate) struct DevNamers {
+
+        namer_data: PathBuf,
+
+        #[arg(long)]
+        /// The name of a namer to generate from. If not specified, all namers will be tested.
+        language: Option<String>,
+
+        #[arg(long)]
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Option<u64>,
+
+
+    }
+}
+
+
+impl Task for DevNamers {
+
+
+    fn run(self) -> Result<(),CommandError> {
+
+        fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, rng: &mut Random) {
+            let namer = namers.load(language).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
+            println!("language: {language}");
+            println!("    name: {}",namer.make_name(rng,None,None));
+            println!("   short: {}",namer.make_short_name(rng));
+            println!("   state: {}",namer.make_state_name(rng, None, None));
+        
+        }
+        
+        let namer_source = File::open(self.namer_data).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        let reader = BufReader::new(namer_source);
+
+        let mut namers = NamerSet::from_json(reader).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+
+        let mut random = random_number_generator(self.seed);
+
+        if let Some(key) = self.language {
+            test_namer(&mut namers, &key, &mut random)
+        } else {
+            let mut languages = namers.list_languages();
+            languages.sort(); // so the tests are reproducible.
+            for language in languages {
+                test_namer(&mut namers, &language, &mut random)
+            }
+
+        }
+
+        Ok(())
+
     
     
     }
