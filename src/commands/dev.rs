@@ -215,7 +215,7 @@ impl Task for DevVoronoiFromTriangles {
 
 
 subcommand_def!{
-    /// Generates names to test the name generators
+    /// Tool for testing name generator data
     #[command(hide=true)]
     pub(crate) struct DevNamers {
 
@@ -229,6 +229,10 @@ subcommand_def!{
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
         seed: Option<u64>,
 
+        #[arg(long)]
+        /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
+        write_json: bool
+
 
     }
 }
@@ -240,7 +244,7 @@ impl Task for DevNamers {
     fn run(self) -> Result<(),CommandError> {
 
         fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, rng: &mut Random) {
-            let namer = namers.load(language).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
+            let namer = namers.prepare(language).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
             println!("   state: {}",namer.make_state_name(rng));
@@ -252,18 +256,25 @@ impl Task for DevNamers {
             namers.extend_from_file(file)?;
         }
 
-        let mut random = random_number_generator(self.seed);
+        if self.write_json {
+            print!("{}",namers.to_json()?)
 
-        if let Some(key) = self.language {
-            test_namer(&mut namers, &key, &mut random)
         } else {
-            let mut languages = namers.list_languages();
-            languages.sort(); // so the tests are reproducible.
-            for language in languages {
-                test_namer(&mut namers, &language, &mut random)
-            }
+            let mut random = random_number_generator(self.seed);
 
+            if let Some(key) = self.language {
+                test_namer(&mut namers, &key, &mut random)
+            } else {
+                let mut languages = namers.list_languages();
+                languages.sort(); // so the tests are reproducible.
+                for language in languages {
+                    test_namer(&mut namers, &language, &mut random)
+                }
+    
+            }
+    
         }
+
 
         Ok(())
 

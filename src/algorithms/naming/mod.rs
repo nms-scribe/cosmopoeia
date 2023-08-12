@@ -12,19 +12,16 @@ use serde::Deserialize;
 use serde_json;
 
 // TODO: *** I'M NOT GOING TO LOAD THE NAMER STUFF INTO THE DATABASE. The user simply has to get a hold of a namer list.
-// TODO: Create some of my own readers and make them available in the file for later.
+// TODO: Create some of my own namers and make them available in the file for later.
 
 
 // TODO: Make sure to ask AFMG about accessing the lists there, I'm not sure what their source is or if they're copyrighted.
 
-
-
-    
-
-
 use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::errors::CommandError;
+
+mod defaults;
 
 // This was almost directly ported from AFMG.
 
@@ -555,7 +552,7 @@ impl Namer {
 
 pub(crate) struct NamerSet {
     source: HashMap<String,NamerSource>,
-    compiled: HashMap<String,Namer>
+    prepared: HashMap<String,Namer>
 }
 
 impl NamerSet {
@@ -563,40 +560,50 @@ impl NamerSet {
     pub(crate) fn empty() -> Self {
         Self {
             source: HashMap::new(),
-            compiled: HashMap::new()
+            prepared: HashMap::new()
         }
     }
 
-    pub(crate) fn load(&mut self, name: &str) -> Option<&mut Namer> { // TODO: Should be an error if this one doesn't exist, once we get this hooked up to the database
-        if let Entry::Vacant(entry) = self.compiled.entry(name.to_owned()) {
+    pub(crate) fn prepare(&mut self, name: &str) -> Option<&mut Namer> { // TODO: Should be an error if this one doesn't exist, once we get this hooked up to the database
+        if let Entry::Vacant(entry) = self.prepared.entry(name.to_owned()) {
             if let Some(name_base) = self.source.remove(name)  { 
                 entry.insert(Namer::new(name_base));
             }
 
         }
-        self.compiled.get_mut(name)
+        self.prepared.get_mut(name)
 
     }
 
     pub(crate) fn list_languages(&self) -> Vec<String>  {
-        self.compiled.keys().chain(self.source.keys()).cloned().collect()
+        self.prepared.keys().chain(self.source.keys()).cloned().collect()
     }
 
-    #[allow(dead_code)] pub(crate) fn to_json(&self) -> Result<String,serde_json::Error> {
+    pub(crate) fn to_json(&self) -> Result<String,CommandError> {
 
-        let mut buf = Vec::new();
-        let formatter = PrettyFormatter::with_indent(b"    ");
-        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
-        self.source.serialize(&mut ser)?;
-        Ok(format!("{}", String::from_utf8(buf).unwrap()))
+        // FUTURE: Probably shouldn't use BadNamerSourceFile for all of the errors, but this theoretically
+        // will be done so rarely I don't know if it's worth creating a new error.
+        if self.prepared.len() == 0 {
+            let mut buf = Vec::new();
+            let formatter = PrettyFormatter::with_indent(b"    ");
+            let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+            // I don't want to serialize a map, I want to serialize it as an array.
+            let data = self.source.values().collect::<Vec<_>>();
+            data.serialize(&mut ser).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+            Ok(String::from_utf8(buf).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?)
+    
+        } else {
+            Err(CommandError::BadNamerSourceFile("Can't serialize namers if any of them have been compiled.".to_owned()))
+        }
+
     }
 
     fn add_language(&mut self, data: NamerSource) {
         let name = data.name.clone();
         // if the name already exists, then we're replacing the existing one.
-        if self.compiled.contains_key(&name) {
+        if self.prepared.contains_key(&name) {
             // uncompile it, we'll get a new one
-            self.compiled.remove(&name);
+            self.prepared.remove(&name);
         }
         self.source.insert(name, data);
     }
