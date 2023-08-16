@@ -1323,19 +1323,19 @@ feature!(BiomeFeature BiomeEntityIterator "biomes" wkbNone geometry: #[allow(dea
 
 impl BiomeFeature<'_> {
 
-    const OCEAN: &str = "Ocean";
-    const HOT_DESERT: &str = "Hot desert";
-    const COLD_DESERT: &str = "Cold desert";
-    const SAVANNA: &str = "Savanna";
-    const GRASSLAND: &str = "Grassland";
-    const TROPICAL_SEASONAL_FOREST: &str = "Tropical seasonal forest";
-    const TEMPERATE_DECIDUOUS_FOREST: &str = "Temperate deciduous forest";
-    const TROPICAL_RAINFOREST: &str = "Tropical rainforest";
-    const TEMPERATE_RAINFOREST: &str = "Temperate rainforest";
-    const TAIGA: &str = "Taiga";
-    const TUNDRA: &str = "Tundra";
-    const GLACIER: &str = "Glacier";
-    const WETLAND: &str = "Wetland";
+    pub(crate) const OCEAN: &str = "Ocean";
+    pub(crate) const HOT_DESERT: &str = "Hot desert";
+    pub(crate) const COLD_DESERT: &str = "Cold desert";
+    pub(crate) const SAVANNA: &str = "Savanna";
+    pub(crate) const GRASSLAND: &str = "Grassland";
+    pub(crate) const TROPICAL_SEASONAL_FOREST: &str = "Tropical seasonal forest";
+    pub(crate) const TEMPERATE_DECIDUOUS_FOREST: &str = "Temperate deciduous forest";
+    pub(crate) const TROPICAL_RAINFOREST: &str = "Tropical rainforest";
+    pub(crate) const TEMPERATE_RAINFOREST: &str = "Temperate rainforest";
+    pub(crate) const TAIGA: &str = "Taiga";
+    pub(crate) const TUNDRA: &str = "Tundra";
+    pub(crate) const GLACIER: &str = "Glacier";
+    pub(crate) const WETLAND: &str = "Wetland";
     
 
     const DEFAULT_BIOMES: [(&str, i32, BiomeCriteria); 13] = [

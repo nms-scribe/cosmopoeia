@@ -22,6 +22,8 @@ use crate::algorithms::triangles::load_triangles_layer;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::world_map::NewTileEntity;
 use crate::algorithms::naming::NamerSet;
+use crate::algorithms::culture_sets::CultureSet;
+use crate::algorithms::culture_sets::CultureSource;
 
 
 subcommand_def!{
@@ -295,6 +297,60 @@ impl Task for DevNamers {
                 }
     
             }
+    
+        }
+
+
+        Ok(())
+
+    
+    
+    }
+}
+
+
+
+subcommand_def!{
+    /// Tool for testing name generator data
+    #[command(hide=true)]
+    pub(crate) struct DevCultures {
+
+        /// Files to load namer-data from, more than one may be specified to load multiple languages. Later language names will override previous ones.
+        culture_data: Vec<PathBuf>,
+
+        #[arg(long)]
+        /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
+        write_json: bool,
+
+
+    }
+}
+
+
+impl Task for DevCultures {
+
+
+    fn run(self) -> Result<(),CommandError> {
+
+        fn test_culture(culture: &CultureSource) {
+            println!("{}",culture.name());
+        
+        }
+        
+        let mut cultures = CultureSet::empty();
+        for file in self.culture_data {
+            cultures.extend_from_file(file)?;
+        }
+
+        if self.write_json {
+            print!("{}",cultures.to_json()?)
+
+        } else {
+            
+            for culture in &cultures {
+                test_culture(&culture)
+            }
+    
     
         }
 

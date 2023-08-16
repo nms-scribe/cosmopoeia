@@ -29,7 +29,10 @@ pub(crate) enum CommandError {
     DuplicateGlacierBiome,
     DuplicateWetlandBiome,
     DuplicateOceanBiome,
-    BadNamerSourceFile(String),
+    NamerSourceRead(String),
+    NamerSourceWrite(String),
+    CultureSourceRead(String),
+    CultureSourceWrite(String),
     #[allow(dead_code)] RasterDatasetRequired,
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType),
 }
@@ -78,7 +81,10 @@ impl Display for CommandError {
             Self::DuplicateOceanBiome => write!(f,"Ocean biome is specified twice in biomes table."),
             Self::DuplicateBiomeMatrixSlot(a, b) => write!(f,"Matrix criteria at ({},{}) specified twice in biome table.",a,b),
             Self::UnknownBiome(a) => write!(f,"Biome '{}' not found in biomes table.",a),
-            Self::BadNamerSourceFile(a) => write!(f,"Error opening namer source: {}",a),
+            Self::NamerSourceRead(a) => write!(f,"Error reading namer source: {}",a),
+            Self::NamerSourceWrite(a) => write!(f,"Error writing namer source: {}",a),
+            Self::CultureSourceRead(a) => write!(f,"Error reading culture source: {}",a),
+            Self::CultureSourceWrite(a) => write!(f,"Error writing culture source: {}",a),
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
         }

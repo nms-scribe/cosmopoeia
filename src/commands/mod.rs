@@ -56,6 +56,7 @@ command!{
     dev::DevTrianglesFromPoints;
     dev::DevVoronoiFromTriangles;
     dev::DevNamers;
+    dev::DevCultures;
     convert_heightmap::ConvertHeightmap;
     convert_heightmap::ConvertHeightmapVoronoi;
     convert_heightmap::ConvertHeightmapSample;

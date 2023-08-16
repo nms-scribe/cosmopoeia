@@ -648,11 +648,11 @@ impl NamerSet {
             let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
             // I don't want to serialize a map, I want to serialize it as an array.
             let data = self.source.values().collect::<Vec<_>>();
-            data.serialize(&mut ser).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
-            Ok(String::from_utf8(buf).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?)
+            data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
+            Ok(String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?)
     
         } else {
-            Err(CommandError::BadNamerSourceFile("Can't serialize namers if any of them have been compiled.".to_owned()))
+            Err(CommandError::NamerSourceWrite("Can't serialize namers if any of them have been compiled.".to_owned()))
         }
 
     }
@@ -668,7 +668,7 @@ impl NamerSet {
     }
     
     pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
-        let data = serde_json::from_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        let data = serde_json::from_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?;
         for data in data {
             self.add_namer(data)
         }
@@ -684,7 +684,7 @@ impl NamerSet {
         let mut sum = 0;
         let mut duplicate_chars = HashSet::new();
         for line in source.lines() {
-            let word = line.map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?; 
+            let word = line.map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?; 
             min = match min {
                 Some(n) => Some(n.min(word.len())),
                 None => Some(word.len())
@@ -745,7 +745,7 @@ impl NamerSet {
             Some(_) | None => Format::JSON, // this is the default, although perhaps the 'txt' should be the default?
         };
 
-        let namer_source = File::open(file).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        let namer_source = File::open(file).map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?;
         let reader = BufReader::new(namer_source);
 
         match format {
@@ -762,8 +762,8 @@ impl NamerSet {
         // will be done so rarely I don't know if it's worth creating a new error.
         let json = self.to_json()?;
         let mut encoder = Encoder::new(writer);
-        encoder.write_all(json.as_bytes()).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
-        encoder.finish().into_result().map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        encoder.write_all(json.as_bytes()).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
+        encoder.finish().into_result().map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
         Ok(())
 
     }
