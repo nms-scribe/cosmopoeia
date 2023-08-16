@@ -1,3 +1,5 @@
+use libflate::deflate::Decoder;
+
 /*
 
 FUTURE: I hope to have namers built in to NFMT for the following languages eventually. The reasons for each language on this list are defined below. I've listed the sources and some notes for the ones I have completed, if you have better sources let me know. I stuck to a few major languages, a few popular ancient languages, and a few indigeonous languages to keep things balanced. The rest are postponed until I can find more time and better resources.
@@ -281,11 +283,19 @@ FUTURE: There is an issue with the English one, and I suspect it might happen in
 */
 
 /*
-The defaults.json file was generated with the following command run from the root of the project directory:
-`cargo run -- dev-namers src/algorithms/naming/*.txt --text-is-markov --write-json > src/algorithms/naming/defaults.json`
+The defaults.deflated file was generated with the following command run from the root of the project directory:
+`cargo run -- dev-namers src/algorithms/naming/*.txt --text-is-markov --write-deflated > src/algorithms/naming/defaults.deflated`
+
+The defaults.json file is intended for review of what was created. FUTURE: If I ever need to "edit" the defaults.json I'll have to
+come up with another way to deflate it quickly.
 
 (Here's a double comment end to match the unintentional comment-start in that code) */*/
 
-// FUTURE: This adds 0.8 MB to the executable. Is there any way to not do that?
-// NOTE: I've locked the file for write access in order to avoid accidental overwrite.
-pub(crate) const DEFAULT_NAMER_DATA: &[u8] = include_bytes!("defaults.json");
+// NOTE: This adds 0.3 MB to the executable (from 1.1MB to 1.4MB). If I didn't deflate it it would add 0.8 MB (1.1 -> 1.9). 
+// FUTURE: The question is whether including the libflate library just for that is worth it, or if there's a simpler 
+// compression mechanism that would workd.
+pub(crate) const DEFAULT_NAMER_DATA_DEFLATED: &[u8] = include_bytes!("defaults.deflated");
+
+pub(crate) fn get_inflated_namer_data() -> Decoder<&'static [u8]> {
+    Decoder::new(DEFAULT_NAMER_DATA_DEFLATED)
+}

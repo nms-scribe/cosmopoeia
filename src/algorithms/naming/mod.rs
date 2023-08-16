@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::io::BufReader;
 use std::io::BufRead;
+use std::io::Write;
 use std::path::Path;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -11,6 +12,7 @@ use rand::Rng;
 use serde::Serialize;
 use serde::Deserialize;
 use serde_json;
+use libflate::deflate::Encoder;
 
 // NOTE: *** I'M NOT GOING TO LOAD THE NAMER STUFF INTO THE DATABASE. I have some defaults built in. If the user wants more they'll have to get a hold of a list.
 
@@ -616,7 +618,7 @@ impl NamerSet {
 
     pub(crate) fn default() -> Result<Self,CommandError> {
         let mut this = Self::empty();
-        this.extend_from_json(BufReader::new(defaults::DEFAULT_NAMER_DATA))?;
+        this.extend_from_json(BufReader::new(defaults::get_inflated_namer_data()))?;
         Ok(this)
     }
 
@@ -639,6 +641,7 @@ impl NamerSet {
 
         // FUTURE: Probably shouldn't use BadNamerSourceFile for all of the errors, but this theoretically
         // will be done so rarely I don't know if it's worth creating a new error.
+        // -- It's really only intended for my own use for quickly creating new namer files.
         if self.prepared.len() == 0 {
             let mut buf = Vec::new();
             let formatter = PrettyFormatter::with_indent(b"    ");
@@ -751,6 +754,17 @@ impl NamerSet {
         }
 
 
+
+    }
+
+    pub(crate) fn to_deflated_json<Target: Write>(&self, writer: Target) -> Result<(), CommandError> {
+        // FUTURE: Probably shouldn't use BadNamerSourceFile for all of the errors, but this theoretically
+        // will be done so rarely I don't know if it's worth creating a new error.
+        let json = self.to_json()?;
+        let mut encoder = Encoder::new(writer);
+        encoder.write_all(json.as_bytes()).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        encoder.finish().into_result().map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
+        Ok(())
 
     }
     

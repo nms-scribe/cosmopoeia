@@ -9,6 +9,7 @@ adaptive-bezier = "0.1.0"
 clap = { version = "4.3.11", features = ["derive"] }
 gdal = { version = "0.15.0", features = ["array"] }
 indicatif = "0.17.5"
+libflate = "2.0.0"
 ordered-float = "3.7.0"
 rand = "0.8.5"
 serde = { version = "1.0.183", features = ["derive"] }

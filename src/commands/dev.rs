@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::io::stdout;
 
 use clap::Args;
 use rand::Rng;
@@ -240,7 +241,11 @@ subcommand_def!{
 
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
-        write_json: bool
+        write_json: bool,
+
+        #[arg(long)]
+        /// If true, the command will serialize the namer data into a "deflated" JSON document rather than test the naming.
+        write_deflated: bool
 
 
     }
@@ -271,7 +276,10 @@ impl Task for DevNamers {
             namers.extend_from_file(file,self.text_is_markov)?;
         }
 
-        if self.write_json {
+        if self.write_deflated {
+            namers.to_deflated_json(stdout())?;
+
+        } else if self.write_json {
             print!("{}",namers.to_json()?)
 
         } else {
