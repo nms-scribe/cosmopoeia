@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::io::BufReader;
 use std::io::BufRead;
@@ -11,17 +12,55 @@ use serde::Serialize;
 use serde::Deserialize;
 use serde_json;
 
-// TODO: *** I'M NOT GOING TO LOAD THE NAMER STUFF INTO THE DATABASE. The user simply has to get a hold of a namer list.
-// TODO: Create some of my own namers and make them available in the file for later.
+// NOTE: *** I'M NOT GOING TO LOAD THE NAMER STUFF INTO THE DATABASE. I have some defaults built in. If the user wants more they'll have to get a hold of a list.
 
 
 // TODO: Make sure to ask AFMG about accessing the lists there, I'm not sure what their source is or if they're copyrighted.
 
-use crate::utils::ToTitleCase;
+//use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
+use crate::utils::split_string_from_end;
 use crate::errors::CommandError;
+use crate::progress::ProgressObserver;
 
 mod defaults;
+
+struct NamerLoadObserver<'data,Progress: ProgressObserver> {
+    name: &'data str,
+    progress: &'data mut Progress,
+    visible: bool
+}
+
+impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
+
+    fn new(name: &'data str, progress: &'data mut Progress) -> Self {
+        Self {
+            name,
+            progress,
+            visible: false
+        }
+    }
+
+    fn start_known_endpoint<Callback: FnOnce() -> usize>(&mut self, callback: Callback) {
+        let count = callback();
+        self.visible = count > 10000; // FUTURE: This should be configurable... any way to only show progress bar if it's taking longer than 1 second?
+        if self.visible {
+            self.progress.start_known_endpoint(|| (format!("Preparing names for {}",self.name),count))
+        }
+    }
+
+    fn update<Callback: FnOnce() -> usize>(&self, callback: Callback) {
+        if self.visible {
+            self.progress.update(callback)
+        }
+    }
+
+    fn finish(&mut self) {
+        if self.visible {
+            self.progress.finish(|| format!("Names prepared for {}",self.name))
+        }
+    }
+}
 
 // This was almost directly ported from AFMG.
 
@@ -178,11 +217,13 @@ struct MarkovGenerator {
 impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
-    fn calculate_chain(array: &Vec<String>) -> HashMap<Option<char>, Vec<std::string::String>> {
+    fn calculate_chain<Progress: ProgressObserver>(array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> HashMap<Option<char>, Vec<std::string::String>> {
         let mut chain = HashMap::new();
 
-        for n in array {
-            let name: Vec<char> = n.trim().to_lowercase().chars().collect();
+        progress.start_known_endpoint(|| array.len());
+
+        for (j,n) in array.iter().enumerate() {
+            let name: Vec<char> = n.trim().chars().collect();
             let basic = name.iter().all(|c| match c {
                 '\u{0000}'..='\u{007f}' => true,
                 _ => false
@@ -255,14 +296,17 @@ impl MarkovGenerator {
                 
                 syllable = String::new();
             }
+            progress.update(|| j);
         }
+
+        progress.finish();
 
         return chain;
     }
 
 
-    fn new(base: MarkovSource) -> Self {
-        let chain = Self::calculate_chain(&base.seed_words);
+    fn new<Progress: ProgressObserver>(base: MarkovSource, progress: &mut NamerLoadObserver<Progress>) -> Self {
+        let chain = Self::calculate_chain(&base.seed_words,progress);
 
         Self {
             chain,
@@ -278,7 +322,7 @@ impl MarkovGenerator {
         let min_len = min_len.unwrap_or_else(|| self.min_len);
         let cutoff_len = cutoff_len.unwrap_or_else(|| self.cutoff_len);
 
-        let mut choices = self.chain.get(&None).unwrap(); // TODO: NMS: Am I always guaranteed that this one will be filled?
+        let mut choices = self.chain.get(&None).unwrap(); // FUTURE: NMS: Am I always guaranteed that this one will be filled?
         let mut cur = choose(rng,choices).to_owned();
         let mut word = String::new();
         for _ in 0..20 {
@@ -288,7 +332,7 @@ impl MarkovGenerator {
                 if word.len() < min_len {
                     cur = String::new();
                     word = String::new();
-                    choices = self.chain.get(&None).unwrap(); // TODO: NMS: Is this guaranteed?
+                    choices = self.chain.get(&None).unwrap(); // FUTURE: NMS: Is this guaranteed?
                 } else {
                     break
                 }
@@ -306,7 +350,7 @@ impl MarkovGenerator {
                     }
                     break;
                 } else {
-                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).unwrap()) // TODO: NMS: Is None guaranteed to return a value?
+                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).unwrap()) // FUTURE: NMS: Is None guaranteed to return a value?
                 };
             }
 
@@ -328,11 +372,15 @@ impl MarkovGenerator {
 
             let last = name.chars().last();
             if (matches!(last,Some('-')) && current_char == &' ') {
-                // remove space after hyphen
+                // remove space after hyphen FUTURE: Should this be absolutely necessary?
                 continue;
             }; 
+            // NOTE: AFMG was capitalizing letters after space and hyphen, however if the seed words are curated correctly,
+            // it should be following the capitalization rules already, right? If we're going to do something like this, though,
+            // it would have to be customizable by language, and we'd have to be able to specify "short words" not capitalizable.
+            // I really feel like this is way beyond the scope.
 
-            // TODO: NMS: Why this particular combination? If it happens in the chains, why can't it happen here?
+            // FUTURE: NMS: Why this particular combination? If it happens in the chains, why can't it happen here?
             if current_char == &'a' && matches!(word.get(current_index + 1),Some('e')) {
                 // "ae" => "e"
                 continue;
@@ -378,7 +426,6 @@ impl ListPicker {
     }
 
     fn pick_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
-        // TODO: Test this...
         if self.available.len() == 0 {
             self.available = std::mem::replace(&mut self.picked, Vec::new())
         }
@@ -403,9 +450,9 @@ impl NamerMethod {
         }
     }
 
-    fn new(method: NamerMethodSource) -> Self {
+    fn new<Progress: ProgressObserver>(method: NamerMethodSource, progress: &mut NamerLoadObserver<Progress>) -> Self {
         match method {
-            NamerMethodSource::Markov(markov) => Self::Markov(MarkovGenerator::new(markov)),
+            NamerMethodSource::Markov(markov) => Self::Markov(MarkovGenerator::new(markov,progress)),
             NamerMethodSource::ListPicker(list) => Self::ListPicker(ListPicker::new(list))
         }
     }
@@ -431,10 +478,10 @@ impl Namer {
      
     }
 
-    fn new(base: NamerSource) -> Self {
+    fn new<Progress: ProgressObserver>(base: NamerSource, progress: &mut NamerLoadObserver<Progress>) -> Self {
         let mut state_name = Self::default_state_name_behavior();
         state_name.extend(base.state_name.iter().cloned());
-        let method = NamerMethod::new(base.method);
+        let method = NamerMethod::new(base.method,progress);
 
         Self {
             method,
@@ -449,22 +496,25 @@ impl Namer {
     }
 
     pub(crate) fn make_name<Random: Rng>(&mut self, rng: &mut Random) -> String {
-        self.make_word(rng).to_title_case()
+        self.make_word(rng)//.to_title_case()
     }
 
     pub(crate) fn make_state_name<Random: Rng>(&mut self, rng: &mut Random) -> String {
         let mut name = self.make_word(rng);
 
+        /*
+        // NOTE: NMS: This was from the AFMG code. However, why not? There are or were places like "Saudi Arabia", "Papua New Guinea", "Saint Kitts", and all of the caribbean saints, "West Germany" -- In any case, I'm seeing a lot of such names from some languages.
         if name.contains(" ") {
-            // don't allow multiword state names // TODO: NMS: Why not? There are or were places like "Saudi Arabia", "Papua New Guinea", "Saint Kitts", and all of the caribbean saints, "West Germany" -- In any case, I'm seeing some such names from Vietnamese.
+            // don't allow multiword state names 
             name = name.replace(' ', "");
         }; 
+        */
 
         for behavior in &self.state_name {
             name = behavior.apply(name);
         }
 
-        name = name.to_title_case();
+        name = name;//.to_title_case();
 
         let suffixing = &self.state_suffix;
 
@@ -476,7 +526,7 @@ impl Namer {
         // define if suffix should be used // FUTURE: NMS: This should be based on language as well, but I'll leave it for now.
         let suffixed_name = if name.len() > 3 && name.ends_with(is_vowel) {
 
-            let (trimmed_name,ending) = name.split_at(name.len() - 2);
+            let (trimmed_name,ending) = split_string_from_end(&name, 2);
             let ending: Vec<char> = ending.chars().collect();
             let is_penultimate_vowel = is_vowel(ending[0]);
 
@@ -510,7 +560,7 @@ impl Namer {
             Err(()) => return name, // don't apply a suffix, and return the original name.
         };
 
-        return Self::validate_suffix(suffixed_name, suffix) // TODO: Should be passing suffixed_name
+        return Self::validate_suffix(suffixed_name, suffix) 
     }
     
 
@@ -524,11 +574,11 @@ impl Namer {
 
         if name.ends_with(s1) {
             // remove name last letter if it's same as suffix first letter
-            name = name.split_at(name.len() - 1).0.to_owned();
+            name = split_string_from_end(&name, 1).0.to_owned();
         }
 
-        if name.len() > 2 {
-            let (beginning,ending) = name.split_at(name.len() - 2);
+        let (beginning,ending) = split_string_from_end(&name, 2);
+        if ending.len() > 1 {
             let ending: Vec<char> = ending.chars().collect();
     
             if is_vowel(s1) == is_vowel(ending[0]) && is_vowel(s1) == is_vowel(ending[1]) {
@@ -541,7 +591,7 @@ impl Namer {
 
         if name.ends_with(s1) {
             // remove name last letter if it's a suffix first letter (Again)
-            name = name.split_at(name.len() - 1).1.to_owned();
+            name = split_string_from_end(&name, 1).0.to_owned();
         }; 
         return name + &suffix
     }
@@ -564,10 +614,16 @@ impl NamerSet {
         }
     }
 
-    pub(crate) fn prepare(&mut self, name: &str) -> Option<&mut Namer> { // TODO: Should be an error if this one doesn't exist, once we get this hooked up to the database
+    pub(crate) fn default() -> Result<Self,CommandError> {
+        let mut this = Self::empty();
+        this.extend_from_json(BufReader::new(defaults::DEFAULT_NAMER_DATA))?;
+        Ok(this)
+    }
+
+    pub(crate) fn prepare<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Option<&mut Namer> { 
         if let Entry::Vacant(entry) = self.prepared.entry(name.to_owned()) {
             if let Some(name_base) = self.source.remove(name)  { 
-                entry.insert(Namer::new(name_base));
+                entry.insert(Namer::new(name_base,&mut NamerLoadObserver::new(name,progress)));
             }
 
         }
@@ -575,7 +631,7 @@ impl NamerSet {
 
     }
 
-    pub(crate) fn list_languages(&self) -> Vec<String>  {
+    pub(crate) fn list_names(&self) -> Vec<String>  {
         self.prepared.keys().chain(self.source.keys()).cloned().collect()
     }
 
@@ -598,7 +654,7 @@ impl NamerSet {
 
     }
 
-    fn add_language(&mut self, data: NamerSource) {
+    fn add_namer(&mut self, data: NamerSource) {
         let name = data.name.clone();
         // if the name already exists, then we're replacing the existing one.
         if self.prepared.contains_key(&name) {
@@ -611,7 +667,7 @@ impl NamerSet {
     pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
         let data = serde_json::from_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?;
         for data in data {
-            self.add_language(data)
+            self.add_namer(data)
         }
 
         Ok(())
@@ -619,25 +675,61 @@ impl NamerSet {
         
     }
 
-    pub(crate) fn extend_from_text<Reader: std::io::Read>(&mut self, language: String, source: BufReader<Reader>) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_text<Reader: std::io::Read>(&mut self, name: String, text_is_markov: bool, source: BufReader<Reader>) -> Result<(),CommandError> {
         let mut list = Vec::new();
+        let mut min: Option<usize> = None;
+        let mut sum = 0;
+        let mut duplicate_chars = HashSet::new();
         for line in source.lines() {
-            list.push(line.map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?)
+            let word = line.map_err(|e| CommandError::BadNamerSourceFile(format!("{}",e)))?; 
+            min = match min {
+                Some(n) => Some(n.min(word.len())),
+                None => Some(word.len())
+            };
+            sum += word.len();
+            for (a,b) in word.chars().zip(word.chars().skip(1)) {
+                if a == b {
+                    duplicate_chars.insert(a);
+                }
+            }
+
+            
+            list.push(word)
         }
 
-        self.add_language(NamerSource {
-            name: language,
-            method: NamerMethodSource::ListPicker(list),
-            state_name: Vec::new(),
-            state_suffix: StateSuffixBehavior::Default,
-        });
+        if text_is_markov {
+            let min_len = min.unwrap_or_else(|| 0);
+            let avg_len = sum / list.len();
+            let cutoff_len = avg_len;
+
+            self.add_namer(NamerSource {
+                name,
+                method: NamerMethodSource::Markov(MarkovSource {
+                    min_len,
+                    cutoff_len,
+                    duplicatable_letters: duplicate_chars.into_iter().collect(),
+                    seed_words: list,
+                }),
+                state_name: Vec::new(),
+                state_suffix: StateSuffixBehavior::NoSuffix,
+            });
+    
+        } else {
+            self.add_namer(NamerSource {
+                name,
+                method: NamerMethodSource::ListPicker(list),
+                state_name: Vec::new(),
+                state_suffix: StateSuffixBehavior::Default,
+            });
+    
+        }
 
         Ok(())
 
         
     }
 
-    pub(crate) fn extend_from_file<AsPath: AsRef<Path>>(&mut self, file: AsPath) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_file<AsPath: AsRef<Path>>(&mut self, file: AsPath, text_is_markov: bool) -> Result<(),CommandError> {
 
         enum Format {
             JSON,
@@ -655,7 +747,7 @@ impl NamerSet {
 
         match format {
             Format::JSON => self.extend_from_json(reader),
-            Format::TextList(name) => self.extend_from_text(name, reader),
+            Format::TextList(name) => self.extend_from_text(name, text_is_markov, reader),
         }
 
 

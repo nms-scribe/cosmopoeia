@@ -1,0 +1,784 @@
+Abdera
+Abellinum
+Abritum
+Abruttus
+Acaunum
+Acelum
+Acinipo
+Acruvium
+Acumincum
+Ad Aquas
+Ad Duodecimum
+Ad Fines
+Ad Mediam
+Ad Pannonios
+Ad Pirum
+Ad Stoma
+Adiacium
+Adrianopolis
+Aegida
+Aegina
+Aegyssus
+Aeminium
+Aenaria
+Aenona
+Aequum
+Aesis
+Aetus
+Agrigentum
+Alabum 
+Alba Pompeia
+Albaniana
+Alberti campus
+Albingaunum
+Albintemelium
+Albona
+Alburnus Maior
+Alcmaria
+Aldenarda
+Alexandria Ad Issum
+Allabo
+Almus
+Alostum
+Altinum
+Amantia
+Amastris
+Ameria
+Amivadum
+Ammurianum
+Ampelum
+Ampicium
+Amstelodamum
+Anagastum
+Anchialus
+Ancyra
+Andautonia
+Andematunnum
+Anderlacum
+Angustia
+Antigonea
+Antiochia Mygdonia
+Antipargal
+Antipatrea
+Antissiodorum
+Antrona Scaranicum
+Antverpia
+Apollonia
+Apollonia Pontica
+Apua
+Apulum
+Aqua Balissae
+Aqua Viva
+Aquae Arnemetiae
+Aquae Flaviae
+Aquae Helveticae
+Aquae Sextiae
+Aquae Statiellae
+Aquae Sulis
+Aquae Sulphurae
+Aquama
+Aquilia in Vestinis
+Arabriga
+Arae Postumiae
+Arandis
+Arbor Felix
+Arca Caesarea
+Arcidava
+Arcionis
+Arconisium
+Ardea
+Arelate
+Arenacum
+Aretium
+Argentoratum
+Ariminum
+Arpajonum
+Arretium
+Arrubium
+Arunda
+Arutela
+Asculum Picenum
+Assisium
+Assos
+Asturica Augusta
+Atalanta
+Aternum
+Ateste
+Athos Novum
+Atrans
+Atrebatum
+Attaleia
+Atuatuca Tungrorum
+Augusta
+Augusta Argentorate
+Augusta Bagiennorum
+Augusta Praetoria Salassorum
+Augusta Raurica
+Augusta Taurinorum
+Augusta Traiana
+Augustobona Tricassium
+Augustodunum
+Augustodurum
+Aulona
+Aurea
+Aurelianum
+Autricum
+Avenio
+Aventicum
+Aviarium
+Baelo Claudia
+Baesuris
+Baetulo
+Balsa
+Bangertium 
+Barcino
+Bardonisca
+Baretium
+Baria
+Barium
+Baruli
+Basilia
+Bassanum
+Bassianae
+Bauzanum
+Beligio
+Bellunum
+Belna
+Beneventum
+Bergomum
+Berna
+Beroea
+Berroea
+Bersobis
+Bevipo
+Bilbilis
+Birziminium
+Blariacum
+Blestium 
+Bobium
+Bononia
+Boreana
+Bovium 
+Bracara Augusta
+Bremetennacum
+Brestum
+Brienzola
+Brigantia
+Brigantium
+Brindisium
+Briva Isara
+Brixellum
+Brixia
+Brixino
+Brucla
+Brugae
+Brunntrudum
+Bruxella
+Bulla Regia
+Burdigala
+Burgenae
+Burgus Maior
+Burgus Sancti Dalmatii
+Burrium 
+Bursao
+Buthrotum
+Bylis
+Byzantium
+Caeciliana
+Caesaraugusta
+Caesarea
+Caesarodunum
+Caesena
+Caesenaticum
+Caetobriga
+Caieta
+Calagurris
+Calatis
+Calipolis
+Callipolis
+Cambria 
+Camulodunum
+Canovium 
+Cantabrigia
+Capreae
+Capua
+Caput Stenarum
+Caralis
+Carnium
+Carnuntum
+Carreum Potentia
+Carsium
+Carthago
+Carthago Nova
+Carvium
+Carvo
+Casalis
+Caspingio
+Castellum Dimmidi
+Castra
+Castra Diva 
+Castra Herculis
+Castra Leuca
+Castrum Falconarii
+Castrum Francorum
+Castrum Novum
+Castrum Villarum
+Catalaunum
+Catana
+Cataractonium
+Catculliacum
+Catholica
+Celeia
+Centum Cellae
+Centum Prata
+Centum Putea
+Cervia
+Ceuclum
+Chalcedonia
+Chellah
+Chremisa
+Chullu
+Cibalae
+Cibinum
+Cicutio 
+Cilpes
+Cirta
+Civitas Aravorum
+Civitas Calabriga
+Civitas Cobelcorum
+Civitas Sancti Romuli
+Claterna
+Colchinium
+Collipo
+Colonia Clunia Sulpicia
+Colonia Ulpia Traiana
+Colonia Victrix Iulia Lepida
+Complutum
+Comum
+Condate Riedonum
+Conelianum
+Conimbriga
+Conistorgis
+Constantinopolis
+Contrebia Belaisca
+Copsis
+Corduba
+Coria
+Corinium
+Coriovallum
+Corona
+Cortoriacum
+Cremona
+Crisenaria
+Cuicul
+Cularo
+Curia
+Cusum
+Damascus
+Damma
+Damovilla
+Darioritum
+Daventria
+Debeltum
+Decentianum
+Dertona
+Dertusa
+Deva
+Dierna
+Dinia
+Diocletianopolis
+Dionysopolis
+Diospolis
+Dipo
+Divio
+Divodurum
+Doclea
+Domenianus
+Dorylaeum
+Drepanum
+Drobeta
+Dunelmum
+Durnovaria
+Durocobrivis
+Durocortorum
+Durostorum
+Durovernum Cantiacorum
+Dyrrhachium
+Ebora
+Eboracum
+Eburobritium
+Eburodunum
+Ecclesia Nova
+Egara
+Egiptania
+Eindovia
+Elenio
+Emerita Augusta
+Emesa
+Emona
+Ephesus
+Epidaurus
+Eporedia
+Equabona
+Escus
+Esquinia
+Fabiranum
+Faesulae
+Faetanum
+Faventia
+Fectio
+Feltria
+Fidentia
+Firmum
+Flanona
+Flavia
+Flavias
+Flaviniacum
+Flaviobriga
+Flavium Brigantium
+Flevum
+Florentia
+Florentinum
+Flumen
+Forum Cornelii
+Forum Fulvii
+Forum Hadriani
+Forum Iulii
+Forum Livii
+Forum Novum Siculorum
+Forum Popilii
+Forum Vibii Caburrum
+Fossa Clodia
+Frusina
+Fulginiae
+Furna
+Gades
+Gandavum
+Ganuentum
+Genava
+Genua
+Germanea
+Germisara
+Gerunda
+Gesoriacum
+Glanum
+Glevum
+Gobannium 
+Goritia
+Granata
+Gressonetum ad Sanctum Joannem
+Grinnes
+Guimaranis
+Gythium
+Hadrumetum
+Hasta
+Henna or Haenna
+Heraclea Pontica
+Heraklia
+Herculaneum
+Hierapolis
+Hippo Regius or Hippone
+Hispalis
+Hispellum
+Horgana
+Horta
+Hostilia
+Iacca
+Iadera
+Iassium
+Iconium
+Idunum
+Iguvium
+Ilerda
+Ilium
+Iluro
+Interamna Nahars
+Interamnia Praetutiana
+Ipses
+Iria
+Iria Flavia
+Isca Dumnoniorum
+Isca Silurum 
+Issa
+Isurium Brigantum
+Iuenna
+Iulia Concordia
+Iulianum
+Iuvavum
+Labellum
+Labitolosa
+Labro
+Lacobriga
+Lamecum
+Lancobriga
+Laurium
+Laus Pompeia
+Lederata
+Lefevanum
+Legio VII Gemina
+Lemonum
+Lentia
+Leodium
+Leptis Parva
+Leucas
+Libarna
+Lilybaeum
+Lindinis
+Lindum Colonia
+Linianum
+Lissus
+Lithopolis
+Livignum
+Lixus
+Locus Rotundus
+Londinium
+Londonia
+Longaticum
+Lopsica
+Lorica
+Lousonna
+Lovanium
+Luca
+Lucentum
+Lucus Augusti
+Lugdunum
+Lugdunum Clavatum
+Lugdunum Convenarum
+Luguvalium
+Luna
+Lupiae
+Lutetia
+Lychnidus
+Magura Piatra
+Malaca
+Malateca
+Mamucium
+Mantua
+Marathon
+Marburgum
+Marcianopolis
+Marinum
+Marsonia
+Martanae Tudertinorum
+Mascula
+Massilia
+Mateola
+Matilo
+Matrice
+Maunnaricium
+Media
+Medicinum
+Mediolanum
+Mediolanum Aulercorum
+Mediolanum Santonum
+Mediomanum 
+Megara
+Melta
+Menasium
+Menebria
+Messana
+Metallum Vipascense
+Mevania
+Micia
+Milevum
+Minorisa
+Mirobriga Celticorum
+Modicia
+Monasterium
+Mondobriga
+Monopolis
+Mons Belluni
+Mons Calerius
+Mons Falconis
+Mons Rotundus
+Mons Viridarium
+Montana
+Monticulus ad Padum
+Mopsuestia
+Morbenium
+Morgiis
+Moridunum 
+Moron
+Mosae Traiectum
+Municipium Aelium Cananefatum
+Municipum Julium Uticense
+Mursa
+Mustis
+Mutina
+Mycenae
+Myrtilis Iulia
+Nabantia
+Naissus
+Napoca
+Narbo Martius
+Narona
+Naupactus
+Nauportus
+Neapolis
+Nemausus
+Neoplanta
+Nesactium
+Neuense
+Neviodunum
+Nicaea
+Nicomedia
+Nicopolis
+Nicopolis ad Istrum
+Nicopolis ad Nestum
+Nidum 
+Nigrum Pullum
+Ninica
+Nissa
+Nola
+Noreia
+Nova Ionia
+Novae
+Novaria
+Novio Rito
+Noviodunum
+Noviomagus Lexoviorum
+Noviomagus Reginorum
+Noviomagus Veromanduorum
+Numantia
+Nursia
+Octodurum
+Oenipons
+Oiasso
+Olisipo
+Olmedum
+Olnanum
+Oneum
+Opitergium
+Orolaunum
+Oscela Lepontiorum
+Ossonoba
+Ovilava
+Oxonium
+Palma
+Palmyra
+Panormus
+Parentium
+Parma
+Patavium
+Pautalia
+Pax Iulia
+Pelva
+Pergamon
+Peronticus
+Perusia
+Petina
+Petra Mularia
+Petuaria
+Phalerum
+Pharus
+Philippi
+Piquentum
+Piraeus
+Pisae
+Pisaurum
+Pistoria
+Placentia
+Poetovio
+Pola
+Pollentia
+Pompaelo
+Pompeii
+Pons Aelius
+Porolissum
+Portus Alacer
+Portus Cale
+Portus Gruarius
+Portus Hannibalis
+Portus Namnetum
+Portus Naonis
+Potaissa
+Potentia
+Praeneste
+Praetorium
+Praetorium Agrippinae
+Prusa
+Puteoli
+Pyrrhanum
+Ragusa
+Ramboletium
+Ratae Corieltauvorum
+Ratiaria
+Ravenna
+Reate
+Remesiana
+Resculum
+Rhegium
+Rhizon
+Rittium
+Rocium
+Rodigium
+Roma
+Roma Nova
+Rothnacum
+Rotomagus
+Ruraemunde
+Rusicade
+Sablones
+Saena
+Salacia
+Salinae
+Salmantica
+Salona
+Saloniana
+Salvia
+Samarobriva
+Sancti Audoeni fanum
+Saudae Ulcii
+Savo
+Scalabis
+Scaptopara
+Scardona
+Scodra
+Scopium
+Scylacium
+Segeda
+Segesta Tiguliorum
+Segontium 
+Segusium
+Seleucia Calycadnus
+Semendria
+Senia
+Serbinum
+Serdica
+Sergiopolis
+Sexaginta Prista
+Silva Ducis
+Singidunum
+Sinus
+Sipontum Novum
+Sirmium
+Sirpe
+Siscia
+Smyrna
+Solodurum
+Spalatum
+Spinetum
+Spoletium
+Stabiae
+Stenimachus
+Stibo
+Stipum
+Storgosia
+Suasa
+Sucidava
+Sufetula
+Suitia
+Surrentum
+Tablis
+Talabara
+Talabriga
+Tamasiacum
+Tapae
+Tarentum
+Tarraco
+Tarsatica
+Tarsus
+Tarvisium
+Tauromenium
+Taurunum
+Teate
+Tegea
+Temesiensis
+Teneramonda
+Tergeste
+Terracina
+Thebae
+Theranda
+Thermae Himerenses
+Thessalonica
+Thuburbo Majus
+Thysdrus
+Tibiscum
+Tibur
+Ticinum
+Tifernum Tiberinum
+Toletum
+Tolosa
+Tomis
+Tongobriga
+Tornacum
+Tragurion
+Traiectum
+Traiectum ad Mosam
+Trapezus
+Trecalae
+Tridentum
+Trimontium
+Triphelis
+Tripolis
+Troesmis
+Troezen
+Tubucci Aurantes
+Tude
+Tuder
+Tugium
+Tullum Leucorum
+Tulmentium
+Turiaso
+Turicum
+Tusculum
+Tutelae
+Tyrana
+Ulmetum
+Ulpia Noviomagus Batavorum
+Ulpia Oescus
+Ulpiana
+Urba
+Urbinum Hortense
+Urbinum Mataurense
+Urci
+Urticetum
+Vada Sabatia
+Vadae
+Valebona
+Valentia
+Valve
+Varadinum
+Vedinum
+Vegium
+Veldidena
+Veleia
+Velitrae
+Veniatia
+Venlonum
+Venta Belgarum
+Venta Silurum 
+Venusia
+Vercellae
+Verodunum
+Verulamium
+Vescera
+Vesontio
+Vibiscum
+Vicetia
+Vicianum
+Vienna
+Vienna Allobrogium
+Viennavicus
+Vierium
+Vigiliae
+Viglebanum
+Vigornia 
+Vigueria
+Villa Euracini
+Villa Franca
+Viminacium
+Vindobona
+Vindonissa
+Vipasca
+Vipitenum
+Virgis
+Viroconium Cornoviorum
+Viroviacum
+Virunum
+Vissaium
+Vitudurum
+Volaterrae
+Volsinii Novi
+Volubilis
+Zycanthus

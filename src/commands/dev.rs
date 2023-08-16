@@ -219,7 +219,16 @@ subcommand_def!{
     #[command(hide=true)]
     pub(crate) struct DevNamers {
 
+        /// Files to load namer-data from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         namer_data: Vec<PathBuf>,
+
+        #[arg(long)]
+        // if true, the namer will load the defaults before any of the passed files.
+        defaults: bool,
+
+        #[arg(long)]
+        /// If this is set, text files loaded as namer_data will be parsed as markov seed lists. Otherwise, they will be list-picker generators.
+        text_is_markov: bool,
 
         #[arg(long)]
         /// The name of a namer to generate from. If not specified, all namers will be tested.
@@ -243,17 +252,23 @@ impl Task for DevNamers {
 
     fn run(self) -> Result<(),CommandError> {
 
-        fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, rng: &mut Random) {
-            let namer = namers.prepare(language).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
+        let mut progress = ConsoleProgressBar::new();
+
+        fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, progress: &mut ConsoleProgressBar, rng: &mut Random) {
+            let namer = namers.prepare(language,progress).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
             println!("   state: {}",namer.make_state_name(rng));
         
         }
         
-        let mut namers = NamerSet::empty();
+        let mut namers = if self.defaults {
+            NamerSet::default()?
+        } else {
+            NamerSet::empty()
+        };
         for file in self.namer_data {
-            namers.extend_from_file(file)?;
+            namers.extend_from_file(file,self.text_is_markov)?;
         }
 
         if self.write_json {
@@ -263,12 +278,12 @@ impl Task for DevNamers {
             let mut random = random_number_generator(self.seed);
 
             if let Some(key) = self.language {
-                test_namer(&mut namers, &key, &mut random)
+                test_namer(&mut namers, &key, &mut progress, &mut random)
             } else {
-                let mut languages = namers.list_languages();
+                let mut languages = namers.list_names();
                 languages.sort(); // so the tests are reproducible.
                 for language in languages {
-                    test_namer(&mut namers, &language, &mut random)
+                    test_namer(&mut namers, &language, &mut progress, &mut random)
                 }
     
             }

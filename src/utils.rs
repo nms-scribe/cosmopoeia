@@ -770,3 +770,15 @@ pub(crate) mod namers_pretty_print {
 
 
 }
+
+pub(crate) fn split_string_from_end(string: &str, char_index_from_end: usize) -> (&str, &str) {
+
+    let char_indexes = string.char_indices();
+    let mut reversed = char_indexes.rev();
+    if let Some(index) = reversed.nth(char_index_from_end) {
+        string.split_at(index.0)
+    } else {
+        (string,"")
+    }
+
+}
