@@ -487,34 +487,29 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_flow: f64, lake_temp: f64, lake_evap: f64, lake_tiles: usize, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64, lake_geometry: Geometry, lakes: &mut Vec<NewLake>) -> Result<(), CommandError> {
     let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
-    // occasionally, the simplification turns the lakes into a multipolygon, so just create separate lakes for that.
+    // occasionally, the simplification turns the lakes into a multipolygon, which is why the lakes layer has to be multipolygon
+    let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
     if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
         for i in 0..lake_geometry.geometry_count() {
             let geometry = bezierify_polygon(&lake_geometry.get_geometry(i),bezier_scale)?;
-            lakes.push(NewLake {
-                elevation: lake_elevation,
-                type_: lake_type.clone(),
-                flow: lake_flow,
-                size: lake_tiles as i32, // TODO: Since we're creating multiple lakes here, should this be a different size? Or should this just be one lake with multiple polygons?
-                temperature: lake_temp,
-                evaporation: lake_evap,
-                geometry,
-            })
+            new_geometry.add_geometry(geometry)?;
         }
 
     } else {
         let geometry = bezierify_polygon(&lake_geometry,bezier_scale)?;
-        lakes.push(NewLake {
-            elevation: lake_elevation,
-            type_: lake_type,
-            flow: lake_flow,
-            size: lake_tiles as i32,
-            temperature: lake_temp,
-            evaporation: lake_evap,
-        geometry,
-        })
+        new_geometry.add_geometry(geometry)?;
 
     };
+
+    lakes.push(NewLake {
+        elevation: lake_elevation,
+        type_: lake_type.clone(),
+        flow: lake_flow,
+        size: lake_tiles as i32,
+        temperature: lake_temp,
+        evaporation: lake_evap,
+        geometry: new_geometry,
+    });
 
     Ok(())
 }

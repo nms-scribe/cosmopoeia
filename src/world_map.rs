@@ -1228,7 +1228,7 @@ impl TryFrom<String> for LakeType {
     }
 }
 
-feature!(LakeFeature LakeEntityIterator "lakes" wkbPolygon geometry: #[allow(dead_code)] {
+feature!(LakeFeature LakeEntityIterator "lakes" wkbMultiPolygon geometry: #[allow(dead_code)] {
     elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
     flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;

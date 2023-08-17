@@ -3663,7 +3663,7 @@ pow(sort,float) = |tile| sort(tile)^float
 
 #### 1) Generate Cultures
 
-
+TODO: Working on this next...
 
 TODO: I need lake cell count on tiles, or a way to get the lake information for a given tile (in which case I lose some fields there)
 - when generating lakes, maybe I can get the id from the lakes layer before I apply it to the land tiles.
