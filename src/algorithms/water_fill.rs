@@ -120,7 +120,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
         let task = if let Some(tile) = tile_map.get(&tile_fid) {
 
             // we don't bother with accumulation in ocean.
-            if tile.is_ocean {
+            if tile.terrain.is_ocean() {
                 continue;
             }
 
@@ -269,7 +269,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 
                                 if let Some(check) = tile_map.get(&check_fid) {
-                                    if check.is_ocean {
+                                    if check.terrain.is_ocean() {
                                         // it's an outlet
                                         new_outlets.push((sponsor_fid,check_fid));
                                         new_shoreline.push((sponsor_fid,check_fid));

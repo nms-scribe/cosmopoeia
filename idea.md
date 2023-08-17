@@ -3661,6 +3661,33 @@ divide(sort,sort) = |tile| sort(tile) / sort(tile) -- TODO: What to return if a 
 add(sort,sort) = |tile| sort(tile) + sort(tile)
 pow(sort,float) = |tile| sort(tile)^float
 
+#### 0.5) Calculate Terrain
+
+To be done as part of the water command. This is a new command.
+
+* create a list of "terrains".
+* add all tiles that aren't ocean to a table
+* while let Some(tile) = table.pop(): -- or otherwise pick a tile off the table, actually remove it
+  * make a terrain list of tiles and add this tile
+  * if there is a lake on the tile, then this becomes a lake feature, with the lake's ID
+  * if there is no lake on the tile, then this becomes a land feature
+  * make a neighbor list of tiles
+  * add the tiles' neighbors to the neighbor list (do not remove them)
+  * while let Some(neighbor) = neighbors.pop():
+    * if the neighbor's tile is on the table:
+      * if this is a lake feature and the neighbor has a matching lake id:
+        * pick the neighbor off of the table and add it to the terrain list
+        * add all of it's neighbors to the neighbor list
+      * if this is a land feature and the neighbor is not ocean:
+        * pick the neighbor off of the table and add it to the terrain list
+        * add all of it's neighbors to the neighbor list
+  * we should now have a list of all tiles of the same terrain connected
+  * determine the type of terrain it is based on count and add this to the list of terrains
+* finally, go through the list of terrains and apply the new types to the tiles layer for each tile.
+
+    
+
+
 #### 1) Generate Cultures
 
 TODO: Working on this next...

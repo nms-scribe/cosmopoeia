@@ -92,6 +92,9 @@ macro_rules! feature_get_field_type {
     };
     (option_lake_type) => {
         Option<LakeType> // this is the same because everything's an option, the option tag only means it can accept options
+    };
+    (terrain) => {
+        Terrain
     }
 }
 
@@ -140,6 +143,9 @@ macro_rules! feature_set_field_type {
     };
     (option_lake_type) => {
         Option<&LakeType>
+    };
+    (terrain) => {
+        &Terrain
     }
 }
 
@@ -248,6 +254,14 @@ macro_rules! feature_get_field {
         }
 
     };
+    ($self: ident terrain $feature_name: literal $prop: ident $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(Terrain::try_from(value)?)
+        } else {
+            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
+        }
+
+    };
 }
 
 fn set_field_null(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
@@ -335,6 +349,9 @@ macro_rules! feature_set_field {
             Ok(set_field_null(&$self.feature,$field)?)
         }        
     }};
+    ($self: ident $value: ident terrain $field: path) => {{
+        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
+    }};
 }
 
 macro_rules! feature_to_value {
@@ -399,6 +416,9 @@ macro_rules! feature_to_value {
             get_field_null_value()
         }
     };
+    ($prop: ident terrain) => {{
+        FieldValue::StringValue(Into::<String>::into($prop))
+    }};
 
 }
 
@@ -795,6 +815,51 @@ impl TrianglesLayer<'_> {
 
 }
 
+#[derive(Clone)]
+pub(crate) enum Terrain {
+    Land,
+    Ocean
+}
+
+impl Terrain {
+
+    pub(crate) fn is_ocean(&self) -> bool {
+        matches!(self,Terrain::Ocean)
+    }
+
+    #[allow(dead_code)] pub(crate) fn is_water(&self) -> bool {
+        // TODO: Add lakes in here...
+        // TODO: Once we do, we need to change any use of is_ocean where their also checking for a lake id to is_water
+        matches!(self,Terrain::Ocean)
+    }
+
+
+}
+
+
+impl Into<String> for &Terrain {
+
+    fn into(self) -> String {
+        match self {
+            Terrain::Land => "land",
+            Terrain::Ocean => "ocean",
+        }.to_owned()
+    }
+}
+
+
+impl TryFrom<String> for Terrain {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "land" => Ok(Self::Land),
+            "ocean" => Ok(Self::Ocean),
+            _ => Err(CommandError::InvalidValueForTerrain(value))
+        }
+    }
+}
+
 feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     /// longitude of the node point for the tile's voronoi
     site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
@@ -806,8 +871,8 @@ feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values
     // If I ever get rid of those algorithms, this field can go away.
     /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
     elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
-    /// whether the tile is marked as ocean
-    is_ocean set_is_ocean bool FIELD_IS_OCEAN "is_ocean" OGRFieldType::OFTInteger;
+    /// Indicates whether the terrain is part of the ocean, an island, a continent, a lake, and maybe others.
+    terrain set_terrain terrain FIELD_TERRAIN "terrain" OGRFieldType::OFTString;
     /// average annual temperature of tile in imaginary units
     temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
     /// roughly estimated average wind direction for tile
@@ -876,7 +941,7 @@ entity!(TileEntityLatElevOcean TileFeature {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
-    is_ocean: bool
+    terrain: Terrain
 });
 entity!(TileEntityLat TileFeature {
     fid: u64, 
@@ -884,7 +949,7 @@ entity!(TileEntityLat TileFeature {
 });
 entity!(TileEntityForWaterFlow TileFeature {
     elevation: f64, 
-    is_ocean: bool, 
+    terrain: Terrain, 
     neighbors: Vec<(u64,i32)>,
     precipitation: f64,
     temperature: f64,
@@ -909,7 +974,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
 // of the macro and figure something out, but this is easier.
 entity!(TileEntityForWaterFill TileFeature {
     elevation: f64, 
-    is_ocean: bool, 
+    terrain: Terrain, 
     neighbors: Vec<(u64,i32)>,
     water_flow: f64,
     water_accumulation: f64,
@@ -931,7 +996,7 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
         Self {
             elevation: value.elevation,
             temperature: value.temperature,
-            is_ocean: value.is_ocean,
+            terrain: value.terrain,
             neighbors: value.neighbors,
             water_flow: value.water_flow,
             water_accumulation: value.water_accumulation,
@@ -944,19 +1009,19 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 
 entity!(TileEntityForWaterDistance TileFeature {
     site: Point,
-    is_ocean: bool, 
+    terrain: Terrain, 
     lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>
 });
 
 entity!(TileEntityForWaterDistanceNeighbor TileFeature {
     site: Point,
-    is_ocean: bool, 
+    terrain: Terrain, 
     lake_id: Option<i64>
 });
 
 entity!(TileEntityForWaterDistanceOuter TileFeature {
-    is_ocean: bool, 
+    terrain: Terrain, 
     lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>,
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
@@ -980,7 +1045,7 @@ entity!(TileForPopulation TileFeature {
 });
 
 entity!(TileForPopulationNeighbor TileFeature {
-    is_ocean: bool,
+    terrain: Terrain,
     lake_id: Option<i64>
 });
 

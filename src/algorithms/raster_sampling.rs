@@ -3,6 +3,7 @@ use crate::errors::CommandError;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::world_map::Terrain;
 
 pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mut WorldMapTransaction, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -134,7 +135,14 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
                 bad_ocean_tile_found = true;
             }
 
-            feature.set_is_ocean(is_ocean)?;
+            let terrain = if is_ocean {
+                Terrain::Ocean
+            } else {
+                // process of setting lake, island, continent, etc. will have to be redone.
+                Terrain::Land
+            };
+
+            feature.set_terrain(&terrain)?;
 
             layer.update_feature(feature)?;
 

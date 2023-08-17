@@ -7,6 +7,7 @@ use crate::world_map::TileEntityLatElevOcean;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::world_map::Terrain;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -36,7 +37,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
     for (i,feature) in features.iter().enumerate() {
 
         let base_temp = equator_temp - (interpolate(feature.site_y.abs()/90.0) * temp_delta);
-        let adabiatic_temp = base_temp - if !feature.is_ocean {
+        let adabiatic_temp = base_temp - if !feature.terrain.is_ocean() {
             (feature.elevation/1000.0)*6.5
         } else {
             0.0
@@ -115,7 +116,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     entity!(TileDataForPrecipitation TileFeature {
         elevation_scaled: i32, 
         wind: i32, 
-        is_ocean: bool, 
+        terrain: Terrain, 
         neighbors: Vec<(u64,i32)>,
         temperature: f64,
         precipitation: f64 = |_| {
@@ -204,8 +205,8 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
                 if let Some((next_fid,mut next)) = next {
                     if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
-                        if current.is_ocean {
-                            if !next.is_ocean {
+                        if current.terrain.is_ocean() {
+                            if !next.terrain.is_ocean() {
                                 // coastal precipitation
                                 // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
                                 // necessary considering it's the only randomness I would use, and nothing else is randomized.
@@ -254,7 +255,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
                     (current_fid,current) = (next_fid,next);
                 } else {
-                    if current.is_ocean {
+                    if current.terrain.is_ocean() {
                         // precipitation over water cells
                         current.precipitation += 5.0 * modifier;
                     } else {
