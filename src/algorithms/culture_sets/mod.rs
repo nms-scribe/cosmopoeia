@@ -5,9 +5,13 @@ use std::fs::File;
 
 use serde::Serialize;
 use serde::Deserialize;
+use rand::Rng;
 
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
+use crate::utils::RandomIndex;
+use crate::algorithms::naming::NamerSet;
+use crate::progress::ProgressObserver;
 
 #[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum TilePreference {
@@ -130,6 +134,47 @@ impl CultureSet {
         self.source.len()
     }
 
+    // TODO: Make use of these...
+    #[allow(dead_code)] pub(crate) fn make_random_culture_set<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
+
+        let namer_keys = namers.list_names();
+        let mut result = Self::empty();
+        for _ in 0..count {
+            let namer_key = namer_keys.choose(rng);
+            let namer = namers.prepare(namer_key, progress).unwrap(); // I'm going from the key list itself, so this should never be None
+            result.add_culture(CultureSource {
+                name: namer.make_name(rng),
+                namer: namer_key.clone(),
+                probability: 1.0,
+                preferences: TilePreference::Habitability,
+            });
+
+        }
+        Ok(result)
+        
+    }
+
+    // TODO: Make use of these...
+    #[allow(dead_code)] pub(crate) fn make_random_culture_set_with_same_namer<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, namer_key: &str, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
+
+        if let Some(namer) = namers.prepare(namer_key, progress) {
+            let mut result = Self::empty();
+            for _ in 0..count {
+                result.add_culture(CultureSource {
+                    name: namer.make_name(rng),
+                    namer: namer_key.to_owned(),
+                    probability: 1.0,
+                    preferences: TilePreference::Habitability,
+                });
+    
+            }
+            Ok(result)
+    
+        } else {
+            Err(CommandError::CultureSourceRead(format!("Could not find namer '{}' for generating random culture set.",namer_key)))
+        }
+        
+    }
 
 }
 
@@ -152,3 +197,21 @@ impl<'data_life> IntoIterator for &'data_life CultureSet {
         self.source.iter()
     }
 }
+
+
+/*
+
+TODO:
+
+if (culturesSet.value === "random") {
+      return d3.range(count).map(function () {
+        const rnd = rand(nameBases.length - 1);
+        const name = Names.getBaseShort(rnd);
+        return {name, base: rnd, odd: 1, shield: getRandomShield()};
+      });
+    }
+
+
+
+
+*/

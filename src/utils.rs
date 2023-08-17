@@ -34,6 +34,35 @@ pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
     StdRng::seed_from_u64(seed)
 }
 
+pub(crate) trait RandomIndex<ItemType> {
+
+    fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType;
+}
+
+impl<ItemType> RandomIndex<ItemType> for &[ItemType] {
+    fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
+        &self[rng.gen_range(0..self.len())] 
+    }
+}
+
+impl<ItemType> RandomIndex<ItemType> for [ItemType] {
+    fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
+        &self[rng.gen_range(0..self.len())] 
+    }
+}
+
+impl<ItemType> RandomIndex<ItemType> for Vec<ItemType> {
+    fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
+        &self[rng.gen_range(0..self.len())] 
+    }
+}
+
+impl<ItemType, const N: usize> RandomIndex<ItemType> for [ItemType; N] {
+    fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
+        &self[rng.gen_range(0..self.len())] 
+    }
+}
+
 
 #[derive(Clone)]
 pub(crate) struct Extent {
@@ -782,3 +811,5 @@ pub(crate) fn split_string_from_end(string: &str, char_index_from_end: usize) ->
     }
 
 }
+
+

@@ -22,6 +22,7 @@ use libflate::deflate::Encoder;
 //use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::split_string_from_end;
+use crate::utils::RandomIndex;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 
@@ -45,7 +46,7 @@ impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
 
     fn start_known_endpoint<Callback: FnOnce() -> usize>(&mut self, callback: Callback) {
         let count = callback();
-        self.visible = count > 10000; // FUTURE: This should be configurable... any way to only show progress bar if it's taking longer than 1 second?
+        self.visible = count > 10000; // TODO: This should be configurable... any way to only show progress bar if it's taking longer than 1 second? or 0.5 seconds? Check in the progress bar crate for that option.
         if self.visible {
             self.progress.start_known_endpoint(|| (format!("Preparing names for {}",self.name),count))
         }
@@ -73,10 +74,6 @@ fn is_ref_vowel(c: &char) -> bool {
 
 fn is_vowel(c: char) -> bool {
     is_ref_vowel(&c)
-}
-
-fn choose<'array, Random: Rng, ItemType>(rng: &mut Random, array: &'array [ItemType]) -> &'array ItemType {
-    &array[rng.gen_range(0..array.len())] 
 }
 
 #[derive(Clone,Serialize,Deserialize)]
@@ -158,14 +155,14 @@ impl StateSuffixBehavior {
         match self {
                 StateSuffixBehavior::NoSuffix => Err(()),
                 StateSuffixBehavior::Default => Ok(None), // let the caller apply the default.
-                StateSuffixBehavior::Suffix(suffix) => Ok(Some(suffix.to_owned().to_owned())),
+                StateSuffixBehavior::Suffix(suffix) => Ok(Some(suffix.to_owned())),
                 StateSuffixBehavior::ProbableSuffix(prob, suffix) => if rng.gen_bool(*prob) {
-                    Ok(Some(suffix.to_owned().to_owned()))
+                    Ok(Some(suffix.to_owned()))
                 } else {
                     Ok(None)
                 },
                 StateSuffixBehavior::ProbableSuffixIfShorter(len, prob, suffix) => if (&name.len() < len) && rng.gen_bool(*prob) {
-                    Ok(Some(suffix.to_owned().to_owned()))
+                    Ok(Some(suffix.to_owned()))
                 } else {
                     Ok(None)
                 },
@@ -325,7 +322,7 @@ impl MarkovGenerator {
         let cutoff_len = cutoff_len.unwrap_or_else(|| self.cutoff_len);
 
         let mut choices = self.chain.get(&None).unwrap(); // FUTURE: NMS: Am I always guaranteed that this one will be filled?
-        let mut cur = choose(rng,choices).to_owned();
+        let mut cur = choices.choose(rng).to_owned();
         let mut word = String::new();
         for _ in 0..20 {
        
@@ -357,7 +354,7 @@ impl MarkovGenerator {
             }
 
             word.push_str(&cur);
-            cur = choose(rng,choices).to_owned();
+            cur = choices.choose(rng).to_owned();
         }
 
         // parse word to get a final name
@@ -404,7 +401,7 @@ impl MarkovGenerator {
         }
 
         if name.len() < 2 {
-            name = choose(rng,&self.seed_words).to_owned().to_owned();
+            name = self.seed_words.choose(rng).to_owned();
         }
 
         return name;
