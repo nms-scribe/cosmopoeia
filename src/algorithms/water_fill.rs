@@ -15,7 +15,8 @@ use crate::world_map::LakeType;
 
 struct TileLakeInformation {
     elevation: f64,
-    type_: LakeType
+    type_: LakeType,
+    fid: i64
 }
 
 struct Lake {
@@ -104,7 +105,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     // TODO: I may need to add some modifiers for the lake filling values, so that I end up with more endorheic lakes.
     // TODO: I predict there will be a problem with lakes on the edges of the maps, which will also be part of the flow algorithm, but I haven't gotten that far yet. I will need a lot more real-world testing to get this figured out.
 
-    let mut layer = target.edit_tile_layer()?;
+    let mut tiles_layer = target.edit_tile_layer()?;
 
     enum Task {
         FillLake(usize, f64),
@@ -196,11 +197,11 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
             Task::AddToFlow(accumulation) => {
                 if let Some(tile) = tile_map.get_mut(&tile_fid) {
                     tile.water_flow += accumulation;
-                    if let Some(mut feature) = layer.feature_by_id(&tile_fid) {
+                    if let Some(mut feature) = tiles_layer.feature_by_id(&tile_fid) {
 
                         feature.set_water_flow(tile.water_flow)?;
 
-                        layer.update_feature(feature)?;
+                        tiles_layer.update_feature(feature)?;
                     }
                 }
 
@@ -410,7 +411,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     let mut lakes = Vec::new();
 
     // figure out some numbers for generating curvy lakes.
-    let tile_area = layer.estimate_average_tile_area()?;
+    let tile_area = tiles_layer.estimate_average_tile_area()?;
     let tile_width = tile_area.sqrt();
     let buffer_distance = (tile_width/10.0) * -lake_buffer_scale;
     // the next isn't customizable, it just seems to work right. FUTURE: Check this with higher and lower resolution tiles.
@@ -420,14 +421,21 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
     for (i,(id,lake)) in lake_map.into_iter().enumerate() {
         if lake.contained_tiles.len() > 0 {
-            let lake_geometry = lake.dissolve_tiles(&mut layer);
+            let lake_geometry = lake.dissolve_tiles(&mut tiles_layer);
             let (lake_temp,lake_evap,lake_type) = lake.get_temp_evap_and_type();
 
-            new_lake_map.insert(id, TileLakeInformation {
+            let geometry = make_curvy_lakes(lake_geometry, lake_bezier_scale, buffer_distance, simplify_tolerance)?;
+            let lake = NewLake {
                 elevation: lake.elevation,
                 type_: lake_type.clone(),
-            });
-            make_curvy_lakes(lake.elevation, lake_type, lake.flow, lake_temp, lake_evap, lake.contained_tiles.len(), lake_bezier_scale, buffer_distance, simplify_tolerance, lake_geometry, &mut lakes)?;
+                flow: lake.flow,
+                size: lake.contained_tiles.len() as i32,
+                temperature: lake_temp,
+                evaporation: lake_evap,
+                geometry: geometry
+            };
+            lakes.push(lake.clone());
+            new_lake_map.insert(id, lake);
 
         }
 
@@ -437,20 +445,50 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     progress.finish(|| "Lakes drawn.");
 
 
+    // I can't write to the lakes layer at the same time I'm drawing because I'm also using
+    // the tile layer to get the geometries for dissolving the shapes. That's a mutable borrow conflict.
+    let mut lakes_layer = target.create_lakes_layer(overwrite_layer)?;
+
+    progress.start_known_endpoint(|| ("Writing lakes.",lakes.len()));
+
+    let mut written_lake_map = HashMap::new();
+
+    for (i,(id,lake)) in new_lake_map.into_iter().enumerate() {
+        let type_ = lake.type_.clone();
+        let elevation = lake.elevation;
+        let lake_fid = lakes_layer.add_lake(lake)?;
+        written_lake_map.insert(id, TileLakeInformation {
+            elevation,
+            type_,
+            fid: lake_fid as i64,
+        });
+        progress.update(|| i);
+
+    }
+
+    progress.finish(|| "Lakes written.");
+
+
+    // re-open layer to avoid mutability conflict from writing the lakes (this allows the layer to be dropped)
+    // when borrowed to open the lakes_layer.
+    let tiles_layer = target.edit_tile_layer()?;
+
     progress.start_known_endpoint(|| ("Writing lake elevations.",tile_map.len()));
 
     for (i,(tile_fid,tile)) in tile_map.iter().enumerate() {
-        if let Some(mut feature) = layer.feature_by_id(&tile_fid) {
+        if let Some(mut feature) = tiles_layer.feature_by_id(&tile_fid) {
 
-            let (lake_elevation,lake_type) = if let Some(lake_id) = tile.lake_id {
-                if let Some(lake) = new_lake_map.get(&lake_id) {
-                    (Some(lake.elevation),Some(&lake.type_))
+            let (lake_elevation,lake_type,lake_id) = if let Some(lake_id) = tile.lake_id {
+                if let Some(lake) = written_lake_map.get(&lake_id) {
+                    (Some(lake.elevation),Some(&lake.type_),Some(lake.fid))
                 } else {
-                    (None,None)
+                    (None,None,None)
                 }
             } else {
-                (None,None)
+                (None,None,None)
             };
+
+            feature.set_lake_id(lake_id)?;
 
             feature.set_lake_elevation(lake_elevation)?;
 
@@ -458,7 +496,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
             feature.set_lake_type(lake_type)?;
 
-            layer.update_feature(feature)?;
+            tiles_layer.update_feature(feature)?;
         }
         progress.update(|| i);
 
@@ -467,25 +505,13 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     progress.finish(|| "Lake elevations written.");
 
 
-    let mut lakes_layer = target.create_lakes_layer(overwrite_layer)?;
-
-    progress.start_known_endpoint(|| ("Writing lakes.",lakes.len()));
-
-    for (i,lake) in lakes.into_iter().enumerate() {
-        lakes_layer.add_lake(lake)?;
-        progress.update(|| i);
-    }
-
-    progress.finish(|| "Lakes written.");
-
-
 
     Ok(())
 
 
 }
 
-pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_flow: f64, lake_temp: f64, lake_evap: f64, lake_tiles: usize, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64, lake_geometry: Geometry, lakes: &mut Vec<NewLake>) -> Result<(), CommandError> {
+pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
     let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
     // occasionally, the simplification turns the lakes into a multipolygon, which is why the lakes layer has to be multipolygon
     let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
@@ -501,18 +527,9 @@ pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_fl
 
     };
 
-    lakes.push(NewLake {
-        elevation: lake_elevation,
-        type_: lake_type.clone(),
-        flow: lake_flow,
-        size: lake_tiles as i32,
-        temperature: lake_temp,
-        evaporation: lake_evap,
-        geometry: new_geometry,
-    });
-
-    Ok(())
+    Ok(new_geometry)
 }
+
 
 pub(crate) fn simplify_lake_geometry(lake_geometry: Geometry, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
     let lake_geometry = if buffer_distance != 0.0 {

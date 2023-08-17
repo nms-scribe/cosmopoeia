@@ -250,6 +250,18 @@ macro_rules! feature_get_field {
     };
 }
 
+fn set_field_null(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
+    // There's no unsetfield, but this seems to have the same effect.
+    // FUTURE: I've put in a feature request to gdal crate for access to clear_value
+    feature.set_field_double_list(name, &[])
+}
+
+fn get_field_null_value() -> FieldValue {
+    // There's no unsetfield, but this seems to have the same effect.
+    // FUTURE: I've put in a feature request to gdal crate for access to clear_value, but I'm not sure how this would be handled.
+    FieldValue::RealListValue(Vec::new())
+}
+
 macro_rules! feature_set_field {
     ($self: ident $value: ident f64 $field: path) => {
         Ok($self.feature.set_field_double($field, $value)?)
@@ -260,7 +272,7 @@ macro_rules! feature_set_field {
         } else {
             // There's no unsetfield, but this should have the same effect.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok($self.feature.set_field_double($field,f64::NAN)?)
+            Ok(set_field_null(&$self.feature,$field)?)
         }
     };
     ($self: ident $value: ident i32 $field: path) => {
@@ -272,7 +284,7 @@ macro_rules! feature_set_field {
         } else {
             // There's no unsetfield, but this should have the same effect.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok($self.feature.set_field_double($field,f64::NAN)?)
+            Ok(set_field_null(&$self.feature,$field)?)
         }
     };
     ($self: ident $value: ident i64 $field: path) => {
@@ -284,7 +296,7 @@ macro_rules! feature_set_field {
         } else {
             // There's no unsetfield, but this should have the same effect.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok($self.feature.set_field_double($field,f64::NAN)?)
+            Ok(set_field_null(&$self.feature,$field)?)
         }
     };
     ($self: ident $value: ident bool $field: path) => {
@@ -320,7 +332,7 @@ macro_rules! feature_set_field {
             // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
             // so this is the best I can do.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok($self.feature.set_field_string($field,"")?)
+            Ok(set_field_null(&$self.feature,$field)?)
         }        
     }};
 }
@@ -339,27 +351,21 @@ macro_rules! feature_to_value {
         if let Some(value) = $prop {
             FieldValue::RealValue(value)
         } else {
-            // There's no unsetfield, but this should have the same effect.
-            // FUTURE: I've put in a feature request to gdal crate.
-            FieldValue::RealValue(f64::NAN)
+            get_field_null_value()
         }
     };
     ($prop: ident option_i32) => {
         if let Some(value) = $prop {
             FieldValue::IntegerValue(value)
         } else {
-            // There's no unsetfield, but this should have the same effect.
-            // FUTURE: I've put in a feature request to gdal crate.
-            FieldValue::RealValue(f64::NAN)
+            get_field_null_value()
         }
     };
     ($prop: ident option_i64) => {
         if let Some(value) = $prop {
             FieldValue::Integer64Value(value)
         } else {
-            // There's no unsetfield, but this should have the same effect.
-            // FUTURE: I've put in a feature request to gdal crate.
-            FieldValue::RealValue(f64::NAN)
+            get_field_null_value()
         }
     };
     ($prop: ident id_list) => {
@@ -390,10 +396,7 @@ macro_rules! feature_to_value {
         if let Some(value) = $prop {
             FieldValue::StringValue(Into::<String>::into(value))
         } else {
-            // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
-            // so this is the best I can do.
-            // FUTURE: I've put in a feature request to gdal crate.
-            FieldValue::StringValue("".to_owned())
+            get_field_null_value()
         }
     };
 
@@ -733,7 +736,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
         LayerGeometryIterator::new(&mut self.layer)
     }
 
-    fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
+    fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<u64,CommandError> {
         // I dug out the source to get this. I wanted to be able to return the feature being created.
         let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
         feature.set_geometry(geometry)?;
@@ -741,7 +744,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
             feature.set_field(&field, value)?;
         }
         feature.create(&self.layer)?;
-        Ok(())
+        Ok(feature.fid().unwrap())
     }
 
 
@@ -815,6 +818,8 @@ feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values
     #[allow(dead_code)] water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
     #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
+    /// if the tile is in a lake, this is the id of the lake in the lakes layer
+    #[allow(dead_code)] lake_id set_lake_id option_i64 FIELD_LAKE_ID "lake_id" OGRFieldType::OFTInteger64;
     /// if the tile is in a lake, this is the elevation of the lake's surface, if not a lake then this will be null.
     #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
     /// if the tile is in a lake, this is the type of lake it is, if not a lake then this will be blank or null.
@@ -1173,7 +1178,7 @@ pub(crate) type RiversLayer<'data_life> = MapLayer<'data_life,RiverFeature<'data
 
 impl RiversLayer<'_> {
 
-    pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<(),CommandError> {
+    pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<u64,CommandError> {
         let geometry = create_line(&segment.line)?;
         let (field_names,field_values) = RiverFeature::to_field_names_values(
             segment.from_tile, 
@@ -1229,30 +1234,31 @@ impl TryFrom<String> for LakeType {
 }
 
 feature!(LakeFeature LakeEntityIterator "lakes" wkbMultiPolygon geometry: #[allow(dead_code)] {
-    elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
-    type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
-    flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
-    size #[allow(dead_code)] set_size i32 FIELD_SIZE "size" OGRFieldType::OFTInteger64;
-    temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
-    evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
+    #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+    #[allow(dead_code)] type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
+    #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
+    #[allow(dead_code)] size #[allow(dead_code)] set_size i32 FIELD_SIZE "size" OGRFieldType::OFTInteger64;
+    #[allow(dead_code)] temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
+    #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
 
 
-entity!(NewLake LakeFeature {
-    elevation: f64,
-    type_: LakeType,
-    flow: f64,
-    size: i32,
-    temperature: f64,
-    evaporation: f64,
-    geometry: Geometry
-});
+#[derive(Clone)]
+pub(crate) struct NewLake {
+    pub(crate) elevation: f64,
+    pub(crate) type_: LakeType,
+    pub(crate) flow: f64,
+    pub(crate) size: i32,
+    pub(crate) temperature: f64,
+    pub(crate) evaporation: f64,
+    pub(crate) geometry: Geometry,
+}
 
 pub(crate) type LakesLayer<'data_life> = MapLayer<'data_life,LakeFeature<'data_life>>;
 
 impl LakesLayer<'_> {
 
-    pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<(),CommandError> {
+    pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<u64,CommandError> {
         let (field_names,field_values) = LakeFeature::to_field_names_values(
             lake.elevation,
             &lake.type_,

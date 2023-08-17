@@ -58,8 +58,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             }
         }
 
+        let mut tile = tiles.try_feature_by_id(&fid)?;
         if (water_count > 0) || closest_water.is_some() || shore_distance.is_some() {
-            let mut tile = tiles.try_feature_by_id(&fid)?;
 
             if water_count > 0 {
                 tile.set_water_count(Some(water_count))?;
@@ -68,15 +68,21 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
             if let Some(shore_distance) = shore_distance {
                 tile.set_shore_distance(shore_distance)?;
-                tiles.update_feature(tile)?;
             }
 
             processed += 1;
     
         } else {
-            // we couldn't calculate, so push it on the queue for the next iteration.
+            // we couldn't calculate, but I need to fill in the blanks
+            tile.set_water_count(None)?;
+            tile.set_closest_water(None)?;
+            // we'll do shore_distance later, it will be taken care of.
+            
+            
+            //so push it on the queue for the next iteration.
             next_queue.push(fid);
         }
+        tiles.update_feature(tile)?;
 
         progress.update(|| processed);
     }
