@@ -3663,7 +3663,7 @@ pow(sort,float) = |tile| sort(tile)^float
 
 #### 0.5) Calculate Terrain
 
-To be done as part of the water command. This is a new command.
+TODO: To be done as part of the water command. This is a new command.
 
 * create a list of "terrains".
 * add all tiles that aren't ocean to a table
@@ -3671,6 +3671,7 @@ To be done as part of the water command. This is a new command.
   * make a terrain list of tiles and add this tile
   * if there is a lake on the tile, then this becomes a lake feature, with the lake's ID
   * if there is no lake on the tile, then this becomes a land feature
+  * let found_non_lake_neighbor = false
   * make a neighbor list of tiles
   * add the tiles' neighbors to the neighbor list (do not remove them)
   * while let Some(neighbor) = neighbors.pop():
@@ -3678,28 +3679,21 @@ To be done as part of the water command. This is a new command.
       * if this is a lake feature and the neighbor has a matching lake id:
         * pick the neighbor off of the table and add it to the terrain list
         * add all of it's neighbors to the neighbor list
-      * if this is a land feature and the neighbor is not ocean:
+      * if this is a land feature and the neighbor is not water:
         * pick the neighbor off of the table and add it to the terrain list
         * add all of it's neighbors to the neighbor list
+    * else: found_non_lake_neighbor = true;
   * we should now have a list of all tiles of the same terrain connected
   * determine the type of terrain it is based on count and add this to the list of terrains
+    * if land and found_non_lake_neighbor = false, then the land type is "lake island".
+     -- NOTE: This isn't right, the tile might have been removed for this one, think about this a little.
 * finally, go through the list of terrains and apply the new types to the tiles layer for each tile.
-
-    
 
 
 #### 1) Generate Cultures
 
 TODO: Working on this next...
-TODO: Problem: The 'null' value for the lake ids is not getting set. There's another field in tiles with the same problem.
-TODO: Get rid of the other lake fields, which we now don't need.
 
-TODO: I need a land_type field on tiles: continent, isle, or island (look for definitions in AFMG), to be calculated after water I guess.
-      - lake_island: it's an area of land surrounded by lake.
-      - continent: number of tiles in land is greater than 1/10 of the total number of tiles
-      - island: not a continent and number of tiles in land is greater than 1/1000 of the total number of tiles
-      - isle: not a continent or island but still land
-      - TODO: I wonder if I could have a "feature_type" field which specifies "ocean", "lake" -- or lake type -- or one of the thingies above, and then we can get rid of the "is_ocean" field.
 TODO: I need an is_nomadic field on biome or something like that. It's true for hot desert, cold desert, and grassland.
 TODO: I need an is_hunting field on biome, it's true for savanna, TDF, TempRain, Taiga, Tundra, Wetland
 
@@ -3748,14 +3742,14 @@ TODO: I need an is_hunting field on biome, it's true for savanna, TDF, TempRain,
 * find_culture_center(populated,culture,culture_count,placed_centers):
   * let spacing = map extent / 2 / culture_count;
   * const MAX_ATTEMPTS = 100
-  * populated.sort(culture.sort)
+  * sorted = populated.sort(culture.preference)
   * let max = (populated.length / 2).floor();
   * let tile_id = None
   * for i in 0..MAX_ATTEMPTS:
     * tile_id = sorted[biased(0,max,5)]
     * spacing *= 0.9 -- reduce the spacing in case that's what the problem was.
     * if !center_placed(placed_centers,tile_id,tile.site,spacing): break;
-  * return tile_id
+  * return tile_id,lat,long
 
 * center_placed(list,tile_id,tile_site,spacing): AFMG used a quadtree structure to do this, however I couldn't find any simple implementation for rust (there are plenty of implementations, but none had an API that gave me a find(x,y,radius) function). Since I don't expect a lot of cultures, I didn't see the need for a separate structure, finds should be quick in placed_centers.
   * for tile in list:
@@ -3774,13 +3768,13 @@ TODO: I need an is_hunting field on biome, it's true for savanna, TDF, TempRain,
     * if tile.closest_water is lake and lake cell count > 5: "Lake"
     * if tile.water_count > 0 && tile.closest_water.is_ocean and (random() < 0.1) ||
       tile.water_count == 1 && (random() < 0.6) ||
-      tile.is_isle && (random() < 0.4): return Naval 
+      tile.terrain.isle && (random() < 0.4): return Naval 
       and bigger than an island. There are numbers for this.
   * if tile.flow > 100: return River
   * if tile.shore_Distance > 2 and tile.biome.is_huntable: return "Hunting" 
   * return "Generic"
 
-* define_culture_expansionism(power_input,type):
+* define_culture_expansionism(power_input,type): -- TODO: This should really be something configurable, shouldn't it?
   * let base = match type:
     * "lake" -> 0.8
     * "Naval" -> 1.5;

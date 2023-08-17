@@ -11,6 +11,7 @@ use crate::algorithms::water_flow::generate_water_flow;
 use crate::algorithms::water_fill::generate_water_fill;
 use crate::algorithms::rivers::generate_water_rivers;
 use crate::algorithms::water_distance::generate_water_distance;
+use crate::algorithms::terrain::calculate_terrain;
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -145,6 +146,34 @@ impl Task for GenWaterDistance {
 }
 
 
+subcommand_def!{
+    /// Calculate terrain types for land tiles
+    pub(crate) struct GenWaterTerrain {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenWaterTerrain {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            calculate_terrain(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -195,7 +224,9 @@ impl Task for GenWater {
 
             generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, &mut progress)?;
 
-            generate_water_distance(target, &mut progress)
+            generate_water_distance(target, &mut progress)?;
+
+            calculate_terrain(target, &mut progress)
 
         })?;
 

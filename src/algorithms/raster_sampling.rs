@@ -139,7 +139,7 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
                 Terrain::Ocean
             } else {
                 // process of setting lake, island, continent, etc. will have to be redone.
-                Terrain::Land
+                Terrain::Continent
             };
 
             feature.set_terrain(&terrain)?;

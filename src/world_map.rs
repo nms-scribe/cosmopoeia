@@ -585,7 +585,6 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
         Ok(result)
     }
 
-
 }
 
 
@@ -817,7 +816,11 @@ impl TrianglesLayer<'_> {
 
 #[derive(Clone)]
 pub(crate) enum Terrain {
-    Land,
+    LakeIsland,
+    Islet,
+    Island,
+    Continent,
+    Lake,
     Ocean
 }
 
@@ -828,9 +831,7 @@ impl Terrain {
     }
 
     #[allow(dead_code)] pub(crate) fn is_water(&self) -> bool {
-        // TODO: Add lakes in here...
-        // TODO: Once we do, we need to change any use of is_ocean where their also checking for a lake id to is_water
-        matches!(self,Terrain::Ocean)
+        matches!(self,Terrain::Ocean | Terrain::Lake)
     }
 
 
@@ -841,8 +842,12 @@ impl Into<String> for &Terrain {
 
     fn into(self) -> String {
         match self {
-            Terrain::Land => "land",
+            Terrain::Continent => "continent",
             Terrain::Ocean => "ocean",
+            Terrain::LakeIsland => "lake-island",
+            Terrain::Islet => "islet",
+            Terrain::Island => "island",
+            Terrain::Lake => "lake",
         }.to_owned()
     }
 }
@@ -853,8 +858,12 @@ impl TryFrom<String> for Terrain {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
-            "land" => Ok(Self::Land),
+            "continent" => Ok(Self::Continent),
             "ocean" => Ok(Self::Ocean),
+            "lake-island" => Ok(Self::LakeIsland),
+            "islet" => Ok(Self::Islet),
+            "island" => Ok(Self::Island),
+            "lake" => Ok(Self::Lake),
             _ => Err(CommandError::InvalidValueForTerrain(value))
         }
     }
@@ -1010,25 +1019,29 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 entity!(TileEntityForWaterDistance TileFeature {
     site: Point,
     terrain: Terrain, 
-    lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>
 });
 
 entity!(TileEntityForWaterDistanceNeighbor TileFeature {
     site: Point,
-    terrain: Terrain, 
-    lake_id: Option<i64>
+    terrain: Terrain 
 });
 
 entity!(TileEntityForWaterDistanceOuter TileFeature {
     terrain: Terrain, 
-    lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>,
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
 entity!(TileEntityForWaterDistanceOuterNeighbor TileFeature {
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
+});
+
+entity!(TileEntityForTerrainCalc TileFeature {
+    fid: u64,
+    terrain: Terrain,
+    lake_id: Option<i64>,
+    neighbors: Vec<(u64,i32)>
 });
 
 entity!(TileForPopulation TileFeature {
@@ -1048,9 +1061,6 @@ entity!(TileForPopulationNeighbor TileFeature {
     terrain: Terrain,
     lake_id: Option<i64>
 });
-
-// entities containing is_ocean, lake_elevation, site, neighbors, and new values tile_distance, water_tile, and water_count, all set to None.
-
 
 impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
 
