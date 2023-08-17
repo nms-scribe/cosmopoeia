@@ -820,10 +820,6 @@ feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values
     #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
     #[allow(dead_code)] lake_id set_lake_id option_i64 FIELD_LAKE_ID "lake_id" OGRFieldType::OFTInteger64;
-    /// if the tile is in a lake, this is the elevation of the lake's surface, if not a lake then this will be null.
-    #[allow(dead_code)] lake_elevation set_lake_elevation option_f64 FIELD_LAKE_ELEVATION "lake_elev" OGRFieldType::OFTReal;
-    /// if the tile is in a lake, this is the type of lake it is, if not a lake then this will be blank or null.
-    #[allow(dead_code)] lake_type set_lake_type option_lake_type FIELD_LAKE_LAKE_TYPE "lake_type" OGRFieldType::OFTString;
     /// id of neighboring tile which water flows to
     #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
@@ -949,19 +945,19 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 entity!(TileEntityForWaterDistance TileFeature {
     site: Point,
     is_ocean: bool, 
-    lake_elevation: Option<f64>,
+    lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>
 });
 
 entity!(TileEntityForWaterDistanceNeighbor TileFeature {
     site: Point,
     is_ocean: bool, 
-    lake_elevation: Option<f64>
+    lake_id: Option<i64>
 });
 
 entity!(TileEntityForWaterDistanceOuter TileFeature {
     is_ocean: bool, 
-    lake_elevation: Option<f64>,
+    lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>,
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
@@ -980,12 +976,12 @@ entity!(TileForPopulation TileFeature {
         Ok::<_,CommandError>(feature.geometry().map(|g| g.area()).unwrap_or_else(|| 0.0))
     },
     closest_water: Option<i64>,
-    lake_type: Option<LakeType>
+    lake_id: Option<i64>
 });
 
 entity!(TileForPopulationNeighbor TileFeature {
     is_ocean: bool,
-    lake_type: Option<LakeType>
+    lake_id: Option<i64>
 });
 
 // entities containing is_ocean, lake_elevation, site, neighbors, and new values tile_distance, water_tile, and water_count, all set to None.
@@ -1242,6 +1238,16 @@ feature!(LakeFeature LakeEntityIterator "lakes" wkbMultiPolygon geometry: #[allo
     #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
 
+entity!(LakeInformation LakeFeature {
+//    elevation: f64,
+    type_: LakeType
+//    flow: f64,
+//    size: i32,
+//    temperature: f64,
+//    evaporation: f64
+});
+
+
 
 #[derive(Clone)]
 pub(crate) struct NewLake {
@@ -1253,6 +1259,7 @@ pub(crate) struct NewLake {
     pub(crate) evaporation: f64,
     pub(crate) geometry: Geometry,
 }
+
 
 pub(crate) type LakesLayer<'data_life> = MapLayer<'data_life,LakeFeature<'data_life>>;
 
@@ -1269,6 +1276,13 @@ impl LakesLayer<'_> {
         );
         self.add_feature(lake.geometry, &field_names, &field_values)
     }
+
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<LakeFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
+
+
 
 }
 
@@ -1621,6 +1635,10 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakesLayer,CommandError> {
         Ok(LakesLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    }
+
+    pub (crate) fn edit_lakes_layer(&mut self) -> Result<LakesLayer,CommandError> {
+        Ok(LakesLayer::open_from_dataset(&mut self.dataset)?)
     }
 
     pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {

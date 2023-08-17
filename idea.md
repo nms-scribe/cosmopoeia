@@ -3667,8 +3667,6 @@ TODO: Working on this next...
 TODO: Problem: The 'null' value for the lake ids is not getting set. There's another field in tiles with the same problem.
 TODO: Get rid of the other lake fields, which we now don't need.
 
-TODO: I need lake cell count on tiles, or a way to get the lake information for a given tile (in which case I lose some fields there)
-- when generating lakes, maybe I can get the id from the lakes layer before I apply it to the land tiles.
 TODO: I need a land_type field on tiles: continent, isle, or island (look for definitions in AFMG), to be calculated after water I guess.
       - lake_island: it's an area of land surrounded by lake.
       - continent: number of tiles in land is greater than 1/10 of the total number of tiles

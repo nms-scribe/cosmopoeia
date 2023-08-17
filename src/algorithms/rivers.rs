@@ -42,10 +42,6 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
 
 pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: If I didn't need tiles to be mut in order to get the iterator, I could also take the Segment layer and just update it here
-    // instead of returning a Vec to do so outside. -- Although, what if I took the whole world map transaction?
-    // TODO: Similar problem with lakes.
-
     let mut tiles = target.edit_tile_layer()?;
 
     let mut segments = Vec::new();
@@ -68,8 +64,8 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
         }
 
         if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(&segment.from),tiles.feature_by_id(&segment.to)) {
-            let from_lake = from_tile.lake_elevation()?;
-            let to_lake = to_tile.lake_elevation()?;
+            let from_lake = from_tile.lake_id()?;
+            let to_lake = to_tile.lake_id()?;
             if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
                 let start_point = from_tile.site()?;
                 let end_point = to_tile.site()?;

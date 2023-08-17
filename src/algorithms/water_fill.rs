@@ -13,12 +13,6 @@ use crate::progress::ProgressObserver;
 use crate::world_map::TilesLayer;
 use crate::world_map::LakeType;
 
-struct TileLakeInformation {
-    elevation: f64,
-    type_: LakeType,
-    fid: i64
-}
-
 struct Lake {
     elevation: f64,
     flow: f64,
@@ -454,14 +448,8 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     let mut written_lake_map = HashMap::new();
 
     for (i,(id,lake)) in new_lake_map.into_iter().enumerate() {
-        let type_ = lake.type_.clone();
-        let elevation = lake.elevation;
         let lake_fid = lakes_layer.add_lake(lake)?;
-        written_lake_map.insert(id, TileLakeInformation {
-            elevation,
-            type_,
-            fid: lake_fid as i64,
-        });
+        written_lake_map.insert(id, lake_fid as i64);
         progress.update(|| i);
 
     }
@@ -478,23 +466,15 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     for (i,(tile_fid,tile)) in tile_map.iter().enumerate() {
         if let Some(mut feature) = tiles_layer.feature_by_id(&tile_fid) {
 
-            let (lake_elevation,lake_type,lake_id) = if let Some(lake_id) = tile.lake_id {
-                if let Some(lake) = written_lake_map.get(&lake_id) {
-                    (Some(lake.elevation),Some(&lake.type_),Some(lake.fid))
-                } else {
-                    (None,None,None)
-                }
+            let lake_id = if let Some(lake_id) = tile.lake_id {
+                written_lake_map.get(&lake_id)
             } else {
-                (None,None,None)
+                None
             };
 
-            feature.set_lake_id(lake_id)?;
-
-            feature.set_lake_elevation(lake_elevation)?;
+            feature.set_lake_id(lake_id.copied())?;
 
             feature.set_outlet_from(&tile.outlet_from)?;
-
-            feature.set_lake_type(lake_type)?;
 
             tiles_layer.update_feature(feature)?;
         }

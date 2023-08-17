@@ -8,12 +8,18 @@ use crate::world_map::TypedFeature;
 use crate::world_map::TileForPopulation;
 use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
-
+use crate::world_map::LakeInformation;
 
 pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
     // This algorithm is almost the same as found in AFMG
 
+    // we need a lake information map
+    let mut lakes_layer = target.edit_lakes_layer()?;
+
+    let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeInformation>(progress)?;
+
+    // and a biome map
     let mut biome_map = HashMap::new();
 
     {
@@ -57,7 +63,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     while let Some(fid) = work_queue.pop() {
         let (habitability,population) = {
             let tile = tiles.try_entity_by_id::<TileForPopulation>(&fid)?; 
-            let mut suitability = if tile.lake_type.is_some() {
+            let mut suitability = if tile.lake_id.is_some() {
                 0.0
             } else {
                 *biome_map.get(&tile.biome).ok_or_else(|| CommandError::UnknownBiome(tile.biome.clone()))? as f64
@@ -73,7 +79,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                     }
                     if let Some(water_cell) = tile.closest_water {
                         let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&(water_cell as u64))?;
-                        if let Some(lake_type) = &water_cell.lake_type {
+                        if let Some(lake_type) = &water_cell.lake_id.and_then(|id| lake_map.get(&(id as u64)).map(|l| &l.type_)) {
                             match lake_type {
                                 LakeType::Fresh => suitability += 30.0,
                                 LakeType::Salt => suitability += 10.0,
