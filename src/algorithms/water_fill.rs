@@ -427,7 +427,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 elevation: lake.elevation,
                 type_: lake_type.clone(),
             });
-            make_curvy_lakes(lake.elevation, lake_type, lake.flow, lake_temp, lake_evap, lake_bezier_scale, buffer_distance, simplify_tolerance, lake_geometry, &mut lakes)?;
+            make_curvy_lakes(lake.elevation, lake_type, lake.flow, lake_temp, lake_evap, lake.contained_tiles.len(), lake_bezier_scale, buffer_distance, simplify_tolerance, lake_geometry, &mut lakes)?;
 
         }
 
@@ -485,7 +485,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 }
 
-pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_flow: f64, lake_temp: f64, lake_evap: f64, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64, lake_geometry: Geometry, lakes: &mut Vec<NewLake>) -> Result<(), CommandError> {
+pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_flow: f64, lake_temp: f64, lake_evap: f64, lake_tiles: usize, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64, lake_geometry: Geometry, lakes: &mut Vec<NewLake>) -> Result<(), CommandError> {
     let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
     // occasionally, the simplification turns the lakes into a multipolygon, so just create separate lakes for that.
     if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
@@ -495,6 +495,7 @@ pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_fl
                 elevation: lake_elevation,
                 type_: lake_type.clone(),
                 flow: lake_flow,
+                size: lake_tiles as i32, // TODO: Since we're creating multiple lakes here, should this be a different size? Or should this just be one lake with multiple polygons?
                 temperature: lake_temp,
                 evaporation: lake_evap,
                 geometry,
@@ -507,6 +508,7 @@ pub(crate) fn make_curvy_lakes(lake_elevation: f64, lake_type: LakeType, lake_fl
             elevation: lake_elevation,
             type_: lake_type,
             flow: lake_flow,
+            size: lake_tiles as i32,
             temperature: lake_temp,
             evaporation: lake_evap,
         geometry,

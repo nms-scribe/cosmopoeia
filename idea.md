@@ -3661,18 +3661,20 @@ divide(sort,sort) = |tile| sort(tile) / sort(tile) -- TODO: What to return if a 
 add(sort,sort) = |tile| sort(tile) + sort(tile)
 pow(sort,float) = |tile| sort(tile)^float
 
-
-
 #### 1) Generate Cultures
 
 
 
-TODO: I'm going to have to define what a culture set is.
-TODO: I need an is_nomadic field on biome or something like that. It's true for hot desert, cold desert, and grassland.
 TODO: I need lake cell count on tiles, or a way to get the lake information for a given tile (in which case I lose some fields there)
-TODO: I need a land_type field on tiles: continent, isle, or island (look for definitions in AFMG)
+- when generating lakes, maybe I can get the id from the lakes layer before I apply it to the land tiles.
+TODO: I need a land_type field on tiles: continent, isle, or island (look for definitions in AFMG), to be calculated after water I guess.
+      - lake_island: it's an area of land surrounded by lake.
+      - continent: number of tiles in land is greater than 1/10 of the total number of tiles
+      - island: not a continent and number of tiles in land is greater than 1/1000 of the total number of tiles
+      - isle: not a continent or island but still land
+      - TODO: I wonder if I could have a "feature_type" field which specifies "ocean", "lake" -- or lake type -- or one of the thingies above, and then we can get rid of the "is_ocean" field.
+TODO: I need an is_nomadic field on biome or something like that. It's true for hot desert, cold desert, and grassland.
 TODO: I need an is_hunting field on biome, it's true for savanna, TDF, TempRain, Taiga, Tundra, Wetland
-TODO: I'm going to need name_bases data in the layer. The user will have to load this in themselves somehow.
 
 * *Input*: culture_set = A culture set to use
 * *Input*: culture_count = number of cultures to use

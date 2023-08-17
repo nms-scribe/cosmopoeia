@@ -1232,6 +1232,7 @@ feature!(LakeFeature LakeEntityIterator "lakes" wkbPolygon geometry: #[allow(dea
     elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
     flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
+    size #[allow(dead_code)] set_size i32 FIELD_SIZE "size" OGRFieldType::OFTInteger64;
     temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
     evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
@@ -1241,6 +1242,7 @@ entity!(NewLake LakeFeature {
     elevation: f64,
     type_: LakeType,
     flow: f64,
+    size: i32,
     temperature: f64,
     evaporation: f64,
     geometry: Geometry
@@ -1255,6 +1257,7 @@ impl LakesLayer<'_> {
             lake.elevation,
             &lake.type_,
             lake.flow,
+            lake.size,
             lake.temperature,
             lake.evaporation
         );
