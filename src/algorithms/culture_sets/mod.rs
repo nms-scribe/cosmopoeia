@@ -6,12 +6,14 @@ use std::fs::File;
 use serde::Serialize;
 use serde::Deserialize;
 use rand::Rng;
+use ordered_float::OrderedFloat;
 
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::RandomIndex;
 use crate::algorithms::naming::NamerSet;
 use crate::progress::ProgressObserver;
+use crate::world_map::TileCultureWorkForPreferenceSorting;
 
 #[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum TilePreference {
@@ -41,7 +43,61 @@ pub(crate) enum TilePreference {
 }
 
 
-#[derive(Serialize,Deserialize)]
+impl TilePreference {
+    
+    pub(crate) fn get_value(&self, tile: &TileCultureWorkForPreferenceSorting, max_habitability: f64) -> OrderedFloat<f64> {
+
+        // formulaes borrowed from AFMG
+        match self {
+            TilePreference::Habitability => OrderedFloat::from(tile.habitability),
+            TilePreference::ShoreDistance => OrderedFloat::from(tile.shore_distance as f64),
+            TilePreference::Elevation => OrderedFloat::from(tile.elevation_scaled as f64),
+            TilePreference::NormalizedHabitability => OrderedFloat::from((tile.habitability / max_habitability) * 3.0),
+            TilePreference::Temperature(goal) => OrderedFloat::from((tile.temperature - goal).abs() + 1.0),
+            TilePreference::Biomes(preferred_biomes, fee) => OrderedFloat::from(if preferred_biomes.contains(&tile.biome.name) {
+                1.0
+            } else {
+                *fee
+            }),
+            TilePreference::OceanCoast(fee) => OrderedFloat::from(if tile.water_count.is_some() && tile.neighboring_lake_size.is_none() {
+                1.0
+            } else {
+                *fee
+            }),
+            TilePreference::Negate(pref) => -pref.get_value(tile, max_habitability),
+            TilePreference::Multiply(prefs) => {
+                let mut prefs = prefs.iter();
+                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); // TODO: Need a real error...
+                for pref in prefs {
+                    result *= pref.get_value(tile, max_habitability)
+                }
+                result
+            },
+            TilePreference::Divide(prefs) => {
+                let mut prefs = prefs.iter();
+                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); // TODO: Need a real error...
+                for pref in prefs {
+                    result /= pref.get_value(tile, max_habitability)
+                }
+                result
+            },
+            TilePreference::Add(prefs) => {
+                let mut prefs = prefs.iter();
+                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); // TODO: Need a real error...
+                for pref in prefs {
+                    result += pref.get_value(tile, max_habitability)
+                }
+                result
+            },
+            TilePreference::Pow(pref, pow) => OrderedFloat::from(pref.get_value(tile, max_habitability).powf(*pow)),
+        }
+        
+    }
+
+}
+
+
+#[derive(Serialize,Deserialize,Clone)]
 pub(crate) struct CultureSource {
     name: String,
     namer: String,
@@ -157,23 +213,42 @@ impl CultureSet {
     // TODO: Make use of these...
     #[allow(dead_code)] pub(crate) fn make_random_culture_set_with_same_namer<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, namer_key: &str, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
 
-        if let Some(namer) = namers.prepare(namer_key, progress) {
-            let mut result = Self::empty();
-            for _ in 0..count {
-                result.add_culture(CultureSource {
-                    name: namer.make_name(rng),
-                    namer: namer_key.to_owned(),
-                    probability: 1.0,
-                    preferences: TilePreference::Habitability,
-                });
-    
-            }
-            Ok(result)
-    
-        } else {
-            Err(CommandError::CultureSourceRead(format!("Could not find namer '{}' for generating random culture set.",namer_key)))
-        }
+        let namer = namers.prepare(namer_key, progress)?;
         
+        let mut result = Self::empty();
+        for _ in 0..count {
+            result.add_culture(CultureSource {
+                name: namer.make_name(rng),
+                namer: namer_key.to_owned(),
+                probability: 1.0,
+                preferences: TilePreference::Habitability,
+            });
+
+        }
+        Ok(result)
+        
+    }
+
+    pub(crate) fn select<Random: Rng>(&self, rng: &mut Random, culture_count: usize) -> Vec<CultureSource> {
+
+        // This algorithm taken from AFMG. 
+
+        let mut result = Vec::new();
+        let mut available = self.source.clone();
+        let mut i = 0;
+        while (result.len() < culture_count) && (available.len() > 0) {
+            let choice = loop {
+                i += 1;
+                let choice = available.choose_index(rng);
+                if (i >= 200) || rng.gen_bool(available[choice].probability) {
+                    break choice;
+                }    
+            };
+            result.push(available.remove(choice));
+        }
+
+        result
+
     }
 
 }

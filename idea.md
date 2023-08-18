@@ -3694,8 +3694,6 @@ TODO: To be done as part of the water command. This is a new command.
 
 TODO: Working on this next...
 
-TODO: I need an is_nomadic field on biome or something like that. It's true for hot desert, cold desert, and grassland.
-TODO: I need an is_hunting field on biome, it's true for savanna, TDF, TempRain, Taiga, Tundra, Wetland
 
 * *Input*: culture_set = A culture set to use
 * *Input*: culture_count = number of cultures to use

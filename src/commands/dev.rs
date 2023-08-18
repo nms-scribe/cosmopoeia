@@ -262,7 +262,7 @@ impl Task for DevNamers {
         let mut progress = ConsoleProgressBar::new();
 
         fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, progress: &mut ConsoleProgressBar, rng: &mut Random) {
-            let namer = namers.prepare(language,progress).unwrap_or_else(|| panic!("Namer '{}' not found.",language));
+            let namer = namers.prepare(language,progress).unwrap();
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
             println!("   state: {}",namer.make_state_name(rng));
@@ -315,7 +315,7 @@ subcommand_def!{
     #[command(hide=true)]
     pub(crate) struct DevCultures {
 
-        /// Files to load namer-data from, more than one may be specified to load multiple languages. Later language names will override previous ones.
+        /// Files to load culture data from, more than one may be specified to load multiple cultures into the set.
         culture_data: Vec<PathBuf>,
 
         #[arg(long)]

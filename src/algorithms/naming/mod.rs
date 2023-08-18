@@ -619,14 +619,26 @@ impl NamerSet {
         Ok(this)
     }
 
-    pub(crate) fn prepare<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Option<&mut Namer> { 
+    pub(crate) fn check(&self, name: &str) -> Result<(),CommandError> {
+        if self.prepared.contains_key(name) ||
+           self.source.contains_key(name) {
+            Ok(())
+        } else {
+            Err(CommandError::UnknownNamer(name.to_owned()))
+        }
+
+    }
+
+    pub(crate) fn prepare<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Result<&mut Namer,CommandError> { 
         if let Entry::Vacant(entry) = self.prepared.entry(name.to_owned()) {
             if let Some(name_base) = self.source.remove(name)  { 
                 entry.insert(Namer::new(name_base,&mut NamerLoadObserver::new(name,progress)));
+            } else {
+
             }
 
         }
-        self.prepared.get_mut(name)
+        self.prepared.get_mut(name).ok_or_else(|| CommandError::UnknownNamer(name.to_owned()))
 
     }
 

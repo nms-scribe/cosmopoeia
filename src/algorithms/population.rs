@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
-use crate::world_map::BiomeData;
+use crate::world_map::BiomeDataForPopulation;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileForPopulation;
 use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
-use crate::world_map::LakeInformation;
+use crate::world_map::LakeDataForPopulation;
 
 pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -17,7 +17,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     // we need a lake information map
     let mut lakes_layer = target.edit_lakes_layer()?;
 
-    let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeInformation>(progress)?;
+    let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeDataForPopulation>(progress)?;
 
     // and a biome map
     let mut biome_map = HashMap::new();
@@ -25,7 +25,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     {
         let mut biomes = target.edit_biomes_layer()?;
 
-        for biome in biomes.read_entities::<BiomeData>() {
+        for biome in biomes.read_features().into_entities::<BiomeDataForPopulation>() {
             let (_,biome) = biome?;
             biome_map.insert(biome.name, biome.habitability);
         }

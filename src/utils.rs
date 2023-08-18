@@ -37,30 +37,67 @@ pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
 pub(crate) trait RandomIndex<ItemType> {
 
     fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType;
-}
 
-impl<ItemType> RandomIndex<ItemType> for &[ItemType] {
-    fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
-        &self[rng.gen_range(0..self.len())] 
-    }
+    fn choose_index<Random: Rng>(&self, rng: &mut Random) -> usize;
+
+    fn choose_biased<Random: Rng>(&self, rng: &mut Random, min: usize, max: usize, ex: i32) -> &ItemType;
+
+/*
+
+
+    * biased(min,max,ex):
+  -- generates a random number between min and max the leans towards the beginning
+  * (min + ((max - min) * random(0..1).pow(ex))).round()
+ */    
 }
 
 impl<ItemType> RandomIndex<ItemType> for [ItemType] {
+
     fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
         &self[rng.gen_range(0..self.len())] 
     }
+
+    fn choose_index<Random: Rng>(&self, rng: &mut Random) -> usize {
+        rng.gen_range(0..self.len())
+    }
+
+    fn choose_biased<Random: Rng>(&self, rng: &mut Random, min: usize, max: usize, ex: i32) -> &ItemType {
+        let index = min + ((max - min) * rng.gen_range::<f64,_>(0.0..1.0).powi(ex).floor() as usize).clamp(0,self.len()-1);
+        &self[index]
+    }
+
 }
 
 impl<ItemType> RandomIndex<ItemType> for Vec<ItemType> {
     fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
         &self[rng.gen_range(0..self.len())] 
     }
+
+    fn choose_index<Random: Rng>(&self, rng: &mut Random) -> usize {
+        rng.gen_range(0..self.len())
+    }
+
+    fn choose_biased<Random: Rng>(&self, rng: &mut Random, min: usize, max: usize, ex: i32) -> &ItemType {
+        let index = min + ((max - min) * rng.gen_range::<f64,_>(0.0..1.0).powi(ex).floor() as usize).clamp(0,self.len()-1);
+        &self[index]
+    }
+
 }
 
 impl<ItemType, const N: usize> RandomIndex<ItemType> for [ItemType; N] {
     fn choose<Random: Rng>(&self, rng: &mut Random) -> &ItemType  {
         &self[rng.gen_range(0..self.len())] 
     }
+
+    fn choose_index<Random: Rng>(&self, rng: &mut Random) -> usize {
+        rng.gen_range(0..self.len())
+    }
+
+    fn choose_biased<Random: Rng>(&self, rng: &mut Random, min: usize, max: usize, ex: i32) -> &ItemType {
+        let index = min + ((max - min) * rng.gen_range::<f64,_>(0.0..1.0).powi(ex).floor() as usize).clamp(0,self.len()-1);
+        &self[index]
+    }
+
 }
 
 

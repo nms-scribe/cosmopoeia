@@ -5,6 +5,15 @@ use indicatif::ProgressStyle;
 
 pub(crate) trait ProgressObserver {
 
+    // TODO: What if the 'start' methods returned some sort of object that would handle the rest of the information?
+    // - the object would guarantee that the progress observer was already borrowed for mutability, preventing
+    //   updates from multiple items.
+    // - if the start also included the 'finish' message, the object could be passed to the to_vec methods instead
+    //   without requiring the 'Feature::LAYER_NAME' requirement, allowing me to implement the progress watching
+    //   for any iterator.
+    // - in fact, such a progress thingie might have a method which quickly wraps the iterator, calling the
+    //   enumerator function, so it doesn't have to be called automatically in the code.
+
     // the parameters are passed as callbacks in case the progress implementation doesn't care (such as if its Option<ProgressObserver>::None)
     fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback);
 
@@ -15,6 +24,8 @@ pub(crate) trait ProgressObserver {
     fn update<Callback: FnOnce() -> usize>(&self, callback: Callback);
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback);
+
+    fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback);
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback);
 
@@ -37,6 +48,10 @@ impl ProgressObserver for () {
     }
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, _: Callback) {
+    }
+
+    fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, _: Callback){
+
     }
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, _: Callback) {
@@ -145,6 +160,18 @@ impl ProgressObserver for ConsoleProgressBar {
         }
     }
 
+    fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback){
+        // FUTURE: Make this in another color?
+        // TODO: Test this to make sure it's working...
+        if let Some(bar) = &self.bar {
+            bar.println(callback())
+        } else {
+            eprintln!("{}",callback().as_ref())
+        }
+    }
+
+
+
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
         if let Some(bar) = &mut self.bar {
             Self::style_as_finished(bar);
@@ -154,5 +181,4 @@ impl ProgressObserver for ConsoleProgressBar {
     }
 
 }
-
 

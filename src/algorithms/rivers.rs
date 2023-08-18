@@ -286,7 +286,7 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
     let mut result = Vec::new();
 
     progress.start_known_endpoint(|| ("Finding segments.",tiles.feature_count()));
-    for (i,entity) in tiles.read_entities::<TileEntityForRiverConnect>().enumerate() {
+    for (i,entity) in tiles.read_features().into_entities::<TileEntityForRiverConnect>().enumerate() {
         let (fid,tile) = entity?;
         for flow_to in &tile.flow_to {
             let flow_to_len = tile.flow_to.len() as f64;

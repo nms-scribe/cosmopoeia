@@ -21,7 +21,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
     progress.start_known_endpoint(|| ("Indexing data.",layer.feature_count() as usize));
 
-    for (i,data) in layer.read_entities::<TileEntityForWaterFlow>().enumerate() {
+    for (i,data) in layer.read_features().into_entities::<TileEntityForWaterFlow>().enumerate() {
         let (fid,entity) = data?;
         if !entity.terrain.is_ocean() {
             // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 

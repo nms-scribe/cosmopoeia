@@ -76,6 +76,7 @@ command!{
     gen_biome::GenBiomeData;
     gen_biome::GenBiomeApply;
     gen_people::GenPeoplePopulation;
+    gen_people::GenPeopleCultures;
 }
 
 

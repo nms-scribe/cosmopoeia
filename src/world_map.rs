@@ -95,7 +95,10 @@ macro_rules! feature_get_field_type {
     };
     (terrain) => {
         Terrain
-    }
+    };
+    (culture_type) => {
+        CultureType
+    };
 }
 
 macro_rules! feature_set_field_type {
@@ -146,7 +149,10 @@ macro_rules! feature_set_field_type {
     };
     (terrain) => {
         &Terrain
-    }
+    };
+    (culture_type) => {
+        &CultureType
+    };
 }
 
 macro_rules! feature_get_field {
@@ -262,6 +268,14 @@ macro_rules! feature_get_field {
         }
 
     };
+    ($self: ident culture_type $feature_name: literal $prop: ident $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            Ok(CultureType::try_from(value)?)
+        } else {
+            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
+        }
+
+    };
 }
 
 fn set_field_null(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
@@ -352,6 +366,9 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident terrain $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
+    ($self: ident $value: ident culture_type $field: path) => {{
+        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
+    }};
 }
 
 macro_rules! feature_to_value {
@@ -419,6 +436,9 @@ macro_rules! feature_to_value {
     ($prop: ident terrain) => {{
         FieldValue::StringValue(Into::<String>::into($prop))
     }};
+    ($prop: ident culture_type) => {{
+        FieldValue::StringValue(Into::<String>::into($prop))
+    }};
 
 }
 
@@ -449,7 +469,7 @@ macro_rules! feature_count_fields {
 }
 
 macro_rules! feature {
-    ($struct_name:ident $iterator: ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
+    ($struct_name:ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
         $(#[$get_attr: meta])* $prop: ident 
         $(#[$set_attr: meta])* $set_prop: ident 
         $prop_type: ident 
@@ -559,8 +579,8 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> From<FeatureIterator<'impl_l
 
 impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_life, Feature> {
 
-    pub(crate) fn to_entities_vec<Progress: ProgressObserver, Data: Entity<'impl_life,Feature>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-        progress.start(|| (format!("Reading {}.",Feature::LAYER_NAME),self.features.size_hint().1));
+    pub(crate) fn to_entities_vec<'local, Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+        progress.start(|| (format!("Reading {}.",Feature::LAYER_NAME),self.size_hint().1));
         let mut result = Vec::new();
         for (i,entity) in self.enumerate() {
             result.push(Data::try_from(entity)?);
@@ -569,6 +589,11 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
         progress.finish(|| format!("{} read.",Feature::LAYER_NAME.to_title_case()));
         Ok(result)
     }
+
+    pub(crate) fn into_entities<Data: Entity<'impl_life,Feature>>(self) -> EntityIterator<'impl_life,Feature, Data> {
+        self.into()
+    }
+
 
     pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<'impl_life,Feature>>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
 
@@ -779,10 +804,11 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
         Ok(())
 
     }
+
 }
 
 
-feature!(PointFeature PointEntityIterator "points" wkbPoint geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
+feature!(PointFeature "points" wkbPoint geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
 type PointsLayer<'data_life> = MapLayer<'data_life,PointFeature<'data_life>>;
 
 
@@ -797,7 +823,7 @@ impl PointsLayer<'_> {
 
 }
 
-feature!(TriangleFeature TriangleEntityIterator "triangles" wkbPolygon geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
+feature!(TriangleFeature "triangles" wkbPolygon geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
 type TrianglesLayer<'data_life> = MapLayer<'data_life,TriangleFeature<'data_life>>;
 
 
@@ -869,7 +895,7 @@ impl TryFrom<String> for Terrain {
     }
 }
 
-feature!(TileFeature TileEntityIterator "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
+feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     /// longitude of the node point for the tile's voronoi
     site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
     /// latitude of the node point for the tile's voronoi
@@ -1073,6 +1099,72 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
     }
 }
 
+
+entity!(TileCultureWork TileFeature {
+    fid: u64,
+    site: Point,
+    population: i32,
+    habitability: f64,
+    shore_distance: i32,
+    elevation_scaled: i32,
+    biome: String,
+    water_count: Option<i32>,
+    closest_water: Option<i64>,
+    terrain: Terrain,
+    water_flow: f64,
+    temperature: f64
+
+});
+
+pub(crate) struct TileCultureWorkForPreferenceSorting<'struct_life> {
+    pub(crate) fid: u64,
+    pub(crate) site: Point,
+    pub(crate) habitability: f64,
+    pub(crate) shore_distance: i32,
+    pub(crate) elevation_scaled: i32,
+    pub(crate) biome: &'struct_life BiomeDataForCultures,
+    pub(crate) water_count: Option<i32>,
+    pub(crate) neighboring_lake_size: Option<i32>,
+    pub(crate) terrain: Terrain,
+    pub(crate) water_flow: f64,
+    pub(crate) temperature: f64
+
+}
+
+impl TileCultureWorkForPreferenceSorting<'_> {
+
+    pub(crate) fn from<'biomes>(tile: TileCultureWork, tiles: &TilesLayer, biomes: &'biomes HashMap<String,BiomeDataForCultures>, lakes: &HashMap<u64,LakeDataForCultures>) -> Result<TileCultureWorkForPreferenceSorting<'biomes>,CommandError> {
+        let biome = biomes.get(&tile.biome).ok_or_else(|| CommandError::UnknownBiome(tile.biome))?;
+        let neighboring_lake_size = if let Some(closest_water) = tile.closest_water {
+            let closest_water = closest_water as u64;
+            let closest_water = tiles.feature_by_id(&closest_water).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, closest_water))?;
+            if let Some(lake_id) = closest_water.lake_id()? {
+                let lake_id = lake_id as u64;
+                let lake = lakes.get(&lake_id).ok_or_else(|| CommandError::MissingFeature(LakeFeature::LAYER_NAME, lake_id))?;
+                Some(lake.size)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        Ok(TileCultureWorkForPreferenceSorting::<'biomes> {
+            fid: tile.fid,
+            site: tile.site,
+            habitability: tile.habitability,
+            shore_distance: tile.shore_distance,
+            elevation_scaled: tile.elevation_scaled,
+            biome,
+            water_count: tile.water_count,
+            neighboring_lake_size,
+            terrain: tile.terrain,
+            water_flow: tile.water_flow,
+            temperature: tile.temperature,
+        })
+
+    }
+}
+
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
 
 impl TilesLayer<'_> {
@@ -1081,12 +1173,6 @@ impl TilesLayer<'_> {
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TileFeature> {
         TypedFeatureIterator::from(self.layer.features())
-    }
-
-    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    // FUTURE: It would also be nice to get rid of the lifetimes
-    pub(crate) fn read_entities<'local, Data: Entity<'local,TileFeature<'local>>>(&'local mut self) -> EntityIterator<'local,TileFeature<'local>, Data> {
-        self.read_features().into()
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -1108,10 +1194,15 @@ impl TilesLayer<'_> {
 
     }
 
-    pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
+    pub(crate) fn get_layer_size(&self) -> Result<(f64,f64),CommandError> {
         let extent = self.layer.get_extent()?;
         let width = extent.MaxX - extent.MinX;
         let height = extent.MaxY - extent.MinY;
+        Ok((width,height))
+    }
+
+    pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
+        let (width,height) = self.get_layer_size()?;
         let tiles = self.feature_count();
         Ok((width*height)/tiles as f64)
     }
@@ -1124,7 +1215,7 @@ impl TilesLayer<'_> {
 
         progress.start_known_endpoint(|| ("Indexing data.",self.feature_count() as usize));
 
-        for (i,data) in self.read_entities::<TileEntityForWaterFill>().enumerate() {
+        for (i,data) in self.read_features().into_entities::<TileEntityForWaterFill>().enumerate() {
             let (fid,entity) = data?;
             if entity.water_accumulation > 0.0 {
                 tile_queue.push((fid,entity.water_accumulation));
@@ -1225,7 +1316,7 @@ impl Into<&str> for &RiverSegmentTo {
 }
 
 
-feature!(RiverFeature RiverEntityIterator "rivers" wkbLineString geometry: #[allow(dead_code)] {
+feature!(RiverFeature "rivers" wkbLineString geometry: #[allow(dead_code)] {
     from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
     from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
     from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
@@ -1304,7 +1395,7 @@ impl TryFrom<String> for LakeType {
     }
 }
 
-feature!(LakeFeature LakeEntityIterator "lakes" wkbMultiPolygon geometry: #[allow(dead_code)] {
+feature!(LakeFeature "lakes" wkbMultiPolygon geometry: #[allow(dead_code)] {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     #[allow(dead_code)] type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
     #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
@@ -1313,13 +1404,16 @@ feature!(LakeFeature LakeEntityIterator "lakes" wkbMultiPolygon geometry: #[allo
     #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
 
-entity!(LakeInformation LakeFeature {
-//    elevation: f64,
+entity!(LakeDataForBiomes LakeFeature {
     type_: LakeType
-//    flow: f64,
-//    size: i32,
-//    temperature: f64,
-//    evaporation: f64
+});
+
+entity!(LakeDataForPopulation LakeFeature {
+    type_: LakeType
+});
+
+entity!(LakeDataForCultures LakeFeature {
+    size: i32
 });
 
 
@@ -1406,6 +1500,15 @@ impl Into<String> for &BiomeCriteria {
     }
 }
 
+struct BiomeDefault {
+    name: &'static str,
+    habitability: i32,
+    criteria: BiomeCriteria,
+    supports_nomadic: bool,
+    supports_hunting: bool
+}
+        
+
 pub(crate) struct BiomeMatrix {
     pub(crate) matrix: [[String; 26]; 5],
     pub(crate) ocean: String,
@@ -1413,10 +1516,13 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature BiomeEntityIterator "biomes" wkbNone geometry: #[allow(dead_code)] {
-    #[allow(dead_code)] name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    #[allow(dead_code)] habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
-    #[allow(dead_code)] criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
+feature!(BiomeFeature "biomes" wkbNone geometry: #[allow(dead_code)] {
+    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
+    criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
+    // FUTURE: These should be replaced with amore configurable culture-type system, or at least build these into the culture data.
+    supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic" OGRFieldType::OFTInteger;
+    supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting" OGRFieldType::OFTInteger;
 });
 
 impl BiomeFeature<'_> {
@@ -1435,21 +1541,21 @@ impl BiomeFeature<'_> {
     pub(crate) const GLACIER: &str = "Glacier";
     pub(crate) const WETLAND: &str = "Wetland";
     
-
-    const DEFAULT_BIOMES: [(&str, i32, BiomeCriteria); 13] = [
-        (Self::OCEAN,0,BiomeCriteria::Ocean),
-        (Self::HOT_DESERT,4,BiomeCriteria::Matrix(vec![])),
-        (Self::COLD_DESERT,10,BiomeCriteria::Matrix(vec![])),
-        (Self::SAVANNA,22,BiomeCriteria::Matrix(vec![])),
-        (Self::GRASSLAND,30,BiomeCriteria::Matrix(vec![])),
-        (Self::TROPICAL_SEASONAL_FOREST,50,BiomeCriteria::Matrix(vec![])),
-        (Self::TEMPERATE_DECIDUOUS_FOREST,100,BiomeCriteria::Matrix(vec![])),
-        (Self::TROPICAL_RAINFOREST,80,BiomeCriteria::Matrix(vec![])),
-        (Self::TEMPERATE_RAINFOREST,90,BiomeCriteria::Matrix(vec![])),
-        (Self::TAIGA,12,BiomeCriteria::Matrix(vec![])),
-        (Self::TUNDRA,4,BiomeCriteria::Matrix(vec![])),
-        (Self::GLACIER,0,BiomeCriteria::Glacier),
-        (Self::WETLAND,12,BiomeCriteria::Wetland),
+    // TODO: Make this a struct to make things easier to read.
+    const DEFAULT_BIOMES: [BiomeDefault; 13] = [ // name, index, habitability, supports_nomadic, supports_hunting
+        BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::HOT_DESERT, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
+        BiomeDefault { name: Self::COLD_DESERT, habitability: 10, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
+        BiomeDefault { name: Self::SAVANNA, habitability: 22, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::GRASSLAND, habitability: 30, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
+        BiomeDefault { name: Self::TROPICAL_SEASONAL_FOREST, habitability: 50, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::TEMPERATE_DECIDUOUS_FOREST, habitability: 100, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::TROPICAL_RAINFOREST, habitability: 80, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::TEMPERATE_RAINFOREST, habitability: 90, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::TAIGA, habitability: 12, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::TUNDRA, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier, supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland, supports_nomadic: false, supports_hunting: true},
     ];
 
     //these constants make the default matrix easier to read.
@@ -1487,16 +1593,18 @@ impl BiomeFeature<'_> {
 
         }
 
-        Self::DEFAULT_BIOMES.iter().map(|(name,habitability,criteria)| {
-            let criteria = if let BiomeCriteria::Matrix(_) = criteria {
-                BiomeCriteria::Matrix(matrix_criteria.get(name).unwrap().clone())
+        Self::DEFAULT_BIOMES.iter().map(|default| {
+            let criteria = if let BiomeCriteria::Matrix(_) = default.criteria {
+                BiomeCriteria::Matrix(matrix_criteria.get(&default.name).unwrap().clone())
             } else {
-                criteria.clone()
+                default.criteria.clone()
             };
             NewBiome {
-                name: (*name).to_owned(),
-                habitability: *habitability,
+                name: (*default.name).to_owned(),
+                habitability: default.habitability,
                 criteria,
+                supports_nomadic: default.supports_nomadic,
+                supports_hunting: default.supports_hunting
             }
 
         }).collect()
@@ -1562,13 +1670,38 @@ impl BiomeFeature<'_> {
 entity!(NewBiome BiomeFeature {
     name: String,
     habitability: i32,
-    criteria: BiomeCriteria
+    criteria: BiomeCriteria,
+    supports_nomadic: bool,
+    supports_hunting: bool
 });
 
-entity!(BiomeData BiomeFeature {
+pub(crate) trait NamedEntity<'trait_life, Feature: TypedFeature<'trait_life>>: Entity<'trait_life, Feature> {
+    fn name(&self) -> &String;
+}
+
+entity!(BiomeDataForPopulation BiomeFeature {
     name: String,
     habitability: i32
 });
+
+impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeDataForPopulation {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
+entity!(BiomeDataForCultures BiomeFeature {
+    name: String,
+    supports_nomadic: bool,
+    supports_hunting: bool
+});
+
+impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeDataForCultures {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
 
 pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_life>>;
 
@@ -1577,7 +1710,7 @@ impl BiomeLayer<'_> {
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<(),CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
-            &biome.name,biome.habitability,&biome.criteria);
+            &biome.name,biome.habitability,&biome.criteria,biome.supports_nomadic,biome.supports_hunting);
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -1593,14 +1726,103 @@ impl BiomeLayer<'_> {
     
     }
 
-    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    // FUTURE: It would also be nice to get rid of the lifetimes
-    pub(crate) fn read_entities<'local, Data: Entity<'local,BiomeFeature<'local>>>(&'local mut self) -> EntityIterator<'local,BiomeFeature<'local>, Data> {
-        self.read_features().into()
+    pub(crate) fn build_index<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+        let mut result = HashMap::new();
+
+        progress.start_known_endpoint(|| ("Indexing biomes.",self.feature_count()));
+
+        for (i,entity) in self.read_features().into_entities::<Data>().enumerate() {
+            let (_,entity) = entity?;
+            let name = entity.name().clone();
+            result.insert(name, entity);
+            progress.update(|| i);
+        }
+
+        progress.finish(|| "Biomes indexed.");
+
+        Ok(result)
+
     }
-    
+
 
 }
+
+#[derive(Clone)]
+pub(crate) enum CultureType {
+    // FUTURE: This just seems to stringent to not allow all of this to be customized. Figure out a better way.
+    Generic,
+    Lake,
+    Naval,
+    River,
+    Nomadic,
+    Hunting,
+    Highland
+}
+
+
+impl Into<String> for &CultureType {
+
+    fn into(self) -> String {
+        match self {
+            CultureType::Generic => "generic",
+            CultureType::Lake => "lake",
+            CultureType::Naval => "naval",
+            CultureType::River => "river",
+            CultureType::Nomadic => "nomadic",
+            CultureType::Hunting => "hunting",
+            CultureType::Highland => "highland",
+        }.to_owned()
+    }
+}
+
+
+impl TryFrom<String> for CultureType {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "generic" => Ok(Self::Generic),
+            "lake" => Ok(Self::Lake),
+            "naval" => Ok(Self::Naval),
+            "river" => Ok(Self::River),
+            "nomadic" => Ok(Self::Nomadic),
+            "hunting" => Ok(Self::Hunting),
+            "highland" => Ok(Self::Highland),
+            _ => Err(CommandError::InvalidValueForCultureType(value))
+        }
+    }
+}
+
+feature!(CultureFeature "cultures" wkbNone geometry: #[allow(dead_code)] {
+    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer" OGRFieldType::OFTString;
+    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
+    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
+    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
+});
+
+entity!(NewCulture CultureFeature {
+    name: String,
+    namer: String,
+    type_: CultureType,
+    expansionism: f64,
+    center: i64
+});
+
+pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'data_life>>;
+
+
+impl CultureLayer<'_> {
+
+    pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<(),CommandError> {
+
+        let (field_names,field_values) = CultureFeature::to_field_names_values(
+            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center);
+        self.add_feature_without_geometry(&field_names, &field_values)
+
+    }
+}
+
 
 pub(crate) struct WorldMap {
     dataset: Dataset
@@ -1728,6 +1950,10 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     #[allow(dead_code)] pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
         Ok(BiomeLayer::open_from_dataset(&mut self.dataset)?)
 
+    }
+
+    pub(crate) fn create_cultures_layer(&mut self, overwrite: bool) -> Result<CultureLayer,CommandError> {
+        Ok(CultureLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
 
 }
