@@ -13,10 +13,12 @@ use crate::world_map::TileCultureWork;
 use crate::world_map::TileCultureWorkForPreferenceSorting;
 use crate::utils::RandomIndex;
 use crate::utils::Point;
+use crate::utils::ToRoman;
 use crate::world_map::Terrain;
 use crate::world_map::TilesLayer;
 use crate::world_map::CultureType;
 use crate::world_map::NewCulture;
+use crate::world_map::CultureForPlacement;
 
 impl CultureType {
 
@@ -81,26 +83,43 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     let max_tile_choice = populated.len() / 2;
     const MAX_ATTEMPTS: usize = 100; // FUTURE: Configure?
 
+    // I need to avoid duplicate names
+    let mut culture_names = HashMap::new();
+
     for culture_source in culture_sources {
 
         // find the cultural center
 
         let preferences = culture_source.preferences();
         
-
+        // sort so the most preferred tiles go to the top.
         populated.sort_by_cached_key(|a| preferences.get_value(a,max_habitability));
         let mut spacing = spacing;
         let mut i = 0;
         let center = loop {
-            let center = populated.choose_biased(rng,0,max_tile_choice,5).clone();
-            if (i > MAX_ATTEMPTS) || !too_close(&placed_centers,&center.site,spacing) { // TODO: look to see if the distance from the center to any of the others is less than spacing
-                break center;
+            // FUTURE: Right now, this chooses randomly and increases the spacing until we've randomly hit upon a good spot,
+            // the spacing has decreased until the too_close is always going to fail, or we just give up and take one. 
+            // There might be a better way:
+            // - start with a biased index, as with current
+            // - if that doesn't work, choose another biased index, but set the min of the parameter to the previous index
+            // - keep trying that until the choice >= max_tile_choice
+            // - at that point I can do one of the following:
+            //   - try decreasing spacing and trying the whole thing again
+            //   - increase by one index until one is found that is outside of the spacing, keeping track of the furthest available
+            //     tile during the process and choose that at the end
+            let index = populated.choose_biased_index(rng,0,max_tile_choice,5);
+            let center = &populated[index];
+            if (i > MAX_ATTEMPTS) || !too_close(&placed_centers,&center.site,spacing) { 
+                // return the removed tile, to prevent any other culture from matching it.
+                break populated.remove(index);
             }
             // reduce spacing in case that's what the problem is
             spacing *= 0.9;
             i += 1;
         };
         placed_centers.push(center.site.clone());
+
+        let name = culture_source.name().to_owned();
 
         // define the culture type
         // TODO: This will be much simpler if it's in a function and early return
@@ -112,14 +131,45 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
         namers.check(namer)?;
 
+        let index = cultures.len();
+        // TODO: This seems like a more efficient way to do this, instead of entry, since I only clone if the name is inserted
+        // TODO: Change the other usages to use this if I can.
+        match culture_names.get_mut(&name) {
+            None => {
+                culture_names.insert(name.clone(), vec![index]);
+            },
+            Some(indexes) => indexes.push(index),
+        }
+
         cultures.push(NewCulture {
-            name: culture_source.name().to_owned(), 
+            name, 
             namer: namer.to_owned(),
             type_: culture_type,
             expansionism,
             center: center.fid as i64,
         });
+        
     }
+
+    progress.start_known_endpoint(|| ("Fixing culture names.",culture_names.len()));
+    // now check the culture_names for duplicates and rename.
+    for (i,(_,indexes)) in culture_names.into_iter().enumerate() {
+
+        if indexes.len() > 1 {
+            let mut suffix = 0;
+            for index in indexes {
+                suffix += 1;
+                cultures[index].name += " ";
+                cultures[index].name += &suffix.to_roman().unwrap_or_else(|| suffix.to_string());
+            }
+
+        }
+
+
+        progress.update(|| i)
+    }
+
+    progress.finish(|| "Culture names fixed.");
 
     // NOTE: AFMG Had a Wildlands culture that was automatically placed wherever there were no cultures.
     // However, that culture did not behave like other cultures. The option is to do this, have a
@@ -214,10 +264,31 @@ fn get_culture_type<Random: Rng>(center: &TileCultureWorkForPreferenceSorting, r
 }
 
 fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
+    // NOTE: While I could use some sort of quadtree/point-distance index, I don't feel like I'm going to deal with enough cultures
+    // at any one point to worry about that.
     for point in point_vec {
         if point.distance(new_point) < spacing {
             return true;
         }
     }
     return false;
+}
+
+
+pub(crate) fn place_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+
+    let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
+
+    let tiles = target.edit_tile_layer()?;
+
+    for culture in cultures {
+
+        let mut tile = tiles.try_feature_by_id(&(culture.center as u64))?;
+
+        tile.set_culture(Some(&culture.name))?;
+
+        tiles.update_feature(tile)?;
+    }
+
+    Ok(())
 }

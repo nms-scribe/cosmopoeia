@@ -9,6 +9,7 @@ use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::population::generate_populations;
 use crate::algorithms::cultures::generate_cultures;
+use crate::algorithms::cultures::place_cultures;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
 use crate::utils::random_number_generator;
@@ -111,6 +112,33 @@ impl Task for GenPeopleCultures {
 
         target.with_transaction(|target| {
             generate_cultures(target, &mut random, cultures, namers, self.count, size_variance, self.overwrite, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+subcommand_def!{
+    /// Generates background population of tiles
+    pub(crate) struct GenPeoplePlaceCultures {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenPeoplePlaceCultures {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            place_cultures(target, &mut progress)
         })?;
 
         target.save(&mut progress)

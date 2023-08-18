@@ -84,6 +84,9 @@ macro_rules! feature_get_field_type {
     (string) => {
         String
     };
+    (option_string) => {
+        Option<String>
+    };
     (biome_criteria) => {
         BiomeCriteria
     };
@@ -137,6 +140,9 @@ macro_rules! feature_set_field_type {
     };
     (string) => {
         &str
+    };
+    (option_string) => {
+        Option<&str>
     };
     (biome_criteria) => {
         &BiomeCriteria
@@ -230,6 +236,18 @@ macro_rules! feature_get_field {
     };
     ($self: ident string $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_string_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
+    };
+    ($self: ident option_string $feature_name: literal $prop: ident $field: path) => {
+        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
+            if value == "" {
+                // we're storing null strings as empty for now.
+                Ok(None)
+            } else {
+                Ok(Some(value))
+            }
+        } else {
+            Ok(None)
+        }
     };
     ($self: ident biome_criteria $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
@@ -347,6 +365,16 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident string $field: path) => {{
         Ok($self.feature.set_field_string($field, $value)?)
     }};
+    ($self: ident $value: ident option_string $field: path) => {{
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_string($field, value)?)
+        } else {
+            // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
+            // so this is the best I can do.
+            // FUTURE: I've put in a feature request to gdal crate.
+            Ok(set_field_null(&$self.feature,$field)?)
+        }        
+    }};
     ($self: ident $value: ident biome_criteria $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
@@ -419,6 +447,13 @@ macro_rules! feature_to_value {
     }};
     ($prop: ident string) => {{
         FieldValue::StringValue($prop.to_owned())
+    }};
+    ($prop: ident option_string) => {{
+        if let Some(value) = $prop {
+            FieldValue::StringValue(value.to_owned())
+        } else {
+            get_field_null_value()
+        }
     }};
     ($prop: ident biome_criteria) => {{
         FieldValue::StringValue(Into::<String>::into($prop))
@@ -934,6 +969,8 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     #[allow(dead_code)] habitability set_habitability f64 FIELD_HABITABILITY "habitability" OGRFieldType::OFTReal;
     /// base population of the cell outside of the towns.
     #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
+    /// The name of the culture assigned to this tile, unless wild
+    #[allow(dead_code)] culture set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
@@ -1541,7 +1578,6 @@ impl BiomeFeature<'_> {
     pub(crate) const GLACIER: &str = "Glacier";
     pub(crate) const WETLAND: &str = "Wetland";
     
-    // TODO: Make this a struct to make things easier to read.
     const DEFAULT_BIOMES: [BiomeDefault; 13] = [ // name, index, habitability, supports_nomadic, supports_hunting
         BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, supports_nomadic: false, supports_hunting: false},
         BiomeDefault { name: Self::HOT_DESERT, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
@@ -1750,6 +1786,8 @@ impl BiomeLayer<'_> {
 #[derive(Clone)]
 pub(crate) enum CultureType {
     // FUTURE: This just seems to stringent to not allow all of this to be customized. Figure out a better way.
+    // TODO: My first thought, but I have to delve deeper into how culture types are used, is to just copy the sorting
+    // preferences from the culture sets, and use those to determine the preferred locations to expand to. 
     Generic,
     Lake,
     Naval,
@@ -1809,6 +1847,11 @@ entity!(NewCulture CultureFeature {
     center: i64
 });
 
+entity!(CultureForPlacement CultureFeature {
+    name: String,
+    center: i64
+});
+
 pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'data_life>>;
 
 
@@ -1821,6 +1864,13 @@ impl CultureLayer<'_> {
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
+
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<CultureFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
+
+
 }
 
 
@@ -1947,13 +1997,18 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
 
-    #[allow(dead_code)] pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
         Ok(BiomeLayer::open_from_dataset(&mut self.dataset)?)
 
     }
 
     pub(crate) fn create_cultures_layer(&mut self, overwrite: bool) -> Result<CultureLayer,CommandError> {
         Ok(CultureLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    }
+
+    pub(crate) fn edit_cultures_layer(&mut self) -> Result<CultureLayer,CommandError> {
+        Ok(CultureLayer::open_from_dataset(&mut self.dataset)?)
+
     }
 
 }
