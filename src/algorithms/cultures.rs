@@ -420,7 +420,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     }
 
-    progress.finish(|| "Cultures written");
+    progress.finish(|| "Cultures written.");
 
 
     Ok(())

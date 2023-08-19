@@ -27,6 +27,7 @@ use crate::utils::Point;
 use crate::utils::create_line;
 use crate::errors::MissingErrorToOption;
 use crate::utils::ToTitleCase;
+use crate::gdal_fixes::FeatureFix;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -95,9 +96,6 @@ macro_rules! feature_get_field_type {
     (lake_type) => {
         LakeType
     };
-    (option_lake_type) => {
-        Option<LakeType> // this is the same because everything's an option, the option tag only means it can accept options
-    };
     (terrain) => {
         Terrain
     };
@@ -151,9 +149,6 @@ macro_rules! feature_set_field_type {
     };
     (lake_type) => {
         &LakeType
-    };
-    (option_lake_type) => {
-        Option<&LakeType>
     };
     (terrain) => {
         &Terrain
@@ -267,19 +262,6 @@ macro_rules! feature_get_field {
         }
 
     };
-    ($self: ident option_lake_type $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            if value == "" {
-                // we're storing null strings as empty for now.
-                Ok(None)
-            } else {
-                Ok(Some(LakeType::try_from(value)?))
-            }
-        } else {
-            Ok(None)
-        }
-
-    };
     ($self: ident terrain $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
             Ok(Terrain::try_from(value)?)
@@ -296,30 +278,6 @@ macro_rules! feature_get_field {
         }
 
     };
-}
-
-fn set_field_null(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
-    // There's no unsetfield, but this seems to have the same effect. (But not in string fields)
-    // FUTURE: I've put in a feature request to gdal crate for access to clear_value
-    feature.set_field_double_list(name, &[])
-}
-
-fn set_field_null_str(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
-    // There's no unsetfield, but this seems to have the same effect.
-    // FUTURE: I've put in a feature request to gdal crate for access to clear_value
-    feature.set_field_string(name, "")
-}
-
-fn to_field_null_value() -> FieldValue {
-    // There's no unsetfield, but this seems to have the same effect. (But not in string fields)
-    // FUTURE: I've put in a feature request to gdal crate for access to clear_value, but I'm not sure how this would be handled.
-    FieldValue::RealListValue(Vec::new())
-}
-
-fn to_field_null_str_value() -> FieldValue {
-    // There's no unsetfield, but this seems to have the same effect.
-    // FUTURE: I've put in a feature request to gdal crate for access to clear_value, but I'm not sure how this would be handled.
-    FieldValue::StringValue("".to_owned())
 }
 
 macro_rules! feature_set_field {
@@ -342,9 +300,7 @@ macro_rules! feature_set_field {
         if let Some(value) = $value {
             Ok($self.feature.set_field_integer($field, value)?)
         } else {
-            // There's no unsetfield, but this should have the same effect.
-            // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null(&$self.feature,$field)?)
+            Ok($self.feature.set_field_null($field)?)
         }
     };
     ($self: ident $value: ident i64 $field: path) => {
@@ -354,9 +310,7 @@ macro_rules! feature_set_field {
         if let Some(value) = $value {
             Ok($self.feature.set_field_integer64($field, value)?)
         } else {
-            // There's no unsetfield, but this should have the same effect.
-            // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null(&$self.feature,$field)?)
+            Ok($self.feature.set_field_null($field)?)
         }
     };
     ($self: ident $value: ident bool $field: path) => {
@@ -383,10 +337,7 @@ macro_rules! feature_set_field {
         if let Some(value) = $value {
             Ok($self.feature.set_field_string($field, value)?)
         } else {
-            // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
-            // so this is the best I can do.
-            // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null_str(&$self.feature,$field)?)
+            Ok($self.feature.set_field_null($field)?)
         }        
     }};
     ($self: ident $value: ident biome_criteria $field: path) => {{
@@ -394,16 +345,6 @@ macro_rules! feature_set_field {
     }};
     ($self: ident $value: ident lake_type $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident option_lake_type $field: path) => {{
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &Into::<String>::into(value))?)
-        } else {
-            // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
-            // so this is the best I can do.
-            // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null_str(&$self.feature,$field)?)
-        }        
     }};
     ($self: ident $value: ident terrain $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
@@ -415,78 +356,71 @@ macro_rules! feature_set_field {
 
 macro_rules! feature_to_value {
     ($prop: ident f64) => {
-        FieldValue::RealValue($prop)
+        Some(FieldValue::RealValue($prop))
     };
     ($prop: ident i32) => {
-        FieldValue::IntegerValue($prop)
+        Some(FieldValue::IntegerValue($prop))
     };
     ($prop: ident bool) => {
-        FieldValue::IntegerValue($prop.into())
+        Some(FieldValue::IntegerValue($prop.into()))
     };
     ($prop: ident option_f64) => {
         if let Some(value) = $prop {
-            FieldValue::RealValue(value)
+            Some(FieldValue::RealValue(value))
         } else {
             to_field_null_value()
         }
     };
     ($prop: ident option_i32) => {
         if let Some(value) = $prop {
-            FieldValue::IntegerValue(value)
+            Some(FieldValue::IntegerValue(value))
         } else {
-            to_field_null_value()
+            None
         }
     };
     ($prop: ident option_i64) => {
         if let Some(value) = $prop {
-            FieldValue::Integer64Value(value)
+            Some(FieldValue::Integer64Value(value))
         } else {
-            to_field_null_value()
+            None
         }
     };
     ($prop: ident id_list) => {
-        FieldValue::StringValue(feature_conv!(id_list_to_string@ $prop))
+        Some(FieldValue::StringValue(feature_conv!(id_list_to_string@ $prop)))
     };
     ($prop: ident neighbor_directions) => {
-        FieldValue::StringValue(feature_conv!(neighbor_directions_to_string@ $prop))
+        Some(FieldValue::StringValue(feature_conv!(neighbor_directions_to_string@ $prop)))
     };
     ($prop: ident i64) => {
-        FieldValue::Integer64Value($prop)
+        Some(FieldValue::Integer64Value($prop))
     };
     ($prop: ident river_segment_from) => {{
-        FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
+        Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
     }};
     ($prop: ident river_segment_to) => {{
-        FieldValue::StringValue(Into::<&str>::into($prop).to_owned())
+        Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
     }};
     ($prop: ident string) => {{
-        FieldValue::StringValue($prop.to_owned())
+        Some(FieldValue::StringValue($prop.to_owned()))
     }};
     ($prop: ident option_string) => {{
         if let Some(value) = $prop {
-            FieldValue::StringValue(value.to_owned())
+            Some(FieldValue::StringValue(value.to_owned()))
         } else {
-            to_field_null_str_value()
+            None
         }
     }};
     ($prop: ident biome_criteria) => {{
-        FieldValue::StringValue(Into::<String>::into($prop))
+        Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
     ($prop: ident lake_type) => {{
-        FieldValue::StringValue(Into::<String>::into($prop))
+        Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
-    ($prop: ident option_lake_type) => {
-        if let Some(value) = $prop {
-            FieldValue::StringValue(Into::<String>::into(value))
-        } else {
-            to_field_null_str_value()
-        }
-    };
     ($prop: ident terrain) => {{
-        FieldValue::StringValue(Into::<String>::into($prop))
+        Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
     ($prop: ident culture_type) => {{
-        FieldValue::StringValue(Into::<String>::into($prop))
+        Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
 
 }
@@ -578,7 +512,7 @@ macro_rules! feature {
             }
     
             // feature initializer function
-            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature_count_fields!($($field),*)],[FieldValue; feature_count_fields!($($field),*)]) {
+            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature_count_fields!($($field),*)],[Option<FieldValue>; feature_count_fields!($($field),*)]) {
                 ([
                     $(Self::$field),*
                 ],[
@@ -830,25 +764,33 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
         LayerGeometryIterator::new(&mut self.layer)
     }
 
-    fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[FieldValue]) -> Result<u64,CommandError> {
+    fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
         // I dug out the source to get this. I wanted to be able to return the feature being created.
         let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
         feature.set_geometry(geometry)?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
-            feature.set_field(&field, value)?;
+            if let Some(value) = value {
+                feature.set_field(&field, value)?;
+            } else {
+                feature.set_field_null(&field)?;
+            }
         }
         feature.create(&self.layer)?;
         Ok(feature.fid().unwrap())
     }
 
 
-    fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[FieldValue]) -> Result<(),CommandError> {
+    fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<(),CommandError> {
         // This function is used for lookup tables, like biomes.
 
         // I had to dig into the source to get this stuff...
         let feature = gdal::vector::Feature::new(self.layer.defn())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
-            feature.set_field(field, value)?;
+            if let Some(value) = value {
+                feature.set_field(&field, value)?;
+            } else {
+                feature.set_field_null(&field)?;
+            }
         }
         feature.create(&self.layer)?;
         Ok(())
@@ -1258,8 +1200,8 @@ impl TilesLayer<'_> {
                 TileFeature::FIELD_SITE_X,
                 TileFeature::FIELD_SITE_Y,
             ],&[
-                FieldValue::RealValue(tile.site_x),
-                FieldValue::RealValue(tile.site_y),
+                Some(FieldValue::RealValue(tile.site_x)),
+                Some(FieldValue::RealValue(tile.site_y)),
             ])?;
         Ok(())
 

@@ -506,6 +506,7 @@ dependencies = [
  "adaptive-bezier",
  "clap",
  "gdal",
+ "gdal-sys",
  "indicatif",
  "libflate",
  "ordered-float",
