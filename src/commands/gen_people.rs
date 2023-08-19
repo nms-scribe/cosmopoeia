@@ -9,7 +9,7 @@ use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::population::generate_populations;
 use crate::algorithms::cultures::generate_cultures;
-use crate::algorithms::cultures::place_cultures;
+use crate::algorithms::cultures::expand_cultures;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
 use crate::utils::random_number_generator;
@@ -21,8 +21,8 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
-        /// A waterflow threshold above which population increases along the coast
         #[arg(long,default_value="10")]
+        /// A waterflow threshold above which population increases along the coast
         estuary_threshold: f64
 
     }
@@ -73,6 +73,10 @@ subcommand_def!{
         /// A number, clamped to 0-10, which controls how much cultures can vary in size
         size_variance: f64,
 
+        #[arg(long,default_value="10")]
+        /// A waterflow threshold above which the tile will count as a river
+        river_threshold: f64,
+
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
         seed: Option<u64>,
@@ -111,7 +115,7 @@ impl Task for GenPeopleCultures {
         let size_variance = self.size_variance.clamp(0.0, 10.0);
 
         target.with_transaction(|target| {
-            generate_cultures(target, &mut random, cultures, namers, self.count, size_variance, self.overwrite, &mut progress)
+            generate_cultures(target, &mut random, cultures, namers, self.count, size_variance, self.river_threshold, self.overwrite, &mut progress)
         })?;
 
         target.save(&mut progress)
@@ -121,15 +125,23 @@ impl Task for GenPeopleCultures {
 
 subcommand_def!{
     /// Generates background population of tiles
-    pub(crate) struct GenPeoplePlaceCultures {
+    pub(crate) struct GenPeopleExpandCultures {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
+        #[arg(long,default_value="10")]
+        /// A waterflow threshold above which the tile will count as a river
+        river_threshold: f64,
+
+        #[arg(long,default_value("1"))]
+        /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
+        limit_factor: f64
+
     }
 }
 
-impl Task for GenPeoplePlaceCultures {
+impl Task for GenPeopleExpandCultures {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -138,7 +150,7 @@ impl Task for GenPeoplePlaceCultures {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            place_cultures(target, &mut progress)
+            expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)
         })?;
 
         target.save(&mut progress)

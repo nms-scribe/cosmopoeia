@@ -13,7 +13,7 @@ use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::RandomIndex;
 use crate::algorithms::naming::NamerSet;
 use crate::progress::ProgressObserver;
-use crate::world_map::TileCultureWorkForPreferenceSorting;
+use crate::world_map::TileForCulturePrefSorting;
 
 #[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum TilePreference {
@@ -45,7 +45,7 @@ pub(crate) enum TilePreference {
 
 impl TilePreference {
     
-    pub(crate) fn get_value(&self, tile: &TileCultureWorkForPreferenceSorting, max_habitability: f64) -> OrderedFloat<f64> {
+    pub(crate) fn get_value(&self, tile: &TileForCulturePrefSorting, max_habitability: f64) -> OrderedFloat<f64> {
 
         // formulaes borrowed from AFMG
         match self {

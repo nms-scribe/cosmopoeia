@@ -2,6 +2,7 @@ use std::path::Path;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
+use std::hash::Hash;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -17,6 +18,7 @@ use gdal::vector::Layer;
 use gdal::vector::Feature;
 use gdal::vector::FeatureIterator;
 use gdal::Transaction;
+use ordered_float::OrderedFloat;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -297,15 +299,27 @@ macro_rules! feature_get_field {
 }
 
 fn set_field_null(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
-    // There's no unsetfield, but this seems to have the same effect.
+    // There's no unsetfield, but this seems to have the same effect. (But not in string fields)
     // FUTURE: I've put in a feature request to gdal crate for access to clear_value
     feature.set_field_double_list(name, &[])
 }
 
-fn get_field_null_value() -> FieldValue {
+fn set_field_null_str(feature: &Feature, name: &str) -> Result<(), gdal::errors::GdalError> {
     // There's no unsetfield, but this seems to have the same effect.
+    // FUTURE: I've put in a feature request to gdal crate for access to clear_value
+    feature.set_field_string(name, "")
+}
+
+fn to_field_null_value() -> FieldValue {
+    // There's no unsetfield, but this seems to have the same effect. (But not in string fields)
     // FUTURE: I've put in a feature request to gdal crate for access to clear_value, but I'm not sure how this would be handled.
     FieldValue::RealListValue(Vec::new())
+}
+
+fn to_field_null_str_value() -> FieldValue {
+    // There's no unsetfield, but this seems to have the same effect.
+    // FUTURE: I've put in a feature request to gdal crate for access to clear_value, but I'm not sure how this would be handled.
+    FieldValue::StringValue("".to_owned())
 }
 
 macro_rules! feature_set_field {
@@ -372,7 +386,7 @@ macro_rules! feature_set_field {
             // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
             // so this is the best I can do.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null(&$self.feature,$field)?)
+            Ok(set_field_null_str(&$self.feature,$field)?)
         }        
     }};
     ($self: ident $value: ident biome_criteria $field: path) => {{
@@ -388,7 +402,7 @@ macro_rules! feature_set_field {
             // There's no unsetfield, and unfortunately if I use the tricks above for numbers, it doesn't work for strings
             // so this is the best I can do.
             // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null(&$self.feature,$field)?)
+            Ok(set_field_null_str(&$self.feature,$field)?)
         }        
     }};
     ($self: ident $value: ident terrain $field: path) => {{
@@ -413,21 +427,21 @@ macro_rules! feature_to_value {
         if let Some(value) = $prop {
             FieldValue::RealValue(value)
         } else {
-            get_field_null_value()
+            to_field_null_value()
         }
     };
     ($prop: ident option_i32) => {
         if let Some(value) = $prop {
             FieldValue::IntegerValue(value)
         } else {
-            get_field_null_value()
+            to_field_null_value()
         }
     };
     ($prop: ident option_i64) => {
         if let Some(value) = $prop {
             FieldValue::Integer64Value(value)
         } else {
-            get_field_null_value()
+            to_field_null_value()
         }
     };
     ($prop: ident id_list) => {
@@ -452,7 +466,7 @@ macro_rules! feature_to_value {
         if let Some(value) = $prop {
             FieldValue::StringValue(value.to_owned())
         } else {
-            get_field_null_value()
+            to_field_null_str_value()
         }
     }};
     ($prop: ident biome_criteria) => {{
@@ -465,7 +479,7 @@ macro_rules! feature_to_value {
         if let Some(value) = $prop {
             FieldValue::StringValue(Into::<String>::into(value))
         } else {
-            get_field_null_value()
+            to_field_null_str_value()
         }
     };
     ($prop: ident terrain) => {{
@@ -722,8 +736,9 @@ macro_rules! entity_field_def {
 
 #[macro_export]
 macro_rules! entity {
-    ($name: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
+    ($(#[$struct_attr: meta])* $name: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]
+        $(#[$struct_attr])* 
         pub(crate) struct $name {
             $(
                 pub(crate) $field: crate::entity_field_def!($type $([$function])?)
@@ -1137,7 +1152,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
 }
 
 
-entity!(TileCultureWork TileFeature {
+entity!(TileForCultureGen TileFeature {
     fid: u64,
     site: Point,
     population: i32,
@@ -1153,13 +1168,13 @@ entity!(TileCultureWork TileFeature {
 
 });
 
-pub(crate) struct TileCultureWorkForPreferenceSorting<'struct_life> {
+pub(crate) struct TileForCulturePrefSorting<'struct_life> {
     pub(crate) fid: u64,
     pub(crate) site: Point,
     pub(crate) habitability: f64,
     pub(crate) shore_distance: i32,
     pub(crate) elevation_scaled: i32,
-    pub(crate) biome: &'struct_life BiomeDataForCultures,
+    pub(crate) biome: &'struct_life BiomeForCultureGen,
     pub(crate) water_count: Option<i32>,
     pub(crate) neighboring_lake_size: Option<i32>,
     pub(crate) terrain: Terrain,
@@ -1168,9 +1183,9 @@ pub(crate) struct TileCultureWorkForPreferenceSorting<'struct_life> {
 
 }
 
-impl TileCultureWorkForPreferenceSorting<'_> {
+impl TileForCulturePrefSorting<'_> {
 
-    pub(crate) fn from<'biomes>(tile: TileCultureWork, tiles: &TilesLayer, biomes: &'biomes HashMap<String,BiomeDataForCultures>, lakes: &HashMap<u64,LakeDataForCultures>) -> Result<TileCultureWorkForPreferenceSorting<'biomes>,CommandError> {
+    pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TilesLayer, biomes: &'biomes HashMap<String,BiomeForCultureGen>, lakes: &HashMap<u64,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
         let biome = biomes.get(&tile.biome).ok_or_else(|| CommandError::UnknownBiome(tile.biome))?;
         let neighboring_lake_size = if let Some(closest_water) = tile.closest_water {
             let closest_water = closest_water as u64;
@@ -1185,7 +1200,7 @@ impl TileCultureWorkForPreferenceSorting<'_> {
         } else {
             None
         };
-        Ok(TileCultureWorkForPreferenceSorting::<'biomes> {
+        Ok(TileForCulturePrefSorting::<'biomes> {
             fid: tile.fid,
             site: tile.site,
             habitability: tile.habitability,
@@ -1201,6 +1216,25 @@ impl TileCultureWorkForPreferenceSorting<'_> {
 
     }
 }
+
+
+entity!(TileForCultureExpand TileFeature {
+    population: i32,
+    shore_distance: i32,
+    elevation_scaled: i32,
+    biome: String,
+    terrain: Terrain,
+    water_flow: f64,
+    neighbors: Vec<(u64,i32)>,
+    lake_id: Option<i64>,
+    area: f64 = |feature: &TileFeature| {
+        Ok::<_,CommandError>(feature.geometry().map(|g| g.area()).unwrap_or_else(|| 0.0))
+    },
+    culture: Option<String> = |_| Ok::<_,CommandError>(None)
+
+});
+
+
 
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
 
@@ -1449,7 +1483,7 @@ entity!(LakeDataForPopulation LakeFeature {
     type_: LakeType
 });
 
-entity!(LakeDataForCultures LakeFeature {
+entity!(LakeForCultureGen LakeFeature {
     size: i32
 });
 
@@ -1541,6 +1575,7 @@ struct BiomeDefault {
     name: &'static str,
     habitability: i32,
     criteria: BiomeCriteria,
+    movement_cost: i32,
     supports_nomadic: bool,
     supports_hunting: bool
 }
@@ -1557,6 +1592,7 @@ feature!(BiomeFeature "biomes" wkbNone geometry: #[allow(dead_code)] {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
+    movement_cost #[allow(dead_code)] set_movement_cost i32 FIELD_MOVEMENT_COST "movement_cost" OGRFieldType::OFTInteger;
     // FUTURE: These should be replaced with amore configurable culture-type system, or at least build these into the culture data.
     supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic" OGRFieldType::OFTInteger;
     supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting" OGRFieldType::OFTInteger;
@@ -1579,19 +1615,19 @@ impl BiomeFeature<'_> {
     pub(crate) const WETLAND: &str = "Wetland";
     
     const DEFAULT_BIOMES: [BiomeDefault; 13] = [ // name, index, habitability, supports_nomadic, supports_hunting
-        BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::HOT_DESERT, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
-        BiomeDefault { name: Self::COLD_DESERT, habitability: 10, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
-        BiomeDefault { name: Self::SAVANNA, habitability: 22, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::GRASSLAND, habitability: 30, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: true, supports_hunting: false},
-        BiomeDefault { name: Self::TROPICAL_SEASONAL_FOREST, habitability: 50, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::TEMPERATE_DECIDUOUS_FOREST, habitability: 100, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::TROPICAL_RAINFOREST, habitability: 80, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::TEMPERATE_RAINFOREST, habitability: 90, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::TAIGA, habitability: 12, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::TUNDRA, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier, supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, movement_cost: 10, supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::HOT_DESERT, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: true, supports_hunting: false},
+        BiomeDefault { name: Self::COLD_DESERT, habitability: 10, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 150, supports_nomadic: true, supports_hunting: false},
+        BiomeDefault { name: Self::SAVANNA, habitability: 22, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 60, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::GRASSLAND, habitability: 30, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 50, supports_nomadic: true, supports_hunting: false},
+        BiomeDefault { name: Self::TROPICAL_SEASONAL_FOREST, habitability: 50, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 70, supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::TEMPERATE_DECIDUOUS_FOREST, habitability: 100, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 70, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::TROPICAL_RAINFOREST, habitability: 80, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 80, supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::TEMPERATE_RAINFOREST, habitability: 90, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 90, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::TAIGA, habitability: 12, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::TUNDRA, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 1000, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier, movement_cost: 5000, supports_nomadic: false, supports_hunting: false},
+        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland, movement_cost: 150, supports_nomadic: false, supports_hunting: true},
     ];
 
     //these constants make the default matrix easier to read.
@@ -1639,6 +1675,7 @@ impl BiomeFeature<'_> {
                 name: (*default.name).to_owned(),
                 habitability: default.habitability,
                 criteria,
+                movement_cost: default.movement_cost,
                 supports_nomadic: default.supports_nomadic,
                 supports_hunting: default.supports_hunting
             }
@@ -1707,6 +1744,7 @@ entity!(NewBiome BiomeFeature {
     name: String,
     habitability: i32,
     criteria: BiomeCriteria,
+    movement_cost: i32,
     supports_nomadic: bool,
     supports_hunting: bool
 });
@@ -1726,17 +1764,29 @@ impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeDa
     }
 }
 
-entity!(BiomeDataForCultures BiomeFeature {
+entity!(BiomeForCultureGen BiomeFeature {
     name: String,
     supports_nomadic: bool,
     supports_hunting: bool
 });
 
-impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeDataForCultures {
+impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForCultureGen {
     fn name(&self) -> &String {
         &self.name
     }
 }
+
+entity!(BiomeForCultureExpand BiomeFeature {
+    name: String,
+    movement_cost: i32
+});
+
+impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForCultureExpand {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
 
 
 pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_life>>;
@@ -1746,7 +1796,7 @@ impl BiomeLayer<'_> {
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<(),CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
-            &biome.name,biome.habitability,&biome.criteria,biome.supports_nomadic,biome.supports_hunting);
+            &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting);
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -1783,7 +1833,7 @@ impl BiomeLayer<'_> {
 
 }
 
-#[derive(Clone)]
+#[derive(Clone,Hash,Eq,PartialEq)]
 pub(crate) enum CultureType {
     // FUTURE: This just seems to stringent to not allow all of this to be customized. Figure out a better way.
     // TODO: My first thought, but I have to delve deeper into how culture types are used, is to just copy the sorting
@@ -1847,10 +1897,14 @@ entity!(NewCulture CultureFeature {
     center: i64
 });
 
-entity!(CultureForPlacement CultureFeature {
+// needs to be hashable in order to fit into a priority queue
+entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement CultureFeature {
     name: String,
-    center: i64
+    center: i64,
+    type_: CultureType,
+    expansionism: OrderedFloat<f64> = |feature: &CultureFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
+
 
 pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'data_life>>;
 

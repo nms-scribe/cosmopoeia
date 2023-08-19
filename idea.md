@@ -3441,7 +3441,7 @@ cells.harbor = tile.water_count
 ### Analysis: Rank Cells
 
 * let suitability = array of int the length of the tiles 
-* let population = array of float the length of the tiles -- TODO: Why is population a float?
+* let population = array of float the length of the tiles 
 * let fl_mean = average of water flow on tiles
 * let fl_max = max of water flow on tiles
 * let area_mean = mean area of cells
@@ -3460,12 +3460,12 @@ cells.harbor = tile.water_count
       * else if lake is frozen: s += 1
       * else if lake is dry: s -= 5
       * else if lake is sinkhole: s -= 5
-      * else if lake is lava: s -= 30 -- TODO: WTF? How do we get lava?
+      * else if lake is lava: s -= 30 
     * else if cell is an ocean
       * s += 5 -- "ocean coast is valued" 
-      * if cell is a harbor: s += 20 -- TODO: How do I determine this.
+      * if cell is a harbor: s += 20 
   * tile.pop_scale (cells.s) = s/5 -- This is the general population rate
-  * tile.population = if tiles.pop_scale > 0 ? (cells.pop_scale * cells.area) / area_mean : 0 -- population is scaled by the area -- TODO: How do I find the area?
+  * tile.population = if tiles.pop_scale > 0 ? (cells.pop_scale * cells.area) / area_mean : 0 -- population is scaled by the area 
 
 ### My Algorithm: Rank Cells
 
@@ -3488,7 +3488,7 @@ cells.harbor = tile.water_count
     * let suitability = biomes_data.get(tile.biome) or error
     * if suitability > 0:
       * if flow_mean > 0:
-        * suitability += ((tile.water_flow - flow_mean)/flow_divisor).clamp(0,1) * 250; // TODO: Is there a number I can just multiply by here?
+        * suitability += ((tile.water_flow - flow_mean)/flow_divisor).clamp(0,1) * 250; 
       * suitability -= (tile.elevation_scaled - 50) / 5 -- low elevation is better
       * if cell.shore_distance == 1:
         * if cell.water_flow > estuary_threshold: suitability += 15 -- estuary
@@ -3521,12 +3521,12 @@ cells.harbor = tile.water_count
 * if populated.len < (count * 25):
   * count (same var as above) = (populated.len / 50).floor
   * if count == 0:
-    * report warning "The climate is too harsh and the people cannot live here, no cultures, nations, or cities can be created." -- TODO: Except, the problem could be that there's no land, or all the elevations are too high, or something else.
+    * report warning "The climate is too harsh and the people cannot live here, no cultures, nations, or cities can be created." -- NOTE: Except, the problem could be that there's no land, or all the elevations are too high, or something else.
     * list of cultures consists only of "Wildlands"
     * map cultures to tiles
     * return
   * else:
-    * report warning "Not enough populated cells for requested number of cultures." -- TODO: This should also warn about why the cells can't be populated.
+    * report warning "Not enough populated cells for requested number of cultures." -- NOTE: This should also warn about why the cells can't be populated.
 
 * let cultures = select_cultures(count) 
 * let centers = d3.quadtree -- This seems to be some sort of graphical index thingie
@@ -3803,31 +3803,33 @@ And that's it. I know it's simple, but it allows the user to go in and edit the 
 * neutral_rate = This seems to be an input, but I can't find it. There is a neutralInput which is a number from 0 to 2, which is labelled as Growth rate and defines how many lands will remain neutral
 * max_expansion_cost = tiles.len() * 0.6 * neutral_rate
 * clear tile cultures
-* for cultur in cultures
-  * queue.add({cell_id: culture.center, culture_id: culture.i, priority: 0})
+* for culture in cultures
+  * queue.add({culture.center, culture, priority: 0})
 * while queue.length:
-  * cell_id, culture_id, priority = queue.pop
-  * type, expansinism from cultures[culture_id]
-  * for each cell neighbor:
+  * tile, culture, priority = queue.pop
+  * tile, name, type, expansinism from culture
+  * get tile for center
+  * for each cell neighbor of tile:
     * biome = cell.biome
     * biome_cost = get_biome_cost(culture_id,biome,type)
     * biome_change_cost = if biome == neighbor.biome ? 0 : 20;
-    * height_cost = get_height_cost(neighbor,neighbor.height,type) -- TODO:
-    * river_cost = get_river_cost(neighbor.water_flow,neighbor,type) -- TODO:
-    * type_cost = get_type_cost(neighbor.type (cells.t), type) -- TODO:
+    * height_cost = get_height_cost(neighbor,neighbor.height,type) 
+    * river_cost = get_river_cost(neighbor.water_flow,neighbor,type) 
+    * type_cost = get_type_cost(neighbor.type (cells.t), type) 
     * cell_cost = (all of those costs) / expansionism
     * total_cost = priority + cell_cost
-    * if total_Cost > max_expansion_cost: return
-    * if cost[neighbor] || total_cost < cost[neighbor] 
-      * if neighbor.population > 0: neighbor.culture = culture_id;
-      * cost[neighbor] = total_cost
+    * if total_Cost > max_expansion_cost: return // we're done, apparently even if some other culture might be able to continue to expand.
+    * if !cost.has_index(neighbor) || total_cost < cost[neighbor] // if it costs less for a culture to expand into the tile than we overwrite the previous one.
+      * if neighbor.population > 0: neighbor.culture = culture_name; // doesn't mean we're done
+      * cost[neighbor] = total_cost 
       * queue.add(neighbor_cell,culture_id, priority: total_cost)
 
 * get_biome_cost(culture,biome,type):
   * if culture.center.biome == biome return 10 // native penalty
-  * if type == "Hunting" return biomes_data.cost[biome] * 5;
-  * if type == "Nomadic" and biome > 4 and biome < 10 return biomes_data.cost[biome] * 10; -- forest penalty for nomads
-  * return biomes_data.cost[biome] * 2;
+  * if type == "Hunting" return biomes_data.cost[biome] * 5; 
+  * if type == "Nomadic" and biome > 4 and biome < 10 return biomes_data.cost[biome] * 10; -- forest penalty for nomads 
+  * return biomes_data.cost[biome] * 2; 
+    
 
 * get height_cost(cell,elevation,type):
   * f = cell.features
@@ -3844,22 +3846,96 @@ And that's it. I know it's simple, but it allows the user to go in and edit the 
   * return 0
 
 * get_river_cost(river_id,cell_id,type):
-  * if type is River return 100 if river_id is not none
+  * if type is River return 100 if river_id is not none -- TODO: Or in our case, flow is above a certain amount.
   * if river_id is none return 0 -- Will need a "water_flow" means a river thing.
   * return (tile.water_flow/10).clamp(20,100)
 
-* get_type_cost(t,type)
-  * if t === 1: 
+* get_type_cost(shore_distance,type)
+  * if shore_distance === 1: 
     * if Naval or Lake: 0
     * if Nomadic 60
     * else 20
-  * if t == 2:
+  * if shore_distance == 2:
     * if Naval or Nomadic: 30
     * else 0
-  * if t != -1:
+  * if shore_distance != -1:
     * if Naval or Lake: 100
     * else 0
   * return 0
+
+### My Algorithm: Expand Cultures
+
+TODO: Okay, I'm ready for this...
+
+* *input* expansion_limit - a number from 0.1 to 2 which "Defines how many lands will stay neutral"
+* queue is a PriorityQueue that sorts by "priority" field, lowest to highest.
+* cost is an empty HashMap of tile id's.
+* max_expansion_cost = tiles.len() * 0.6 * expansion_limit
+* tile_map is a map of tiles with an entity where the culture is empty.
+* biome_map is a map of biomes by name
+* cultures is a list of cultures with center, name, expansionism, type, some other stuff.
+* for culture in cultures:
+  * tile_map.get_mut(culture.center).culture = culture.name; -- This wasn't in the original AFMG code, but they placed the cultures during culture generation.
+  * queue.push({tile_id: culture.center, culture: culture}, 0)
+* while let Some(({tile_id, culture}, priority)) = queue.pop()
+  * get tile = tile_map.get(tile_id)
+  * for each neighbor_id in tile.neighbors:
+    * neighbor = tile_map.get(neighbor_id)
+    * biome = biome_map.get(neighbor.biome)
+    * biome_cost = get_biome_cost(tile_map.get(culture.center).biome,biome,culture.type)
+    * biome_change_cost = if biome == neighbor.biome ? 0 : 20 -- TODO: Yes, that's what this appears to be in AFMG. They're giving a penalty if two values which are the same are not the same.
+    * height_cost = get_height_cost(neighbor, culture.type)
+    * river_cost = get_river_cost(neighbor,culture.type)
+    * type_cost = get_type_cost(neighbor,culture.type)
+    * cell_cost = (biome_cost + biome_change_cost + height_cost + river_cost + type_cost) / expansionism;
+    * toital_cost = prioriaty + cell_cost;
+    * if total_cost > max_expansion_cost: return -- NOTE: Yes, just stop all expandings of every culture.
+    * if cost.get(neighbor_id) is none or total_cost < cost.get(neighbor_id):
+      * if neighbor.population > 0: neighbor.culture = culture.name -- Note that this overwrites any existing culture, Also note that this doesn't prevent the culture from spreading from this tile.
+      * cost.insert(neighbor_id,total_cost)
+      * queue.add({tile_id: neighbor_id, culture: culture, priority: total_cost})
+    * else: no more expansion in this direction.
+
+* get_biome_cost(culture_biome,biome,culture_type):
+  * if culture_biome = biome return 10 // native penalty -- TODO: And yet, we're adding a penalty for changing biomes as well.
+  * if culture_type == Hunting return biome.cost * 5
+  * if culture_type == Nomadic and biome is forest (>4 and <10) return biome.cost * 10
+  * return biome.cost * 2
+
+* get_height_cost(tile,culture_type):
+  * a = tile.area
+  * if culture_type is Lake and tile.lake_id is not none: return 10
+  * if culture_type is Naval and tile.terrain.is_ocean: return a * 2
+  * if culture_type is Nomadic and tile.terrain.is_ocean: return a * 50 
+  * if tile.terrain.is_ocan: return a * 6
+  * if culture_type is Highland and tile.elevation_scaled < 44: return 3000
+  * if culture_type is Highland and tile.elevation_Scaled < 62: return 200
+  * if culture_type is Highland: return 0
+  * if tile.elevation_Scaled >= 67: return 200;
+  * if tile.elevation_scaled >= 44: return 30;
+  * return 0;
+
+* get_river_cost(tile,culture_type):
+  * if culture_type is River: return (tile.water_flow > 100) ? 0 : 100 -- TODO: I need to determine a good flowage for this
+  * if tile.waterflow <= 100: return 0
+  * return (tile.water_flow / 10).clamp(20,100)
+
+* get_type_cost(tile,culture_type): -- TODO: Note that this creates bands of conflict, but doesn't cost as much once they are beyond.
+  * if tile.shore_distance == 1:
+    * if type is Naval | Lake:
+      * return 0
+    * if type is Nomadic:
+      * return 60
+    * else: return 20
+  * if tile.shore_distance == 2:
+    * if type is Naval | Nomadic:
+      * return 30
+    * else: return 0
+  * if tile.shore_distance !== -1:
+    * if type is Naval | Lake:
+      * return 100
+    * else
+      * return 0
 
 
 ### Analysis: Generate Burgs and States
@@ -3868,32 +3944,31 @@ TODO:
 
 ### Analysis: Generate Religions
 
-TODO: 
+TODO: I'm not sure I want to do this...
 
 ### Analysis: Define State Forms (Burgs and States)
 
-TODO: 
+TODO: I'm not sure I need to do this...
 
 ### Analysis: Generate Provinces (Burgs and States)
 
-TODO: 
+TODO: Probably...
 
 ### Analysis: Define Burg Features (Burgs and States)
 
-TODO: 
+TODO: Maybe...
 
 ### Analysis: Draw States?
 
-TODO: 
+TODO: Probably not...
 
 ### Analysis: Draw Borders?
 
-TODO: 
+TODO: Probably not...
 
 ### Analysis: Draw State Labels (Burgs and States)
 
-TODO: 
-
+TODO: Probably not...
 
 
 # Testing Commands:
@@ -3907,6 +3982,7 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people-population testing_output/Inannak.world.gpkg
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people-cultures testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people-expand-cultures testing_output/Inannak.world.gpkg
 
 ```
 

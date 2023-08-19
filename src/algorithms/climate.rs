@@ -131,7 +131,6 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     });
 
     // I need to trace the data across the map, so I can't just do quick read and writes to the database.
-    // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let mut tile_map = layer.read_features().to_entities_index::<_,TileDataForPrecipitation>(progress)?;
 
     // I can't work on the tiles map while also iterating it, so I have to copy the keys
@@ -160,8 +159,13 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                     break;
                 }
 
-                // TODO: I wonder if I should be sending the precipitation to all tiles in the general direction of the wind, not just
-                // one. That changes this algorithm a lot, though.
+                // TODO: I think this will be improved if instead of just sending precipitation to one tile, I send it to all
+                // tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see
+                // now. Split up the precipitation evenly.
+                // -- This would require switching to a queue thing like I did for water flow.
+                // -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will
+                //    infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed 
+                //    along to the queue.
 
                 // find neighbor closest to wind direction
                 let mut best_neighbor: Option<(_,_)> = None;
