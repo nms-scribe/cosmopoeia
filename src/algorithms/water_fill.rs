@@ -10,6 +10,8 @@ use crate::errors::CommandError;
 use crate::world_map::TileEntityForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
+use crate::progress::WatchableQueue;
 use crate::world_map::TilesLayer;
 use crate::world_map::LakeType;
 
@@ -106,13 +108,11 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
         AddToFlow(f64)
     }
 
-    let mut tile_queue = tile_queue;
+    let mut tile_queue = tile_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
     // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let mut tile_map = tile_map;
     let mut next_lake_id = (0..).into_iter();
     let mut lake_map = HashMap::new();
-
-    progress.start_unknown_endpoint(|| "Filling lakes.");
 
     while let Some((tile_fid,accumulation)) = tile_queue.pop() {
 
@@ -397,10 +397,6 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
     }
 
-    progress.finish(|| "Lakes filled.");
-
-
-    progress.start_known_endpoint(|| ("Drawing lakes.",lake_map.len()));
 
     let mut lakes = Vec::new();
 
@@ -413,7 +409,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     let mut new_lake_map = HashMap::new();
 
 
-    for (i,(id,lake)) in lake_map.into_iter().enumerate() {
+    for (id,lake) in lake_map.into_iter().watch(progress,"Drawing lakes.","Lakes drawn.") {
         if lake.contained_tiles.len() > 0 {
             let lake_geometry = lake.dissolve_tiles(&mut tiles_layer);
             let (lake_temp,lake_evap,lake_type) = lake.get_temp_evap_and_type();
@@ -433,37 +429,28 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
         }
 
-        progress.update(|| i);
     }
 
-    progress.finish(|| "Lakes drawn.");
 
 
     // I can't write to the lakes layer at the same time I'm drawing because I'm also using
     // the tile layer to get the geometries for dissolving the shapes. That's a mutable borrow conflict.
     let mut lakes_layer = target.create_lakes_layer(overwrite_layer)?;
 
-    progress.start_known_endpoint(|| ("Writing lakes.",lakes.len()));
-
     let mut written_lake_map = HashMap::new();
 
-    for (i,(id,lake)) in new_lake_map.into_iter().enumerate() {
+    for (id,lake) in new_lake_map.into_iter().watch(progress,"Writing lakes.","Lakes written.") {
         let lake_fid = lakes_layer.add_lake(lake)?;
         written_lake_map.insert(id, lake_fid as i64);
-        progress.update(|| i);
 
     }
-
-    progress.finish(|| "Lakes written.");
 
 
     // re-open layer to avoid mutability conflict from writing the lakes (this allows the layer to be dropped)
     // when borrowed to open the lakes_layer.
     let tiles_layer = target.edit_tile_layer()?;
 
-    progress.start_known_endpoint(|| ("Writing lake elevations.",tile_map.len()));
-
-    for (i,(tile_fid,tile)) in tile_map.iter().enumerate() {
+    for (tile_fid,tile) in tile_map.iter().watch(progress,"Writing lake elevations.","Lake elevations written.") {
         if let Some(mut feature) = tiles_layer.feature_by_id(&tile_fid) {
 
             let lake_id = if let Some(lake_id) = tile.lake_id {
@@ -478,11 +465,8 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
             tiles_layer.update_feature(feature)?;
         }
-        progress.update(|| i);
 
     }
-
-    progress.finish(|| "Lake elevations written.");
 
 
 

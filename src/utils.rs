@@ -19,6 +19,7 @@ use adaptive_bezier::Vector2;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 
 pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
     let seed = if let Some(seed) = seed {
@@ -221,13 +222,10 @@ pub(crate) trait ToGeometryCollection {
 impl<Iter: Iterator<Item=Result<Geometry,CommandError>>> ToGeometryCollection for Iter {
 
     fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Geometry,CommandError> {
-        progress.start(|| ("Reading geometries.",self.size_hint().1));
         let mut result = Geometry::empty(wkbGeometryCollection)?;
-        for (i,geometry) in self.enumerate() {
+        for geometry in self.watch(progress,"Reading geometries.","Geometries read.") {
             result.add_geometry(geometry?)?;
-            progress.update(|| i);
         }
-        progress.finish(|| "Geometries read.");
         Ok(result)
     }
 

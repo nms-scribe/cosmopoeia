@@ -80,6 +80,8 @@ impl Task for ConvertHeightmap {
         // triangle calculator
 
         let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(&mut progress)?);
+
+        progress.announce("Generate random points:");
     
         triangles.start(&mut progress)?;
     
@@ -87,15 +89,21 @@ impl Task for ConvertHeightmap {
 
         let mut voronois = VoronoiGenerator::new(triangles,extent)?;
     
+        progress.announce("Generate delaunay triangles:");
+    
         voronois.start(&mut progress)?;
     
         target.with_transaction(|target| {
+
+            progress.announce("Create tiles from voronoi polygons:");
+
             load_tile_layer(target, self.overwrite, voronois, &mut progress)?;
 
             // TODO: Some of the following could be done at the same time. Instead of iterating through all the tiles
             // three times, just iterate once and 1) sample elevations, 2) sample ocean and 3) calculate neighbors.
             // I just have to find a way to do that all at once while still being able to keep it separate for testing.
 
+            progress.announce("Sample elevations from heightmap:");
 
             sample_elevations_on_tiles(target, &source, &mut progress)?;
 
@@ -118,10 +126,14 @@ impl Task for ConvertHeightmap {
             };
 
 
+            progress.announce("Sample ocean data from heightmap:");
+
 
             sample_ocean_on_tiles(target, &ocean, ocean_method, &mut progress)?;
     
             // calculate neighbors
+            progress.announce("Calculate neighbors for tiles:");
+
 
             calculate_tile_neighbors(target, &mut progress)
         })?;
@@ -181,16 +193,23 @@ impl Task for ConvertHeightmapVoronoi {
         // triangle calculator
 
         let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(&mut progress)?);
+
+        progress.announce("Generate random points:");
     
         triangles.start(&mut progress)?;
     
         // voronoi calculator
 
         let mut voronois = VoronoiGenerator::new(triangles,extent)?;
-    
+
+        progress.announce("Generate delaunay triangles:");
+
         voronois.start(&mut progress)?;
     
         target.with_transaction(|target| {
+            progress.announce("Create tiles from voronoi polygons:");
+
+
             load_tile_layer(target, self.overwrite, voronois, &mut progress)
         })?;
 
@@ -222,6 +241,8 @@ impl Task for ConvertHeightmapSample {
         let source = RasterMap::open(self.source)?;
 
         let mut target = WorldMap::create_or_edit(self.target)?;
+
+        progress.announce("Sample elevations from heightmap:");
 
         // sample elevations
         target.with_transaction(|target| {
@@ -294,7 +315,11 @@ impl Task for ConvertHeightmapOcean {
 
         target.with_transaction(|target| {
 
+            progress.announce("Sampling ocean data from heightmap:");
+
             sample_ocean_on_tiles(target, &ocean, ocean_method, &mut progress)?;
+
+            progress.announce("Calculating neighbors for tiles:");
 
             calculate_tile_neighbors(target, &mut progress)
         })?;
@@ -327,6 +352,9 @@ impl Task for ConvertHeightmapNeighbors {
         let mut target = WorldMap::create_or_edit(self.target)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Calculate neighbors for tiles:");
+
             calculate_tile_neighbors(target, &mut progress)
         })?;
 

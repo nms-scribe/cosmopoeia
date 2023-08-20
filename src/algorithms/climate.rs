@@ -7,6 +7,7 @@ use crate::world_map::TileEntityLatElevOcean;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::world_map::Terrain;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
@@ -32,9 +33,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
 
     let features = layer.read_features().to_entities_vec::<_,TileEntityLatElevOcean>(progress)?;
 
-    progress.start_known_endpoint(|| ("Generating temperatures.",features.len()));
-
-    for (i,feature) in features.iter().enumerate() {
+    for feature in features.iter().watch(progress,"Generating temperatures.","Temperatures calculated.") {
 
         let base_temp = equator_temp - (interpolate(feature.site_y.abs()/90.0) * temp_delta);
         let adabiatic_temp = base_temp - if !feature.terrain.is_ocean() {
@@ -53,12 +52,8 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
 
 
 
-        progress.update(|| i);
-
 
     }
-
-    progress.finish(|| "Temperatures calculated.");
 
     Ok(())
 }
@@ -72,9 +67,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let features = layer.read_features().to_entities_vec::<_,TileEntityLat>(progress)?;
 
-    progress.start_known_endpoint(|| ("Generating winds.",features.len()));
-
-    for (i,feature) in features.iter().enumerate() {
+    for feature in features.iter().watch(progress,"Generating winds.","Winds generated.") {
 
         let wind_tier = ((feature.site_y - 89.0)/30.0).abs().floor() as usize;
         let wind_dir = winds[wind_tier];
@@ -87,12 +80,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
         }
 
 
-        progress.update(|| i);
-
-
     }
-
-    progress.finish(|| "Winds generated.");
 
     Ok(())
 }
@@ -141,9 +129,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     working_tiles.sort();
     let working_tiles = working_tiles;
 
-    progress.start_known_endpoint(|| ("Tracing winds.",working_tiles.len()));
-
-    for (i,start_fid) in working_tiles.iter().enumerate() {
+    for start_fid in working_tiles.iter().watch(progress,"Tracing winds.","Winds traced.") {
         if let Some(tile) = tile_map.get(start_fid).cloned() {
 
             let max_prec = 120.0 * tile.lat_modifier;
@@ -277,15 +263,9 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
         
         }
 
-        progress.update(|| i);
-
     }
 
-    progress.finish(|| "Winds traced.");
-
-    progress.start_known_endpoint(|| ("Writing precipitation",tile_map.len()));
-
-    for (fid,tile) in tile_map {
+    for (fid,tile) in tile_map.iter().watch(progress,"Writing precipitation.","Precipitation written.") {
         if let Some(mut working_feature) = layer.feature_by_id(&fid) {
 
             working_feature.set_precipitation(tile.precipitation)?;
@@ -295,8 +275,6 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
 
     }
-
-    progress.finish(|| "Precipitation written.");
 
     Ok(())
 }

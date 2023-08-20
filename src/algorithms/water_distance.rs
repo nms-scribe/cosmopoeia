@@ -1,4 +1,5 @@
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileEntityForWaterDistance;
@@ -14,18 +15,15 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     let mut queue = Vec::new();
     let mut next_queue = Vec::new();
 
-    progress.start_known_endpoint(|| ("Indexing data.",tiles.feature_count() as usize));
-
-    for (i,feature) in tiles.read_features().enumerate() {
+    for feature in tiles.read_features().watch(progress,"Queuing tiles.","Tiles queued.") {
         let fid = feature.fid()?;
         queue.push(fid);
-        progress.update(|| i);
 
     }
-    progress.finish(|| "Data indexed.");
 
     let total_queue = queue.len();
     let mut processed = 0;
+    // Can't use a queue watcher here because we're creating multiple queues, and I need to update the message in between without creating a new bar.
     progress.start_known_endpoint(|| ("Finding tiles at distance 1.",total_queue));
 
     while let Some(fid) = queue.pop() {

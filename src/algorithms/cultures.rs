@@ -5,6 +5,8 @@ use priority_queue::DoublePriorityQueue;
 use ordered_float::OrderedFloat;
 
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
+use crate::progress::WatchableDoublePriorityQueue;
 use crate::world_map::WorldMapTransaction;
 use crate::errors::CommandError;
 use crate::algorithms::culture_sets::CultureSet;
@@ -52,7 +54,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     // Algorithm copied from AFMG
 
     let culture_count = if culture_count > culture_set.len() {
-        progress.warning(|| "The provided culture set is not large enough to produce the requested number of cultures. The count will be limited.");
+        progress.warning(|| format!("The provided culture set is not large enough to produce the requested number of cultures. The count will be limited to {}.",culture_set.len()));
         culture_set.len()
     } else {
         culture_count
@@ -71,7 +73,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         if culture_count == 0 {
             progress.warning(|| "There aren't enough habitable tiles to support urban societies. Only the 'wildlands' culture will be created.")
         } else {
-            progress.warning(|| "There aren't enough habitiable tiles to support the requested number of cultures. The count will be limited.")
+            progress.warning(|| format!("There aren't enough habitiable tiles to support the requested number of cultures. The count will be limited to {}.",culture_count))
         }
         culture_count
 
@@ -79,6 +81,10 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         culture_count
     };
 
+    // TODO: I'm seeing some cultures which spread a lot further out than I would expect.
+    // -- how can you get an expansionism of 2.2, for a nomadic type?
+    // -- is generic overpowered? 
+    // -- Even at limit-factor of 0.2 it goes really far.
 
     let culture_sources = culture_set.select(rng,culture_count);
     // TODO: Make sure to add the wildlands culture on and fill up the empties at the end if there are any.
@@ -159,9 +165,8 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         
     }
 
-    progress.start_known_endpoint(|| ("Fixing culture names.",culture_names.len()));
     // now check the culture_names for duplicates and rename.
-    for (i,(_,indexes)) in culture_names.into_iter().enumerate() {
+    for (_,indexes) in culture_names.into_iter().watch(progress,"Fixing culture names.","Culture names fixed.") {
 
         if indexes.len() > 1 {
             let mut suffix = 0;
@@ -173,11 +178,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
         }
 
-
-        progress.update(|| i)
     }
-
-    progress.finish(|| "Culture names fixed.");
 
     // NOTE: AFMG Had a Wildlands culture that was automatically placed wherever there were no cultures.
     // However, that culture did not behave like other cultures. The option is to do this, have a
@@ -188,17 +189,13 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     // randomize hundreds to thousands of of random cultures with their own languages, etc. Such cultures
     // would have a very low expansionism.
 
-    progress.start_known_endpoint(|| ("Writing cultures.",cultures.len()));
     let mut cultures_layer = target.create_cultures_layer(overwrite_layer)?;
 
-    for (i,culture) in cultures.iter().enumerate() {
+    for culture in cultures.iter().watch(progress,"Writing cultures.","Cultures written.") {
 
         cultures_layer.add_culture(culture)?;
 
-        progress.update(|| i);
     }
-
-    progress.finish(|| "Cultures written.");
 
 
 
@@ -213,29 +210,20 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
     
     let mut populated = Vec::new();
     
-    progress.start_known_endpoint(|| ("Reading tiles.",tile_layer.feature_count()));
-    
-    for (i,tile) in tile_layer.read_features().into_entities::<TileForCultureGen>().enumerate() {
+    for tile in tile_layer.read_features().into_entities::<TileForCultureGen>().watch(progress,"Reading tiles.","Tiles read.") {
         let (_,tile) = tile?;
         if tile.population > 0 {
             max_habitability = max_habitability.max(tile.habitability);
             populated.push(tile);
         }
-        progress.update(|| i);
     }
     
-    progress.finish(|| "Tiles read.");
     
-    progress.start_known_endpoint(|| ("Processing tiles for preference sorting",populated.len()));
-
     let mut sortable_populated = Vec::new();
 
-    for (i,tile) in populated.into_iter().enumerate() {
+    for tile in populated.into_iter().watch(progress,"Processing tiles for preference sorting.","Tiles processed.") {
         sortable_populated.push(TileForCulturePrefSorting::from(tile, &*tile_layer, &biomes, &lake_map)?);
-        progress.update(|| i);
     }
-
-    progress.finish(|| "Tiles processed.");
 
     Ok((max_habitability, sortable_populated))
 }
@@ -316,7 +304,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     }
 
-    progress.start_unknown_endpoint(|| "Expanding cultures.");
+    let mut queue = queue.watch_queue(progress, "Expanding cultures.", "Cultures expanded.");
 
     while let Some(((tile_id, culture, culture_biome), priority)) = queue.pop_min() {
 
@@ -400,15 +388,10 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
             tile.culture = Some(culture);
         }
 
-        progress.update(|| 0);
 
     }
 
-    progress.finish(|| "Cultures expanded.");
-
-    progress.start_known_endpoint(|| ("Writing cultures.",tile_map.len()));
-
-    for (fid,tile) in tile_map {
+    for (fid,tile) in tile_map.iter().watch(progress,"Writing cultures.","Cultures written.") {
 
         let mut feature = tiles.try_feature_by_id(&fid)?;
 
@@ -416,11 +399,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
         tiles.update_feature(feature)?;
 
-        progress.update(|| 0);
-
     }
-
-    progress.finish(|| "Cultures written.");
 
 
     Ok(())

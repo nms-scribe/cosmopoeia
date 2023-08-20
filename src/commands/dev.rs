@@ -13,7 +13,7 @@ use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::random_points::PointGenerator;
-use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::algorithms::triangles::DelaunayGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::algorithms::voronoi::VoronoiGenerator;
@@ -61,6 +61,8 @@ impl Task for DevPointsFromHeightmap {
         let generator = PointGenerator::new(random, extent, self.points);
 
         target.with_transaction(|target| {
+            progress.announce("Generating random points:");
+
             load_points_layer(target, self.overwrite, generator, &mut progress)
         })?;
 
@@ -117,6 +119,8 @@ impl Task for DevPointsFromExtent {
         let generator = PointGenerator::new(random, extent, self.points);
         
         target.with_transaction(|target| {
+            progress.announce("Generating random points:");
+
             load_points_layer(target, self.overwrite, generator, &mut progress)
         })?;
 
@@ -152,6 +156,8 @@ impl Task for DevTrianglesFromPoints {
     
         let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(&mut progress)?);
     
+        progress.announce("Generating delaunay triangles:");
+
         generator.start(&mut progress)?;
     
         target.with_transaction(|target| {
@@ -197,14 +203,12 @@ impl Task for DevVoronoiFromTriangles {
         let mut triangles = target.triangles_layer()?;
     
         let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
+
+        progress.announce("Create tiles from voronoi polygons:");
     
         generator.start(&mut progress)?;
     
-        progress.start(|| ("Copying voronoi.",generator.size_hint().1));
-        
-        let voronoi: Vec<Result<NewTileEntity,CommandError>> = generator.collect();
-
-        progress.finish(|| "Voronoi copied.");
+        let voronoi: Vec<Result<NewTileEntity,CommandError>> = generator.watch(&mut progress,"Copying voronoi.","Voronoi copied.").collect();
 
         target.with_transaction(|target| {
             load_tile_layer(target,self.overwrite,voronoi.into_iter(),&mut progress)

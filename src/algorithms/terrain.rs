@@ -1,4 +1,5 @@
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::TileEntityForTerrainCalc;
 use crate::world_map::Terrain;
@@ -12,15 +13,12 @@ pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMa
     // we just want land tiles
     let mut table = tiles.read_features().to_entities_index::<_,TileEntityForTerrainCalc>(progress)?;
 
-    let table_len = table.len();
-    progress.start_known_endpoint(|| ("Calculating terrain types.",table_len));
-
     let mut terrains = Vec::new();
     let mut ocean = Vec::new();
-    let mut changes = 0;
 
     // pop the next one off of the table.
-    while let Some(tile) = table.keys().next().cloned().and_then(|first| table.remove(&first)) {
+    // TODO: I'm not sure if the progress is getting a size hint for this one.
+    while let Some(tile) = table.keys().watch(progress,"Calculating terrain types.","Terrain types calculated.").next().cloned().and_then(|first| table.remove(&first)) {
 
         if tile.terrain.is_ocean() {
             ocean.push(tile.fid)
@@ -75,34 +73,20 @@ pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMa
                 }
             };
 
-            changes += group_len;
-
             terrains.push((terrain,group));
     
                 
         }
 
-        progress.update(|| table_len - table.len())
-
     }
 
-    progress.finish(|| "Terrain types calculated.");
-
-    progress.start_known_endpoint(|| ("Writing terrain types.",changes));
-
-    let mut changes_written = 0;
-
-    for (terrain,group) in terrains {
+    for (terrain,group) in terrains.iter().watch(progress,"Writing terrain types.","Terrain types written.") {
         for tile in group {
             let mut feature = tiles.try_feature_by_id(&tile)?;
             feature.set_terrain(&terrain)?;
             tiles.update_feature(feature)?;
-            changes_written += 1;
-            progress.update(|| changes_written);
         }
     }
-
-    progress.finish(|| "Terrain types written.");
 
     Ok(())
 }

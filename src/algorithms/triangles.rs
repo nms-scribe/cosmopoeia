@@ -2,6 +2,7 @@ use gdal::vector::Geometry;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::utils::GeometryGeometryIterator;
 use crate::world_map::WorldMapTransaction;
 
@@ -34,7 +35,7 @@ impl DelaunayGenerator {
             // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
             // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
             progress.start_unknown_endpoint(|| "Generating triangles.");
-            let triangles = source.delaunay_triangulation(None)?; // FUTURE: Should this be configurable?
+            let triangles = source.delaunay_triangulation(None)?; // FUTURE: Should tolerance be configurable?
             progress.finish(|| "Triangles generated.");
             self.phase = DelaunayGeneratorPhase::Started(GeometryGeometryIterator::new(triangles))
         }
@@ -64,22 +65,24 @@ impl Iterator for DelaunayGenerator {
             DelaunayGeneratorPhase::Done => None,
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.phase {
+            DelaunayGeneratorPhase::Unstarted(geometry) => (0,Some(geometry.geometry_count())),
+            DelaunayGeneratorPhase::Started(iterator) => iterator.size_hint(),
+            DelaunayGeneratorPhase::Done => (0,None),
+        }
+        
+    }
 }
 
 pub(crate) fn load_triangles_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut target = target.create_triangles_layer(overwrite_layer)?;
 
-    // boundary points    
-
-    progress.start(|| ("Writing triangles.",generator.size_hint().1));
-
-    for (i,triangle) in generator.enumerate() {
+    for triangle in generator.watch(progress,"Writing triangles.","Triangles written.") {
         target.add_triangle(triangle?.to_owned())?;
-        progress.update(|| i);
     }
-
-    progress.finish(|| "Triangles written.");
 
     Ok(())
 

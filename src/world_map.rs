@@ -22,6 +22,7 @@ use ordered_float::OrderedFloat;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::utils::create_line;
@@ -549,6 +550,10 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> Iterator for TypedFeatureIte
     fn next(&mut self) -> Option<Self::Item> {
         self.features.next().map(Feature::from)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.features.size_hint()
+    }
 }
 
 impl<'impl_life, Feature: TypedFeature<'impl_life>> From<FeatureIterator<'impl_life>> for TypedFeatureIterator<'impl_life, Feature> {
@@ -563,13 +568,10 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> From<FeatureIterator<'impl_l
 impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_life, Feature> {
 
     pub(crate) fn to_entities_vec<'local, Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
-        progress.start(|| (format!("Reading {}.",Feature::LAYER_NAME),self.size_hint().1));
         let mut result = Vec::new();
-        for (i,entity) in self.enumerate() {
+        for entity in self.watch(progress,format!("Reading {}.",Feature::LAYER_NAME),format!("{} read.",Feature::LAYER_NAME.to_title_case())) {
             result.push(Data::try_from(entity)?);
-            progress.update(|| i);
         }
-        progress.finish(|| format!("{} read.",Feature::LAYER_NAME.to_title_case()));
         Ok(result)
     }
 
@@ -580,16 +582,13 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
 
     pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<'impl_life,Feature>>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
 
-        progress.start(|| (format!("Indexing {}.",Feature::LAYER_NAME),self.features.size_hint().1));
         let mut result = HashMap::new();
-        for (i,feature) in self.enumerate() {
+        for feature in self.watch(progress,format!("Indexing {}.",Feature::LAYER_NAME),format!("{} indexed.",Feature::LAYER_NAME.to_title_case())) {
             let fid = feature.fid()?;
             let entity = Data::try_from(feature)?;
  
             result.insert(fid,entity);
-            progress.update(|| i);
         }
-        progress.finish(|| format!("{} indexed.",Feature::LAYER_NAME.to_title_case()));
         Ok(result)
     }
 
@@ -619,6 +618,10 @@ impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Featu
         } else {
             None
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.features.size_hint()
     }
 }
 
@@ -1226,18 +1229,14 @@ impl TilesLayer<'_> {
         let mut tile_map = HashMap::new();
         let mut tile_queue = Vec::new();
 
-        progress.start_known_endpoint(|| ("Indexing data.",self.feature_count() as usize));
-
-        for (i,data) in self.read_features().into_entities::<TileEntityForWaterFill>().enumerate() {
+        for data in self.read_features().into_entities::<TileEntityForWaterFill>().watch(progress,"Indexing tiles.","Tiles indexed.") {
             let (fid,entity) = data?;
             if entity.water_accumulation > 0.0 {
                 tile_queue.push((fid,entity.water_accumulation));
             }
             tile_map.insert(fid, entity);
-            progress.update(|| i);
 
         }
-        progress.finish(|| "Data indexed.");
 
         Ok((tile_map,tile_queue))
         
@@ -1757,16 +1756,11 @@ impl BiomeLayer<'_> {
     pub(crate) fn build_index<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
         let mut result = HashMap::new();
 
-        progress.start_known_endpoint(|| ("Indexing biomes.",self.feature_count()));
-
-        for (i,entity) in self.read_features().into_entities::<Data>().enumerate() {
+        for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
             let (_,entity) = entity?;
             let name = entity.name().clone();
             result.insert(name, entity);
-            progress.update(|| i);
         }
-
-        progress.finish(|| "Biomes indexed.");
 
         Ok(result)
 

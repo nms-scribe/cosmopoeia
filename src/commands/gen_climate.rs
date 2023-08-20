@@ -39,6 +39,9 @@ impl Task for GenClimateTemperature {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Generating temperatures:");
+
             generate_temperatures(target, self.equator_temp,self.polar_temp,&mut progress)
         })?;
 
@@ -103,6 +106,8 @@ impl Task for GenClimateWind {
 
         target.with_transaction(|target| {
 
+            progress.announce("Generating winds:");
+
             generate_winds(target, winds, &mut progress)
 
         })?;
@@ -137,6 +142,9 @@ impl Task for GenClimatePrecipitation {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Generating precipitation:");
+
             generate_precipitation(target, self.moisture, &mut progress)
 
         })?;
@@ -213,10 +221,14 @@ impl Task for GenClimate {
         ];
 
         target.with_transaction(|target| {
+
+            progress.announce("Generating temperatures:");
             generate_temperatures(target, self.equator_temp, self.polar_temp, &mut progress)?;
 
+            progress.announce("Generating winds:");
             generate_winds(target, winds, &mut progress)?;
 
+            progress.announce("Generating precipitation:");
             generate_precipitation(target, self.moisture_factor, &mut progress)
         })?;
         

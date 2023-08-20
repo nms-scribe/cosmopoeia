@@ -6,6 +6,7 @@ use crate::utils::Extent;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 
 pub(crate) enum PointGeneratorPhase {
     NortheastInfinity,
@@ -133,14 +134,9 @@ pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,Command
 
     // boundary points    
 
-    progress.start(|| ("Writing points.",generator.size_hint().1));
-
-    for (i,point) in generator.enumerate() {
+    for point in generator.watch(progress,"Writing points.","Points written.") {
         target_points.add_point(point?)?;
-        progress.update(|| i);
     }
-
-    progress.finish(|| "Points written.");
 
     Ok(())
 

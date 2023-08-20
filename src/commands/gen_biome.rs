@@ -34,6 +34,8 @@ impl Task for GenBiomeData {
 
         target.with_transaction(|target| {
 
+            progress.announce("Filling biome defaults:");
+
             fill_biome_defaults(target, self.overwrite, &mut progress)
 
         })?;
@@ -63,6 +65,9 @@ impl Task for GenBiomeApply {
         let biomes = target.biomes_layer()?.get_matrix(&mut progress)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Applying biomes to tiles:");
+
             apply_biomes(target, biomes, &mut progress)
 
         })?;
@@ -96,12 +101,18 @@ impl Task for GenBiome {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Filling biome defaults:");
+
             fill_biome_defaults(target, self.overwrite, &mut progress)
         })?;
 
         let biomes = target.biomes_layer()?.get_matrix(&mut progress)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Applying biomes to tiles:");
+
             apply_biomes(target, biomes, &mut progress)
         })?;
 

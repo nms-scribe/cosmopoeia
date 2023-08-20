@@ -4,6 +4,7 @@ use crate::world_map::TileFeature;
 use crate::world_map::Entity;
 use crate::world_map::BiomeMatrix;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::world_map::BiomeFeature;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
@@ -50,9 +51,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
     let tiles = tiles_layer.read_features().to_entities_vec::<_,BiomeSource>(progress)?;
 
-    progress.start_known_endpoint(|| ("Applying biomes.",tiles.len()));
-
-    for (i,tile) in tiles.iter().enumerate() {
+    for tile in tiles.iter().watch(progress,"Applying biomes.","Biomes applied.") {
 
         let biome = if !tile.terrain.is_ocean() {
             if tile.temperature < -5.0 {
@@ -90,11 +89,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
         }
 
-        progress.update(|| i);
-
     }
-
-    progress.finish(|| "Biomes applied.");
 
     Ok(())
 

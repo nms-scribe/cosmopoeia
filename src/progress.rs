@@ -1,7 +1,10 @@
 use std::time::Duration;
+use std::iter::Enumerate;
 
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use priority_queue::DoublePriorityQueue;
+
 
 pub(crate) trait ProgressObserver {
 
@@ -22,6 +25,8 @@ pub(crate) trait ProgressObserver {
     fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, callback: Callback);
 
     fn update<Callback: FnOnce() -> usize>(&self, callback: Callback);
+
+    fn update_step_length<Callback: FnOnce() -> usize>(&self, callback: Callback);
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback);
 
@@ -45,6 +50,9 @@ impl ProgressObserver for () {
     }
 
     fn update<Callback: FnOnce() -> usize>(&self, _: Callback) {
+    }
+
+    fn update_step_length<Callback: FnOnce() -> usize>(&self, _: Callback) {
     }
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, _: Callback) {
@@ -127,6 +135,13 @@ impl ConsoleProgressBar {
 
     }
 
+    pub(crate) fn announce(&self, message: &str) {
+        if let Some(bar) = &self.bar {
+            bar.println(message)
+        } else {
+            println!("{}",message)
+        }
+    }
 
 
 }
@@ -154,6 +169,14 @@ impl ProgressObserver for ConsoleProgressBar {
         }
     }
 
+    fn update_step_length<Callback: FnOnce() -> usize>(&self, callback: Callback) {
+        if let Some(bar) = &self.bar {
+            bar.set_length(callback() as u64);
+        }
+    }
+
+
+
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
         if let Some(bar) = &self.bar {
             bar.set_message(callback().as_ref().to_owned())
@@ -170,8 +193,6 @@ impl ProgressObserver for ConsoleProgressBar {
         }
     }
 
-
-
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
         if let Some(bar) = &mut self.bar {
             Self::style_as_finished(bar);
@@ -181,4 +202,194 @@ impl ProgressObserver for ConsoleProgressBar {
     }
 
 }
+
+pub(crate) struct IteratorWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, IteratorType> {
+    finish: Message,
+    progress: &'progress mut Progress,
+    inner: Enumerate<IteratorType>
+}
+
+impl<'watcher,Message: AsRef<str>, Progress: ProgressObserver, ItemType, IteratorType: Iterator<Item=ItemType>> Iterator for IteratorWatcher<'watcher,Message,Progress,IteratorType> {
+
+    type Item = ItemType;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((i,next)) = self.inner.next() {
+            self.progress.update(|| i);
+            Some(next)
+        } else {
+            self.progress.finish(|| &self.finish);
+            None
+        }
+        
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()        
+    }
+    
+
+}
+
+pub(crate) trait WatchableIterator: Iterator + Sized {
+
+    fn watch<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> IteratorWatcher<Message, Progress, Self>;
+}
+
+impl<IteratorType: Iterator> WatchableIterator for IteratorType {
+
+    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
+    // - patterns which deal with popping items off a queue -- see below
+    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
+    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
+    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
+    // bar as well as updating the current step.
+
+    fn watch<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> IteratorWatcher<Message, Progress, Self> {
+        progress.start(|| (start,self.size_hint().1));
+        IteratorWatcher { 
+            finish: finish, 
+            progress: progress, 
+            inner: self.enumerate()
+        }
+
+    }
+
+
+}
+
+pub(crate) struct QueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> {
+    finish: Message,
+    progress: &'progress mut Progress,
+    inner: Vec<ItemType>,
+    popped: usize,
+    pushed: usize,
+}
+
+impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> QueueWatcher<'progress,Message,Progress,ItemType> {
+
+    pub(crate) fn pop(&mut self) -> Option<ItemType> {
+        let result = self.inner.pop();
+        self.popped += 1;
+        let len = self.inner.len();
+        if len == 0 {
+            self.progress.finish(|| &self.finish)
+        } else {
+            self.progress.update(|| self.popped);
+        }
+        result
+    }
+
+    pub(crate) fn push(&mut self, value: ItemType) {
+        self.inner.push(value);
+        self.pushed += 1;
+        self.progress.update_step_length(|| self.pushed);
+    }
+
+    pub(crate) fn last(&self) -> Option<&ItemType> {
+        self.inner.last()
+    }
+} 
+
+pub(crate) trait WatchableQueue<ItemType: Sized> {
+
+    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> QueueWatcher<Message, Progress, ItemType>;
+}
+
+impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
+
+    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
+    // - patterns which deal with popping items off a queue -- see below
+    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
+    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
+    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
+    // bar as well as updating the current step.
+
+    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> QueueWatcher<Message, Progress, ItemType> {
+        progress.start(|| (start,Some(self.len())));
+        QueueWatcher { 
+            finish: finish, 
+            progress: progress, 
+            inner: self,
+            pushed: 0,
+            popped: 0
+        }
+
+    }
+
+
+}
+
+
+pub(crate) struct DoublePriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
+    finish: Message,
+    progress: &'progress mut Progress,
+    inner: DoublePriorityQueue<ItemType,PriorityType>,
+    popped: usize,
+    pushed: usize,
+}
+
+impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> DoublePriorityQueueWatcher<'progress,Message,Progress,ItemType,PriorityType> {
+
+    pub(crate) fn pop_min(&mut self) -> Option<(ItemType,PriorityType)> {
+        let result = self.inner.pop_min();
+        self.popped += 1;
+        let len = self.inner.len();
+        if len == 0 {
+            self.progress.finish(|| &self.finish)
+        } else {
+            self.progress.update(|| self.popped);
+        }
+        result
+    }
+
+    #[allow(dead_code)] pub(crate) fn pop_max(&mut self) -> Option<(ItemType,PriorityType)> {
+        let result = self.inner.pop_max();
+        self.popped += 1;
+        let len = self.inner.len();
+        if len == 0 {
+            self.progress.finish(|| &self.finish)
+        } else {
+            self.progress.update(|| self.popped);
+        }
+        result
+    }
+
+    pub(crate) fn push(&mut self, value: ItemType, priority: PriorityType) {
+        self.inner.push(value,priority);
+        self.pushed += 1;
+        self.progress.update_step_length(|| self.pushed);
+    }
+
+} 
+
+pub(crate) trait WatchableDoublePriorityQueue<ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
+
+    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> DoublePriorityQueueWatcher<Message, Progress, ItemType,PriorityType>;
+}
+
+impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchableDoublePriorityQueue<ItemType,PriorityType> for DoublePriorityQueue<ItemType,PriorityType> {
+
+    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
+    // - patterns which deal with popping items off a queue -- see below
+    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
+    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
+    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
+    // bar as well as updating the current step.
+
+    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> DoublePriorityQueueWatcher<Message, Progress, ItemType,PriorityType> {
+        progress.start(|| (start,Some(self.len())));
+        DoublePriorityQueueWatcher { 
+            finish: finish, 
+            progress: progress, 
+            inner: self,
+            pushed: 0,
+            popped: 0
+        }
+
+    }
+
+
+}
+
 

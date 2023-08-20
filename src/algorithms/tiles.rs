@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::errors::CommandError;
 use crate::world_map::NewTileEntity;
 use crate::world_map::TypedFeature;
@@ -13,16 +14,9 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileEntity,Comm
 
     let mut target = target.create_tile_layer(overwrite_layer)?;
 
-    // boundary points    
-
-    progress.start(|| ("Writing tiles.",generator.size_hint().1));
-
-    for (i,tile) in generator.enumerate() {
+    for tile in generator.watch(progress,"Writing tiles.","Tiles written.") {
         target.add_tile(tile?)?;
-        progress.update(|| i);
     }
-
-    progress.finish(|| "Tiles written.");
 
     Ok(())
 
@@ -53,20 +47,15 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     let mut layer = target.edit_tile_layer()?;
     
     mark_time!{"reading tiles": 
-        progress.start_known_endpoint(|| ("Reading tiles",layer.feature_count()));
         let mut features = Vec::new();
-        for (i,feature) in layer.read_features().enumerate() {
+        for feature in layer.read_features().watch(progress,"Reading tiles.","Tiles read.") {
             features.push(feature.fid()?);
-            progress.update(|| i)
         }
-        progress.finish(|| "Tiles read.");
     };
-
-    progress.start_known_endpoint(|| ("Calculating neighbors.",features.len()));
 
     // # Loop through all features and find features that touch each feature
     // for f in feature_dict.values():
-    for (i,working_fid) in features.iter().enumerate() {
+    for working_fid in features.iter().watch(progress,"Calculating neighbors.","Neighbors calculated.") {
 
         mark_time!{"feature geometry":
             let (site_x,site_y,envelope,working_geometry) = { // shelter mutable borrow
@@ -144,11 +133,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         }
 
 
-        progress.update(|| i);
-
     }
-
-    progress.finish(|| "Neighbors calculated.");
 
     //println!("{:#?}",time_map);
     

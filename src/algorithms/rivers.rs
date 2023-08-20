@@ -13,6 +13,8 @@ use crate::algorithms::tiles::find_tile_site_point;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
+use crate::progress::WatchableQueue;
 
 pub(crate) struct RiverSegment {
     pub(crate) from: u64,
@@ -51,9 +53,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
     // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
     let (tile_from_index, tile_to_index, segment_draw_queue) = generate_water_rivers_clean_and_index(segment_clean_queue, progress);
 
-    progress.start_known_endpoint(|| ("Drawing segments.",segment_draw_queue.len()));
-
-    for (i,segment) in segment_draw_queue.iter().enumerate() {
+    for segment in segment_draw_queue.iter().watch(progress,"Drawing segments.","Segments drawn.") {
 
         let (to_type, next_tile) = generate_water_river_to_type(segment, &tile_to_index, &tile_from_index);
 
@@ -90,25 +90,14 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
 
         }
 
-        progress.update(|| i);
-
     }
-
-    progress.finish(|| "Segments drawn.");
 
     let mut segments_layer = target.create_rivers_layer(overwrite_layer)?;
 
     
-    // boundary points    
-
-    progress.start_known_endpoint(|| ("Writing rivers.",segments.len()));
-
-    for (i,segment) in segments.iter().enumerate() {
+    for segment in segments.iter().watch(progress,"Writing rivers.","Rivers written.") {
         segments_layer.add_segment(segment)?;
-        progress.update(|| i);
     }
-
-    progress.finish(|| "Rivers written.");
 
     Ok(())
 
@@ -221,7 +210,6 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
     let mut tile_from_index = HashMap::new();
     let mut tile_to_index = HashMap::new();
     let mut result_queue = Vec::new();
-    progress.start_known_endpoint(|| ("Cleaning and indexing segments.",segment_clean_queue.len()));
 
     // sort so that segments with the same to and from are equal, as we need to go through them in groups.
     segment_clean_queue.sort_by(|a,b| {
@@ -233,6 +221,7 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
 
     });
 
+    let mut segment_clean_queue = segment_clean_queue.watch_queue(progress,"Cleaning and indexing segments.","Segments cleaned and indexed.");
     while let Some(segment) = segment_clean_queue.pop() {
 
         // look for duplicates and merge them
@@ -274,19 +263,15 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
         };
         result_queue.push(segment);
 
-        progress.update(|| result_queue.len());
-
     }
 
-    progress.finish(|| "Segments cleaned and indexed.");
     (tile_from_index, tile_to_index, result_queue)
 }
 
 pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_>, progress: &mut Progress) -> Result<Vec<Rc<RiverSegment>>, CommandError> {
     let mut result = Vec::new();
 
-    progress.start_known_endpoint(|| ("Finding segments.",tiles.feature_count()));
-    for (i,entity) in tiles.read_features().into_entities::<TileEntityForRiverConnect>().enumerate() {
+    for entity in tiles.read_features().into_entities::<TileEntityForRiverConnect>().watch(progress,"Finding segments.","Segments found.") {
         let (fid,tile) = entity?;
         for flow_to in &tile.flow_to {
             let flow_to_len = tile.flow_to.len() as f64;
@@ -307,11 +292,7 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
             }));
         }
 
-        progress.update(|| i);
-
     };
-
-    progress.finish(|| "Segments found.");
 
     Ok(result)
 }

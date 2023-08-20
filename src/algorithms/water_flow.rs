@@ -6,6 +6,7 @@ use crate::errors::CommandError;
 use crate::world_map::TileEntityForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 
 pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
@@ -19,9 +20,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();
 
-    progress.start_known_endpoint(|| ("Indexing data.",layer.feature_count() as usize));
-
-    for (i,data) in layer.read_features().into_entities::<TileEntityForWaterFlow>().enumerate() {
+    for data in layer.read_features().into_entities::<TileEntityForWaterFlow>().watch(progress,"Indexing tiles.","Tiles indexed.") {
         let (fid,entity) = data?;
         if !entity.terrain.is_ocean() {
             // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 
@@ -29,10 +28,8 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
             tile_list.push((fid,entity.elevation));
         }
         tile_map.insert(fid, entity);
-        progress.update(|| i);
 
     }
-    progress.finish(|| "Data indexed.");
 
     // sort tile list so the highest is first.
     tile_list.sort_by(|(_,a),(_,b)| 
@@ -45,9 +42,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
         }
     );
 
-    progress.start_known_endpoint(|| ("Calculating initial flow",tile_list.len()));
-
-    for (i,(fid,elevation)) in tile_list.iter().enumerate() {
+    for (fid,elevation) in tile_list.iter().watch(progress,"Calculating initial flow.","Flow calculated.") {
         let (water_flow,lowest,lowest_elevation) = if let Some(entity) = tile_map.get(fid) {
             let water_flow = entity.water_flow + entity.precipitation / cells_number_modifier;
             let (lowest,lowest_elevation) = super::tiles::find_lowest_neighbors(entity,&tile_map);
@@ -84,15 +79,10 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
             tile.flow_to = flow_to;
         }
 
-        progress.update(|| i);
-
     }
 
-    progress.finish(|| "Flow calculated.");
 
-    progress.start_known_endpoint(|| ("Writing flow",tile_map.len()));
-
-    for (fid,tile) in &tile_map {
+    for (fid,tile) in tile_map.iter().watch(progress,"Writing flow.","Flow written.") {
         if let Some(mut working_feature) = layer.feature_by_id(&fid) {
 
             working_feature.set_water_flow(tile.water_flow)?;
@@ -104,8 +94,6 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
 
     }
-
-    progress.finish(|| "Flow written.");
 
     Ok((tile_map.into_iter().map(|(k,v)| (k,v.into())).collect(),lake_queue))
 

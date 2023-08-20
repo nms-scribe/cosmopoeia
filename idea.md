@@ -3416,6 +3416,276 @@ function drawBorders() {
   TIME && console.timeEnd("drawBorders");
 }
 
+window.Routes = (function () {
+  const getRoads = function () {
+    TIME && console.time("generateMainRoads");
+    const cells = pack.cells;
+    const burgs = pack.burgs.filter(b => b.i && !b.removed);
+    const capitals = burgs.filter(b => b.capital).sort((a, b) => a.population - b.population);
+
+    if (capitals.length < 2) return []; // not enough capitals to build main roads
+    const paths = []; // array to store path segments
+
+    for (const b of capitals) {
+      const connect = capitals.filter(c => c.feature === b.feature && c !== b);
+      for (const t of connect) {
+        const [from, exit] = findLandPath(b.cell, t.cell, true);
+        const segments = restorePath(b.cell, exit, "main", from);
+        segments.forEach(s => paths.push(s));
+      }
+    }
+
+    cells.i.forEach(i => (cells.s[i] += cells.road[i] / 2)); // add roads to suitability score
+    TIME && console.timeEnd("generateMainRoads");
+    return paths;
+  };
+
+  const getTrails = function () {
+    TIME && console.time("generateTrails");
+    const cells = pack.cells;
+    const burgs = pack.burgs.filter(b => b.i && !b.removed);
+
+    if (burgs.length < 2) return []; // not enough burgs to build trails
+
+    let paths = []; // array to store path segments
+    for (const f of pack.features.filter(f => f.land)) {
+      const isle = burgs.filter(b => b.feature === f.i); // burgs on island
+      if (isle.length < 2) continue;
+
+      isle.forEach(function (b, i) {
+        let path = [];
+        if (!i) {
+          // build trail from the first burg on island
+          // to the farthest one on the same island or the closest road
+          const farthest = d3.scan(isle, (a, c) => (c.y - b.y) ** 2 + (c.x - b.x) ** 2 - ((a.y - b.y) ** 2 + (a.x - b.x) ** 2));
+          const to = isle[farthest].cell;
+          if (cells.road[to]) return;
+          const [from, exit] = findLandPath(b.cell, to, true);
+          path = restorePath(b.cell, exit, "small", from);
+        } else {
+          // build trail from all other burgs to the closest road on the same island
+          if (cells.road[b.cell]) return;
+          const [from, exit] = findLandPath(b.cell, null, true);
+          if (exit === null) return;
+          path = restorePath(b.cell, exit, "small", from);
+        }
+        if (path) paths = paths.concat(path);
+      });
+    }
+
+    TIME && console.timeEnd("generateTrails");
+    return paths;
+  };
+
+  const getSearoutes = function () {
+    TIME && console.time("generateSearoutes");
+    const {cells, burgs, features} = pack;
+    const allPorts = burgs.filter(b => b.port > 0 && !b.removed);
+
+    if (!allPorts.length) return [];
+
+    const bodies = new Set(allPorts.map(b => b.port)); // water features with ports
+    let paths = []; // array to store path segments
+    const connected = []; // store cell id of connected burgs
+
+    bodies.forEach(f => {
+      const ports = allPorts.filter(b => b.port === f); // all ports on the same feature
+      if (!ports.length) return;
+
+      if (features[f]?.border) addOverseaRoute(f, ports[0]);
+
+      // get inner-map routes
+      for (let s = 0; s < ports.length; s++) {
+        const source = ports[s].cell;
+        if (connected[source]) continue;
+
+        for (let t = s + 1; t < ports.length; t++) {
+          const target = ports[t].cell;
+          if (connected[target]) continue;
+
+          const [from, exit, passable] = findOceanPath(target, source, true);
+          if (!passable) continue;
+
+          const path = restorePath(target, exit, "ocean", from);
+          paths = paths.concat(path);
+
+          connected[source] = 1;
+          connected[target] = 1;
+        }
+      }
+    });
+
+    function addOverseaRoute(f, port) {
+      const {x, y, cell: source} = port;
+      const dist = p => Math.abs(p[0] - x) + Math.abs(p[1] - y);
+      const [x1, y1] = [
+        [0, y],
+        [x, 0],
+        [graphWidth, y],
+        [x, graphHeight]
+      ].sort((a, b) => dist(a) - dist(b))[0];
+      const target = findCell(x1, y1);
+
+      if (cells.f[target] === f && cells.h[target] < 20) {
+        const [from, exit, passable] = findOceanPath(target, source, true);
+
+        if (passable) {
+          const path = restorePath(target, exit, "ocean", from);
+          paths = paths.concat(path);
+          last(path).push([x1, y1]);
+        }
+      }
+    }
+
+    TIME && console.timeEnd("generateSearoutes");
+    return paths;
+  };
+
+  const draw = function (main, small, water) {
+    TIME && console.time("drawRoutes");
+    const {cells, burgs} = pack;
+    const {burg, p} = cells;
+
+    const getBurgCoords = b => [burgs[b].x, burgs[b].y];
+    const getPathPoints = cells => cells.map(i => (Array.isArray(i) ? i : burg[i] ? getBurgCoords(burg[i]) : p[i]));
+    const getPath = segment => round(lineGen(getPathPoints(segment)), 1);
+    const getPathsHTML = (paths, type) => paths.map((path, i) => `<path id="${type}${i}" d="${getPath(path)}" />`).join("");
+
+    lineGen.curve(d3.curveCatmullRom.alpha(0.1));
+    roads.html(getPathsHTML(main, "road"));
+    trails.html(getPathsHTML(small, "trail"));
+
+    lineGen.curve(d3.curveBundle.beta(1));
+    searoutes.html(getPathsHTML(water, "searoute"));
+
+    TIME && console.timeEnd("drawRoutes");
+  };
+
+  const regenerate = function () {
+    routes.selectAll("path").remove();
+    pack.cells.road = new Uint16Array(pack.cells.i.length);
+    pack.cells.crossroad = new Uint16Array(pack.cells.i.length);
+    const main = getRoads();
+    const small = getTrails();
+    const water = getSearoutes();
+    draw(main, small, water);
+  };
+
+  return {getRoads, getTrails, getSearoutes, draw, regenerate};
+
+  // Find a land path to a specific cell (exit), to a closest road (toRoad), or to all reachable cells (null, null)
+  function findLandPath(start, exit = null, toRoad = null) {
+    const cells = pack.cells;
+    const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
+    const cost = [],
+      from = [];
+    queue.queue({e: start, p: 0});
+
+    while (queue.length) {
+      const next = queue.dequeue(),
+        n = next.e,
+        p = next.p;
+      if (toRoad && cells.road[n]) return [from, n];
+
+      for (const c of cells.c[n]) {
+        if (cells.h[c] < 20) continue; // ignore water cells
+        const stateChangeCost = cells.state && cells.state[c] !== cells.state[n] ? 400 : 0; // trails tend to lay within the same state
+        const habitability = biomesData.habitability[cells.biome[c]];
+        if (!habitability) continue; // avoid inhabitable cells (eg. lava, glacier)
+        const habitedCost = habitability ? Math.max(100 - habitability, 0) : 400; // routes tend to lay within populated areas
+        const heightChangeCost = Math.abs(cells.h[c] - cells.h[n]) * 10; // routes tend to avoid elevation changes
+        const heightCost = cells.h[c] > 80 ? cells.h[c] : 0; // routes tend to avoid mountainous areas
+        const cellCoast = 10 + stateChangeCost + habitedCost + heightChangeCost + heightCost;
+        const totalCost = p + (cells.road[c] || cells.burg[c] ? cellCoast / 3 : cellCoast);
+
+        if (from[c] || totalCost >= cost[c]) continue;
+        from[c] = n;
+        if (c === exit) return [from, exit];
+        cost[c] = totalCost;
+        queue.queue({e: c, p: totalCost});
+      }
+    }
+    return [from, exit];
+  }
+
+  function restorePath(start, end, type, from) {
+    const cells = pack.cells;
+    const path = []; // to store all segments;
+    let segment = [],
+      current = end,
+      prev = end;
+    const score = type === "main" ? 5 : 1; // to increase road score at cell
+
+    if (type === "ocean" || !cells.road[prev]) segment.push(end);
+    if (!cells.road[prev]) cells.road[prev] = score;
+
+    for (let i = 0, limit = 1000; i < limit; i++) {
+      if (!from[current]) break;
+      current = from[current];
+
+      if (cells.road[current]) {
+        if (segment.length) {
+          segment.push(current);
+          path.push(segment);
+          if (segment[0] !== end) {
+            cells.road[segment[0]] += score;
+            cells.crossroad[segment[0]] += score;
+          }
+          if (current !== start) {
+            cells.road[current] += score;
+            cells.crossroad[current] += score;
+          }
+        }
+        segment = [];
+        prev = current;
+      } else {
+        if (prev) segment.push(prev);
+        prev = null;
+        segment.push(current);
+      }
+
+      cells.road[current] += score;
+      if (current === start) break;
+    }
+
+    if (segment.length > 1) path.push(segment);
+    return path;
+  }
+
+  // find water paths
+  function findOceanPath(start, exit = null, toRoute = null) {
+    const cells = pack.cells,
+      temp = grid.cells.temp;
+    const queue = new PriorityQueue({comparator: (a, b) => a.p - b.p});
+    const cost = [],
+      from = [];
+    queue.queue({e: start, p: 0});
+
+    while (queue.length) {
+      const next = queue.dequeue(),
+        n = next.e,
+        p = next.p;
+      if (toRoute && n !== start && cells.road[n]) return [from, n, true];
+
+      for (const c of cells.c[n]) {
+        if (c === exit) {
+          from[c] = n;
+          return [from, exit, true];
+        }
+        if (cells.h[c] >= 20) continue; // ignore land cells
+        if (temp[cells.g[c]] <= -5) continue; // ignore cells with term <= -5
+        const dist2 = (cells.p[c][1] - cells.p[n][1]) ** 2 + (cells.p[c][0] - cells.p[n][0]) ** 2;
+        const totalCost = p + (cells.road[c] ? 1 + dist2 / 2 : dist2 + (cells.t[c] ? 1 : 100));
+
+        if (from[c] || totalCost >= cost[c]) continue;
+        (from[c] = n), (cost[c] = totalCost);
+        queue.queue({e: c, p: totalCost});
+      }
+    }
+    return [from, exit, false];
+  }
+})();
+
 ```
 
 ### Analysis
@@ -3940,7 +4210,382 @@ TODO: Okay, I'm ready for this...
 
 ### Analysis: Generate Burgs and States
 
-TODO: 
+* *input*: regionsOutput: number of states
+* n = cells.length
+* cells.burg = new array
+* cells.road = new array
+* cells.cross_road = new array
+* burgs,burgTree = placeCapitals()
+* states = createStates(burgs)
+* capitalRoutes = Routes.getRoads()
+* placeTowns(burgsTree)
+* expandStates()
+* normalizeStates()
+* let townRoutes = Routes.getTrails() -- TODO:
+* specifyBurgs()
+* let oceanRoutes = Routes.getSearoutes() -- TODO:
+* collectStatisticts() -- I don't need this
+* assignColors() -- I don't need this
+* generateDiplomacy() -- I don't need this
+* Routes.draw(capitalRoutes,townRoutes,oceanRoutes) -- I don't need this
+* drawBurgs -- I don't need this
+
+* placeCapitals()
+  * count = regionsOutput
+  * burgs = []
+  * rand = || 0.5 + rng.gen_range(0..1) * 0.5
+  * score = array the same length as tiles holding a value of habitability * rand()
+  * sorted = tiles filtered for score[i] > 0 and tile.culture.is_some, then sorted by score backwards
+  * if sorted.length < count * 10:
+    * count = sorted.length / 10
+    * if count == 0: warning: "There are not enough populated cells to generate states." and return.
+    * else: "There are not enough populated cells to generate requested number. Will only generate count states.
+  * burgs_tree is a graphical 2d index of points where burgs are located
+  * spacing = (extent.width + extent.height) / 2 / count;
+  * i = 0
+  * while i < sorted.len: -- we might manipulate i, so this can't be a for loop
+    * if burgs.len > count: break;
+    * cell = sorted[i]
+    * [x,y] = cell.site
+    * if burgs_tree.find(x,y,spacing) is null:
+      * burgs.push({cell, x, y})
+      * burgs_tree.add(x,y)
+    * if i === sorted.len - 1:
+      * -- can not place capitals with current spacing, trying again with reduced spacing
+      * reset burgs_tree, burgs
+      * spacing = spacing / 1.2
+      * i = 0 -- don't increment
+      * continue
+    * i += 1
+  * return (burgsTree,burgs)
+  
+* createStates(burgs)
+  * states = [{i: 0, name: "Neutrals"}]
+  * each5th = each(5) -- TODO: What is this?
+  * for (i,burg) in burgs:
+    * b.i = b.state = i;
+    * b.culture = b.cell.culture
+    * b.name = namers.load(b.culture).get_name()
+    * b.feature = lake_map.get(b.cell.lake_id)
+    * b.capital = 1
+
+    * expansionism = (random() * powerInput.value + 1) -- PowerInput is also used in culture expansion, I believe
+    * basename = if b.name.length < 9 && each5th(b.cell) { b.name } else {b.getshort name from culture}
+    * name = namer(culture.namer).get name
+    * type = b.cultuer.type
+
+    * -- skipping some coat of arms nonsense
+
+    * states.push(i,name,expansionism,capital,type,center,culture)
+
+    * cell.burg = i (i is an id, we might need that with burgs, we can't assume names are unique)
+
+* placeTowns(burgsTree)
+  * score = array the same length as tiles holding a value of habitability * gause(1,3,0,20,3) -- TODO: What is this?
+  * sorted = tiles filtered for score[i] > 0 and tile.culture.is_some and no burg right now, then sorted by score backwards
+  * desiredNumber = if manorsInput == 1000: -- TODO: What is this?
+    * sorted.len / 5 / (grid.points.length / 10000) * 0.8
+    * else: manorsInput
+  * burgs_number = desiredNumber.min(sorted.length)
+  * burgsAdded = 0
+  * spacing = extent.width + extent.height / 150 / ((burgs_number^0.7)/66)
+  * while burgsAdded < burgs_number && spacing > 1:
+    * for i in 0..sorted.length:
+      * if burgs_added >= burgs_number: break;
+      * if sorted[i] has burg: continue
+      * tile = sorted[i]
+      * x,y = sorted[i].site
+      * s = spacing * gauss(1,0.3,0.2,2,2) -- TODO: What is this?
+      * if burgs_Tree.find(x,y,s): continue -- too close to existing burg
+      * burg = burgs.length
+      * culture = tile.culture
+      * name = namer get name for culture.namer
+      * burgs.push({cell, x, y, state: 0, i: burg, culture, name, capital: 0, feature: lake_map[cell]})
+      * burgs_tree.add(x,y)
+      * cells.burg[cell] = burg
+      * burgs_added += 1;
+    * spacing *= 0.5 -- decrease spacing and try to keep going.
+  * if burgs_added < desired_number:
+    * warning: Couldn't place all burgs. Requested {}, placed {}
+
+* expandStates
+  * queue = PriorityQueue
+  * cost = []
+  * global_neutral_rate = neutral_input -- TODO: What is this?
+  * states_neutral_rate = states_neutral -- TODO: What is this?
+  * neutral = (tiles.len() / 2) * global_neutral_rate * states_neutral_rate -- TODO: Why are their two numbers?
+  * for state of states:
+    * capitalCell = burgs[state.capital].cell
+    * cells.state[capitalCell] = state.i
+    * culture_center = cultures[state.culture].center;
+    * b = cells.biome[cultuer_center]
+    * queue.push({e: state.center, s: state.i, b},0)
+    * cost[state.center] = 1;
+
+  * while let Some(e,s,b,priority) in queue:
+    * type,culture = states[s]
+    * for each neighbor of e:
+      * state = state[cells.state[neighbor]]
+      * if cells.state[neighbor] && neighbor == state.center: continue -- don't overwrite capital cells
+      * culture_cost = if culture == neighbor.culture {-9} else {100}
+      * population_Cost = if cell is ocean: 0 else: {if cells.habitability > 0: (20-cells.habitability).max(0) else: 5000}
+      * biome_cost = get_biome_cost(b,neighbor.biome,type) -- TODO: Similar but not the same as with culture expansion
+      * height_cost = get_height_cost(lake for neighbor, height of neighbor, type) -- TODO: Similar but not the same as with culture expansion
+      * river_cost = get_river_cost -- TODO: Similar but not the same as with culture expansion
+      * type_cost = get_type_cost -- TODO: Similar but not the same as with culture expansion
+      * cell_cost = (culture_cost + population_cost + biome_cost + height_cost + river_cost + type_cost).max(0)
+      * total_cost = priority + 10 + (cell_cost/state.expansionism)
+      * if total_cost > neutral: return
+      * if cost[neighbor] not specified or total cost is less than it:
+        * if not water, assign the state to the cell
+        * cost[neighbor] = total_cost
+        * queue.push(...)
+  * for each burg in burgs:
+    * burg.state = cells.state[b.cell]
+
+* normalizeStates: -- removes weird nodules sticking out of states, and probably small exclaves, too.
+  * for tile in tiles:
+    * if tile is water || tile has burg: continue; -- do not overwrite burgs
+    * if tile.neighbors contains a capital; -- do not overwrite near capital
+    * neighbors = neighbors.filter(terrain is not water)
+    * adversaries = neighbors.filter(state != this state)
+    * if adversaries.length < 2: continue;
+    * buddies = neighbors.filter(state == this state)
+    * if buddies.length > 2: continue;
+    * if adversaries.length < buddies.length: continue;
+    * state[i] = state[adversaries[0]]
+
+* specifyBurgs -- defines burg coordinates, port status and other details TODO: Need roads before I can do this
+  * for b of burgs:
+    * i = b.cell
+    -- assign port status to some coastline burgs with temp > 0
+    * haven = i.closest_water:
+    * if haven and i.temp > 0:
+      * f = lake_map.get(haven);
+      * port = f.size > 1 && ((b.capital && i.water_count > 0) || i.water_count == 1);
+      * b.port = if port ? f : 0;
+    * else: b.port = 0;
+    -- define population
+    * b.population = (cell.habitability + cell.road / 2) / 8 + b.i / 1000 + (i % 100) / 1000, 0.1) * 1000 -- TODO: Not sure what's going on here
+    * if b.capital: b.population = b.population * 1.3 -- increase capital population
+
+    * if b.port:
+      * b.population = b.population * 1.3 -- increase port population
+      * [x,y] = getMiddlePoint(i,haven) -- TODO: What is this?
+      * b.site = x,y
+
+    -- random factor
+    * b.population = b.population * gauss(2, 3, 0.6, 20, 3)
+
+    -- shfit burgs on rivers semi-randomly and just a bit. Basically, there's a shift and we decide which way to shift based on even-ness of two separate ids.
+    * if !b.port && i.is_river
+      * shift: (i.water_flow / 150).min(1)
+      * if i % 2: b.x = (b.x + shift)
+      * else b.x = b.x - shift
+      * if cells.r[i] %2 b.y = b.y + shift
+      * else b.y = b.y - shift
+  
+  -- de-assign port status if it's the only one on the feature TODO: I get the idea, but I'm not sure if there's some data I'm missing, and I'm not certain of the point of this.
+  * ports = burgs filter for port > 0
+  * for f of features:
+    * if tile is land or border: continue
+    * feature_ports = ports.filter(port = feature)
+    * if feature_ports.length === 1: feature_ports[0].port = 0;
+
+* Routes.getRoads:
+  * burgs = burgs
+  * capitals = burgs.filter for capital and sorted by population
+  * if capitals.len < 2: return []
+  * paths = []
+  * for b of capitals:
+    * connect = capitals.filter for being on the same feature as b and not == b -- TODO: Once again, this is data I'm not maintaining.
+    * for t of connect:
+      * [from,exit] = findLandPath(b.cell,t.cell,true) -- TODO: What is this?
+      * segments = restorePath(b.cell,exit,"main",from) -- TODO: What is this?
+      * segments.forEach(|s| paths.push(s));
+  * for each tile:
+    * tile.habitability += (tile.road / 2) -- add roads to habitability score -- TODO: Since this is after cultures, I think I want to put this in another field, and then use that for the city stuff. road_habitability? traffic?
+  * return paths
+
+* Routes.getTrails
+  * if burgs.length < 2 return []
+  * paths = []
+  * for f of features filtered for land type:
+    * isle = burgs.filter(b.feature == f) -- burgs on the same island
+    * if isle.length: continue
+    * for each (i,burg) in isle:
+      * path = []
+      * if i == 0: -- build trail from first burg on island to the farthest one
+        * farthest = compare location of i to every other burg to find the most distant
+        * to = farhest.tile
+        * if there is already a road to to, continue
+        * [from,exit] = findLandPath(burg.cell, to, true);
+        * path = restorePath(burg.cell, exit, "small", from)
+      * else:
+        -- build trail from all other burgs to the closest road on the same island
+        * if cells.road[b.cell] continue
+        * [from,exit] = findLandPath(b.cell, null, true);
+        * if (not exit) return;
+        * path = restorePath(b.cell,exit,"small",from);
+      if path: paths paths.concat(path);
+  * return paths
+
+Routes.getSearoutes:
+  * all_ports = burgs.filter for having a port
+  * if allports.length < 2 return []
+  * bodies = new Set(all_ports.map(|b| b.port))
+  * let paths = []
+  * connected = []
+  * for each f in bodies:
+    * ports = all_poarts filter for ports on this feature
+    * if ports.length < 2: continue;
+    * if f.border: addOverseaRoute(f,ports[0])
+    * for s from 0...ports.len
+      * source = ports[s].cell
+      * if connected[source]: continue;
+      * for t from s + 1..ports.len:
+        * target = ports[t].cell
+        * if connected[target] continue;
+        * const [from,exit,passable] = findOceanPath(target,source,true); -- TODO: What's this function?
+        * if !passable: continue
+        * path = restorePath(target,exit,"ocean",from)
+        * paths.push(path)
+        * connected[source] = 1;
+        * connected[target] = 1;
+
+* addOverseaRoute(feature,port,paths):
+  * x,y,cell: source = port
+  * dist = |p| (p[0] - x).abs() + (p[1] - y).abs() -- seems to be a simplification of the distance for easier comparisons
+  * [x1,y1] = [ 
+      [0,y],
+      [x,0],
+      [extent.width,y],
+      [x,extent.height]
+  ].sort((a,b) => dist(a) - dist(b))[0] -- finding the nearest corner
+  * target = findCell(x1,y1) -- find the cell that is tile to this point
+  * if target.feature == feature and target.is_water:
+    * [from,exit,passable] = findOceanPath(target,source,true);
+    * if passable: 
+      * path = restorePath(target,exit,"ocean",from);
+      * paths.push(path)
+      * last(path).push([x1,y1]) -- adds the actual coordinate for drawing the route, I think.
+
+* findLandPath(start,exit = null, toRoad = null):
+  * queue = PrioirityQueue
+  * cost = [];
+  * from = [];
+  * queue.queue(start, priority: 0)
+  * while next = queue.pop_min:
+    * n = next.e // neighbors
+    * p = next.p // site, I believe
+    * if toRoad && cells.road[n]: return [from,n] -- we just wanted to connect to a road and we've reached one.
+    * for c of cells.c[n]:
+      * if cell is water: continue
+      * state_change_cost = cells.state && cells.state[c] != cells.state[n] ? 400 : 0 -- trails will try to stay in the same state
+      * habitability = biomesData.habitability[c] 
+      * if habitability == 0: continue -- avoid uninhabitable cells
+      * habited_cost = (100-habitability).max(0) -- routes lay within populated areas
+      * height_change_cost = (c.elevation - n.elevation).abs() * 10 -- routes tend to avoid elevation changes
+      * height_cost = if c.elevation < 80: c.elevation else: 0 -- routes tend to avoid mountainous areas
+      * cell_cost = 10 + state_change_cost + habited_cost + height_change_cost + height_cost;
+      * total_cost = priority + (if c.road || c.burg: cell_cost / 3 else cell_cost) -- cost is much easier if there's already a road or a burg here.
+      * if from[c] || totalCost > cost[c]: continue; -- if from already has c in it, perhaps? or if total cost is too high.
+      * from[c] = n -- this is saying that this is the least costly route from n to c, I think.
+      * if c == exit: return [from,exit] -- we've reached the end.
+      * cost[c] = totalCost
+      * queue.add(c,totalCost)
+  * return [from,exit]
+
+* restorePath(start,end,type,from): -- I think I'll understand this more once I figure out what the return value for findLandPath is.
+  * path = []
+  * segment = []
+  * current = end
+  * prev = end
+  * score = type==="main" ? 5 : 1
+  * if type == "ocean" || !cells.road[prev]: segment.push(end);
+  * if !cells.road[prev]: cells.road[prev] = score
+  * i = 0
+  * limit = 1000
+  * while i < limit:
+    * if !from[current] break;
+    * current = from[current]
+    * if cells.road[current]:
+      * if segment.length:
+        * segment.push(current):
+        * path.push(segment);
+        * if segment[0] != end:
+          * cells.road[segment[0]] += score
+          * cells.crossroad[segment[0]] += score
+        * if current != start:
+          * cells.road[current] += score
+          * cells.crossroad[current] += score
+      * segment = []
+      * prev = current
+    * else: 
+      * if prev: segment.push(prev);
+      * prev = null
+      * segment.push(current);
+    * cells.road[current] += score;
+    * if current == start: break;
+  * if segment.length > 1: path.push(segment);
+  * return path
+
+* findOceeanPath:
+  -- very similar to findLandPath except land cells are ignored, temperatur of -5 is ignored, and cost is based off of distance between points.
+
+#### My Algorithms:
+
+I'm going to break this up into pieces as well:
+* Place Capitals
+* Create States
+* Place Towns
+* Expand States
+* Normalize States
+* Place Roads
+* Place Trails
+* Place Ocean Routes
+* Specify Burgs
+
+TODO: Is there any way I can simplify this? Instead of placing towns in two steps, can't I just create towns in one step? Just create capitals while I'm at it. This allows more ordered generation: Towns, then states, then roads, (then specify towns), then provinces.
+
+#### Place Capitals
+
+TODO: This is a new suite of commands: gen-nations or gen-politics
+
+TODO:
+
+#### Create States
+
+TODO:
+
+#### Place Towns
+
+TODO:
+
+#### Expand States
+
+TODO:
+
+#### Normalize States
+
+TODO:
+
+#### Place Roads
+
+TODO:
+
+#### Place Trails
+
+TODO:
+
+#### Place Ocean Routes
+
+TODO:
+
+#### Specify Burgs
+
+TODO:
+
 
 ### Analysis: Generate Religions
 
@@ -3952,7 +4597,7 @@ TODO: I'm not sure I need to do this...
 
 ### Analysis: Generate Provinces (Burgs and States)
 
-TODO: Probably...
+TODO: I do want this...
 
 ### Analysis: Define Burg Features (Burgs and States)
 
@@ -3980,9 +4625,7 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-climate testing_output/Inannak.world.gpkg 
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people-population testing_output/Inannak.world.gpkg
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people-cultures testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people-expand-cultures testing_output/Inannak.world.gpkg
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
 
 ```
 
@@ -4036,10 +4679,24 @@ To proceed on this, I can break it down into the following steps:
 [X] `gen-biomes` command
     [X] Review AFMG biome generation algorithms
     [X] Create command (requires water, temperature, precipitation, rivers and lakes)
-[ ] `gen-people` command
-    [ ] various auxiliary files
-    [ ] Review AFMG people generation algorithms -- again, wait on improvements until later
-    [ ] Figure out how to break the task apart into sub commands and create those commands.
+[X] `gen-people` command
+    [X] various auxiliary files
+    [X] Review AFMG people generation algorithms -- again, wait on improvements until later
+    [X] Figure out how to break the task apart into sub commands and create those commands.
+[ ] `gen-nation` command:
+    [ ] `gen-nation-capitals`
+    [ ] `gen-nation-nations`
+    [ ] `gen-nation-towns`
+    [ ] `gen-nation-expand`
+    [ ] `gen-nation-normalize`
+    [ ] `gen-nation-roads`
+    [ ] `gen-nation-trails`
+    [ ] `gen-nation-ocean-routes`
+    [ ] `gen-nation-town-details`
+    [ ] `gen-nation-state-forms` TODO: If this is not necessary for provinces beyond getting the province form, then I'd rather not.
+    [ ] `gen-nation-provinces`
+    [ ] `gen-nation-town-features` TODO: Depending on what these features are, I may not need this one.
+    [ ] Finalize command
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
     [ ] is_ocean

@@ -3,6 +3,7 @@ use crate::errors::CommandError;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::world_map::Terrain;
 
 pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mut WorldMapTransaction, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
@@ -31,9 +32,7 @@ pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mu
 
     let features = layer.read_features().to_entities_vec::<_,TileEntitySite>(progress)?;
 
-    progress.start_known_endpoint(|| ("Sampling elevations.",features.len()));
-
-    for (i,feature) in features.iter().enumerate() {
+    for feature in features.iter().watch(progress,"Sampling elevations.","Elevations sampled.") {
 
 
         let (x,y) = bounds.coords_to_pixels(feature.site_x, feature.site_y);
@@ -59,14 +58,7 @@ pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mu
 
 
 
-        progress.update(|| i);
-
-
-
-
     }
-
-    progress.finish(|| "Elevation sampled.");
 
     Ok(())
 }
@@ -94,11 +86,9 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
 
     let features = layer.read_features().to_entities_vec::<_,TileEntitySite>(progress)?;
 
-    progress.start_known_endpoint(|| ("Sampling oceans.",features.len()));
-
     let mut bad_ocean_tile_found = false;
 
-    for (i,feature) in features.iter().enumerate() {
+    for feature in features.iter().watch(progress,"Sampling oceans.","Oceans sampled.") {
 
 
         let (x,y) = bounds.coords_to_pixels(feature.site_x, feature.site_y);
@@ -149,18 +139,11 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
         }
 
 
-        progress.update(|| i);
-
-
-
 
     }
 
-    progress.finish(|| "Oceans sampled.");
-
     if bad_ocean_tile_found {
-        println!("At least one ocean tile was found with an elevation above 0.")
-
+        progress.warning(|| "At least one ocean tile was found with an elevation above 0.")
     }
 
     Ok(())

@@ -9,6 +9,7 @@ use gdal::vector::Geometry;
 
 use crate::utils::create_polygon;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
 use crate::world_map::NewTileEntity;
 use crate::utils::Extent;
 use crate::utils::Point;
@@ -17,7 +18,7 @@ use crate::errors::CommandError;
 
 pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> {
     Unstarted(GeometryIterator),
-    Started(IntoIter<Point,VoronoiInfo>)
+    Started(IntoIter<Point,VoronoiInfo>,Option<usize>)
 }
 
 pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> {
@@ -180,12 +181,12 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    pub(crate) fn generate_voronoi(source: &mut GeometryIterator) -> Result<IntoIter<Point,VoronoiInfo>,CommandError> {
+    pub(crate) fn generate_voronoi<Progress: ProgressObserver>(source: &mut GeometryIterator, progress: &mut Progress) -> Result<IntoIter<Point,VoronoiInfo>,CommandError> {
 
         // Calculate a map of sites with a list of triangle circumcenters
         let mut sites: HashMap<Point, VoronoiInfo> = HashMap::new(); // site, voronoi info
 
-        for geometry in source {
+        for geometry in source.watch(progress,"Generating voronoi.","Voronoi generated.") {
             let geometry = geometry?;
         
             if geometry.geometry_type() != OGRwkbGeometryType::wkbPolygon {
@@ -237,10 +238,9 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         if let VoronoiGeneratorPhase::Unstarted(source) = &mut self.phase {
             // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
             // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
-            progress.start_unknown_endpoint(|| "Generating voronoi.");
-            let voronoi = Self::generate_voronoi(source)?; // FUTURE: Should this be configurable?
-            progress.finish(|| "Voronoi generated.");
-            self.phase = VoronoiGeneratorPhase::Started(voronoi.into_iter())
+            let len = source.size_hint().1;
+            let voronoi = Self::generate_voronoi(source,progress)?; // FUTURE: Should this be configurable?
+            self.phase = VoronoiGeneratorPhase::Started(voronoi.into_iter(),len)
         }
         Ok(())
     }
@@ -259,7 +259,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
                     Err(e) => Some(Err(e)),
                 }
             },
-            VoronoiGeneratorPhase::Started(iter) => {
+            VoronoiGeneratorPhase::Started(iter,_) => {
                 let mut result = None;
                 while let Some(value) = iter.next() {
                     // create_voronoi returns none for various reasons if the polygon shouldn't be written. 
@@ -272,5 +272,13 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
                 result
             }
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match &self.phase {
+            VoronoiGeneratorPhase::Unstarted(iterator) => iterator.size_hint(),
+            VoronoiGeneratorPhase::Started(_,hint) => (0,*hint),
+        }
+        
     }
 }

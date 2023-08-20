@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
+use crate::progress::WatchableIterator;
+use crate::progress::WatchableQueue;
 use crate::errors::CommandError;
 use crate::world_map::BiomeDataForPopulation;
 use crate::world_map::TypedFeature;
@@ -39,27 +41,21 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     let mut flow_max: f64 = 0.0;
     let mut area_sum = 0.0;
 
-    progress.start_known_endpoint(|| ("Indexing tiles.",tiles.feature_count()));
-
-    for (i,feature) in tiles.read_features().enumerate() {
+    for feature in tiles.read_features().watch(progress,"Indexing tiles.","Tiles indexed.") {
         let fid = feature.fid()?;
         let water_flow = feature.water_flow()?;
         flow_sum += water_flow;
         flow_max = flow_max.max(water_flow);
         area_sum += feature.geometry().map(|g| g.area()).unwrap_or_default();
         work_queue.push(fid);
-        progress.update(|| i);
 
     }
 
-    progress.finish(|| "Tiles indexed");
-    
     let flow_mean = flow_sum/work_queue.len() as f64;
     let area_mean = area_sum/work_queue.len() as f64;
     let flow_divisor = flow_max - flow_mean;
 
-    let total_work = work_queue.len();
-    progress.start_known_endpoint(|| ("Calculating population.",total_work));
+    let mut work_queue = work_queue.watch_queue(progress, "Calculating population.", "Population calculated.");
     while let Some(fid) = work_queue.pop() {
         let (habitability,population) = {
             let tile = tiles.try_entity_by_id::<TileForPopulation>(&fid)?; 
@@ -115,11 +111,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
 
         tiles.update_feature(feature)?;
 
-        progress.update(|| total_work - work_queue.len());
-
     }
-
-    progress.finish(|| "Population calculated.");
 
     Ok(())
 }
