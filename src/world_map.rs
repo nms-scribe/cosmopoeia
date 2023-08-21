@@ -903,6 +903,8 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
     /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
     grouping set_grouping grouping FIELD_GROUPING "grouping" OGRFieldType::OFTString;
+    /// A unique id for each grouping. These id's do not map to other tables, but will tell when tiles are in the same group. Use lake_id to link to the lake table.
+    #[allow(dead_code)] grouping_id set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
     /// average annual temperature of tile in imaginary units
     temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
     /// roughly estimated average wind direction for tile
@@ -914,7 +916,7 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
     #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
-    #[allow(dead_code)] lake_id set_lake_id option_i64 FIELD_LAKE_ID "lake_id" OGRFieldType::OFTInteger64;
+    lake_id set_lake_id option_i64 FIELD_LAKE_ID "lake_id" OGRFieldType::OFTInteger64;
     /// id of neighboring tile which water flows to
     #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
