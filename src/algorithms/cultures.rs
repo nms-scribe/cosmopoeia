@@ -23,7 +23,7 @@ use crate::world_map::BiomeFeature;
 use crate::utils::RandomIndex;
 use crate::utils::Point;
 use crate::utils::ToRoman;
-use crate::world_map::Terrain;
+use crate::world_map::Grouping;
 use crate::world_map::TilesLayer;
 use crate::world_map::CultureType;
 use crate::world_map::NewCulture;
@@ -245,7 +245,7 @@ fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_thres
 
         if (center.neighboring_lake_size.is_none() && rng.gen_bool(0.1)) || // on the ocean cost (on water cost and not on a lake)
            ((water_count == 1) && rng.gen_bool(0.6)) || // on exactly one water (makes a good harbor)
-           (matches!(center.terrain,Terrain::Islet) && rng.gen_bool(0.4)) { // on a small island
+           (matches!(center.grouping,Grouping::Islet) && rng.gen_bool(0.4)) { // on a small island
             return Ok(CultureType::Naval)
         }
     }
@@ -481,7 +481,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
         CultureType::Lake => if neighbor.lake_id.is_some() {
             // low lake crossing penalty for lake cultures
             10.0
-        } else if neighbor.terrain.is_water() {
+        } else if neighbor.grouping.is_water() {
             // general sea/lake crossing penalty
             neighbor.area * 6.0
         } else if neighbor.elevation_scaled >= 67 {
@@ -493,7 +493,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
         } else {
             0.0
         },
-        CultureType::Naval => if neighbor.terrain.is_water() {
+        CultureType::Naval => if neighbor.grouping.is_water() {
             // low water crossing penalty
             neighbor.area * 2.0
         } else if neighbor.elevation_scaled >= 67 {
@@ -505,7 +505,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
         } else {
             0.0
         },
-        CultureType::Nomadic => if neighbor.terrain.is_water() {
+        CultureType::Nomadic => if neighbor.grouping.is_water() {
             neighbor.area * 50.0
         } else if neighbor.elevation_scaled >= 67 {
             // mountain crossing penalty
@@ -516,7 +516,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
         } else {
             0.0
         },
-        CultureType::Highland => if neighbor.terrain.is_water() {
+        CultureType::Highland => if neighbor.grouping.is_water() {
             // general sea/lake corssing penalty
             neighbor.area * 6.0
         } else if neighbor.elevation_scaled < 44 {
@@ -531,7 +531,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
         },
         CultureType::Generic |
         CultureType::River |
-        CultureType::Hunting => if neighbor.terrain.is_water() {
+        CultureType::Hunting => if neighbor.grouping.is_water() {
             // general sea/lake corssing penalty
             neighbor.area * 6.0
         } else if neighbor.elevation_scaled >= 67 {

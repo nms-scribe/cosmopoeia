@@ -4229,6 +4229,8 @@ TODO: Okay, I'm ready for this...
 * generateDiplomacy() -- I don't need this
 * Routes.draw(capitalRoutes,townRoutes,oceanRoutes) -- I don't need this
 * drawBurgs -- I don't need this
+-- then, in a completely other location:
+* generateProvinces
 
 * placeCapitals()
   * count = regionsOutput
@@ -4533,88 +4535,99 @@ Routes.getSearoutes:
 * findOceeanPath:
   -- very similar to findLandPath except land cells are ignored, temperatur of -5 is ignored, and cost is based off of distance between points.
 
+* generateProvinces:
+  * provinces = [0]
+  * province_ids = new array for each tile
+  * percentage = provincesInput.value -- TODO: Check, but I assume this is the number of provinces
+  * max = percentage == 100 ? 1000 : gauss(20,5,5,100) * percentage.pow(0.5) -- max growth
+  * for s in states
+    * s.provinces = []
+    * if provinces.len > 0: -- TODO: Sounds like this is related to the "locked" provinces described above, so might not be necessary
+      * s.provinces = provinces.filter for provinces in this state already 
+    * state_burgs = burgs filtered for being in this state and not part of a province already -- TODO: Again, that last part probably has to do with locking them.
+      * then sorted (a,b) by b.population * gauss(1, 0.2, 0.5, 1.5, 3) - a.population
+      * then sorted so that capitals go to the top -- TODO: This all assumes that the others will remain sorted in place if equal, I'm not sure about that.
+    * if state_burgs.len < 1: continue -- No provinces if there is only 1 city
+    * provincesNumber = ((state_burgs.len * percentage) / 100).ceil().max(2) -- must be at least two
+    * for i in 0..provincesNumber:
+      * province_id = provinces.len()
+      * center = state_burgs[i].cell
+      * burg = state_burgs[i]
+      * c = state_burgs[i].culture
+      * name_by_burg = rnd.gen_bool(0.5)
+      * name = if name_by_burg { burg.name } else { namers.getStateName(culture namer)}
+      * type = getType(center,burg.port) -- TODO: What is this?
+      * s.provinces.push(provinceId)
+      * provinces.push(...all the information)
+  -- expand provinces
+  * queue = priority_queue
+  * cost = []
+  * for each province:
+    * province_ids[province.center] = p
+    * queue.push(e: p.center, province: p, state: p.state, priority: 0)
+    * cost[p.center] = 1
+  * while let (e,province,state,priority) = queue.pop:
+    * for each neighbor of e:
+      * land = !neighbor.terrain.is_water
+      * if !land and cells.shore_distance === 0: continue -- TODO: this only makes sense if we didn't go beyond -10 in the ocean. But what province is going to go that far anyway? TODO: I'd probably say if it's < -2 instead.
+      * if land and neighbor.state !== state: continue -- TODO: Can't pass into a neighboring state
+      * evevation [sic] = if neighbor.height >= 70 { 100 } else if neighbor.height >= 50 { 30 } else if neighbor.terrain.is_land { 20 } else { 100 }
+      * total_cost = priority + evevation
+      * if total_cost > max: continue;
+      * if !cost[neighbor] or total_cost < cost[neighbor]
+        * if land { provinces[neighbor] = province}
+        * cost[neighbor] = total_cost
+        * queue.push({neighbor, province, state, priority: total_cost})
+  -- justify provinces shapes a bit -- is this normalizing them?
+  * for each tile:
+    * if tile.burg continue -- don't overwrite burgs
+    * neighbors = tile.neighbors filtered for cells in the same state and mapped into province IDs
+    * adversaries = neighbors filtered for cells not in the same province
+    * if adversaries.len < 2: continue
+    * buddies = neighbors filtered for cells in the same province
+    * if buddies.len > 2: continue
+    * competitors = adversaries.map using reduce to count the total number of neighbors with the same province_id
+    * max = the index of the competitor with the highest number of "friends"
+    * neighbor.province = adversaries[max]
+  -- add wild provinces -- there are going to be some places in the nation that don't have provinces yet, perhaps because they are on islands or otherwise disconnected.
+  * let noProvince = tiles filtered for having a state and no province:
+  * for each state s:
+    * if s.provinces.length: continue;
+    * coreProvinceNames = s.provinces.map(|p| p.province?.name)
+    * colonyNamePool = [s.name, ..coreProvinceNames].filter(|name| name is some && name doesn't contain 'new')
+    * getColonyName = || -- this is the 
+      * if colonyNamePool.len < 1: return none
+      * index = colonyNamePool.choose_index()
+      * spliced = colonyNamePool.remove(index)
+      * return spliced is some ? `New ${spliced}` else none
+    * stateNoProvince = noProvince.filter for cells in the state and no province for that cell
+    * while stateNoProvince.len():
+      * province_id = provinces.len
+      * burgCell = stateNoProvince.find a cell with a burg -- TODO: Personally, I think I would skip this part if there is no burg
+      * center = if burgCell ? burgCell else stateNoProvince[0]
+      * burg = burgCell? cells.burg[burgCell] else 0
+      * provinceIds[center] = provinceId
+      * ... -- expand province, pretty much the same as above
+      * -- a bunch of bs to come up with a name to indicate it's a colony, based on things like whether it's on an isle group, whether it's connected with the state, etc. Since I'm not dealing with form names, I don't think I need most of this.
+      * stateNoProvince...remove cells that are now in the new province
+
 #### My Algorithms:
 
 I'm going to break this up into pieces as well:
-* Place Capitals
+* Place Towns (both Capital and regular in the same thing)
 * Create States
-* Place Towns
 * Expand States
 * Normalize States
+* Generate Provinces
 * Place Roads
 * Place Trails
 * Place Ocean Routes
-* Specify Burgs
+* Specify Burgs -- add burg details
+* Place Provinces
 
-TODO: Is there any way I can simplify this? Instead of placing towns in two steps, can't I just create towns in one step? Just create capitals while I'm at it. This allows more ordered generation: Towns, then states, then roads, (then specify towns), then provinces.
+I'm not going to generate religions, maybe sometime in the future. And when I do, that can happen after the provinces. I'm not going to define "forms" of states, any more than I did the coats of arms. There has to be a point where your imagination gets to take over.
 
-#### Place Capitals
-
-TODO: This is a new suite of commands: gen-nations or gen-politics
-
-TODO:
-
-#### Create States
-
-TODO:
-
-#### Place Towns
-
-TODO:
-
-#### Expand States
-
-TODO:
-
-#### Normalize States
-
-TODO:
-
-#### Place Roads
-
-TODO:
-
-#### Place Trails
-
-TODO:
-
-#### Place Ocean Routes
-
-TODO:
-
-#### Specify Burgs
-
-TODO:
-
-
-### Analysis: Generate Religions
-
-TODO: I'm not sure I want to do this...
-
-### Analysis: Define State Forms (Burgs and States)
-
-TODO: I'm not sure I need to do this...
-
-### Analysis: Generate Provinces (Burgs and States)
-
-TODO: I do want this...
-
-### Analysis: Define Burg Features (Burgs and States)
-
-TODO: Maybe...
-
-### Analysis: Draw States?
-
-TODO: Probably not...
-
-### Analysis: Draw Borders?
-
-TODO: Probably not...
-
-### Analysis: Draw State Labels (Burgs and States)
-
-TODO: Probably not...
-
+TODO: Before I can get to the roads, I'm going to need to distinguish land and water bodies from each other more than just lake ids, so I know when cells are on the same body. This also applies to oceans.
 
 # Testing Commands:
 
@@ -4684,18 +4697,15 @@ To proceed on this, I can break it down into the following steps:
     [X] Review AFMG people generation algorithms -- again, wait on improvements until later
     [X] Figure out how to break the task apart into sub commands and create those commands.
 [ ] `gen-nation` command:
-    [ ] `gen-nation-capitals`
-    [ ] `gen-nation-nations`
     [ ] `gen-nation-towns`
+    [ ] `gen-nation-nations`
     [ ] `gen-nation-expand`
     [ ] `gen-nation-normalize`
     [ ] `gen-nation-roads`
     [ ] `gen-nation-trails`
     [ ] `gen-nation-ocean-routes`
     [ ] `gen-nation-town-details`
-    [ ] `gen-nation-state-forms` TODO: If this is not necessary for provinces beyond getting the province form, then I'd rather not.
-    [ ] `gen-nation-provinces`
-    [ ] `gen-nation-town-features` TODO: Depending on what these features are, I may not need this one.
+    [ ] `gen-nation-subdivisions`
     [ ] Finalize command
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
@@ -4710,6 +4720,7 @@ To proceed on this, I can break it down into the following steps:
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well?
 [ ] Documentation
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
+    [ ] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool.
     [ ] Include explanation of all commands
     [ ] Include explanation of the data in the output file.
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.

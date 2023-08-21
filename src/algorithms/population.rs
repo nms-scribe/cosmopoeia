@@ -84,7 +84,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                                 LakeType::Dry => suitability -= 5.0,
                                 LakeType::Marsh => suitability += 5.0,
                             }
-                        } else if water_cell.terrain.is_ocean() {
+                        } else if water_cell.grouping.is_ocean() {
                             suitability += 5.0;
                             if let Some(1) = tile.water_count {
                                 // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which

@@ -34,11 +34,11 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut water_count = 0;
 
         let tile = tiles.try_entity_by_id::<TileEntityForWaterDistance>(&fid)?;
-        let is_land = !tile.terrain.is_water();
+        let is_land = !tile.grouping.is_water();
 
         for (neighbor_fid,_) in &tile.neighbors {
             let neighbor = tiles.try_entity_by_id::<TileEntityForWaterDistanceNeighbor>(&neighbor_fid)?;
-            if is_land && (neighbor.terrain.is_water()) {
+            if is_land && (neighbor.grouping.is_water()) {
                 shore_distance.get_or_insert_with(|| 1);
                 let neighbor_water_distance = tile.site.distance(&neighbor.site);
                 if let Some(old_water_distance) = water_distance {
@@ -51,7 +51,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                     closest_water = Some(*neighbor_fid);
                 }
                 water_count += 1;
-            } else if !is_land && !neighbor.terrain.is_water() {
+            } else if !is_land && !neighbor.grouping.is_water() {
                 shore_distance.get_or_insert_with(|| -1);
             }
         }
@@ -99,7 +99,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                 let tile = tiles.try_entity_by_id::<TileEntityForWaterDistanceOuter>(&fid)?; 
 
                 if tile.shore_distance.is_none() {
-                    let is_land = !tile.terrain.is_water();
+                    let is_land = !tile.grouping.is_water();
     
                     for (neighbor_fid,_) in &tile.neighbors {
                         let neighbor = tiles.try_entity_by_id::<TileEntityForWaterDistanceOuterNeighbor>(neighbor_fid)?; 

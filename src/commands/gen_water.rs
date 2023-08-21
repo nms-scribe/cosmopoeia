@@ -11,7 +11,7 @@ use crate::algorithms::water_flow::generate_water_flow;
 use crate::algorithms::water_fill::generate_water_fill;
 use crate::algorithms::rivers::generate_water_rivers;
 use crate::algorithms::water_distance::generate_water_distance;
-use crate::algorithms::terrain::calculate_terrain;
+use crate::algorithms::grouping::calculate_grouping;
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -151,8 +151,8 @@ impl Task for GenWaterDistance {
 
 
 subcommand_def!{
-    /// Calculate terrain types for land tiles
-    pub(crate) struct GenWaterTerrain {
+    /// Calculate grouping types for land tiles
+    pub(crate) struct GenWaterGrouping {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -160,7 +160,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenWaterTerrain {
+impl Task for GenWaterGrouping {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -170,7 +170,7 @@ impl Task for GenWaterTerrain {
 
         target.with_transaction(|target| {
             progress.announce("Delineating land and water bodies:");
-            calculate_terrain(target, &mut progress)
+            calculate_grouping(target, &mut progress)
         })?;
 
         target.save(&mut progress)
@@ -236,7 +236,7 @@ impl Task for GenWater {
             generate_water_distance(target, &mut progress)?;
 
             progress.announce("Delineating land and water bodies:");
-            calculate_terrain(target, &mut progress)
+            calculate_grouping(target, &mut progress)
 
         })?;
 

@@ -8,7 +8,7 @@ use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::Terrain;
+use crate::world_map::Grouping;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -36,7 +36,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
     for feature in features.iter().watch(progress,"Generating temperatures.","Temperatures calculated.") {
 
         let base_temp = equator_temp - (interpolate(feature.site_y.abs()/90.0) * temp_delta);
-        let adabiatic_temp = base_temp - if !feature.terrain.is_ocean() {
+        let adabiatic_temp = base_temp - if !feature.grouping.is_ocean() {
             (feature.elevation/1000.0)*6.5
         } else {
             0.0
@@ -104,7 +104,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     entity!(TileDataForPrecipitation TileFeature {
         elevation_scaled: i32, 
         wind: i32, 
-        terrain: Terrain, 
+        grouping: Grouping, 
         neighbors: Vec<(u64,i32)>,
         temperature: f64,
         precipitation: f64 = |_| {
@@ -195,8 +195,8 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
                 if let Some((next_fid,mut next)) = next {
                     if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
-                        if current.terrain.is_ocean() {
-                            if !next.terrain.is_ocean() {
+                        if current.grouping.is_ocean() {
+                            if !next.grouping.is_ocean() {
                                 // coastal precipitation
                                 // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
                                 // necessary considering it's the only randomness I would use, and nothing else is randomized.
@@ -245,7 +245,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
                     (current_fid,current) = (next_fid,next);
                 } else {
-                    if current.terrain.is_ocean() {
+                    if current.grouping.is_ocean() {
                         // precipitation over water cells
                         current.precipitation += 5.0 * modifier;
                     } else {

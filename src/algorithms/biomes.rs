@@ -10,7 +10,7 @@ use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::LakeType;
 use crate::world_map::LakeDataForBiomes;
-use crate::world_map::Terrain;
+use crate::world_map::Grouping;
 
 pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -46,14 +46,14 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         elevation_scaled: i32,
         water_flow: f64,
         lake_id: Option<i64> = |feature: &TileFeature| feature.lake_id(),
-        terrain: Terrain
+        grouping: Grouping
     });
 
     let tiles = tiles_layer.read_features().to_entities_vec::<_,BiomeSource>(progress)?;
 
     for tile in tiles.iter().watch(progress,"Applying biomes.","Biomes applied.") {
 
-        let biome = if !tile.terrain.is_ocean() {
+        let biome = if !tile.grouping.is_ocean() {
             if tile.temperature < -5.0 {
                 biomes.glacier.clone()
             } else {

@@ -1,26 +1,28 @@
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::TileEntityForTerrainCalc;
-use crate::world_map::Terrain;
+use crate::world_map::TileEntityForGroupingCalc;
+use crate::world_map::Grouping;
 use crate::errors::CommandError;
 
-pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.edit_tile_layer()?;
     let tile_count = tiles.feature_count();
 
     // we just want land tiles
-    let mut table = tiles.read_features().to_entities_index::<_,TileEntityForTerrainCalc>(progress)?;
+    let mut table = tiles.read_features().to_entities_index::<_,TileEntityForGroupingCalc>(progress)?;
 
     let mut terrains = Vec::new();
     let mut ocean = Vec::new();
 
+    // TODO: I need to track the ids of these things
+    // - first, I think it's "grouping" and not "terrain"
+
     // pop the next one off of the table.
-    // TODO: I'm not sure if the progress is getting a size hint for this one.
     while let Some(tile) = table.keys().watch(progress,"Calculating terrain types.","Terrain types calculated.").next().cloned().and_then(|first| table.remove(&first)) {
 
-        if tile.terrain.is_ocean() {
+        if tile.grouping.is_ocean() {
             ocean.push(tile.fid)
         } else {
             let mut found_ocean_neighbor = false;
@@ -30,7 +32,7 @@ pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMa
     
             while let Some((neighbor_fid,_)) = neighbors.pop() {
                 if let Some(neighbor) = table.get(&neighbor_fid) {
-                    if neighbor.terrain.is_ocean() {
+                    if neighbor.grouping.is_ocean() {
                         // it's not part of the group, but we now know this body is next to the ocean
                         found_ocean_neighbor = true
                     } else if is_lake == neighbor.lake_id {
@@ -50,10 +52,10 @@ pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMa
             let group_len = group.len();
     
             let terrain = if is_lake.is_some() {
-                Terrain::Lake
+                Grouping::Lake
             } else {
                 if !found_ocean_neighbor {
-                    Terrain::LakeIsland // even if it's continent size
+                    Grouping::LakeIsland // even if it's continent size
                     // FUTURE: There is a possible error if there are no oceans on the map at all. While we could
                     // check oceans.len, that will cause every lake_island to be a continent, even if it actually is 
                     // a lake_island. We could have another flag for having found only lake neighbors, but that's just
@@ -65,11 +67,11 @@ pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMa
                     // FUTURE: The comparsion shouldn't be made against the tile count, but against a potential
                     // tile count if the map extended to the entire world.
                     // FUTURE: Alternatively, we could have a "Scale" parameter which would be required for calculating this.
-                    Terrain::Continent
+                    Grouping::Continent
                 } else if group_len > (tile_count / 1000) {
-                    Terrain::Island
+                    Grouping::Island
                 } else {
-                    Terrain::Islet // Except it's not really that small either, but what the heck it will work.
+                    Grouping::Islet // Except it's not really that small either, but what the heck it will work.
                 }
             };
 
@@ -80,10 +82,10 @@ pub(crate) fn calculate_terrain<Progress: ProgressObserver>(target: &mut WorldMa
 
     }
 
-    for (terrain,group) in terrains.iter().watch(progress,"Writing terrain types.","Terrain types written.") {
+    for (grouping,group) in terrains.iter().watch(progress,"Writing terrain types.","Terrain types written.") {
         for tile in group {
             let mut feature = tiles.try_feature_by_id(&tile)?;
-            feature.set_terrain(&terrain)?;
+            feature.set_grouping(&grouping)?;
             tiles.update_feature(feature)?;
         }
     }

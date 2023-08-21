@@ -97,8 +97,8 @@ macro_rules! feature_get_field_type {
     (lake_type) => {
         LakeType
     };
-    (terrain) => {
-        Terrain
+    (grouping) => {
+        Grouping
     };
     (culture_type) => {
         CultureType
@@ -151,8 +151,8 @@ macro_rules! feature_set_field_type {
     (lake_type) => {
         &LakeType
     };
-    (terrain) => {
-        &Terrain
+    (grouping) => {
+        &Grouping
     };
     (culture_type) => {
         &CultureType
@@ -263,9 +263,9 @@ macro_rules! feature_get_field {
         }
 
     };
-    ($self: ident terrain $feature_name: literal $prop: ident $field: path) => {
+    ($self: ident grouping $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Terrain::try_from(value)?)
+            Ok(Grouping::try_from(value)?)
         } else {
             Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
         }
@@ -347,7 +347,7 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident lake_type $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
-    ($self: ident $value: ident terrain $field: path) => {{
+    ($self: ident $value: ident grouping $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
     ($self: ident $value: ident culture_type $field: path) => {{
@@ -417,7 +417,7 @@ macro_rules! feature_to_value {
     ($prop: ident lake_type) => {{
         Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
-    ($prop: ident terrain) => {{
+    ($prop: ident grouping) => {{
         Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
     ($prop: ident culture_type) => {{
@@ -836,7 +836,7 @@ impl TrianglesLayer<'_> {
 }
 
 #[derive(Clone)]
-pub(crate) enum Terrain {
+pub(crate) enum Grouping {
     LakeIsland,
     Islet,
     Island,
@@ -845,36 +845,36 @@ pub(crate) enum Terrain {
     Ocean
 }
 
-impl Terrain {
+impl Grouping {
 
     pub(crate) fn is_ocean(&self) -> bool {
-        matches!(self,Terrain::Ocean)
+        matches!(self,Grouping::Ocean)
     }
 
     #[allow(dead_code)] pub(crate) fn is_water(&self) -> bool {
-        matches!(self,Terrain::Ocean | Terrain::Lake)
+        matches!(self,Grouping::Ocean | Grouping::Lake)
     }
 
 
 }
 
 
-impl Into<String> for &Terrain {
+impl Into<String> for &Grouping {
 
     fn into(self) -> String {
         match self {
-            Terrain::Continent => "continent",
-            Terrain::Ocean => "ocean",
-            Terrain::LakeIsland => "lake-island",
-            Terrain::Islet => "islet",
-            Terrain::Island => "island",
-            Terrain::Lake => "lake",
+            Grouping::Continent => "continent",
+            Grouping::Ocean => "ocean",
+            Grouping::LakeIsland => "lake-island",
+            Grouping::Islet => "islet",
+            Grouping::Island => "island",
+            Grouping::Lake => "lake",
         }.to_owned()
     }
 }
 
 
-impl TryFrom<String> for Terrain {
+impl TryFrom<String> for Grouping {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -885,7 +885,7 @@ impl TryFrom<String> for Terrain {
             "islet" => Ok(Self::Islet),
             "island" => Ok(Self::Island),
             "lake" => Ok(Self::Lake),
-            _ => Err(CommandError::InvalidValueForTerrain(value))
+            _ => Err(CommandError::InvalidValueForGroupingType(value))
         }
     }
 }
@@ -901,8 +901,8 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     // If I ever get rid of those algorithms, this field can go away.
     /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
     elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
-    /// Indicates whether the terrain is part of the ocean, an island, a continent, a lake, and maybe others.
-    terrain set_terrain terrain FIELD_TERRAIN "terrain" OGRFieldType::OFTString;
+    /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
+    grouping set_grouping grouping FIELD_GROUPING "grouping" OGRFieldType::OFTString;
     /// average annual temperature of tile in imaginary units
     temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
     /// roughly estimated average wind direction for tile
@@ -973,7 +973,7 @@ entity!(TileEntityLatElevOcean TileFeature {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
-    terrain: Terrain
+    grouping: Grouping
 });
 entity!(TileEntityLat TileFeature {
     fid: u64, 
@@ -981,7 +981,7 @@ entity!(TileEntityLat TileFeature {
 });
 entity!(TileEntityForWaterFlow TileFeature {
     elevation: f64, 
-    terrain: Terrain, 
+    grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     precipitation: f64,
     temperature: f64,
@@ -1006,7 +1006,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
 // of the macro and figure something out, but this is easier.
 entity!(TileEntityForWaterFill TileFeature {
     elevation: f64, 
-    terrain: Terrain, 
+    grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     water_flow: f64,
     water_accumulation: f64,
@@ -1028,7 +1028,7 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
         Self {
             elevation: value.elevation,
             temperature: value.temperature,
-            terrain: value.terrain,
+            grouping: value.grouping,
             neighbors: value.neighbors,
             water_flow: value.water_flow,
             water_accumulation: value.water_accumulation,
@@ -1041,17 +1041,17 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
 
 entity!(TileEntityForWaterDistance TileFeature {
     site: Point,
-    terrain: Terrain, 
+    grouping: Grouping, 
     neighbors: Vec<(u64,i32)>
 });
 
 entity!(TileEntityForWaterDistanceNeighbor TileFeature {
     site: Point,
-    terrain: Terrain 
+    grouping: Grouping 
 });
 
 entity!(TileEntityForWaterDistanceOuter TileFeature {
-    terrain: Terrain, 
+    grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
@@ -1060,9 +1060,9 @@ entity!(TileEntityForWaterDistanceOuterNeighbor TileFeature {
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
-entity!(TileEntityForTerrainCalc TileFeature {
+entity!(TileEntityForGroupingCalc TileFeature {
     fid: u64,
-    terrain: Terrain,
+    grouping: Grouping,
     lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>
 });
@@ -1081,7 +1081,7 @@ entity!(TileForPopulation TileFeature {
 });
 
 entity!(TileForPopulationNeighbor TileFeature {
-    terrain: Terrain,
+    grouping: Grouping,
     lake_id: Option<i64>
 });
 
@@ -1107,7 +1107,7 @@ entity!(TileForCultureGen TileFeature {
     biome: String,
     water_count: Option<i32>,
     closest_water: Option<i64>,
-    terrain: Terrain,
+    grouping: Grouping,
     water_flow: f64,
     temperature: f64
 
@@ -1122,7 +1122,7 @@ pub(crate) struct TileForCulturePrefSorting<'struct_life> {
     pub(crate) biome: &'struct_life BiomeForCultureGen,
     pub(crate) water_count: Option<i32>,
     pub(crate) neighboring_lake_size: Option<i32>,
-    pub(crate) terrain: Terrain,
+    pub(crate) grouping: Grouping,
     pub(crate) water_flow: f64,
     pub(crate) temperature: f64
 
@@ -1154,7 +1154,7 @@ impl TileForCulturePrefSorting<'_> {
             biome,
             water_count: tile.water_count,
             neighboring_lake_size,
-            terrain: tile.terrain,
+            grouping: tile.grouping,
             water_flow: tile.water_flow,
             temperature: tile.temperature,
         })
@@ -1168,7 +1168,7 @@ entity!(TileForCultureExpand TileFeature {
     shore_distance: i32,
     elevation_scaled: i32,
     biome: String,
-    terrain: Terrain,
+    grouping: Grouping,
     water_flow: f64,
     neighbors: Vec<(u64,i32)>,
     lake_id: Option<i64>,

@@ -4,7 +4,7 @@ use crate::raster::RasterMap;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::Terrain;
+use crate::world_map::Grouping;
 
 pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mut WorldMapTransaction, raster: &RasterMap, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -125,14 +125,14 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
                 bad_ocean_tile_found = true;
             }
 
-            let terrain = if is_ocean {
-                Terrain::Ocean
+            let grouping = if is_ocean {
+                Grouping::Ocean
             } else {
                 // process of setting lake, island, continent, etc. will have to be redone.
-                Terrain::Continent
+                Grouping::Continent
             };
 
-            feature.set_terrain(&terrain)?;
+            feature.set_grouping(&grouping)?;
 
             layer.update_feature(feature)?;
 

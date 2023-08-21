@@ -8,7 +8,7 @@ pub(crate) mod water_flow;
 pub(crate) mod water_fill;
 pub(crate) mod rivers;
 pub(crate) mod water_distance;
-pub(crate) mod terrain;
+pub(crate) mod grouping;
 pub(crate) mod biomes;
 pub(crate) mod population;
 pub(crate) mod naming;
