@@ -59,6 +59,7 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
+        // TODO: Can we use Point::create_geometry?
         let mut point = Geometry::empty(OGRwkbGeometryType::wkbPoint)?;
         point.add_point_2d((self.extent.west + x,self.extent.south + y));
         Ok(point)

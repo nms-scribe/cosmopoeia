@@ -13,7 +13,9 @@ indicatif = "0.17.5"
 libflate = "2.0.0"
 ordered-float = "3.7.0"
 priority-queue = "1.3.2"
+qutee = "0.1.1"
 rand = "0.8.5"
+rand_distr = "0.4.3"
 serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 

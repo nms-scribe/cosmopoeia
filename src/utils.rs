@@ -9,11 +9,7 @@ use gdal::vector::Geometry;
 use gdal::vector::Layer;
 use gdal::vector::LayerAccess;
 use gdal::vector::FeatureIterator;
-use gdal::vector::OGRwkbGeometryType::wkbNone;
-use gdal::vector::OGRwkbGeometryType::wkbGeometryCollection;
-use gdal::vector::OGRwkbGeometryType::wkbPolygon;
-use gdal::vector::OGRwkbGeometryType::wkbLinearRing;
-use gdal::vector::OGRwkbGeometryType::wkbLineString;
+use gdal::vector::OGRwkbGeometryType;
 use adaptive_bezier::adaptive_bezier_curve; 
 use adaptive_bezier::Vector2;
 
@@ -34,6 +30,27 @@ pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
     };
     StdRng::seed_from_u64(seed)
 }
+
+pub(crate) trait RandomNth<ItemType> {
+
+    fn choose<Random: Rng>(&mut self, rng: &mut Random) -> Option<ItemType>;
+
+}
+
+impl<ItemType, IteratorType: Iterator<Item=ItemType>> RandomNth<ItemType> for IteratorType {
+
+    fn choose<Random: Rng>(&mut self, rng: &mut Random) -> Option<ItemType> {
+
+        // FUTURE: I really wish size_hint was a trait that iterators could implement, so I could require it to exist for this to work.
+        if let Some(len) = self.size_hint().1 {
+            self.nth(rng.gen_range(0..len))
+        } else {
+            None
+        }
+    }
+}
+
+
 
 pub(crate) trait RandomIndex<ItemType> {
 
@@ -139,6 +156,14 @@ impl Extent {
         create_polygon(&vertices)
     }
 
+    pub(crate) fn east(&self) -> f64 {
+        self.west + self.width
+    }
+
+    pub(crate) fn north(&self) -> f64 {
+        self.south + self.height
+    }
+
 }
 
 
@@ -201,7 +226,7 @@ impl<'lifetime> Iterator for LayerGeometryIterator<'lifetime> {
             if let Some(geometry) = feature.geometry() {
                 Some(Ok(geometry.clone()))
             } else {
-                Some(Geometry::empty(wkbNone).map_err(Into::into))
+                Some(Geometry::empty(OGRwkbGeometryType::wkbNone).map_err(Into::into))
             }
         } else {
             None
@@ -222,7 +247,7 @@ pub(crate) trait ToGeometryCollection {
 impl<Iter: Iterator<Item=Result<Geometry,CommandError>>> ToGeometryCollection for Iter {
 
     fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Geometry,CommandError> {
-        let mut result = Geometry::empty(wkbGeometryCollection)?;
+        let mut result = Geometry::empty(OGRwkbGeometryType::wkbGeometryCollection)?;
         for geometry in self.watch(progress,"Reading geometries.","Geometries read.") {
             result.add_geometry(geometry?)?;
         }
@@ -290,6 +315,13 @@ impl Point {
         ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt()
     }
 
+    pub(crate) fn create_geometry(&self) -> Result<Geometry,CommandError> {
+        let mut point = Geometry::empty(OGRwkbGeometryType::wkbPoint)?;
+        point.add_point_2d((self.x.into(),self.y.into()));
+        Ok(point)
+
+    }
+
     
 }
 
@@ -353,7 +385,7 @@ impl std::ops::Add for &Point {
 
 pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
     // close the polygon if necessary
-    let mut line = Geometry::empty(wkbLinearRing)?;
+    let mut line = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
     for point in vertices {
         line.add_point_2d(point.to_tuple())
     
@@ -362,7 +394,7 @@ pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandEr
         // if the vertices don't link up, then link them.
         line.add_point_2d(vertices[0].to_tuple())
     }
-    let mut polygon = Geometry::empty(wkbPolygon)?;
+    let mut polygon = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
     polygon.add_geometry(line)?;
     Ok(polygon)
 
@@ -392,7 +424,7 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Geome
 
 
 pub(crate) fn create_line(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
-    let mut line = Geometry::empty(wkbLineString)?;
+    let mut line = Geometry::empty(OGRwkbGeometryType::wkbLineString)?;
     for point in vertices {
         line.add_point_2d(point.to_tuple());
     }
@@ -941,3 +973,67 @@ macro_rules! impl_to_roman {
 
 impl_to_roman!(usize);
 
+pub(crate) mod point_finder {
+    // FUTURE: This was an implementation I found on crates.io that allowed inserting and floating point points, and wasn't too difficult to construct. Although that could be done better. It didn't have a lot of downloads, however, so I don't know if it's really something I should be using.
+    use qutee::QuadTree; 
+    use qutee::Boundary;
+
+    use super::Extent;
+    use super::Point;
+    use crate::errors::CommandError;
+
+    pub(crate) struct PointFinder {
+      // It's kind of annoying, but the query method doesn't return the original point, so I have to store the point.
+      inner: QuadTree<f64,Point>,
+      bounds: Boundary<f64>, // it also doesn't give us access to this
+      capacity: usize // or this
+    }
+    
+    impl PointFinder {
+    
+        pub(crate) fn new(extent: &Extent, capacity: usize) -> Self {
+            let bounds = Boundary::between_points((extent.west,extent.south),(extent.east(),extent.north()));
+            Self {
+                inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
+                bounds,
+                capacity
+            }
+        }
+
+        pub(crate) fn add_point(&mut self, point: Point) -> Result<(),CommandError> {
+            self.inner.insert_at(point.to_tuple(),point.clone()).map_err(|_| CommandError::PointFinderOutOfBounds(point.x.into(),point.y.into()))
+
+        }
+
+        pub(crate) fn points_in_target(&mut self, point: &Point, spacing: f64) -> bool {
+            let west = point.x - spacing;
+            let south = point.y - spacing;
+            let north = point.x + spacing;
+            let east = point.y + spacing;
+            let boundary = Boundary::between_points((west.into(),south.into()),(east.into(),north.into()));
+            for item in self.inner.query(boundary) {
+                if item.distance(point) <= spacing {
+                    return true;
+                }
+            }
+            return false;
+
+        }
+
+        pub(crate) fn fill_from(other: &PointFinder, additional_size: usize) -> Result<Self,CommandError> {
+            let bounds = other.bounds.clone();
+            let capacity = other.capacity + additional_size;
+            let mut result = Self {
+                inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
+                bounds,
+                capacity
+            };
+            for point in other.inner.iter() {
+                result.add_point(point.clone())?
+            }
+            Ok(result)
+        }
+    }
+    
+
+}

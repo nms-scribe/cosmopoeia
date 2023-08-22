@@ -10,6 +10,7 @@ mod gen_climate;
 mod gen_water;
 mod gen_biome;
 mod gen_people;
+mod gen_civil;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -79,6 +80,7 @@ command!{
     gen_people::GenPeoplePopulation;
     gen_people::GenPeopleCultures;
     gen_people::GenPeopleExpandCultures;
+    gen_civil::GenCivilTowns;
 }
 
 

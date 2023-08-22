@@ -191,13 +191,15 @@ impl CultureSet {
     }
 
     // TODO: Make use of these...
-    #[allow(dead_code)] pub(crate) fn make_random_culture_set<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
+    #[allow(dead_code)] pub(crate) fn make_random_culture_set<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: NamerSet, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
 
         let namer_keys = namers.list_names();
+        let mut loaded_namers = namers.into_loaded(&namer_keys, progress)?;
         let mut result = Self::empty();
         for _ in 0..count {
             let namer_key = namer_keys.choose(rng);
-            let namer = namers.prepare(namer_key, progress).unwrap(); // I'm going from the key list itself, so this should never be None
+            let namer = loaded_namers.get_mut(namer_key).unwrap(); // It should be here.
+
             result.add_culture(CultureSource {
                 name: namer.make_name(rng),
                 namer: namer_key.clone(),
@@ -213,7 +215,7 @@ impl CultureSet {
     // TODO: Make use of these...
     #[allow(dead_code)] pub(crate) fn make_random_culture_set_with_same_namer<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, namer_key: &str, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
 
-        let namer = namers.prepare(namer_key, progress)?;
+        let mut namer = namers.load_one(namer_key, progress)?;
         
         let mut result = Self::empty();
         for _ in 0..count {

@@ -136,6 +136,7 @@ impl ConsoleProgressBar {
     }
 
     pub(crate) fn announce(&self, message: &str) {
+        let message = format!("== {} ==",message);
         if let Some(bar) = &self.bar {
             bar.println(message)
         } else {
@@ -233,7 +234,7 @@ impl<'watcher,Message: AsRef<str>, Progress: ProgressObserver, ItemType, Iterato
 
 pub(crate) trait WatchableIterator: Iterator + Sized {
 
-    fn watch<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> IteratorWatcher<Message, Progress, Self>;
+    fn watch<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self>;
 }
 
 impl<IteratorType: Iterator> WatchableIterator for IteratorType {
@@ -245,7 +246,7 @@ impl<IteratorType: Iterator> WatchableIterator for IteratorType {
     // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
     // bar as well as updating the current step.
 
-    fn watch<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> IteratorWatcher<Message, Progress, Self> {
+    fn watch<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self> {
         progress.start(|| (start,self.size_hint().1));
         IteratorWatcher { 
             finish: finish, 
@@ -293,7 +294,7 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> QueueW
 
 pub(crate) trait WatchableQueue<ItemType: Sized> {
 
-    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> QueueWatcher<Message, Progress, ItemType>;
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType>;
 }
 
 impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
@@ -305,7 +306,7 @@ impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
     // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
     // bar as well as updating the current step.
 
-    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> QueueWatcher<Message, Progress, ItemType> {
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         QueueWatcher { 
             finish: finish, 
@@ -365,7 +366,7 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::h
 
 pub(crate) trait WatchableDoublePriorityQueue<ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
 
-    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> DoublePriorityQueueWatcher<Message, Progress, ItemType,PriorityType>;
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DoublePriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
 }
 
 impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchableDoublePriorityQueue<ItemType,PriorityType> for DoublePriorityQueue<ItemType,PriorityType> {
@@ -377,7 +378,7 @@ impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchableDoublePriorityQ
     // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
     // bar as well as updating the current step.
 
-    fn watch_queue<'progress, Message: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: Message, finish: Message) -> DoublePriorityQueueWatcher<Message, Progress, ItemType,PriorityType> {
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DoublePriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));
         DoublePriorityQueueWatcher { 
             finish: finish, 

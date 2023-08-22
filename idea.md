@@ -3829,9 +3829,9 @@ cells.harbor = tile.water_count
   * let max = (sorted.length / 2).floor()
   * let cell_id = 0;
   * for i in 0..MAX_ATTEMPTS:
-    * cell_id = sorted[biased(0, max, 5)] -- TODO: What is biased?
+    * cell_id = sorted[biased(0, max, 5)] 
     * spacing *= 0.9
-    * if culture_ids[cell_id] == 0 and !centers.find(cells.p[cell_id][0], cells.p[cellId][1], spacing) break; -- TODO: The 'find' is from the quadtree thingie above.
+    * if culture_ids[cell_id] == 0 and !centers.find(cells.p[cell_id][0], cells.p[cellId][1], spacing) break;
   * return cell_id
 
 * select_cultures(culture_number)
@@ -3846,7 +3846,7 @@ cells.harbor = tile.water_count
       * rnd = rand(def.length - 1)
       * culture = def[rnd]
       * i += 1;
-      * if i < 200 && !P(culture.odd): continue; -- TODO: What is that function P -- I think it's a random number generation thingie...
+      * if i < 200 && !P(culture.odd): continue; 
       * break -- I'm just trying to emulate the process of a do..while loop
     * cultures.push(culture)
     * def.splice(rnd,1) -- remove that from the defaults
@@ -3856,8 +3856,8 @@ cells.harbor = tile.water_count
   * if tile.elevation_Scaled < 70 and biome is hot desert, cold desert or grassland: return "Nomadic" -- NOTE: This is fairly stereotyped for those environments, I don't think I should do this in the future
   * if tile.elevation_scaled > 50: return "Highland"
   * let f = -- I don't even know what this is, but I think it's checking for the feature in the "opposite" tile.
-  * if f.type == "lake" and f.cells > 5: return "Lake" -- f.cells is the count of cells in a feature, so the number of cells in the lake. TODO: I don't have this data readily available.
-  * if -- TODO: And now, I seem to need to know if there's a harbor here.
+  * if f.type == "lake" and f.cells > 5: return "Lake" -- f.cells is the count of cells in a feature, so the number of cells in the lake. 
+  * if -- And now, I seem to need to know if there's a harbor here.
      * tile.harbor and f.type != "lake" && P(0.1) ||
      * tile.harbor == 1 && P(0.6) ||
      * tile is an "isle" && P(0.4):
@@ -3881,7 +3881,7 @@ cells.harbor = tile.water_count
 * get_default(count):
   * cells = tiles
   * s = tile suitabilities
-  * s_max = d3.max(s) -- TODO: What is this?
+  * s_max = d3.max(s) -- 
   * t = cells.t -- This relates to whether the tile is land, on the coast, or on a shoreline of a water body
   * temp = cells.temp -- temperature
   * n = |cell| ((s[cell]/s_max) * 3).ceil()
@@ -4221,9 +4221,9 @@ TODO: Okay, I'm ready for this...
 * placeTowns(burgsTree)
 * expandStates()
 * normalizeStates()
-* let townRoutes = Routes.getTrails() -- TODO:
+* let townRoutes = Routes.getTrails()
 * specifyBurgs()
-* let oceanRoutes = Routes.getSearoutes() -- TODO:
+* let oceanRoutes = Routes.getSearoutes()
 * collectStatisticts() -- I don't need this
 * assignColors() -- I don't need this
 * generateDiplomacy() -- I don't need this
@@ -4263,7 +4263,7 @@ TODO: Okay, I'm ready for this...
   
 * createStates(burgs)
   * states = [{i: 0, name: "Neutrals"}]
-  * each5th = each(5) -- TODO: What is this?
+  * each5th = each(5) -- creates a function that returns true if a value mod 5 is 0.
   * for (i,burg) in burgs:
     * b.i = b.state = i;
     * b.culture = b.cell.culture
@@ -4272,7 +4272,7 @@ TODO: Okay, I'm ready for this...
     * b.capital = 1
 
     * expansionism = (random() * powerInput.value + 1) -- PowerInput is also used in culture expansion, I believe
-    * basename = if b.name.length < 9 && each5th(b.cell) { b.name } else {b.getshort name from culture}
+    * basename = if b.name.length < 9 && each5th(b.cell) { b.name } else {b.getshort name from culture} -- every 5th one gets a short name? Which I'm not doing short names (This sort of thing should be built into the namer to generate wider ranges of lengths, instead)
     * name = namer(culture.namer).get name
     * type = b.cultuer.type
 
@@ -4282,10 +4282,19 @@ TODO: Okay, I'm ready for this...
 
     * cell.burg = i (i is an id, we might need that with burgs, we can't assume names are unique)
 
+* gauss
+```js
+function gauss(expected = 100, deviation = 30, min = 0, max = 300, round = 0) {
+  return rn(minmax(d3.randomNormal(expected, deviation)(), min, max), round);
+}
+```
+  * source for randomNormal is https://github.com/d3/d3-random/blob/main/src/normal.js
+  * check if the rand crate already has this built in.
+
 * placeTowns(burgsTree)
-  * score = array the same length as tiles holding a value of habitability * gause(1,3,0,20,3) -- TODO: What is this?
+  * score = array the same length as tiles holding a value of habitability * gause(1,3,0,20,3) 
   * sorted = tiles filtered for score[i] > 0 and tile.culture.is_some and no burg right now, then sorted by score backwards
-  * desiredNumber = if manorsInput == 1000: -- TODO: What is this?
+  * desiredNumber = if manorsInput == 1000: -- manorsInput is labeled as number of towns, but when it gets up to 1000, it says "auto" instead of 1000.
     * sorted.len / 5 / (grid.points.length / 10000) * 0.8
     * else: manorsInput
   * burgs_number = desiredNumber.min(sorted.length)
@@ -4297,7 +4306,7 @@ TODO: Okay, I'm ready for this...
       * if sorted[i] has burg: continue
       * tile = sorted[i]
       * x,y = sorted[i].site
-      * s = spacing * gauss(1,0.3,0.2,2,2) -- TODO: What is this?
+      * s = spacing * gauss(1,0.3,0.2,2,2) 
       * if burgs_Tree.find(x,y,s): continue -- too close to existing burg
       * burg = burgs.length
       * culture = tile.culture
@@ -4313,9 +4322,9 @@ TODO: Okay, I'm ready for this...
 * expandStates
   * queue = PriorityQueue
   * cost = []
-  * global_neutral_rate = neutral_input -- TODO: What is this?
-  * states_neutral_rate = states_neutral -- TODO: What is this?
-  * neutral = (tiles.len() / 2) * global_neutral_rate * states_neutral_rate -- TODO: Why are their two numbers?
+  * global_neutral_rate = neutral_input -- This is the same neutral_input used for cultures. (limit_factor)
+  * states_neutral_rate = states_neutral -- I can't find this, maybe there are some "advanced" values?
+  * neutral = (tiles.len() / 2) * global_neutral_rate * states_neutral_rate -- I think we can just use a different limit_factor for states instead.
   * for state of states:
     * capitalCell = burgs[state.capital].cell
     * cells.state[capitalCell] = state.i
@@ -4357,7 +4366,7 @@ TODO: Okay, I'm ready for this...
     * if adversaries.length < buddies.length: continue;
     * state[i] = state[adversaries[0]]
 
-* specifyBurgs -- defines burg coordinates, port status and other details TODO: Need roads before I can do this
+* specifyBurgs -- defines burg coordinates, port status and other details NOTE: Need roads before I can do this
   * for b of burgs:
     * i = b.cell
     -- assign port status to some coastline burgs with temp > 0
@@ -4368,12 +4377,12 @@ TODO: Okay, I'm ready for this...
       * b.port = if port ? f : 0;
     * else: b.port = 0;
     -- define population
-    * b.population = (cell.habitability + cell.road / 2) / 8 + b.i / 1000 + (i % 100) / 1000, 0.1) * 1000 -- TODO: Not sure what's going on here
+    * b.population = (cell.habitability + cell.road / 2) / 8 + b.i / 1000 + (i % 100) / 1000, 0.1) * 1000 -- As 'i' is usually an id, I believe it's creating modulated changes which seem random but aren't really.
     * if b.capital: b.population = b.population * 1.3 -- increase capital population
 
     * if b.port:
       * b.population = b.population * 1.3 -- increase port population
-      * [x,y] = getMiddlePoint(i,haven) -- TODO: What is this?
+      * [x,y] = getMiddlePoint(i,haven) -- return the center point of the common border between two cells. Have to get into the tile geometry for that.
       * b.site = x,y
 
     -- random factor
@@ -4387,7 +4396,7 @@ TODO: Okay, I'm ready for this...
       * if cells.r[i] %2 b.y = b.y + shift
       * else b.y = b.y - shift
   
-  -- de-assign port status if it's the only one on the feature TODO: I get the idea, but I'm not sure if there's some data I'm missing, and I'm not certain of the point of this.
+  -- de-assign port status if it's the only one on the feature -- I can tell that they are on the same feature if they have the same group_id
   * ports = burgs filter for port > 0
   * for f of features:
     * if tile is land or border: continue
@@ -4400,13 +4409,13 @@ TODO: Okay, I'm ready for this...
   * if capitals.len < 2: return []
   * paths = []
   * for b of capitals:
-    * connect = capitals.filter for being on the same feature as b and not == b -- TODO: Once again, this is data I'm not maintaining.
+    * connect = capitals.filter for being on the same feature as b and not == b 
     * for t of connect:
-      * [from,exit] = findLandPath(b.cell,t.cell,true) -- TODO: What is this?
-      * segments = restorePath(b.cell,exit,"main",from) -- TODO: What is this?
+      * [from,exit] = findLandPath(b.cell,t.cell,true) 
+      * segments = restorePath(b.cell,exit,"main",from) 
       * segments.forEach(|s| paths.push(s));
   * for each tile:
-    * tile.habitability += (tile.road / 2) -- add roads to habitability score -- TODO: Since this is after cultures, I think I want to put this in another field, and then use that for the city stuff. road_habitability? traffic?
+    * tile.habitability += (tile.road / 2) -- add roads to habitability score -- NOTE: Since this is after cultures, I think I want to put this in another field, and then use that for the city stuff. road_habitability? traffic?
   * return paths
 
 * Routes.getTrails
@@ -4448,7 +4457,7 @@ Routes.getSearoutes:
       * for t from s + 1..ports.len:
         * target = ports[t].cell
         * if connected[target] continue;
-        * const [from,exit,passable] = findOceanPath(target,source,true); -- TODO: What's this function?
+        * const [from,exit,passable] = findOceanPath(target,source,true); 
         * if !passable: continue
         * path = restorePath(target,exit,"ocean",from)
         * paths.push(path)
@@ -4538,15 +4547,15 @@ Routes.getSearoutes:
 * generateProvinces:
   * provinces = [0]
   * province_ids = new array for each tile
-  * percentage = provincesInput.value -- TODO: Check, but I assume this is the number of provinces
+  * percentage = provincesInput.value -- This is called 'provincesRatio' "Define burg percentage to form a separate province".
   * max = percentage == 100 ? 1000 : gauss(20,5,5,100) * percentage.pow(0.5) -- max growth
   * for s in states
     * s.provinces = []
-    * if provinces.len > 0: -- TODO: Sounds like this is related to the "locked" provinces described above, so might not be necessary
+    * if provinces.len > 0: -- NOTE: Sounds like this is related to the "locked" provinces which I skipped in my analysys, so might not be necessary
       * s.provinces = provinces.filter for provinces in this state already 
-    * state_burgs = burgs filtered for being in this state and not part of a province already -- TODO: Again, that last part probably has to do with locking them.
+    * state_burgs = burgs filtered for being in this state and not part of a province already -- NOTE: Again, that last part probably has to do with locking them.
       * then sorted (a,b) by b.population * gauss(1, 0.2, 0.5, 1.5, 3) - a.population
-      * then sorted so that capitals go to the top -- TODO: This all assumes that the others will remain sorted in place if equal, I'm not sure about that.
+      * then sorted so that capitals go to the top -- NOTE: This all assumes that the others will remain sorted in place if equal, I'm not sure about that.
     * if state_burgs.len < 1: continue -- No provinces if there is only 1 city
     * provincesNumber = ((state_burgs.len * percentage) / 100).ceil().max(2) -- must be at least two
     * for i in 0..provincesNumber:
@@ -4556,7 +4565,7 @@ Routes.getSearoutes:
       * c = state_burgs[i].culture
       * name_by_burg = rnd.gen_bool(0.5)
       * name = if name_by_burg { burg.name } else { namers.getStateName(culture namer)}
-      * type = getType(center,burg.port) -- TODO: What is this?
+      * type = getType(center,burg.port) -- See function in JS, easy to port
       * s.provinces.push(provinceId)
       * provinces.push(...all the information)
   -- expand provinces
@@ -4569,8 +4578,8 @@ Routes.getSearoutes:
   * while let (e,province,state,priority) = queue.pop:
     * for each neighbor of e:
       * land = !neighbor.terrain.is_water
-      * if !land and cells.shore_distance === 0: continue -- TODO: this only makes sense if we didn't go beyond -10 in the ocean. But what province is going to go that far anyway? TODO: I'd probably say if it's < -2 instead.
-      * if land and neighbor.state !== state: continue -- TODO: Can't pass into a neighboring state
+      * if !land and cells.shore_distance === 0 or null: continue -- NOTE: this only makes sense if we didn't go beyond -10 in the ocean. But what province is going to go that far anyway? TODO: I'd probably say if it's < -2 instead.
+      * if land and neighbor.state !== state: continue -- NOTE: Can't pass into a neighboring state
       * evevation [sic] = if neighbor.height >= 70 { 100 } else if neighbor.height >= 50 { 30 } else if neighbor.terrain.is_land { 20 } else { 100 }
       * total_cost = priority + evevation
       * if total_cost > max: continue;
@@ -4603,13 +4612,14 @@ Routes.getSearoutes:
     * stateNoProvince = noProvince.filter for cells in the state and no province for that cell
     * while stateNoProvince.len():
       * province_id = provinces.len
-      * burgCell = stateNoProvince.find a cell with a burg -- TODO: Personally, I think I would skip this part if there is no burg
+      * burgCell = stateNoProvince.find a cell with a burg -- NOTE: Personally, I think I would skip this part if there is no burg
       * center = if burgCell ? burgCell else stateNoProvince[0]
       * burg = burgCell? cells.burg[burgCell] else 0
       * provinceIds[center] = provinceId
       * ... -- expand province, pretty much the same as above
       * -- a bunch of bs to come up with a name to indicate it's a colony, based on things like whether it's on an isle group, whether it's connected with the state, etc. Since I'm not dealing with form names, I don't think I need most of this.
       * stateNoProvince...remove cells that are now in the new province
+
 
 #### My Algorithms:
 
@@ -4627,7 +4637,128 @@ I'm going to break this up into pieces as well:
 
 I'm not going to generate religions, maybe sometime in the future. And when I do, that can happen after the provinces. I'm not going to define "forms" of states, any more than I did the coats of arms. There has to be a point where your imagination gets to take over.
 
-TODO: Before I can get to the roads, I'm going to need to distinguish land and water bodies from each other more than just lake ids, so I know when cells are on the same body. This also applies to oceans.
+#### 1) Place Towns
+
+In AFMG, this is a two-part process, separated by creation of states. I'm doing this all at once to simplify things.
+
+* *input*: capital_count = Number of states (to decide how many capitals to place, maybe it's called number of capitals)
+* *input*: town_count = Option<Number of towns>,
+* capitals = []
+* get list of tile entities, included in the fields is a 'capital_score' and 'town_score':
+  * capital_score = tile.habitability * (0.5 + random() * 0.5)
+  * town_score = tile.habitability *  gauss(1,3,0,20,3) )
+  * filter for either score > 0 and tiles which have a culture
+* sort tile entities by capital_score so highest are at the top
+* if sorted.len < capital_count * 10
+  * capital_count = sorted.len / 10
+  * if capital_count == 0: warn that there are not enough populated cells to generate states. (I'm still going to generate towns, though)
+  * else warn that there aren't enough populated cells to generate requested number of capitals, will only generate capital_count.
+* capitals_tree is a graphical 2d index of points where burgs are located. I could use a previous quadtree implementation, but I can only find ones that search by rectangular region, not be distance. Maybe I can use them anyway, get a rectangular area and then check if the resulting points are within the distance of the checking point. TODO: If I get this to work, go back and use it for the culture centers, maybe.
+* spacing = (extent.width + extent.height) / 2 / capital_count
+* loop
+  * for i in 0..sorted.len()
+    * tile = sorted.get(i)
+    * (x,y) = tile.site
+    * if !capitals_tree.find(x,y,spacing):
+      * tile = sorted.remove(i)
+      * capitals.push((tile,x,y,true))
+      * capitals_tree.add(x,y)
+      * if capitals.len() >= capital_count: break;
+  * if capitals.len() < capital_count:
+    * print a warning that we can't place the capitals, so we're trying again with reduced spacing.
+    * towns_tree = new one, or clear it.
+    * sorted.extend(capitals), replacing capitals with []
+    * sorted.sort by capital_score (since we had to reinsert things)
+    * spacing = spacing / 1.2
+  * else: break
+
+* if town_count is none: town_count = sorted.len() / 5 / (tile_count / 10000) * 0.8
+* else if town_count > sorted.len:
+  * town_count = sorted.len
+  * if town_count is 0, then warn that no towns will be placed, there's not enough space
+  * otherwise, warn that I couldn't place that many towns, so only count will be placed.
+* towns = []
+* towns_tree = capital_tree.clone()
+* sort sorted by town_score
+* spacing = extent.width + extent.height / 150 / ((town_count^0.7)/66)
+* loop
+  * for i in 0..sorted.len()
+    * tile = sorted.get(i)
+    * (x,y) = tile.site
+    * s = spacing * gauss(1,0.3,0.2,2,2)
+    * if !towns_tree.find(x,y,s):
+      * tile = sorted.remove(i)
+      * towns.push((tile,x,y,false))
+      * towns_tree.add(x,y)
+      * if towns_added >= town_count: break;
+  * if towns.len < town_count:
+    * print a warning that we can't place the towns, so we're trying again with reduced spacing.
+    * towns_tree = capital_tree.clone()
+    * sorted.extend(towns), replacing towns with []
+    * sorted.sort by town_score (since we had to reinsert things)
+    * spacing = spacing / 2 -- decrease the spacing and try to keep going
+    * if spacing <= 1: break
+  * else: break
+* towns.len < town_count:
+  * warning: couldn't place all the towns, so only count were added.
+* edit the towns layer
+* placed_towns = []
+* for each town in capitals.chain(towns):
+  * get the culture for the tile
+  * get the namer for the culture
+  * generate a name for the town
+  * fid = add town to towns layer with:
+    * geometry point of x,y
+    * name
+    * culture 
+    * is_capital (this was the boolean when adding towns to the vector above)
+    * tile_id
+    * tile.grouping_id (even though this is available on the tile, it might make some algorithms easier later)
+  * placed_towns = (tile,fid)
+* edit the tiles layer
+* for each town of placed_towns -- NOTE: I'm not sure at this point that it's necessary. We already have a link to the tile in 'towns', at best it makes it easier to figure out if a tile has a town on it already.
+  * tile = tiles.feature_by_id
+  * tile.set_town(town)
+  * update
+
+#### 2) Create States
+
+TODO: 
+
+#### 3) Expand States
+
+TODO: 
+
+#### 4) Normalize States
+
+TODO: 
+
+#### 5) Generate Provinces
+
+TODO: 
+
+#### 6) Place Roads
+
+TODO: 
+
+#### 7) Place Trails
+
+TODO: 
+
+#### 8) Place Ocean Routes
+
+TODO: 
+
+#### 9) Specify Burgs -- add burg details
+
+TODO: 
+
+#### 10) Place Provinces
+
+TODO: 
+
+
+
 
 # Testing Commands:
 
@@ -4696,16 +4827,16 @@ To proceed on this, I can break it down into the following steps:
     [X] various auxiliary files
     [X] Review AFMG people generation algorithms -- again, wait on improvements until later
     [X] Figure out how to break the task apart into sub commands and create those commands.
-[ ] `gen-nation` command:
-    [ ] `gen-nation-towns`
-    [ ] `gen-nation-nations`
-    [ ] `gen-nation-expand`
-    [ ] `gen-nation-normalize`
-    [ ] `gen-nation-roads`
-    [ ] `gen-nation-trails`
-    [ ] `gen-nation-ocean-routes`
-    [ ] `gen-nation-town-details`
-    [ ] `gen-nation-subdivisions`
+[ ] `gen-civil` command:
+    [ ] `gen-civil-towns`
+    [ ] `gen-civil-nations`
+    [ ] `gen-civil-expand`
+    [ ] `gen-civil-normalize`
+    [ ] `gen-civil-roads`
+    [ ] `gen-civil-trails`
+    [ ] `gen-civil-ocean-routes`
+    [ ] `gen-civil-town-details`
+    [ ] `gen-civil-subdivisions`
     [ ] Finalize command
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.

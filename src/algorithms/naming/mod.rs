@@ -5,6 +5,7 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::ffi::OsStr;
 use std::fs::File;
 
@@ -600,28 +601,38 @@ impl Namer {
 }
 
 pub(crate) struct NamerSet {
-    source: HashMap<String,NamerSource>,
-    prepared: HashMap<String,Namer>
+    source: HashMap<String,NamerSource>
 }
 
 impl NamerSet {
 
-    pub(crate) fn empty() -> Self {
+    fn empty() -> Self {
         Self {
-            source: HashMap::new(),
-            prepared: HashMap::new()
+            source: HashMap::new()
         }
     }
 
-    pub(crate) fn default() -> Result<Self,CommandError> {
+    pub(crate) fn from_files(files: Vec<PathBuf>, include_defaults: bool) -> Result<Self,CommandError> {
+        let mut result = if include_defaults {
+            NamerSet::default()?
+        } else {
+            NamerSet::empty()
+        };
+
+        for file in files {
+            result.extend_from_file(file,false)?;
+        }
+        Ok(result)
+    }
+
+    fn default() -> Result<Self,CommandError> {
         let mut this = Self::empty();
         this.extend_from_json(BufReader::new(defaults::get_inflated_namer_data()))?;
         Ok(this)
     }
 
-    pub(crate) fn check(&self, name: &str) -> Result<(),CommandError> {
-        if self.prepared.contains_key(name) ||
-           self.source.contains_key(name) {
+    pub(crate) fn check_exists(&self, name: &str) -> Result<(),CommandError> {
+        if self.source.contains_key(name) {
             Ok(())
         } else {
             Err(CommandError::UnknownNamer(name.to_owned()))
@@ -629,50 +640,46 @@ impl NamerSet {
 
     }
 
-    pub(crate) fn prepare<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Result<&mut Namer,CommandError> { 
-        if let Entry::Vacant(entry) = self.prepared.entry(name.to_owned()) {
-            if let Some(name_base) = self.source.remove(name)  { 
-                entry.insert(Namer::new(name_base,&mut NamerLoadObserver::new(name,progress)));
-            } else {
-
-            }
-
+    pub(crate) fn load_one<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Result<Namer,CommandError> { 
+        if let Some(name_base) = self.source.remove(name)  { 
+            Ok(Namer::new(name_base,&mut NamerLoadObserver::new(name,progress)))
+        } else {
+            Err(CommandError::UnknownNamer(name.to_owned()))
         }
-        self.prepared.get_mut(name).ok_or_else(|| CommandError::UnknownNamer(name.to_owned()))
-
     }
 
+    pub(crate) fn into_loaded<StringType: AsRef<str>, Strings: IntoIterator<Item=StringType>, Progress: ProgressObserver>(mut self, load_namers: Strings, progress: &mut Progress) -> Result<HashMap<String,Namer>,CommandError> {
+        let mut result = HashMap::new();
+        for name in load_namers {
+            if let None = result.get(name.as_ref()) {
+                let namer = (&mut self).load_one(name.as_ref(), progress)?;
+                result.insert(name.as_ref().to_owned(), namer);
+            }
+        }
+        Ok(result)
+        
+    }
+    
     pub(crate) fn list_names(&self) -> Vec<String>  {
-        self.prepared.keys().chain(self.source.keys()).cloned().collect()
+        self.source.keys().cloned().collect()
     }
 
     pub(crate) fn to_json(&self) -> Result<String,CommandError> {
 
-        // FUTURE: Probably shouldn't use BadNamerSourceFile for all of the errors, but this theoretically
-        // will be done so rarely I don't know if it's worth creating a new error.
-        // -- It's really only intended for my own use for quickly creating new namer files.
-        if self.prepared.len() == 0 {
-            let mut buf = Vec::new();
-            let formatter = PrettyFormatter::with_indent(b"    ");
-            let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
-            // I don't want to serialize a map, I want to serialize it as an array.
-            let data = self.source.values().collect::<Vec<_>>();
-            data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
-            Ok(String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?)
+        let mut buf = Vec::new();
+        let formatter = PrettyFormatter::with_indent(b"    ");
+        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+        // I don't want to serialize a map, I want to serialize it as an array.
+        let data = self.source.values().collect::<Vec<_>>();
+        data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
+        Ok(String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?)
     
-        } else {
-            Err(CommandError::NamerSourceWrite("Can't serialize namers if any of them have been compiled.".to_owned()))
-        }
 
     }
 
     fn add_namer(&mut self, data: NamerSource) {
         let name = data.name.clone();
         // if the name already exists, then we're replacing the existing one.
-        if self.prepared.contains_key(&name) {
-            // uncompile it, we'll get a new one
-            self.prepared.remove(&name);
-        }
         self.source.insert(name, data);
     }
     
@@ -776,6 +783,5 @@ impl NamerSet {
         Ok(())
 
     }
-    
 
 }

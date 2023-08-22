@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
 use std::hash::Hash;
+use std::collections::HashSet;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -25,10 +26,13 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
+use crate::utils::Extent;
 use crate::utils::create_line;
 use crate::errors::MissingErrorToOption;
 use crate::utils::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
+use crate::algorithms::naming::NamerSet;
+use crate::algorithms::naming::Namer;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -592,12 +596,33 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
         Ok(result)
     }
 
+    #[allow(dead_code)] pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<'impl_life,Feature>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+        let mut result = HashMap::new();
+
+        for feature in self.watch(progress,format!("Indexing {}.",Feature::LAYER_NAME),format!("{} indexed.",Feature::LAYER_NAME.to_title_case())) {
+            let entity = Data::try_from(feature)?;
+            let name = entity.name().clone();
+            result.insert(name, entity);
+        }
+
+        Ok(result)
+
+    }
+
+
+    
+
 }
 
 
 pub(crate) trait Entity<'trait_life, Feature: TypedFeature<'trait_life>>: TryFrom<Feature,Error=CommandError> {
 
 }
+
+pub(crate) trait NamedEntity<'trait_life, Feature: TypedFeature<'trait_life>>: Entity<'trait_life, Feature> {
+    fn name(&self) -> &String;
+}
+
 
 pub(crate) struct EntityIterator<'data_life, Feature: TypedFeature<'data_life>, Data: Entity<'data_life,Feature>> {
     features: TypedFeatureIterator<'data_life,Feature>,
@@ -904,7 +929,7 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
     grouping set_grouping grouping FIELD_GROUPING "grouping" OGRFieldType::OFTString;
     /// A unique id for each grouping. These id's do not map to other tables, but will tell when tiles are in the same group. Use lake_id to link to the lake table.
-    #[allow(dead_code)] grouping_id set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
+    grouping_id set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
     /// average annual temperature of tile in imaginary units
     temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
     /// roughly estimated average wind direction for tile
@@ -1181,6 +1206,13 @@ entity!(TileForCultureExpand TileFeature {
 
 });
 
+entity!(TileForTowns TileFeature {
+    fid: u64,
+    habitability: f64,
+    site: Point,
+    culture: Option<String>,
+    grouping_id: i64
+});
 
 
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
@@ -1223,6 +1255,12 @@ impl TilesLayer<'_> {
         let (width,height) = self.get_layer_size()?;
         let tiles = self.feature_count();
         Ok((width*height)/tiles as f64)
+    }
+
+    pub(crate) fn get_extent(&self) -> Result<Extent,CommandError> {
+        let result = self.layer.get_extent()?;
+        Ok(Extent::new(result.MinX, result.MinY, result.MaxX, result.MaxY))
+
     }
 
    // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
@@ -1692,10 +1730,6 @@ entity!(NewBiome BiomeFeature {
     supports_hunting: bool
 });
 
-pub(crate) trait NamedEntity<'trait_life, Feature: TypedFeature<'trait_life>>: Entity<'trait_life, Feature> {
-    fn name(&self) -> &String;
-}
-
 entity!(BiomeDataForPopulation BiomeFeature {
     name: String,
     habitability: i32
@@ -1755,7 +1789,8 @@ impl BiomeLayer<'_> {
     
     }
 
-    pub(crate) fn build_index<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+    // TODO: Replace with to_named_entities_index in TypedFeatureIterator
+    pub(crate) fn build_named_index<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
         let mut result = HashMap::new();
 
         for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
@@ -1843,6 +1878,28 @@ entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement CultureFeature {
     expansionism: OrderedFloat<f64> = |feature: &CultureFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
+entity!(CultureForTowns CultureFeature {
+    name: String,
+    namer: String
+});
+
+impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureForTowns {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
+pub(crate) trait CultureWithNamer<'impl_life>: NamedEntity<'impl_life,CultureFeature<'impl_life>> {
+
+    fn namer(&self) -> &String;
+}
+
+impl<'impl_life> CultureWithNamer<'impl_life> for CultureForTowns {
+    fn namer(&self) -> &String {
+        &self.namer
+    }
+}
+
 
 pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'data_life>>;
 
@@ -1862,9 +1919,62 @@ impl CultureLayer<'_> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
+    pub(crate) fn get_lookup_and_load_namers<'local, Data: CultureWithNamer<'local>, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(HashMap<String,Data>,HashMap<String,Namer>),CommandError> {
+        let mut result = HashMap::new();
+        let mut load_namers = HashSet::new();
+
+        for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
+            let (_,entity) = entity?;
+            let name = entity.name().clone();
+            load_namers.insert(entity.namer().clone());
+            result.insert(name, entity);
+        }
+
+        let loaded_namers = namer_set.into_loaded(load_namers.into_iter().chain([default_namer].into_iter()), progress)?;
+
+        Ok((result,loaded_namers))
+    }
+
+
+
 
 }
 
+feature!(TownFeature "towns" wkbPoint {
+    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
+    is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital" OGRFieldType::OFTInteger;
+    tile_id #[allow(dead_code)] set_tile_id i64 FIELD_TILE_ID "tile_id" OGRFieldType::OFTInteger64;
+    grouping_id #[allow(dead_code)] set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
+});
+
+entity!(NewTown TownFeature {
+    geometry: Geometry,
+    name: String,
+    culture: Option<String>,
+    is_capital: bool,
+    tile_id: i64,
+    grouping_id: i64
+});
+
+pub(crate) type TownLayer<'data_life> = MapLayer<'data_life,TownFeature<'data_life>>;
+
+impl TownLayer<'_> {
+
+    pub(crate) fn add_town(&mut self, town: NewTown) -> Result<u64,CommandError> {
+        let (field_names,field_values) = TownFeature::to_field_names_values(
+            &town.name,
+            town.culture.as_deref(),
+            town.is_capital,
+            town.tile_id,
+            town.grouping_id
+        );
+        self.add_feature(town.geometry, &field_names, &field_values)
+    }
+
+
+    
+}
 
 pub(crate) struct WorldMap {
     dataset: Dataset
@@ -1936,6 +2046,10 @@ impl WorldMap {
         BiomeLayer::open_from_dataset(&self.dataset)
     }
 
+    pub(crate) fn cultures_layer(&self) -> Result<CultureLayer, CommandError> {
+        CultureLayer::open_from_dataset(&self.dataset)
+    }
+
  
 
 }
@@ -2001,6 +2115,10 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     pub(crate) fn edit_cultures_layer(&mut self) -> Result<CultureLayer,CommandError> {
         Ok(CultureLayer::open_from_dataset(&mut self.dataset)?)
 
+    }
+
+    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: bool) -> Result<TownLayer,CommandError> {
+        Ok(TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
     }
 
 }

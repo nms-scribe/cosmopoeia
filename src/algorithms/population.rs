@@ -25,6 +25,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     let mut biome_map = HashMap::new();
 
     {
+        // TODO: Need to use build_index on the biomes layer.
         let mut biomes = target.edit_biomes_layer()?;
 
         for biome in biomes.read_features().into_entities::<BiomeDataForPopulation>() {

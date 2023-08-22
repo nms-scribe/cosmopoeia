@@ -36,6 +36,7 @@ pub(crate) enum CommandError {
     NamerSourceWrite(String),
     CultureSourceRead(String),
     CultureSourceWrite(String),
+    PointFinderOutOfBounds(f64,f64),
     #[allow(dead_code)] RasterDatasetRequired,
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType),
 }
@@ -91,6 +92,7 @@ impl Display for CommandError {
             Self::NamerSourceWrite(a) => write!(f,"Error writing namer source: {}",a),
             Self::CultureSourceRead(a) => write!(f,"Error reading culture source: {}",a),
             Self::CultureSourceWrite(a) => write!(f,"Error writing culture source: {}",a),
+            Self::PointFinderOutOfBounds(a, b) => write!(f,"An out of bounds point ({},{}) was added to a point finder",a,b),
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
         }

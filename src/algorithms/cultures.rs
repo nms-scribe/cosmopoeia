@@ -60,7 +60,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         culture_count
     };
 
-    let biomes = target.edit_biomes_layer()?.build_index(progress)?;
+    let biomes = target.edit_biomes_layer()?.build_named_index(progress)?;
 
     let lake_map = target.edit_lakes_layer()?.read_features().to_entities_index::<_,LakeForCultureGen>(progress)?;
 
@@ -143,7 +143,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
         let namer = culture_source.namer_name();
 
-        namers.check(namer)?;
+        namers.check_exists(namer)?;
 
         let index = cultures.len();
         // TODO: This seems like a more efficient way to do this, instead of entry, since I only clone if the name is inserted
@@ -275,7 +275,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.build_index::<_,BiomeForCultureExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.build_named_index::<_,BiomeForCultureExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 

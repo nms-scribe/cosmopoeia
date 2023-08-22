@@ -61,7 +61,7 @@ impl Task for DevPointsFromHeightmap {
         let generator = PointGenerator::new(random, extent, self.points);
 
         target.with_transaction(|target| {
-            progress.announce("Generating random points:");
+            progress.announce("Generating random points");
 
             load_points_layer(target, self.overwrite, generator, &mut progress)
         })?;
@@ -119,7 +119,7 @@ impl Task for DevPointsFromExtent {
         let generator = PointGenerator::new(random, extent, self.points);
         
         target.with_transaction(|target| {
-            progress.announce("Generating random points:");
+            progress.announce("Generating random points");
 
             load_points_layer(target, self.overwrite, generator, &mut progress)
         })?;
@@ -156,7 +156,7 @@ impl Task for DevTrianglesFromPoints {
     
         let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(&mut progress)?);
     
-        progress.announce("Generating delaunay triangles:");
+        progress.announce("Generating delaunay triangles");
 
         generator.start(&mut progress)?;
     
@@ -204,7 +204,7 @@ impl Task for DevVoronoiFromTriangles {
     
         let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
 
-        progress.announce("Create tiles from voronoi polygons:");
+        progress.announce("Create tiles from voronoi polygons");
     
         generator.start(&mut progress)?;
     
@@ -266,21 +266,14 @@ impl Task for DevNamers {
         let mut progress = ConsoleProgressBar::new();
 
         fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, progress: &mut ConsoleProgressBar, rng: &mut Random) {
-            let namer = namers.prepare(language,progress).unwrap();
+            let mut namer = namers.load_one(language,progress).unwrap();
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
             println!("   state: {}",namer.make_state_name(rng));
         
         }
         
-        let mut namers = if self.defaults {
-            NamerSet::default()?
-        } else {
-            NamerSet::empty()
-        };
-        for file in self.namer_data {
-            namers.extend_from_file(file,self.text_is_markov)?;
-        }
+        let mut namers = NamerSet::from_files(self.namer_data, self.defaults)?;
 
         if self.write_deflated {
             namers.to_deflated_json(stdout())?;

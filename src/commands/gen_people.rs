@@ -38,7 +38,7 @@ impl Task for GenPeoplePopulation {
 
         target.with_transaction(|target| {
 
-            progress.announce("Generating population:");
+            progress.announce("Generating population");
             generate_populations(target, self.estuary_threshold, &mut progress)
         })?;
 
@@ -65,7 +65,7 @@ subcommand_def!{
 
         #[arg(long)]
         /// if specified, the default namers will not be loaded.
-        no_default_namers: bool,
+        no_builtin_namers: bool,
 
         #[arg(long,default_value("10"))]
         /// The number of cultures to generate
@@ -101,14 +101,7 @@ impl Task for GenPeopleCultures {
             cultures.extend_from_file(file)?;
         }
 
-        let mut namers = if self.no_default_namers {
-            NamerSet::empty()
-        } else {
-            NamerSet::default()?
-        };
-        for file in self.namers {
-            namers.extend_from_file(file,false)?;
-        }
+        let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
 
         let mut random = random_number_generator(self.seed);
 
@@ -117,7 +110,7 @@ impl Task for GenPeopleCultures {
         let size_variance = self.size_variance.clamp(0.0, 10.0);
 
         target.with_transaction(|target| {
-            progress.announce("Generating cultures:");
+            progress.announce("Generating cultures");
             generate_cultures(target, &mut random, cultures, namers, self.count, size_variance, self.river_threshold, self.overwrite, &mut progress)
         })?;
 
@@ -153,7 +146,7 @@ impl Task for GenPeopleExpandCultures {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Applying cultures to tiles:");
+            progress.announce("Applying cultures to tiles");
 
             expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)
         })?;
@@ -189,7 +182,7 @@ subcommand_def!{
 
         #[arg(long)]
         /// if specified, the default namers will not be loaded.
-        no_default_namers: bool,
+        no_builtin_namers: bool,
 
         #[arg(long,default_value("10"))]
         /// The number of cultures to generate
@@ -221,14 +214,7 @@ impl Task for GenPeople {
             cultures.extend_from_file(file)?;
         }
 
-        let mut namers = if self.no_default_namers {
-            NamerSet::empty()
-        } else {
-            NamerSet::default()?
-        };
-        for file in self.namers {
-            namers.extend_from_file(file,false)?;
-        }
+        let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
 
         let size_variance = self.size_variance.clamp(0.1, 10.0);
 
@@ -237,13 +223,13 @@ impl Task for GenPeople {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Generating population:");
+            progress.announce("Generating population");
             generate_populations(target, self.river_threshold, &mut progress)?;
 
-            progress.announce("Generating cultures:");
+            progress.announce("Generating cultures");
             generate_cultures(target, &mut random, cultures, namers, self.culture_count, size_variance, self.river_threshold, self.overwrite, &mut progress)?;
 
-            progress.announce("Applying cultures to tiles:");
+            progress.announce("Applying cultures to tiles");
             expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)
         })?;
 

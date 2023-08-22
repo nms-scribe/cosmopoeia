@@ -74,10 +74,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             // we couldn't calculate, but I need to fill in the blanks
             tile.set_water_count(None)?;
             tile.set_closest_water(None)?;
-            // we'll do shore_distance later, it will be taken care of.
-            
-            
-            //so push it on the queue for the next iteration.
+            // we'll do shore_distance later, it will be taken care of in the next queue.
             next_queue.push(fid);
         }
         tiles.update_feature(tile)?;

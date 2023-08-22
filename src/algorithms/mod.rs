@@ -14,4 +14,5 @@ pub(crate) mod population;
 pub(crate) mod naming;
 pub(crate) mod culture_sets;
 pub(crate) mod cultures;
+pub(crate) mod civilization;
 

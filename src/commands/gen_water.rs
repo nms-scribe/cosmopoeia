@@ -32,7 +32,7 @@ impl Task for GenWaterFlow {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Calculating water flow:");
+            progress.announce("Calculating water flow");
             generate_water_flow(target, &mut progress)
         })?;
 
@@ -76,7 +76,7 @@ impl Task for GenWaterFill {
         let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(&mut progress)?;
 
         target.with_transaction(|target| {
-            progress.announce("Filling lakes:");
+            progress.announce("Filling lakes");
             generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, &mut progress)
 
         })?;
@@ -112,7 +112,7 @@ impl Task for GenWaterRivers {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Generating rivers:");
+            progress.announce("Generating rivers");
             generate_water_rivers(target, self.bezier_scale, self.overwrite, &mut progress)
         })?;
 
@@ -140,7 +140,7 @@ impl Task for GenWaterDistance {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Calculating distance from shores:");
+            progress.announce("Calculating distance from shores");
             generate_water_distance(target, &mut progress)
         })?;
 
@@ -169,7 +169,7 @@ impl Task for GenWaterGrouping {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Delineating land and water bodies:");
+            progress.announce("Delineating land and water bodies");
             calculate_grouping(target, &mut progress)
         })?;
 
@@ -223,19 +223,19 @@ impl Task for GenWater {
 
         target.with_transaction(|target| {
 
-            progress.announce("Calculating water flow:");
+            progress.announce("Calculating water flow");
             let (tile_map,tile_queue) = generate_water_flow(target, &mut progress)?;
 
-            progress.announce("Filling lakes:");
+            progress.announce("Filling lakes");
             generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite_lakes || self.overwrite, &mut progress)?;
 
-            progress.announce("Generating rivers:");
+            progress.announce("Generating rivers");
             generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, &mut progress)?;
 
-            progress.announce("Calculating distance from shore:");
+            progress.announce("Calculating distance from shore");
             generate_water_distance(target, &mut progress)?;
 
-            progress.announce("Delineating land and water bodies:");
+            progress.announce("Delineating land and water bodies");
             calculate_grouping(target, &mut progress)
 
         })?;

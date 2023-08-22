@@ -34,7 +34,7 @@ impl Task for GenBiomeData {
 
         target.with_transaction(|target| {
 
-            progress.announce("Filling biome defaults:");
+            progress.announce("Filling biome defaults");
 
             fill_biome_defaults(target, self.overwrite, &mut progress)
 
@@ -66,7 +66,7 @@ impl Task for GenBiomeApply {
 
         target.with_transaction(|target| {
 
-            progress.announce("Applying biomes to tiles:");
+            progress.announce("Applying biomes to tiles");
 
             apply_biomes(target, biomes, &mut progress)
 
@@ -102,7 +102,7 @@ impl Task for GenBiome {
 
         target.with_transaction(|target| {
 
-            progress.announce("Filling biome defaults:");
+            progress.announce("Filling biome defaults");
 
             fill_biome_defaults(target, self.overwrite, &mut progress)
         })?;
@@ -111,7 +111,7 @@ impl Task for GenBiome {
 
         target.with_transaction(|target| {
 
-            progress.announce("Applying biomes to tiles:");
+            progress.announce("Applying biomes to tiles");
 
             apply_biomes(target, biomes, &mut progress)
         })?;
