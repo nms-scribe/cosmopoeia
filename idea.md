@@ -4628,14 +4628,14 @@ I'm going to break this up into pieces as well:
 * Create States
 * Expand States
 * Normalize States
-* Generate Provinces
-* Place Roads
-* Place Trails
-* Place Ocean Routes
-* Specify Burgs -- add burg details
-* Place Provinces
+* Create Provinces
+* Expand Provinces
+* Normalize Provinces?
+* Specify Burgs -- add burg details inc. population
 
 I'm not going to generate religions, maybe sometime in the future. And when I do, that can happen after the provinces. I'm not going to define "forms" of states, any more than I did the coats of arms. There has to be a point where your imagination gets to take over.
+
+I'm also going to delay placing roads and routes until later, although that will cause the specify burgs thing to change later.
 
 #### 1) Place Towns
 
@@ -4723,39 +4723,98 @@ In AFMG, this is a two-part process, separated by creation of states. I'm doing 
 
 #### 2) Create States
 
-TODO: 
+TODO: This is the next thing.
+
+* *input* size_variance -- just like cultures
+* states = vec[]
+* for town in towns layer entity iterator:
+  * if town.is_capital:
+    * culture = town.culture
+    * expansionism = (random() * size_variance + 1)
+    * name = get namer for culture (or default) and then get state name from it
+    * type = culture.type
+    * center = town.tile_id
+    * capital = town.fid
+    * states.push(NewState with name, center, culture, type, expansionism, capital)
+* write states to new states layer
 
 #### 3) Expand States
 
-TODO: 
+* *input* expansion_limit - a number from 0.1 to 2 which "Defines how many lands will stay neutral" -- similar to that used in cultures
+* get biome lookup
+* get culture lookup
+* get tile_map with a blank value in state_id
+* queue = double priority queue
+* costs = map
+* state_capitals = set
+* for state in states layer:
+  * culture_center = culture.center
+  * biome = biome for culture.center from tile_map
+  * queue.push((state.center, state, biome),0)
+  * cost[state.center] = 1;
+  * state_capitals.insert(state.center)
+* while let ((tile_id,state,biome),priority) = queue.pop_min:
+  * type = state.type
+  * culture = state.culture
+  * for neighbor in state_center.neighbors:
+    * if neighbor is in state_capitals: continue; -- do not overwrite capital cells
+    * neighbor = tile_map.get(neighbor)
+    * culture_cost = if culture == neighbor.culture {-9} else { 100 };
+    * population_cost = if neighbor.terrain.is_water() { 0 } else if neighbor.habitability > 0 { (20 - neighbor.habitability).max(0)} else 5000;
+    * biome_cost = get_biome_cost(state.biome,neighbor.biome,state.type) -- see original javascript function
+    * height_cost = get_height_cost(neighbor.grouping_id,neighbor.groupong,neighbor.elevation,state.type) -- see original javascript function
+    * river_cost = get_river_cost(neighbor.water_flow, state.type) -- see original javascript function
+    * type_cost = get_type_cost(neighbor.shore_distance, state.type) -- see original javascript function
+    * cell_cost = (culture_cost + population_cost + biome_cost + height_cost + river_cost + type_cost).max(0)
+    * total_cost = priority + 10 + (cell_cost/state.expansionism)
+    * if total_cost > expansion_limit: continue
+    * if cost does not have neighbor, or total_cost < cost[neighbor]:
+      * if !neighbor.terrain.is_ocean(): neighbor.state = state.fid
+      * cost[neighbor] = total_cost
+      * queue.push((neighbor_id,state,biome),total_cost)
+  -- TODO: Assign state to burgs now
+* update state_id field from tile_map into tiles layer 
+
 
 #### 4) Normalize States
 
+* get tile_map and tile_list
+* for tile in tile_list
+  * if tile.terrain.is_water() || tile.town_id: continue -- do not overwrite towns 
+  * dont_overwrite = false
+  * adversaries = list
+  * buddy_count = 0
+  * for neighbor in neighbors:
+    * if neighbor.town_id:
+      * if towns[neighbor.town_id].is_capital: -- don't overwrite near a capital
+        * dont_overwrite = true;
+        break;
+    * if !neighbor.is_water:
+      * if neighbor.state != tile.state: adversaries.add(neighbor.state)
+      * else if neighbor.state == tile.state: buddy_count += 1
+  * if dont_overwrite: continue
+  * if adversaries.len < 2: continue
+  * if buddy_count > 2: continue
+  * if adversaries.len <= buddy_count: continue
+  * worst_adversary: find the adversary in adversaries with the highest count -- TODO: Look for good algorithms for this.
+  * tile.state = worst_adversary
+
+#### 5) Create Provinces
+
 TODO: 
 
-#### 5) Generate Provinces
+#### 6) Expand Provinces
+
+TODO:
+
+#### 7) Normalize Provinces
+
+TODO:
+
+#### 8) Specify Burgs -- add burg details, at least that we can
 
 TODO: 
 
-#### 6) Place Roads
-
-TODO: 
-
-#### 7) Place Trails
-
-TODO: 
-
-#### 8) Place Ocean Routes
-
-TODO: 
-
-#### 9) Specify Burgs -- add burg details
-
-TODO: 
-
-#### 10) Place Provinces
-
-TODO: 
 
 
 
@@ -4770,6 +4829,7 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
 
 ```
 
@@ -4828,15 +4888,16 @@ To proceed on this, I can break it down into the following steps:
     [X] Review AFMG people generation algorithms -- again, wait on improvements until later
     [X] Figure out how to break the task apart into sub commands and create those commands.
 [ ] `gen-civil` command:
-    [ ] `gen-civil-towns`
-    [ ] `gen-civil-nations`
-    [ ] `gen-civil-expand`
-    [ ] `gen-civil-normalize`
-    [ ] `gen-civil-roads`
-    [ ] `gen-civil-trails`
-    [ ] `gen-civil-ocean-routes`
+    [X] `gen-civil-towns`
+    [ ] `gen-civil-create-nations`
+    [ ] `gen-civil-expand-nations`
+    [ ] `gen-civil-normalize-nations`
+    [ ] `gen-civil-create-subdivisions`
+    [ ] `gen-civil-expand-subdivisions`
+    [ ] `gen-civil-normalize-subdivisions`
     [ ] `gen-civil-town-details`
-    [ ] `gen-civil-subdivisions`
+    [ ] `gen-civil-nations` -- wraps up all of the nation commands
+    [ ] `gen-civil-subdivisions` -- wraps up all of the subdivision commands
     [ ] Finalize command
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
@@ -4865,6 +4926,11 @@ To proceed on this, I can break it down into the following steps:
     [ ] `gen-climate-temperatures`
     [ ] `gen-climate-wind`
     [ ] `gen-climate-precipitation`
+[ ] Some additions to `gen-civil`, or perhaps another command:
+    [ ] `gen-civil-roads`
+    [ ] `gen-civil-trails`
+    [ ] `gen-civil-ocean-routes`
+    [ ] Update `gen-civil-town-details` so that the population of towns are effected by connection to roads
 [ ] Improved, Similar-area voronoization algorithm vaguely described above
 [ ] Improved climate generation commands
 [ ] Improved people generation commands

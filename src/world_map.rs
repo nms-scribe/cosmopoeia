@@ -958,6 +958,8 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
     /// The name of the culture assigned to this tile, unless wild
     #[allow(dead_code)] culture set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
+    /// if the tile is in a lake, this is the id of the lake in the lakes layer
+    #[allow(dead_code)] town_id set_town_id option_i64 FIELD_TOWN_ID "town_id" OGRFieldType::OFTInteger64;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
