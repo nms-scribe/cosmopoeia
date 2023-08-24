@@ -9,7 +9,7 @@ use crate::world_map::BiomeFeature;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::LakeType;
-use crate::world_map::LakeDataForBiomes;
+use crate::world_map::LakeForBiomes;
 use crate::world_map::Grouping;
 
 pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
@@ -21,7 +21,7 @@ pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut World
     progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
 
     for data in &default_biomes {
-        biomes.add_biome(data)?
+        biomes.add_biome(data)?;
     }
 
     progress.finish(|| "Biomes written.");
@@ -34,7 +34,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
     // we need a lake information map
     let mut lakes_layer = target.edit_lakes_layer()?;
 
-    let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeDataForBiomes>(progress)?;
+    let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeForBiomes>(progress)?;
 
     let mut tiles_layer = target.edit_tile_layer()?; 
 

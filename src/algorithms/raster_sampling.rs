@@ -1,4 +1,4 @@
-use crate::world_map::TileEntitySite;
+use crate::world_map::TileForSampling;
 use crate::errors::CommandError;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMapTransaction;
@@ -30,7 +30,7 @@ pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mu
 
     progress.finish(|| "Raster read.");
 
-    let features = layer.read_features().to_entities_vec::<_,TileEntitySite>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileForSampling>(progress)?;
 
     for feature in features.iter().watch(progress,"Sampling elevations.","Elevations sampled.") {
 
@@ -84,7 +84,7 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
 
     progress.finish(|| "Raster read.");
 
-    let features = layer.read_features().to_entities_vec::<_,TileEntitySite>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileForSampling>(progress)?;
 
     let mut bad_ocean_tile_found = false;
 

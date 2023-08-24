@@ -7,7 +7,7 @@ use gdal::vector::Geometry;
 use crate::utils::bezierify_polygon;
 use crate::world_map::NewLake;
 use crate::errors::CommandError;
-use crate::world_map::TileEntityForWaterFill;
+use crate::world_map::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
@@ -96,7 +96,7 @@ impl Lake {
 }
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: HashMap<u64,TileEntityForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: HashMap<u64,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // TODO: I may need to add some modifiers for the lake filling values, so that I end up with more endorheic lakes.
     // TODO: I predict there will be a problem with lakes on the edges of the maps, which will also be part of the flow algorithm, but I haven't gotten that far yet. I will need a lot more real-world testing to get this figured out.

@@ -20,7 +20,7 @@ use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::random_points::load_points_layer;
 use crate::algorithms::triangles::load_triangles_layer;
 use crate::algorithms::tiles::load_tile_layer;
-use crate::world_map::NewTileEntity;
+use crate::world_map::NewTile;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::culture_sets::CultureSource;
@@ -208,7 +208,7 @@ impl Task for DevVoronoiFromTriangles {
     
         generator.start(&mut progress)?;
     
-        let voronoi: Vec<Result<NewTileEntity,CommandError>> = generator.watch(&mut progress,"Copying voronoi.","Voronoi copied.").collect();
+        let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(&mut progress,"Copying voronoi.","Voronoi copied.").collect();
 
         target.with_transaction(|target| {
             load_tile_layer(target,self.overwrite,voronoi.into_iter(),&mut progress)

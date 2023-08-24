@@ -4,13 +4,13 @@ use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::errors::CommandError;
-use crate::world_map::NewTileEntity;
+use crate::world_map::NewTile;
 use crate::world_map::TypedFeature;
-use crate::world_map::TileEntityWithNeighborsElevation;
+use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TilesLayer;
 use crate::utils::Point;
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileEntity,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut target = target.create_tile_layer(overwrite_layer)?;
 
@@ -142,7 +142,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 }
 
 
-pub(crate) fn find_lowest_neighbors<Data: TileEntityWithNeighborsElevation>(entity: &Data, tile_map: &HashMap<u64,Data>) -> (Vec<u64>, Option<f64>) {
+pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &Data, tile_map: &HashMap<u64,Data>) -> (Vec<u64>, Option<f64>) {
     let mut lowest = Vec::new();
     let mut lowest_elevation = None;
 

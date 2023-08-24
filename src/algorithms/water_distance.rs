@@ -2,10 +2,10 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::TypedFeature;
-use crate::world_map::TileEntityForWaterDistance;
-use crate::world_map::TileEntityForWaterDistanceNeighbor;
-use crate::world_map::TileEntityForWaterDistanceOuter;
-use crate::world_map::TileEntityForWaterDistanceOuterNeighbor;
+use crate::world_map::TileForWaterDistance;
+use crate::world_map::TileForWaterDistanceNeighbor;
+use crate::world_map::TileForWaterDistanceOuter;
+use crate::world_map::TileForWaterDistanceOuterNeighbor;
 use crate::errors::CommandError;
 
 pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
@@ -33,11 +33,11 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut water_distance = None;
         let mut water_count = 0;
 
-        let tile = tiles.try_entity_by_id::<TileEntityForWaterDistance>(&fid)?;
+        let tile = tiles.try_entity_by_id::<TileForWaterDistance>(&fid)?;
         let is_land = !tile.grouping.is_water();
 
         for (neighbor_fid,_) in &tile.neighbors {
-            let neighbor = tiles.try_entity_by_id::<TileEntityForWaterDistanceNeighbor>(&neighbor_fid)?;
+            let neighbor = tiles.try_entity_by_id::<TileForWaterDistanceNeighbor>(&neighbor_fid)?;
             if is_land && (neighbor.grouping.is_water()) {
                 shore_distance.get_or_insert_with(|| 1);
                 let neighbor_water_distance = tile.site.distance(&neighbor.site);
@@ -95,13 +95,13 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
             let mut shore_distance = None;
             {
-                let tile = tiles.try_entity_by_id::<TileEntityForWaterDistanceOuter>(&fid)?; 
+                let tile = tiles.try_entity_by_id::<TileForWaterDistanceOuter>(&fid)?; 
 
                 if tile.shore_distance.is_none() {
                     let is_land = !tile.grouping.is_water();
     
                     for (neighbor_fid,_) in &tile.neighbors {
-                        let neighbor = tiles.try_entity_by_id::<TileEntityForWaterDistanceOuterNeighbor>(neighbor_fid)?; 
+                        let neighbor = tiles.try_entity_by_id::<TileForWaterDistanceOuterNeighbor>(neighbor_fid)?; 
                         
                         if let Some(neighbor_shore_distance) = neighbor.shore_distance {
                             if is_land {

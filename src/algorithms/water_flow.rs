@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::cmp::Ordering;
 
-use crate::world_map::TileEntityForWaterFlow;
+use crate::world_map::TileForWaterflow;
 use crate::errors::CommandError;
-use crate::world_map::TileEntityForWaterFill;
+use crate::world_map::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 
-pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
+pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(HashMap<u64,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
     let mut layer = target.edit_tile_layer()?;
 
@@ -20,7 +20,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();
 
-    for data in layer.read_features().into_entities::<TileEntityForWaterFlow>().watch(progress,"Indexing tiles.","Tiles indexed.") {
+    for data in layer.read_features().into_entities::<TileForWaterflow>().watch(progress,"Indexing tiles.","Tiles indexed.") {
         let (fid,entity) = data?;
         if !entity.grouping.is_ocean() {
             // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 

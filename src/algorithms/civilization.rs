@@ -9,16 +9,20 @@ use ordered_float::OrderedFloat;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
+use crate::world_map::NamedCulture;
 use crate::errors::CommandError;
 use crate::algorithms::naming::Namer;
 use crate::world_map::TileForTowns;
 use crate::utils::point_finder::PointFinder;
-use crate::world_map::CultureForTowns;
 use crate::world_map::NewTown;
 use crate::world_map::TilesLayer;
 use crate::utils::Extent;
 use crate::world_map::TypedFeature;
-
+use crate::world_map::CultureWithNamer;
+use crate::world_map::CultureWithType;
+use crate::world_map::TownForNations;
+use crate::world_map::NewNation;
+use crate::world_map::CultureType;
 
 struct ScoredTileForTowns {
     tile: TileForTowns,
@@ -26,7 +30,7 @@ struct ScoredTileForTowns {
     town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &HashMap<String,CultureForTowns>, namers: &mut HashMap<String,Namer>, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &HashMap<String,Culture>, namers: &mut HashMap<String,Namer>, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // a lot of this is ported from AFMG
 
@@ -48,12 +52,7 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver>(target: &m
     for town in capitals.into_iter().chain(towns.into_iter()).watch(progress,"Writing towns.","Towns written.") {
         let (ScoredTileForTowns{tile,..},is_capital) = town;
         let culture = tile.culture;
-        let namer = if let Some(namer) = culture.as_ref().and_then(|culture| culture_lookup.get(culture)).map(|culture| &culture.namer) {
-            namer
-        } else {
-            default_namer
-        };
-        let namer = namers.get_mut(namer).ok_or_else(|| CommandError::UnknownNamer(namer.to_owned()))?; // we should have guaranteed that this was loaded.
+        let namer = get_namer(culture.as_ref().and_then(|c| culture_lookup.get(c)), namers, default_namer)?;
         let name = namer.make_name(rng);
         let fid = towns_layer.add_town(NewTown {
             geometry: tile.site.create_geometry()?,
@@ -81,6 +80,16 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver>(target: &m
     }
 
     Ok(())
+}
+
+fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut HashMap<String, Namer>, default_namer: &str) -> Result<&'namers mut Namer, CommandError> {
+    let namer = if let Some(namer) = culture.map(|culture| culture.namer()) {
+        namer
+    } else {
+        default_namer
+    };
+    let namer = namers.get_mut(namer).ok_or_else(|| CommandError::UnknownNamer(namer.to_owned()))?;
+    Ok(namer)
 }
 
 fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, town_count: Option<usize>, total_tiles_count: usize, capitals_finder: &PointFinder, progress: &mut Progress) -> Result<Vec<(ScoredTileForTowns, bool)>,CommandError> {
@@ -243,4 +252,42 @@ fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
 
     }
     Ok(tiles)
+}
+
+
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &HashMap<String,Culture>, namers: &mut HashMap<String,Namer>, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+
+    let mut towns = target.edit_towns_layer()?;
+
+    let mut nations = Vec::new();
+
+    for town in towns.read_features().into_entities::<TownForNations>().watch(progress,"Reading towns.","Towns read.") {
+        let (_,town) = town?;
+        if town.is_capital {
+            let culture = town.culture;
+            let culture_data = culture.as_ref().and_then(|c| culture_lookup.get(c));
+            let namer = get_namer(culture_data, namers, default_namer)?;
+            let name = namer.make_state_name(rng);
+            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
+            let center = town.tile_id;
+            let capital = town.fid as i64;
+            let expansionism = rng.gen_range(0.1..1.0) * size_variance + 1.0;
+            nations.push(NewNation {
+                name,
+                center,
+                culture,
+                type_,
+                expansionism,
+                capital
+            })
+    
+        }
+    }
+
+    let mut nations_layer = target.create_nations_layer(overwrite_layer)?;
+    for nation in nations.into_iter().watch(progress,"Writing nations.","Nations written.") {
+        nations_layer.add_nation(nation)?;
+    }
+
+    Ok(())
 }

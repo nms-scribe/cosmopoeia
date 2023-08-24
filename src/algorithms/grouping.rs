@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::TileEntityForGroupingCalc;
+use crate::world_map::TileForGroupingCalc;
 use crate::world_map::Grouping;
 use crate::errors::CommandError;
 
@@ -14,7 +14,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
     let tile_count = tiles.feature_count();
 
     // we just want land tiles
-    let mut table = tiles.read_features().to_entities_index::<_,TileEntityForGroupingCalc>(progress)?;
+    let mut table = tiles.read_features().to_entities_index::<_,TileForGroupingCalc>(progress)?;
 
     let mut groupings = Vec::new();
     let mut ocean = HashSet::new();

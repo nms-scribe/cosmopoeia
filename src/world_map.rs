@@ -808,7 +808,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
     }
 
 
-    fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<(),CommandError> {
+    fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
         // This function is used for lookup tables, like biomes.
 
         // I had to dig into the source to get this stuff...
@@ -821,7 +821,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
             }
         }
         feature.create(&self.layer)?;
-        Ok(())
+        Ok(feature.fid().unwrap())
 
     }
 
@@ -979,36 +979,48 @@ impl TileFeature<'_> {
 
 }
 
-
-pub(crate) trait TileEntityWithNeighborsElevation {
+pub(crate) trait TileWithNeighbors {
 
     fn neighbors(&self) -> &Vec<(u64,i32)>;
 
+}
+
+pub(crate) trait TileWithElevation {
+
     fn elevation(&self) -> &f64;
+
+}
+
+pub(crate) trait TileWithNeighborsElevation: TileWithNeighbors + TileWithElevation {
+
+}
+
+impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T {
+
 }
 
 
-entity!(NewTileEntity TileFeature {
+entity!(NewTile TileFeature {
     geometry: Geometry,
     site_x: f64, 
     site_y: f64
 }); 
-entity!(TileEntitySite TileFeature {
+entity!(TileForSampling TileFeature {
     fid: u64, 
     site_x: f64, 
     site_y: f64
 });
-entity!(TileEntityLatElevOcean TileFeature {
+entity!(TileForTemperatures TileFeature {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
     grouping: Grouping
 });
-entity!(TileEntityLat TileFeature {
+entity!(TileForWinds TileFeature {
     fid: u64, 
     site_y: f64
 });
-entity!(TileEntityForWaterFlow TileFeature {
+entity!(TileForWaterflow TileFeature {
     elevation: f64, 
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1019,11 +1031,15 @@ entity!(TileEntityForWaterFlow TileFeature {
     flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
-impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
+impl TileWithNeighbors for TileForWaterflow {
 
     fn neighbors(&self) -> &Vec<(u64,i32)> {
         &self.neighbors
     }
+
+}
+
+impl TileWithElevation for TileForWaterflow {
 
     fn elevation(&self) -> &f64 {
         &self.elevation
@@ -1033,7 +1049,7 @@ impl TileEntityWithNeighborsElevation for TileEntityForWaterFlow {
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
 // just use a different function because it's based on a trait. I could take this one out
 // of the macro and figure something out, but this is easier.
-entity!(TileEntityForWaterFill TileFeature {
+entity!(TileForWaterFill TileFeature {
     elevation: f64, 
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1045,15 +1061,9 @@ entity!(TileEntityForWaterFill TileFeature {
     lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileEntityForRiverConnect TileFeature {
-    water_flow: f64,
-    flow_to: Vec<u64>,
-    outlet_from: Vec<u64>
-});
+impl From<TileForWaterflow> for TileForWaterFill {
 
-impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
-
-    fn from(value: TileEntityForWaterFlow) -> Self {
+    fn from(value: TileForWaterflow) -> Self {
         Self {
             elevation: value.elevation,
             temperature: value.temperature,
@@ -1068,28 +1078,51 @@ impl From<TileEntityForWaterFlow> for TileEntityForWaterFill {
     }
 }
 
-entity!(TileEntityForWaterDistance TileFeature {
+impl TileWithNeighbors for TileForWaterFill {
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+
+
+}
+
+impl TileWithElevation for TileForWaterFill {
+
+    fn elevation(&self) -> &f64 {
+        &self.elevation
+    }
+}
+
+
+entity!(TileForRiverConnect TileFeature {
+    water_flow: f64,
+    flow_to: Vec<u64>,
+    outlet_from: Vec<u64>
+});
+
+
+entity!(TileForWaterDistance TileFeature {
     site: Point,
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>
 });
 
-entity!(TileEntityForWaterDistanceNeighbor TileFeature {
+entity!(TileForWaterDistanceNeighbor TileFeature {
     site: Point,
     grouping: Grouping 
 });
 
-entity!(TileEntityForWaterDistanceOuter TileFeature {
+entity!(TileForWaterDistanceOuter TileFeature {
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
-entity!(TileEntityForWaterDistanceOuterNeighbor TileFeature {
+entity!(TileForWaterDistanceOuterNeighbor TileFeature {
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
-entity!(TileEntityForGroupingCalc TileFeature {
+entity!(TileForGroupingCalc TileFeature {
     fid: u64,
     grouping: Grouping,
     lake_id: Option<i64>,
@@ -1114,16 +1147,6 @@ entity!(TileForPopulationNeighbor TileFeature {
     lake_id: Option<i64>
 });
 
-impl TileEntityWithNeighborsElevation for TileEntityForWaterFill {
-
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
-        &self.neighbors
-    }
-
-    fn elevation(&self) -> &f64 {
-        &self.elevation
-    }
-}
 
 
 entity!(TileForCultureGen TileFeature {
@@ -1142,7 +1165,7 @@ entity!(TileForCultureGen TileFeature {
 
 });
 
-pub(crate) struct TileForCulturePrefSorting<'struct_life> {
+pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity because we add in data from other layers.
     pub(crate) fid: u64,
     pub(crate) site: Point,
     pub(crate) habitability: f64,
@@ -1154,7 +1177,6 @@ pub(crate) struct TileForCulturePrefSorting<'struct_life> {
     pub(crate) grouping: Grouping,
     pub(crate) water_flow: f64,
     pub(crate) temperature: f64
-
 }
 
 impl TileForCulturePrefSorting<'_> {
@@ -1233,7 +1255,7 @@ impl TilesLayer<'_> {
         self.try_feature_by_id(&fid)?.try_into()
     }
 
-    pub(crate) fn add_tile(&mut self, tile: NewTileEntity) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, tile: NewTile) -> Result<(),CommandError> {
 
         self.add_feature(tile.geometry,&[
                 TileFeature::FIELD_SITE_X,
@@ -1266,12 +1288,12 @@ impl TilesLayer<'_> {
     }
 
    // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
-   pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileEntityForWaterFill>,Vec<(u64,f64)>),CommandError> {
+   pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
         let mut tile_map = HashMap::new();
         let mut tile_queue = Vec::new();
 
-        for data in self.read_features().into_entities::<TileEntityForWaterFill>().watch(progress,"Indexing tiles.","Tiles indexed.") {
+        for data in self.read_features().into_entities::<TileForWaterFill>().watch(progress,"Indexing tiles.","Tiles indexed.") {
             let (fid,entity) = data?;
             if entity.water_accumulation > 0.0 {
                 tile_queue.push((fid,entity.water_accumulation));
@@ -1458,11 +1480,11 @@ feature!(LakeFeature "lakes" wkbMultiPolygon geometry: #[allow(dead_code)] {
     #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
 
-entity!(LakeDataForBiomes LakeFeature {
+entity!(LakeForBiomes LakeFeature {
     type_: LakeType
 });
 
-entity!(LakeDataForPopulation LakeFeature {
+entity!(LakeForPopulation LakeFeature {
     type_: LakeType
 });
 
@@ -1732,12 +1754,12 @@ entity!(NewBiome BiomeFeature {
     supports_hunting: bool
 });
 
-entity!(BiomeDataForPopulation BiomeFeature {
+entity!(BiomeForPopulation BiomeFeature {
     name: String,
     habitability: i32
 });
 
-impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeDataForPopulation {
+impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForPopulation {
     fn name(&self) -> &String {
         &self.name
     }
@@ -1772,7 +1794,7 @@ pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_
 
 impl BiomeLayer<'_> {
 
-    pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<(),CommandError> {
+    pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
             &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting);
@@ -1864,6 +1886,25 @@ feature!(CultureFeature "cultures" wkbNone geometry: #[allow(dead_code)] {
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
 });
 
+pub(crate) trait NamedCulture<'feature>: NamedEntity<'feature,CultureFeature<'feature>> {
+
+}
+
+impl<'feature, Entity: NamedEntity<'feature,CultureFeature<'feature>>> NamedCulture<'feature> for Entity {
+    
+}
+
+pub(crate) trait CultureWithNamer {
+
+    fn namer(&self) -> &String;
+}
+
+pub(crate) trait CultureWithType {
+
+    fn type_(&self) -> &CultureType;
+}
+
+
 entity!(NewCulture CultureFeature {
     name: String,
     namer: String,
@@ -1891,16 +1932,39 @@ impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureF
     }
 }
 
-pub(crate) trait CultureWithNamer<'impl_life>: NamedEntity<'impl_life,CultureFeature<'impl_life>> {
-
-    fn namer(&self) -> &String;
-}
-
-impl<'impl_life> CultureWithNamer<'impl_life> for CultureForTowns {
+impl<'impl_life> CultureWithNamer for CultureForTowns {
     fn namer(&self) -> &String {
         &self.namer
     }
 }
+
+entity!(CultureForNations CultureFeature {
+    name: String,
+    namer: String,
+    type_: CultureType
+});
+
+impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureForNations {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
+impl<'impl_life> CultureWithNamer for CultureForNations {
+    fn namer(&self) -> &String {
+        &self.namer
+    }
+}
+
+impl<'impl_life> CultureWithType for CultureForNations {
+    fn type_(&self) -> &CultureType {
+        &self.type_
+    }
+}
+
+
+
+
 
 
 pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'data_life>>;
@@ -1908,7 +1972,7 @@ pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'d
 
 impl CultureLayer<'_> {
 
-    pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<(),CommandError> {
+    pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = CultureFeature::to_field_names_values(
             &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center);
@@ -1921,7 +1985,7 @@ impl CultureLayer<'_> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
-    pub(crate) fn get_lookup_and_load_namers<'local, Data: CultureWithNamer<'local>, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(HashMap<String,Data>,HashMap<String,Namer>),CommandError> {
+    pub(crate) fn get_lookup_and_load_namers<'local, Data: NamedCulture<'local> + CultureWithNamer, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(HashMap<String,Data>,HashMap<String,Namer>),CommandError> {
         let mut result = HashMap::new();
         let mut load_namers = HashSet::new();
 
@@ -1959,6 +2023,13 @@ entity!(NewTown TownFeature {
     grouping_id: i64
 });
 
+entity!(TownForNations TownFeature {
+    fid: u64,
+    is_capital: bool,
+    culture: Option<String>,
+    tile_id: i64
+});
+
 pub(crate) type TownLayer<'data_life> = MapLayer<'data_life,TownFeature<'data_life>>;
 
 impl TownLayer<'_> {
@@ -1974,9 +2045,52 @@ impl TownLayer<'_> {
         self.add_feature(town.geometry, &field_names, &field_values)
     }
 
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TownFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
 
     
 }
+
+
+feature!(NationFeature "nations" wkbNone geometry: #[allow(dead_code)] {
+    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
+    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
+    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
+    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
+    capital #[allow(dead_code)] set_capital i64 FIELD_CAPITAL "capital" OGRFieldType::OFTInteger64;
+});
+
+entity!(NewNation NationFeature {
+    name: String,
+    culture: Option<String>,
+    center: i64,
+    type_: CultureType,
+    expansionism: f64,
+    capital: i64
+});
+
+pub(crate) type NationsLayer<'data_life> = MapLayer<'data_life,NationFeature<'data_life>>;
+
+impl NationsLayer<'_> {
+
+    pub(crate) fn add_nation(&mut self, nation: NewNation) -> Result<u64,CommandError> {
+        let (field_names,field_values) = NationFeature::to_field_names_values(
+            &nation.name,
+            nation.culture.as_deref(),
+            nation.center,
+            &nation.type_,
+            nation.expansionism,
+            nation.capital
+        );
+        self.add_feature_without_geometry(&field_names, &field_values)
+    }
+
+
+}
+
 
 pub(crate) struct WorldMap {
     dataset: Dataset
@@ -2122,6 +2236,16 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     pub(crate) fn create_towns_layer(&mut self, overwrite_layer: bool) -> Result<TownLayer,CommandError> {
         Ok(TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
     }
+
+    pub(crate) fn edit_towns_layer(&mut self) -> Result<TownLayer,CommandError> {
+        Ok(TownLayer::open_from_dataset(&mut self.dataset)?)
+
+    }
+
+    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: bool) -> Result<NationsLayer,CommandError> {
+        Ok(NationsLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    }
+
 
 }
 

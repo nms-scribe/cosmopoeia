@@ -9,6 +9,9 @@ use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::civilization::generate_towns;
+use crate::world_map::CultureForTowns;
+use crate::world_map::CultureForNations;
+use crate::algorithms::civilization::generate_nations;
 use crate::utils::random_number_generator;
 
 subcommand_def!{
@@ -66,7 +69,7 @@ impl Task for GenCivilTowns {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForTowns,_>(namers,self.default_namer.clone(),&mut progress)?;
 
         target.with_transaction(|target| {
 
@@ -78,3 +81,69 @@ impl Task for GenCivilTowns {
 
     }
 }
+
+
+subcommand_def!{
+    /// Generates background population of tiles
+    pub(crate) struct GenCivilNations {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long)]
+        /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
+        namers: Vec<PathBuf>,
+
+        #[arg(long)]
+        /// if specified, the built-in namers will not be loaded.
+        no_builtin_namers: bool,
+
+        // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
+        #[arg(long)]
+        /// The name generator to use for naming towns in tiles without a culture
+        default_namer: String,
+
+        #[arg(long,default_value("1"))]
+        /// A number, clamped to 0-10, which controls how much cultures can vary in size
+        size_variance: f64,
+
+        #[arg(long)]
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Option<u64>,
+
+        #[arg(long)]
+        /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite: bool
+
+
+
+    }
+}
+
+impl Task for GenCivilNations {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut random = random_number_generator(self.seed);
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
+
+        progress.announce("Preparing");
+
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),&mut progress)?;
+
+        target.with_transaction(|target| {
+
+            progress.announce("Generating towns");
+            generate_nations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.size_variance, self.overwrite, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+

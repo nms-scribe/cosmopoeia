@@ -10,7 +10,7 @@ use gdal::vector::Geometry;
 use crate::utils::create_polygon;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::NewTileEntity;
+use crate::world_map::NewTile;
 use crate::utils::Extent;
 use crate::utils::Point;
 use crate::errors::CommandError;
@@ -152,7 +152,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    pub(crate) fn create_voronoi(site: Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<NewTileEntity>,CommandError> {
+    pub(crate) fn create_voronoi(site: Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<NewTile>,CommandError> {
         if (voronoi.vertices.len() >= 3) && extent.contains(&site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
@@ -169,7 +169,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             } else {
                 Some(polygon)
             };
-            Ok(polygon.map(|a| NewTileEntity {
+            Ok(polygon.map(|a| NewTile {
                 geometry: a,
                 site_x: *site.x,
                 site_y: *site.y,
@@ -249,7 +249,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
 impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator for VoronoiGenerator<GeometryIterator> {
 
-    type Item = Result<NewTileEntity,CommandError>; // TODO: Should be a voronoi struct defined in world_map.
+    type Item = Result<NewTile,CommandError>; // TODO: Should be a voronoi struct defined in world_map.
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.phase {

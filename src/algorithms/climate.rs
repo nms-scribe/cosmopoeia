@@ -2,8 +2,8 @@ use crate::entity;
 use crate::entity_field_assign;
 use crate::world_map::TileFeature;
 use crate::world_map::Entity;
-use crate::world_map::TileEntityLat;
-use crate::world_map::TileEntityLatElevOcean;
+use crate::world_map::TileForWinds;
+use crate::world_map::TileForTemperatures;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -31,7 +31,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
         })/2.0
     }
 
-    let features = layer.read_features().to_entities_vec::<_,TileEntityLatElevOcean>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileForTemperatures>(progress)?;
 
     for feature in features.iter().watch(progress,"Generating temperatures.","Temperatures calculated.") {
 
@@ -65,7 +65,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
     // Algorithm borrowed from AFMG with some modifications
 
 
-    let features = layer.read_features().to_entities_vec::<_,TileEntityLat>(progress)?;
+    let features = layer.read_features().to_entities_vec::<_,TileForWinds>(progress)?;
 
     for feature in features.iter().watch(progress,"Generating winds.","Winds generated.") {
 
