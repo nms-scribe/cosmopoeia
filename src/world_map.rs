@@ -958,8 +958,10 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
     /// The name of the culture assigned to this tile, unless wild
     #[allow(dead_code)] culture set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
-    /// if the tile is in a lake, this is the id of the lake in the lakes layer
+    /// if the tile has a town, this is the id of the town in the towns layer
     #[allow(dead_code)] town_id set_town_id option_i64 FIELD_TOWN_ID "town_id" OGRFieldType::OFTInteger64;
+    /// if the tile is part of a nation, this is the id of the nation which controls it
+    #[allow(dead_code)] nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
@@ -1238,6 +1240,19 @@ entity!(TileForTowns TileFeature {
     grouping_id: i64
 });
 
+
+entity!(TileForNationExpand TileFeature {
+    habitability: f64,
+    shore_distance: i32,
+    elevation_scaled: i32,
+    biome: String,
+    grouping: Grouping,
+    water_flow: f64,
+    neighbors: Vec<(u64,i32)>,
+    lake_id: Option<i64>,
+    culture: Option<String> = |_| Ok::<_,CommandError>(None),
+    nation_id: Option<i64>
+});
 
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
 
@@ -1788,6 +1803,17 @@ impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeFo
     }
 }
 
+entity!(BiomeForNationExpand BiomeFeature {
+    name: String,
+    movement_cost: i32
+});
+
+impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForNationExpand {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
 
 
 pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_life>>;
@@ -2072,6 +2098,17 @@ entity!(NewNation NationFeature {
     capital: i64
 });
 
+// needs to be hashable in order to fit into a priority queue
+entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationFeature {
+    fid: u64,
+    name: String,
+    center: i64,
+    type_: CultureType,
+    expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
+});
+
+
+
 pub(crate) type NationsLayer<'data_life> = MapLayer<'data_life,NationFeature<'data_life>>;
 
 impl NationsLayer<'_> {
@@ -2088,6 +2125,12 @@ impl NationsLayer<'_> {
         self.add_feature_without_geometry(&field_names, &field_values)
     }
 
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<NationFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
+
+    
 
 }
 
@@ -2244,6 +2287,10 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     pub(crate) fn create_nations_layer(&mut self, overwrite_layer: bool) -> Result<NationsLayer,CommandError> {
         Ok(NationsLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    }
+
+    pub(crate) fn edit_nations_layer(&mut self) -> Result<NationsLayer,CommandError> {
+        Ok(NationsLayer::open_from_dataset(&mut self.dataset)?)
     }
 
 

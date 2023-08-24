@@ -13,6 +13,7 @@ use crate::world_map::CultureForTowns;
 use crate::world_map::CultureForNations;
 use crate::algorithms::civilization::generate_nations;
 use crate::utils::random_number_generator;
+use crate::algorithms::civilization::expand_nations;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -85,7 +86,7 @@ impl Task for GenCivilTowns {
 
 subcommand_def!{
     /// Generates background population of tiles
-    pub(crate) struct GenCivilNations {
+    pub(crate) struct GenCivilCreateNations {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -120,7 +121,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenCivilNations {
+impl Task for GenCivilCreateNations {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -138,7 +139,7 @@ impl Task for GenCivilNations {
 
         target.with_transaction(|target| {
 
-            progress.announce("Generating towns");
+            progress.announce("Generating nations");
             generate_nations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.size_variance, self.overwrite, &mut progress)
         })?;
 
@@ -147,3 +148,40 @@ impl Task for GenCivilNations {
     }
 }
 
+
+subcommand_def!{
+    /// Generates background population of tiles
+    pub(crate) struct GenCivilExpandNations {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="10")]
+        /// A waterflow threshold above which the tile will count as a river
+        river_threshold: f64,
+
+        #[arg(long,default_value("1"))]
+        /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
+        limit_factor: f64
+
+    }
+}
+
+impl Task for GenCivilExpandNations {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Applying nations to tiles");
+
+            expand_nations(target, self.river_threshold, self.limit_factor, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
