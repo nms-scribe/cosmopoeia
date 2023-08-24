@@ -3,7 +3,7 @@ use std::iter::Enumerate;
 
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
-use priority_queue::DoublePriorityQueue;
+use priority_queue::PriorityQueue;
 
 
 pub(crate) trait ProgressObserver {
@@ -321,31 +321,18 @@ impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
 
 }
 
-
-pub(crate) struct DoublePriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
+pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
     finish: Message,
     progress: &'progress mut Progress,
-    inner: DoublePriorityQueue<ItemType,PriorityType>,
+    inner: PriorityQueue<ItemType,PriorityType>,
     popped: usize,
     pushed: usize,
 }
 
-impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> DoublePriorityQueueWatcher<'progress,Message,Progress,ItemType,PriorityType> {
+impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'progress,Message,Progress,ItemType,PriorityType> {
 
-    pub(crate) fn pop_min(&mut self) -> Option<(ItemType,PriorityType)> {
-        let result = self.inner.pop_min();
-        self.popped += 1;
-        let len = self.inner.len();
-        if len == 0 {
-            self.progress.finish(|| &self.finish)
-        } else {
-            self.progress.update(|| self.popped);
-        }
-        result
-    }
-
-    #[allow(dead_code)] pub(crate) fn pop_max(&mut self) -> Option<(ItemType,PriorityType)> {
-        let result = self.inner.pop_max();
+    pub(crate) fn pop(&mut self) -> Option<(ItemType,PriorityType)> {
+        let result = self.inner.pop();
         self.popped += 1;
         let len = self.inner.len();
         if len == 0 {
@@ -364,12 +351,12 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::h
 
 } 
 
-pub(crate) trait WatchableDoublePriorityQueue<ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
+pub(crate) trait WatchablePriorityQueue<ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DoublePriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
 }
 
-impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchableDoublePriorityQueue<ItemType,PriorityType> for DoublePriorityQueue<ItemType,PriorityType> {
+impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
 
     // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
     // - patterns which deal with popping items off a queue -- see below
@@ -378,9 +365,9 @@ impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchableDoublePriorityQ
     // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
     // bar as well as updating the current step.
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DoublePriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));
-        DoublePriorityQueueWatcher { 
+        PriorityQueueWatcher { 
             finish: finish, 
             progress: progress, 
             inner: self,

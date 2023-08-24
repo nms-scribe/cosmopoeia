@@ -82,6 +82,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         progress.update(|| processed);
     }
 
+    // TODO: I could possibly use the cost algorithm (like in cultures and states) here, instead of just going through. In this case, the cost for traversing a tile is always 1, or -1 in water, and the algorithm is allowed to complete without stopping anywhere.
+
     // now iterate outwards from there, if the tile is not marked, but it has a neighbor that was marked for the previous distance, then
     // it is marked with the next distance. There might be a more efficient algorithm, but I'd have to think about it. I know I can't calculate
     // the distance n until distance n-1 is calculated, or I might mismark it.

@@ -1,12 +1,13 @@
 use std::collections::HashMap;
+use std::cmp::Reverse;
 
 use rand::Rng;
-use priority_queue::DoublePriorityQueue;
+use priority_queue::PriorityQueue;
 use ordered_float::OrderedFloat;
 
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::progress::WatchableDoublePriorityQueue;
+use crate::progress::WatchablePriorityQueue;
 use crate::world_map::WorldMapTransaction;
 use crate::errors::CommandError;
 use crate::algorithms::culture_sets::CultureSet;
@@ -284,7 +285,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     // priority queue keeps tasks sorted by priority
     // Since I need to go for the least priorities first, I need the double queue to get pop_min
-    let mut queue = DoublePriorityQueue::new();
+    let mut queue = PriorityQueue::new();
 
     // empty hashmap of tile ids
     let mut costs = HashMap::new();
@@ -300,13 +301,15 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         tile.culture = Some(culture.name.clone());
 
         // add the tile to the queue for work.
-        queue.push((culture.center as u64,culture,tile.biome.clone()), OrderedFloat::from(0.0));
+        queue.push((culture.center as u64,culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
+    // TODO: I use this algorithm a lot. Maybe I need to put this in some sort of function? But there are so many differences.
+
     let mut queue = queue.watch_queue(progress, "Expanding cultures.", "Cultures expanded.");
 
-    while let Some(((tile_id, culture, culture_biome), priority)) = queue.pop_min() {
+    while let Some(((tile_id, culture, culture_biome), priority)) = queue.pop() {
 
         let mut place_cultures = Vec::new();
 
@@ -333,7 +336,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
             let cell_cost = OrderedFloat::from(biome_cost /* + biome_change_cost */ + height_cost + river_cost + type_cost) / culture.expansionism;
 
-            let total_cost = priority + cell_cost;
+            let total_cost = priority.0 + cell_cost;
 
             if total_cost <= max_expansion_cost {
 
@@ -358,7 +361,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                     }
                     costs.insert(*neighbor_id, total_cost);
 
-                    queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), total_cost);
+                    queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), Reverse(total_cost));
 
                 } // else we can't expand into this tile, and this line of spreading ends here.
             } else {
