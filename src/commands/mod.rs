@@ -81,8 +81,10 @@ command!{
     gen_people::GenPeopleCultures;
     gen_people::GenPeopleExpandCultures;
     gen_civil::GenCivilTowns;
+    gen_civil::GenCivilNations;
     gen_civil::GenCivilCreateNations;
     gen_civil::GenCivilExpandNations;
+    gen_civil::GenCivilNormalizeNations;
 }
 
 

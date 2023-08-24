@@ -1254,6 +1254,13 @@ entity!(TileForNationExpand TileFeature {
     nation_id: Option<i64>
 });
 
+entity!(TileForNationNormalize TileFeature {
+    grouping: Grouping,
+    neighbors: Vec<(u64,i32)>,
+    town_id: Option<i64>,
+    nation_id: Option<i64>
+});
+
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
 
 impl TilesLayer<'_> {
@@ -2054,6 +2061,10 @@ entity!(TownForNations TownFeature {
     is_capital: bool,
     culture: Option<String>,
     tile_id: i64
+});
+
+entity!(TownForNationNormalize TownFeature {
+    is_capital: bool
 });
 
 pub(crate) type TownLayer<'data_life> = MapLayer<'data_life,TownFeature<'data_life>>;

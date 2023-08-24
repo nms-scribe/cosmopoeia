@@ -31,6 +31,9 @@ use crate::world_map::BiomeForNationExpand;
 use crate::world_map::TileForNationExpand;
 use crate::world_map::TileFeature;
 use crate::world_map::BiomeFeature;
+use crate::world_map::TileForNationNormalize;
+use crate::world_map::TownFeature;
+use crate::world_map::TownForNationNormalize;
 
 
 struct ScoredTileForTowns {
@@ -610,4 +613,107 @@ fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForNationExpand,
     
     }
 
+}
+
+// TODO: is 'normalize' the right word?
+pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+
+    let town_index = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForNationNormalize>(progress)?;
+
+    let mut tiles_layer = target.edit_tile_layer()?;
+
+    let mut tile_map = HashMap::new();
+    let mut tile_list = Vec::new();
+
+    for tile in tiles_layer.read_features().into_entities::<TileForNationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {
+        let (fid,tile) = tile?;
+        tile_list.push(fid);
+        tile_map.insert(fid,tile);
+    }
+
+    for tile_id in tile_list.into_iter().watch(progress,"Normalizing nations.","Nations normalized.") {
+        let tile = tile_map.get(&tile_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, tile_id))?;
+
+        if tile.grouping.is_water() || tile.town_id.is_some() {
+            continue; // don't overwrite
+        }
+
+        let mut dont_overwrite = false;
+        let mut adversaries = HashMap::new();
+        let mut adversary_count = 0;
+        let mut buddy_count = 0;
+        for (neighbor_id,_) in &tile.neighbors {
+
+            let neighbor = tile_map.get(&neighbor_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, *neighbor_id))?;
+
+            if let Some(town_id) = neighbor.town_id {
+                let town = town_index.get(&(town_id as u64)).ok_or_else(|| CommandError::MissingFeature(TownFeature::LAYER_NAME, town_id as u64))?;
+                if town.is_capital {
+                    dont_overwrite = true; // don't overwrite near capital
+                    break;
+                }
+            }
+
+            if !neighbor.grouping.is_water() {
+                if neighbor.nation_id != tile.nation_id {
+                    if let Some(count) = adversaries.get(&neighbor.nation_id) {
+                        adversaries.insert(neighbor.nation_id, count + 1)
+                    } else {
+                        adversaries.insert(neighbor.nation_id, 1)
+                    };
+                    adversary_count += 1;
+                } else {
+                    buddy_count += 1;
+                }
+            }
+
+        }
+
+        if dont_overwrite {
+            continue;
+        }
+
+        if adversary_count < 2 {
+            continue;
+        }
+
+        if buddy_count > 2 {
+            continue;
+        }
+
+        if adversaries.len() < buddy_count {
+            continue;
+        }
+
+        let worst_adversary = adversaries.into_iter().max_by_key(|(_,count)| *count).and_then(|(adversary,_)| adversary);
+
+        let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
+        tile.set_nation_id(worst_adversary)?;
+        tiles_layer.update_feature(tile)?
+    }
+
+/*
+
+* get tile_map and tile_list
+* for tile in tile_list
+  * if tile.terrain.is_water() || tile.town_id: continue -- do not overwrite towns 
+  * dont_overwrite = false
+  * adversaries = list
+  * buddy_count = 0
+  * for neighbor in neighbors:
+    * if neighbor.town_id:
+      * if towns[neighbor.town_id].is_capital: -- don't overwrite near a capital
+        * dont_overwrite = true;
+        break;
+    * if !neighbor.is_water:
+      * if neighbor.state != tile.state: adversaries.add(neighbor.state)
+      * else if neighbor.state == tile.state: buddy_count += 1
+  * if dont_overwrite: continue
+  * if adversaries.len < 2: continue
+  * if buddy_count > 2: continue
+  * if adversaries.len <= buddy_count: continue
+  * worst_adversary: find the adversary in adversaries with the highest count -- TODO: Look for good algorithms for this.
+  * tile.state = worst_adversary
+ */    
+    Ok(()) 
 }
