@@ -4833,6 +4833,8 @@ TODO: I can add this to the town stuff earlier, I have everything I need.
 
 #### 5) Create Provinces
 
+TODO: This is where I am.
+
 * *input*: province_percentage -- defined as "burgs percentage to form separate province" -- Except I don't think that's what this is
 * provinces = []
 * town_map = index of towns

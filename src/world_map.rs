@@ -992,6 +992,8 @@ feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code
     #[allow(dead_code)] town_id set_town_id option_i64 FIELD_TOWN_ID "town_id" OGRFieldType::OFTInteger64;
     /// if the tile is part of a nation, this is the id of the nation which controls it
     #[allow(dead_code)] nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
+    /// if the tile is part of a subnation, this is the id of the nation which controls it
+    #[allow(dead_code)] subnation_id set_subnation_id option_i64 FIELD_SUBNATION_ID "subnation_id" OGRFieldType::OFTInteger64;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
@@ -1322,6 +1324,23 @@ entity!(TileForNationNormalize TileFeature {
     neighbors: Vec<(u64,i32)>,
     town_id: Option<i64>,
     nation_id: Option<i64>
+});
+
+entity!(TileForSubnations TileFeature {
+    fid: u64,
+    town_id: Option<i64>,
+    nation_id: Option<i64>,
+    culture: Option<String>,
+    population: i32
+});
+
+entity!(TileForSubnationPlacement TileFeature {
+    neighbors: Vec<(u64,i32)>,
+    grouping: Grouping,
+    shore_distance: i32,
+    elevation_scaled: i32,
+    nation_id: Option<i64>,
+    subnation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
 
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
@@ -2159,6 +2178,10 @@ entity!(TownForNationNormalize TownFeature {
     is_capital: bool
 });
 
+entity!(TownForSubnations TownFeature {
+    name: String
+});
+
 pub(crate) type TownLayer<'data_life> = MapLayer<'data_life,TownFeature<'data_life>>;
 
 impl TownLayer<'_> {
@@ -2212,6 +2235,11 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationFeature {
     expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
+entity!(NationForSubnations NationFeature {
+    fid: u64,
+    capital: i64 // TODO: This should be capital_town_id, or capital_id
+});
+
 
 
 pub(crate) type NationsLayer<'data_life> = MapLayer<'data_life,NationFeature<'data_life>>;
@@ -2239,6 +2267,56 @@ impl NationsLayer<'_> {
 
 }
 
+feature!(SubnationFeature "subnations" wkbNone geometry: #[allow(dead_code)] {
+    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
+    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
+    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
+    seat #[allow(dead_code)] set_seat i64 FIELD_SEAT "seat" OGRFieldType::OFTInteger64;
+    nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
+});
+
+
+entity!(NewSubnation SubnationFeature {
+    name: String,
+    culture: Option<String>,
+    center: i64,
+    type_: CultureType,
+    seat: i64,
+    nation_id: i64
+});
+
+
+entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationFeature {
+    fid: u64,
+    center: i64,
+    nation_id: i64
+});
+
+
+pub(crate) type SubnationsLayer<'data_life> = MapLayer<'data_life,SubnationFeature<'data_life>>;
+
+impl SubnationsLayer<'_> {
+
+    pub(crate) fn add_subnation(&mut self, subnation: NewSubnation) -> Result<u64,CommandError> {
+        let (field_names,field_values) = SubnationFeature::to_field_names_values(
+            &subnation.name,
+            subnation.culture.as_deref(),
+            subnation.center,
+            &subnation.type_,
+            subnation.seat,
+            subnation.nation_id
+        );
+        self.add_feature_without_geometry(&field_names, &field_values)
+    }
+
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<SubnationFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
+
+
+}
 
 pub(crate) struct WorldMap {
     dataset: Dataset
@@ -2396,6 +2474,14 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     pub(crate) fn edit_nations_layer(&mut self) -> Result<NationsLayer,CommandError> {
         Ok(NationsLayer::open_from_dataset(&mut self.dataset)?)
+    }
+
+    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: bool) -> Result<SubnationsLayer,CommandError> {
+        Ok(SubnationsLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    }
+
+    pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationsLayer,CommandError> {
+        Ok(SubnationsLayer::open_from_dataset(&mut self.dataset)?)
     }
 
 

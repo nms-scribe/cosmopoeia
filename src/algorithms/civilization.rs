@@ -35,8 +35,14 @@ use crate::world_map::TileForNationExpand;
 use crate::world_map::BiomeFeature;
 use crate::world_map::TileForNationNormalize;
 use crate::world_map::TownForNationNormalize;
+use crate::world_map::TownForSubnations;
+use crate::world_map::NationForSubnations;
+use crate::world_map::TileForSubnations;
 use crate::utils::Point;
 use crate::utils::TryGetMap;
+use crate::world_map::NewSubnation;
+use crate::world_map::SubnationForPlacement;
+use crate::world_map::TileForSubnationPlacement;
 
 
 struct ScoredTileForTowns {
@@ -509,7 +515,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 // then I can place or replace the culture with this one. This will remove cultures that were previously
                 // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
                 // may still be spreading, don't worry).
-                let replace_culture = if let Some(neighbor_cost) = costs.get(&neighbor_id) {
+                let replace_nation = if let Some(neighbor_cost) = costs.get(&neighbor_id) {
                     if &total_cost < neighbor_cost {
                         true
                     } else {
@@ -519,7 +525,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                     true
                 };
 
-                if replace_culture {
+                if replace_nation {
                     if !neighbor.grouping.is_ocean() {
                         place_nations.push((*neighbor_id,nation.fid.clone()));
                         // even if we don't place the culture, because people can't live here, it will still spread.
@@ -811,4 +817,181 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
 
     
     Ok(()) 
+}
+
+
+
+pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+
+    let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForSubnations>(progress)?;
+    let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForSubnations>(progress)?; 
+    let mut towns_by_nation = HashMap::new();
+
+    for tile in target.edit_tile_layer()?.read_features().into_entities::<TileForSubnations>().watch(progress, "Reading tiles.", "Tiles read.") {
+        let (_,tile) = tile?;
+        if let (Some(nation_id),Some(town_id)) = (tile.nation_id,tile.town_id) {
+            match towns_by_nation.get_mut(&nation_id) {
+                None => {towns_by_nation.insert(nation_id, vec![(tile,town_id)]); },
+                Some(list) => list.push((tile,town_id))
+            }
+        }
+        
+    }
+
+    let town_sort_normal = Normal::new(1.0f64,0.2f64).unwrap();
+
+    let mut subnations = target.create_subnations_layer(overwrite_layer)?;
+
+    for nation in nations.into_iter().watch(progress,"Creating subnations.","Subnations created.") {
+        let mut nation_towns = towns_by_nation.remove(&(nation.fid as i64)).unwrap_or_else(|| vec![]);
+        if nation_towns.len() < 2 {
+            continue; // at least two towns are required to get a province
+        }
+
+        let subnation_count = ((nation_towns.len() as f64 * subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
+        nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital)));
+        
+        for i in 0..subnation_count {
+            let center = nation_towns[i].0.fid as i64;
+            let seat = nation_towns[i].1;
+            let culture = nation_towns[i].0.culture.clone();
+            let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
+            let name = if rng.gen_bool(0.5) {
+                // name by town
+                let town = town_map.try_get(&(seat as u64))?;
+                town.name.clone()
+            } else {
+                // new name by culture
+                let namer = Culture::get_namer(culture_data, namers, default_namer)?;
+                namer.make_state_name(rng)                  
+            };
+
+            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
+
+            subnations.add_subnation(NewSubnation {
+                name,
+                culture,
+                center,
+                type_,
+                seat,
+                nation_id: nation.fid as i64
+            })?;
+        }
+    }
+
+
+    Ok(())
+}
+
+
+
+
+pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
+
+    let max = if subnation_percentage == 100.0 {
+        1000.0
+    } else {
+        Normal::new(20.0f64,5.0f64).unwrap().sample(rng).clamp(5.0,100.0) * subnation_percentage.powf(0.5)
+    };
+
+    let mut tile_layer = target.edit_tile_layer()?;
+
+    let mut tile_map = tile_layer.read_features().to_entities_index::<_,TileForSubnationPlacement>(progress)?;
+
+    let mut costs = HashMap::new();
+
+    let mut queue = PriorityQueue::new();
+
+    for subnation in target.edit_subnations_layer()?.read_features().into_entities::<SubnationForPlacement>().watch(progress,"Reading subnations.","Subnations read.") {
+        let (_,subnation) = subnation?; // TODO: I have to do this so often, is there a shortcut?
+        let center = subnation.center as u64;
+        tile_map.try_get_mut(&center)?.subnation_id = Some(subnation.fid as i64);
+        costs.insert(center, OrderedFloat::from(1.0));
+        queue.push((center,subnation), Reverse(OrderedFloat::from(0.0)));
+    }
+
+    let mut queue = queue.watch_queue(progress, "Expanding subnations.", "Subnations expanded.");
+
+    while let Some(((tile_id,subnation),priority)) = queue.pop() {
+
+        let mut place_subnations = Vec::new();
+
+        let tile = tile_map.try_get(&(tile_id as u64))?;
+        for (neighbor_id,_) in &tile.neighbors {
+            let neighbor = tile_map.try_get(&neighbor_id)?;
+            
+            let (is_land, total_cost) = match subnation_expansion_cost(neighbor, &subnation, priority) {
+                Some(value) => value,
+                None => continue,
+            };
+
+            if total_cost.0 <= max {
+
+                // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
+                // then I can place or replace the culture with this one. This will remove cultures that were previously
+                // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
+                // may still be spreading, don't worry).
+                let replace_subnation = if let Some(neighbor_cost) = costs.get(&neighbor_id) {
+                    if &total_cost.0 < neighbor_cost {
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    true
+                };
+
+                if replace_subnation {
+                    if is_land {
+                        place_subnations.push((*neighbor_id,subnation.fid.clone()));
+                    }
+                    costs.insert(*neighbor_id, total_cost);
+                    queue.push((*neighbor_id,subnation.clone()), Reverse(total_cost));
+                } // else we can't expand into this tile, and this line of spreading ends here.
+            }
+
+
+        }
+        
+        for (tile_id,subnation_id) in place_subnations {
+            let tile = tile_map.try_get_mut(&tile_id)?;
+            tile.subnation_id = Some(subnation_id as i64);
+        }
+
+
+
+    }
+
+    let tile_layer = target.edit_tile_layer()?;
+
+    for (fid,tile) in tile_map.into_iter().watch(progress,"Writing subnations.","Subnations written.") {
+        let mut feature = tile_layer.try_feature_by_id(&fid)?;
+        feature.set_subnation_id(tile.subnation_id)?;
+        tile_layer.update_feature(feature)?;
+    }
+
+
+
+    Ok(())
+}
+
+fn subnation_expansion_cost(neighbor: &TileForSubnationPlacement, subnation: &SubnationForPlacement, priority: Reverse<OrderedFloat<f64>>) -> Option<(bool, OrderedFloat<f64>)> {
+    let is_land = !neighbor.grouping.is_water();
+    if !is_land && neighbor.shore_distance < -2 {
+        return None; // don't pass through deep ocean
+    }
+    if is_land && neighbor.nation_id != Some(subnation.nation_id) {
+        return None; // don't leave nation
+    }
+    let elevation_cost = if neighbor.elevation_scaled >= 70 {
+        100
+    } else if neighbor.elevation_scaled >= 50 {
+        30
+    } else if neighbor.grouping.is_water() {
+        100
+    } else {
+        10
+    } as f64;
+    let total_cost = priority.0 + elevation_cost;
+    Some((is_land, total_cost))
 }
