@@ -4721,9 +4721,41 @@ In AFMG, this is a two-part process, separated by creation of states. I'm doing 
   * tile.set_town(town)
   * update
 
-#### 2) Create States
 
-TODO: This is the next thing.
+#### 8) Specify Towns -- add burg details, at least that we can use
+
+TODO: I can add this to the town stuff earlier, I have everything I need.
+
+* tile_map = index of tiles
+* lake_map = index of lakes
+* water_towns_map = empty map
+* for town in towns
+  * tile = tile_map[town.tile_id]
+  * port = if tile.closest_water has some:
+    * water_towns_map[closest_water.grouping_id] = vec[town] or push if it's already there.
+    * if tile.temperature > 0:
+      * on_large_water = if tile.closest_watier.lake_id and lake = lake_map[tile.closest_water.lake_id]:
+        * lake.size > 1
+        * else: tile.is_ocean
+      * on_large_water && (town.is_capital || tile.water_count == 1) -- if the lake is bigger and town is either a capital or on a "good" harbor.
+  * population = ((tile.habitability + tile.road / 2) / 8 *1000 ).max(100) -- The 'road' thing will be dealt with later, make a note that it should be added in.
+  * if town.capital: population = population * 1.3
+  * if port:
+    * popuation = population * 1.3
+    * new location is "middle point on border between this tile and closest_water". see getMiddlePoint for how to do that.
+  * population = population * gauss(2,3).clamp(0.6,20)
+  * if !port and on river (need river threshold):
+    * shift = tile.water_flow/150.min(1)
+    * if tile.x % 2 != 0: new x is x + shift else x - shift
+    * if tile.y % 2 != 0: new y is y + shift else y - shift
+  * update town population, port and new location
+-- remove port status if its the only one on the feature (still get benefits of population though, fishing?)
+* for water_town_list in water_towns:
+  * if water_town_list.len == 1: town[water_town_list[0]].port = false
+* assign new data to towns.
+
+
+#### 2) Create States
 
 * *input* size_variance -- just like cultures
 * states = vec[]
@@ -4801,20 +4833,125 @@ TODO: This is the next thing.
 
 #### 5) Create Provinces
 
-TODO: 
+* *input*: province_percentage -- defined as "burgs percentage to form separate province" -- Except I don't think that's what this is
+* provinces = []
+* town_map = index of towns
+* nations = list of nations
+* towns_by_nation = map
+* for tile in tiles:
+  * if tile.nation_id and tile.town_id is some:
+    * if towns_by_nation has nation_id:
+      * towns_by_nation.get(nation_id).push(tile)
+    * else: towns_by_nation.insert(nation_id,vec[tile])
+* for nation_id in nations:
+  * nation_towns = towns_by_nation.remove(nation_id)
+  * if nation_towns.len < 2: continue -- at least two towns are required to get a province
+  * province_count = ((nation_towns.len * province_percentat)/100).max(2) -- at least two provinces must be created
+  * nation_towns.sort_by_key(tile.population * gause(1,0.2).clamp(0.5,1.5)).sort(tile.town_id = nation.capital_id) -- TODO: Is there any way to make sure this is done right?
+  * for i from 0..province_count:
+    * center = nation_towns[i].fid
+    * seat = nation_towns[i].town_id
+    * culture = nation_towns[i].culture
+    * name_by_burg = rng.gen_bool(0.5)
+    * nation_id = nation_id
+    * name = if name_by_burg { town_map[seat].name } else { get state name from culture namer }
+    * type = town.culture.type
+    * provinces.push(...all the information)
 
 #### 6) Expand Provinces
 
-TODO:
+* *input*: province_percentage -- defined as "burgs percentage to form separate province" -- Except I don't think that's what this is
+* max = if percentage == 100 { 1000 } else { Normal(20,5).sample(rng).clamp(5,100) * province_percentage.pow(0.5)}
+* provinces = list of provinces
+* queue = PriorityQueue
+* province_tiles = tile_map with empty subdivision_id
+* cost = map
+* for province in provinces
+  * province_tiles[province.center] = province.fid
+  * cost[province.center] = 1
+  * queue.push((province.center,province),0)
+* while (tile,province,priority) = queue.pop:
+  * for neighbor in tile.neighbors:
+    * land = neighbor.grouping.is_land()
+    * if !land && neighbor.shore_distance < -2: continue -- cannot pass deep ocen
+    * if land && neighbor.nation_id != province.nation_id: continue -- can not leave nation
+    * elevation_cost = if tile.elevation_scaled >= 70 { 100 } else if elevation >= 50 { 30 } else if tile.is_water { 100 } else { 10 }
+    * total_cost = prioirty + elevation_cost
+    * if total_cost > max: continue
+    * if !cost[neighbor] or total_cost < cost[neighbor]:
+      * if land: province_map[neighbor].province_id = province.fid
+      * cost[neighbor] = total_cost
+      * queue.push(neighbor,province,priority)
+
+#### 6.5) Fill Missing Provinces
+
+* provinces = []
+* town_map = index of towns
+* nations = list of nations
+* tile_map = index of tiles by fid
+* tiles_by_nation = map
+* for tile in tiles:
+  * if tile.nation_id is some and tile.province_id is *none*:
+    * if tiles_by_nation has nation_id: -- NOTE: the item inside is a priority queue, which allows us to remove the highest population as well as remove by value in a shorter time than vec.
+      * tiles_by_nation.get(nation_id).insert(tile,tile.population)
+    * else: tiles_by_nation.insert(nation_id,piority_queue[tile,population])
+* let new_provinces = map by tile index
+* let provinces = list of provinces
+* let next_province_id = range 0..? -- NOTE: not the actual fid, but a temporary id for mapping provinces
+* for nation_id in nations:
+  * let nation_tiles = tiles_by_nation.remove(nation_id)
+  * while tile = nation_tiles.pop
+    * province_id = next_province_id.next
+    * province_seat = None
+    * center = tile
+    * new_provinces[tile] = province_id
+    * let cost = map
+    * cost[tile] = 1;
+    * let queue = priority_queue[tile,0]
+    * while tile,priority in queue:
+      * if tile is town and province_seat is empty or it's population is less thant this one:
+        * province_seat = town on tile
+      * for neighbor in tile.neighbors:
+        * if new_provinces[tile] is set: continue;
+        -- I'm taking this directly from the normal province expansion, will this work?
+        * land = neighbor.grouping.is_land
+        * if !land && neighbor.shore_distance < -2: continue -- cannot pass deep ocen
+        * if land && neighbor.nation_id != province.nation_id: continue -- can not leave nation
+        * elevation_cost = if tile.elevation_scaled >= 70 { 100 } else if elevation >= 50 { 30 } else if tile.is_water { 100 } else { 10 }
+        * total_cost = prioirty + elevation_cost
+        * if total_cost > max: continue
+        * if total_cost > max: continue
+        * if !cost[neighbor] or total_cost < cost[neighbor]:
+          * if land: new_provinces[neighbor] = province_id
+          * cost[neighbor] = total_cost
+          * nation_tiles.remove(neighbor)
+          * queue.push(neighbor,population)
+    * province = create new province(name,province_seat, other stuff)
+    * provinces.push(province,province_tiles)
+* for (province,province_tiles) in provinces:
+  * add new province
+  * write province_id on all province_tiles
+  -- I'm not writing over existing provinces at all.
+
 
 #### 7) Normalize Provinces
 
-TODO:
-
-#### 8) Specify Burgs -- add burg details, at least that we can
-
-TODO: 
-
+* for tile of tiles:
+  * let adversary_count = 0;
+  * let buddy_count = 0;
+  * let adversary_map = map
+  * for neighbor of tile.neighbors:
+    * if neighbor.state = tile.state:
+      * if neighbor.province_id != tile.province_id
+        * adversary_map.insert(neighbor.province_id,n+1)
+        * adversary_count += 1
+      * else: 
+        * buddy_count += 1
+  * if adversary_count < 2: continue
+  * if budy_count > 2: continue;
+  * find adversary province with the most other tiles
+  * if buddies > count of maximum adversary: continue
+  * provinces[tile] = maximum adversary
 
 
 
@@ -4830,7 +4967,7 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-create-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
 
 ```
 
@@ -4889,28 +5026,29 @@ To proceed on this, I can break it down into the following steps:
     [X] Review AFMG people generation algorithms -- again, wait on improvements until later
     [X] Figure out how to break the task apart into sub commands and create those commands.
 [ ] `gen-civil` command:
-    [X] `gen-civil-towns`
-    [ ] `gen-civil-create-nations`
-    [ ] `gen-civil-expand-nations`
-    [ ] `gen-civil-normalize-nations`
+    [X] `gen-civil-create-towns`
+    [X] `gen-civil-populate-towns`
+    [X] `gen-civil-create-nations`
+    [X] `gen-civil-expand-nations`
+    [X] `gen-civil-normalize-nations`
     [ ] `gen-civil-create-subdivisions`
     [ ] `gen-civil-expand-subdivisions`
     [ ] `gen-civil-normalize-subdivisions`
-    [ ] `gen-civil-town-details`
-    [ ] `gen-civil-nations` -- wraps up all of the nation commands
+    [ ] `gen-civil-towns`
     [ ] `gen-civil-subdivisions` -- wraps up all of the subdivision commands
-    [ ] Finalize command
+    [X] `gen-civil-nations` -- wraps up all of the nation commands
+    [ ] `gen-civil` all-encompassing command
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
-    [ ] is_ocean
+    [ ] is_ocean, or maybe groupings. The other layers do have to line up exactly with this, so they have to take this into account as well.
     [ ] biomes
     [ ] nations and provinces
     [ ] cultures
-    [ ] religions
 [ ] `create-terrain` commands
     [ ] terrain template files
     [ ] Review AFMG terrain generation algorithms
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well?
+[ ] Hide the sub-commands, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command.
 [ ] Documentation
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
     [ ] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool.
@@ -4919,14 +5057,6 @@ To proceed on this, I can break it down into the following steps:
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, a few other places), and start updating those places when changes are made.
     -- I feel like having all the above is enough to announce, as long as "creating terrain", a large task, will be the next thing on the list.
-[ ] Possibly, split some of the commands apart, for custom manipulation (some of these commands are `dev-` commands now, but can be switched over):
-    [ ] `convert-heightmap-voronoi`: creates points and voronoi from a heightmap, but doesn't add neighbors, sample heights, or set ocean
-    [ ] `convert-heightmap-neighbors`: calculates neighbors for voronoi tiles -- this will be an alias for a future command `create-terrain-neighbors`
-    [ ] `convert-heightmap-sample`
-    [ ] `convert-heightmap-ocean`
-    [ ] `gen-climate-temperatures`
-    [ ] `gen-climate-wind`
-    [ ] `gen-climate-precipitation`
 [ ] Some additions to `gen-civil`, or perhaps another command:
     [ ] `gen-civil-roads`
     [ ] `gen-civil-trails`
@@ -4934,17 +5064,18 @@ To proceed on this, I can break it down into the following steps:
     [ ] Update `gen-civil-town-details` so that the population of towns are effected by connection to roads
 [ ] Improved, Similar-area voronoization algorithm vaguely described above
 [ ] Improved climate generation commands
-[ ] Improved people generation commands
-[ ] `gen-features` command
+[ ] Improved people and culture generation commands
+[ ] `gen-features` command?
     [ ] Various auxiliar files
     [ ] Review AFMG markers and zones algorithm
 [ ] `regen-*` commands
-    [ ] Based on what is done in `gen-people` and some other things, but keep things that shouldn't be regenerated.
+    [ ] Based on what is done in `gen-people` and some other things, but keep things that shouldn't be regenerated. -- Do I want to allow them to "lock" things? This almost has to be the same algorithms that I'm using. In which case, do I really need this? The only way this would be useful is if I could lock, because otherwise you could just continue.
 [ ] `dissolve` commands
-[ ] `genesis` command
-[ ] Start working on QGIS scripts and tools and a plugin for installing them.
+[ ] `genesis` command and `genesis-heightmap` Which does everything.
+[ ] Also a `regenesis` command that will let you start at a specific stage in the process and regenerate everything from that, but keep the previous stuff. This is different from just the sub-tasks, as it will finish all tasks after that.
+[ ] Start working on QGIS scripts and tools and a plugin for installing them -- maybe, if there's call for it.
 [ ] `convert-afmg` command -- for now, just convert CSV and GeoJSON exports. Don't worry and probably don't plan to support the ".map" file.
 [ ] `submap` command
 [ ] `convert-image` command if I can't just use convert-heightmap
-[ ] `import-climates` command
+[ ] `import-biomes` command
 

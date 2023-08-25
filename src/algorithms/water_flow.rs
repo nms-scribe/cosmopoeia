@@ -7,6 +7,7 @@ use crate::world_map::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
+use crate::utils::TryGetMap;
 
 pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(HashMap<u64,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
@@ -43,15 +44,9 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     );
 
     for (fid,elevation) in tile_list.iter().watch(progress,"Calculating initial flow.","Flow calculated.") {
-        let (water_flow,lowest,lowest_elevation) = if let Some(entity) = tile_map.get(fid) {
-            let water_flow = entity.water_flow + entity.precipitation / cells_number_modifier;
-            let (lowest,lowest_elevation) = super::tiles::find_lowest_neighbors(entity,&tile_map);
-
-            (water_flow,lowest,lowest_elevation)
-
-        } else {
-            (0.0,vec![],None)
-        };
+        let entity = tile_map.try_get(fid)?;
+        let water_flow = entity.water_flow + entity.precipitation / cells_number_modifier;
+        let (lowest,lowest_elevation) = super::tiles::find_lowest_neighbors(entity,&tile_map)?;
 
         let (water_accumulation,flow_to) = if let Some(lowest_elevation) = lowest_elevation {
 
@@ -59,9 +54,8 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
                 let neighbor_flow = water_flow/lowest.len() as f64;
                 //println!("flowing {} to {} neighbors",neighbor_flow,lowest.len());
                 for neighbor in &lowest {
-                    if let Some(neighbor) = tile_map.get_mut(&neighbor) {
-                        neighbor.water_flow += neighbor_flow;
-                    }
+                    let neighbor = tile_map.try_get_mut(&neighbor)?;
+                    neighbor.water_flow += neighbor_flow;
                 }
                 (0.0,lowest)
             } else {
@@ -73,11 +67,10 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
             (water_flow,Vec::new())
         };
 
-        if let Some(tile) = tile_map.get_mut(&fid) {
-            tile.water_flow = water_flow;
-            tile.water_accumulation += water_accumulation;
-            tile.flow_to = flow_to;
-        }
+        let tile = tile_map.try_get_mut(&fid)?; 
+        tile.water_flow = water_flow;
+        tile.water_accumulation += water_accumulation;
+        tile.flow_to = flow_to;
 
     }
 

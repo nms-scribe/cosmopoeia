@@ -14,10 +14,13 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::NamedCulture;
 use crate::errors::CommandError;
-use crate::algorithms::naming::Namer;
+use crate::algorithms::naming::LoadedNamers;
 use crate::world_map::TileForTowns;
 use crate::utils::point_finder::PointFinder;
 use crate::world_map::NewTown;
+use crate::world_map::TileForTownPopulation;
+use crate::world_map::LakeForTownPopulation;
+use crate::world_map::TownForPopulation;
 use crate::world_map::TilesLayer;
 use crate::utils::Extent;
 use crate::world_map::TypedFeature;
@@ -29,11 +32,11 @@ use crate::world_map::CultureType;
 use crate::world_map::NationForPlacement;
 use crate::world_map::BiomeForNationExpand;
 use crate::world_map::TileForNationExpand;
-use crate::world_map::TileFeature;
 use crate::world_map::BiomeFeature;
 use crate::world_map::TileForNationNormalize;
-use crate::world_map::TownFeature;
 use crate::world_map::TownForNationNormalize;
+use crate::utils::Point;
+use crate::utils::TryGetMap;
 
 
 struct ScoredTileForTowns {
@@ -42,7 +45,9 @@ struct ScoredTileForTowns {
     town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &HashMap<String,Culture>, namers: &mut HashMap<String,Namer>, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+
+    // TODO: Certain culture "types" shouldn't generate towns, or should generate fewer towns. Nomads, for example. 
 
     // a lot of this is ported from AFMG
 
@@ -64,7 +69,7 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
     for town in capitals.into_iter().chain(towns.into_iter()).watch(progress,"Writing towns.","Towns written.") {
         let (ScoredTileForTowns{tile,..},is_capital) = town;
         let culture = tile.culture;
-        let namer = get_namer(culture.as_ref().and_then(|c| culture_lookup.get(c)), namers, default_namer)?;
+        let namer = Culture::get_namer(culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?, namers, default_namer)?;
         let name = namer.make_name(rng);
         let fid = towns_layer.add_town(NewTown {
             geometry: tile.site.create_geometry()?,
@@ -92,16 +97,6 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
     }
 
     Ok(())
-}
-
-fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut HashMap<String, Namer>, default_namer: &str) -> Result<&'namers mut Namer, CommandError> {
-    let namer = if let Some(namer) = culture.map(|culture| culture.namer()) {
-        namer
-    } else {
-        default_namer
-    };
-    let namer = namers.get_mut(namer).ok_or_else(|| CommandError::UnknownNamer(namer.to_owned()))?;
-    Ok(namer)
 }
 
 fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, town_count: Option<usize>, total_tiles_count: usize, capitals_finder: &PointFinder, progress: &mut Progress) -> Result<Vec<(ScoredTileForTowns, bool)>,CommandError> {
@@ -181,6 +176,7 @@ fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTo
     let mut capitals_finder;
     let mut capitals;
     let mut capital_cultures;
+
 
     let capital_count = if tiles.len() < (capital_count * 10) {
         let capital_count = tiles.len() / 10;
@@ -266,8 +262,125 @@ fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     Ok(tiles)
 }
 
+pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &HashMap<String,Culture>, namers: &mut HashMap<String,Namer>, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+    struct TownDetails {
+        population: i32,
+        is_port: bool,
+        new_location: Option<Point>
+    }
+
+    let mut tile_layer = target.edit_tile_layer()?;
+
+    let tile_map = tile_layer.read_features().to_entities_index::<_,TileForTownPopulation>(progress)?;
+
+    let mut lake_layer = target.edit_lakes_layer()?;
+
+    let lake_map = lake_layer.read_features().to_entities_index::<_,LakeForTownPopulation>(progress)?;
+
+    let mut coastal_towns = HashMap::new();
+
+    let mut town_details = HashMap::new();
+
+    let mut towns_layer = target.edit_towns_layer()?;
+
+    for town in towns_layer.read_features().into_entities::<TownForPopulation>().watch(progress,"Populating towns.","Towns populated.") {
+        let (_,town) = town?;
+        let tile = tile_map.try_get(&(town.tile_id as u64))?;
+
+        // figure out if it's a port
+        let port_location = if let Some(closest_water) = tile.closest_water {
+            let harbor = tile_map.try_get(&(closest_water as u64))?;
+
+            // add it to the map of towns by feature for removing port status later.
+            match coastal_towns.get_mut(&harbor.grouping_id) {
+                None => { coastal_towns.insert(harbor.grouping_id, vec![town.fid]); },
+                Some(entry) => entry.push(town.fid),
+            }
+
+            // no ports if the water is frozen
+            if harbor.temperature > 0.0 {
+                let on_large_water = if let Some(lake_id) = harbor.lake_id {
+                    // don't make it a port if the lake is only 1 tile big
+                    let lake = lake_map.try_get(&(lake_id as u64))?;
+                    lake.size > 1
+                } else {
+                    harbor.grouping.is_ocean()
+                };
+
+                // it's a port if it's on the large water and either it's a capital or has a good harbor (only one water tile next to it)
+                if on_large_water && (town.is_capital || matches!(tile.water_count,Some(1))) {
+                    Some(tile.find_middle_point_between(harbor)?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+
+        } else {
+            None
+        };
+
+        // figure out it's population -- habitability is already divided by 5, so this makes it 10% of true suitability for people.
+        // FUTURE: The population should be increased by the road traffic, but that could be done in the road generating stuff
+        // TODO: I'm not sure why AFMG added that 8 in there. Check town populations when I'm done and possibly get rid of it.
+        let population = (((tile.habitability / 2.0) / 8.0) * 1000.0).max(100.0); 
+
+        let population = if town.is_capital {
+            population * 1.3
+        } else {
+            population
+        };
+
+        let population = if port_location.is_some() {
+            population * 1.3
+        } else {
+            population
+        };
+
+        let population = population.floor() as i32;
+
+        let (is_port,new_location) = if port_location.is_none() && tile.water_flow > river_threshold {
+            let shift = (tile.water_flow / 150.0).min(1.0);
+            let x = if (tile.site.x.into_inner() % 2.0) < 1.0 { tile.site.x + shift } else { tile.site.x - shift };
+            let y = if (tile.site.y.into_inner() % 2.0) < 1.0 { tile.site.y + shift } else { tile.site.y - shift };
+            (false,Some(Point::new(x,y)))
+        } else {
+            (port_location.is_some(),port_location)
+        };
+
+
+        town_details.insert(town.fid,TownDetails {
+            new_location,
+            population,
+            is_port
+        });
+    }
+
+    // remove port status if there's only one on the feature, but still get the benefits
+    for list in coastal_towns.values().watch(progress,"Validating ports.","Ports validated.") {
+        if list.len() == 1 {
+            town_details.get_mut(&list[0]).unwrap().is_port = false
+        }
+    }
+
+    for (fid,town) in town_details.into_iter().watch(progress,"Writing town details.","Town details written.") {
+        let mut town_feature = towns_layer.try_feature_by_id(&fid)?;
+        if let Some(new_location) = town.new_location {
+            town_feature.move_to(new_location)?;
+        }
+        town_feature.set_population(town.population)?;
+        town_feature.set_is_port(town.is_port)?;
+        towns_layer.update_feature(town_feature)?;
+    }
+
+
+    Ok(())
+}
+
+
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
@@ -277,8 +390,8 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
         let (_,town) = town?;
         if town.is_capital {
             let culture = town.culture;
-            let culture_data = culture.as_ref().and_then(|c| culture_lookup.get(c));
-            let namer = get_namer(culture_data, namers, default_namer)?;
+            let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
+            let namer = Culture::get_namer(culture_data, namers, default_namer)?;
             let name = namer.make_state_name(rng);
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
             let center = town.tile_id;
@@ -313,7 +426,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     // TODO: A lot of these lookups use 'edit', except I'm not editing them, should I be able to open up a layer without editing in the WorldMapTransaction?
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.build_named_index::<_,BiomeForNationExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForNationExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 
@@ -334,7 +447,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     for nation in nations {
 
         // place the nation center
-        let tile = tile_map.get_mut(&(nation.center as u64)).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, nation.center as u64))?;
+        let tile = tile_map.try_get_mut(&(nation.center as u64))?;
         tile.nation_id = Some(nation.fid as i64);
 
         costs.insert(nation.center as u64, OrderedFloat::from(1.0));
@@ -356,7 +469,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         
         // TODO: I should find a way to avoid repeating this error check.
-        let tile = tile_map.get(&tile_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, nation.center as u64))?;
+        let tile = tile_map.try_get(&tile_id)?;
 
         for (neighbor_id,_) in &tile.neighbors {
             
@@ -364,7 +477,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 continue; // don't overwrite capital cells
             }
 
-            let neighbor = tile_map.get(&neighbor_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, nation.center as u64))?;
+            let neighbor = tile_map.try_get(&neighbor_id)?;
 
             let culture_cost = if tile.culture == neighbor.culture {-9.0} else { 100.0 };
 
@@ -376,7 +489,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 5000.0
             };
 
-            let neighbor_biome = biome_map.get(&neighbor.biome).ok_or_else(|| CommandError::UnknownBiome(neighbor.biome.clone()))?;
+            let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
 
             let biome_cost = get_biome_cost(&nation_biome,neighbor_biome,&nation.type_);
 
@@ -425,7 +538,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
         }
 
         for (tile_id,nation_id) in place_nations {
-            let tile = tile_map.get_mut(&tile_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, tile_id))?;
+            let tile = tile_map.try_get_mut(&tile_id)?;
             tile.nation_id = Some(nation_id as i64);
         }
 
@@ -632,7 +745,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
     }
 
     for tile_id in tile_list.into_iter().watch(progress,"Normalizing nations.","Nations normalized.") {
-        let tile = tile_map.get(&tile_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, tile_id))?;
+        let tile = tile_map.try_get(&tile_id)?;
 
         if tile.grouping.is_water() || tile.town_id.is_some() {
             continue; // don't overwrite
@@ -644,10 +757,10 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
         let mut buddy_count = 0;
         for (neighbor_id,_) in &tile.neighbors {
 
-            let neighbor = tile_map.get(&neighbor_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, *neighbor_id))?;
+            let neighbor = tile_map.try_get(&neighbor_id)?;
 
             if let Some(town_id) = neighbor.town_id {
-                let town = town_index.get(&(town_id as u64)).ok_or_else(|| CommandError::MissingFeature(TownFeature::LAYER_NAME, town_id as u64))?;
+                let town = town_index.try_get(&(town_id as u64))?;
                 if town.is_capital {
                     dont_overwrite = true; // don't overwrite near capital
                     break;
@@ -685,35 +798,17 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
             continue;
         }
 
-        let worst_adversary = adversaries.into_iter().max_by_key(|(_,count)| *count).and_then(|(adversary,_)| adversary);
+        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).and_then(|(adversary,count)| Some((adversary,count))) {
+            if count > buddy_count {
+                let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
+                tile.set_nation_id(worst_adversary)?;
+                tiles_layer.update_feature(tile)?    
+            }
+    
+        }
 
-        let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
-        tile.set_nation_id(worst_adversary)?;
-        tiles_layer.update_feature(tile)?
     }
 
-/*
-
-* get tile_map and tile_list
-* for tile in tile_list
-  * if tile.terrain.is_water() || tile.town_id: continue -- do not overwrite towns 
-  * dont_overwrite = false
-  * adversaries = list
-  * buddy_count = 0
-  * for neighbor in neighbors:
-    * if neighbor.town_id:
-      * if towns[neighbor.town_id].is_capital: -- don't overwrite near a capital
-        * dont_overwrite = true;
-        break;
-    * if !neighbor.is_water:
-      * if neighbor.state != tile.state: adversaries.add(neighbor.state)
-      * else if neighbor.state == tile.state: buddy_count += 1
-  * if dont_overwrite: continue
-  * if adversaries.len < 2: continue
-  * if buddy_count > 2: continue
-  * if adversaries.len <= buddy_count: continue
-  * worst_adversary: find the adversary in adversaries with the highest count -- TODO: Look for good algorithms for this.
-  * tile.state = worst_adversary
- */    
+    
     Ok(()) 
 }

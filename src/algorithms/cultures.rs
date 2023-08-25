@@ -18,8 +18,6 @@ use crate::world_map::BiomeForCultureExpand;
 use crate::world_map::TileForCultureGen;
 use crate::world_map::TileForCulturePrefSorting;
 use crate::world_map::TileForCultureExpand;
-use crate::world_map::TileFeature;
-use crate::world_map::TypedFeature;
 use crate::world_map::BiomeFeature;
 use crate::utils::RandomIndex;
 use crate::utils::Point;
@@ -29,6 +27,7 @@ use crate::world_map::TilesLayer;
 use crate::world_map::CultureType;
 use crate::world_map::NewCulture;
 use crate::world_map::CultureForPlacement;
+use crate::utils::TryGetMap;
 
 
 impl CultureType {
@@ -61,7 +60,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         culture_count
     };
 
-    let biomes = target.edit_biomes_layer()?.build_named_index(progress)?;
+    let biomes = target.edit_biomes_layer()?.build_lookup(progress)?;
 
     let lake_map = target.edit_lakes_layer()?.read_features().to_entities_index::<_,LakeForCultureGen>(progress)?;
 
@@ -276,7 +275,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.build_named_index::<_,BiomeForCultureExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForCultureExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 
@@ -297,7 +296,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     for culture in cultures {
 
         // place the culture center
-        let tile = tile_map.get_mut(&(culture.center as u64)).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, culture.center as u64))?;
+        let tile = tile_map.try_get_mut(&(culture.center as u64))?;
         tile.culture = Some(culture.name.clone());
 
         // add the tile to the queue for work.
@@ -315,13 +314,13 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
         
         // TODO: I should find a way to avoid repeating this error check.
-        let tile = tile_map.get(&tile_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, culture.center as u64))?;
+        let tile = tile_map.try_get(&tile_id)?;
 
         for (neighbor_id,_) in &tile.neighbors {
 
-            let neighbor = tile_map.get(&neighbor_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, culture.center as u64))?;
+            let neighbor = tile_map.try_get(&neighbor_id)?;
 
-            let neighbor_biome = biome_map.get(&neighbor.biome).ok_or_else(|| CommandError::UnknownBiome(neighbor.biome.clone()))?;
+            let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
 
             let biome_cost = get_biome_cost(&culture_biome,neighbor_biome,&culture.type_);
 
@@ -387,7 +386,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         }
 
         for (tile_id,culture) in place_cultures {
-            let tile = tile_map.get_mut(&tile_id).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, tile_id))?;
+            let tile = tile_map.try_get_mut(&tile_id)?;
             tile.culture = Some(culture);
         }
 

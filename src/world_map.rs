@@ -33,6 +33,8 @@ use crate::utils::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::naming::Namer;
+use crate::algorithms::naming::LoadedNamers;
+use crate::utils::TryGetMap;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -501,6 +503,7 @@ macro_rules! feature {
 
         }
         
+        
         impl $struct_name<'_> {
 
             // constant field names
@@ -539,8 +542,12 @@ macro_rules! feature {
             )*
         }
 
+        
+
     };
 }
+
+
 
 
 pub(crate) struct TypedFeatureIterator<'data_life, Feature: TypedFeature<'data_life>> {
@@ -619,7 +626,7 @@ pub(crate) trait Entity<'trait_life, Feature: TypedFeature<'trait_life>>: TryFro
 
 }
 
-pub(crate) trait NamedEntity<'trait_life, Feature: TypedFeature<'trait_life>>: Entity<'trait_life, Feature> {
+pub(crate) trait NamedEntity<'feature, Feature: TypedFeature<'feature>>: Entity<'feature, Feature> {
     fn name(&self) -> &String;
 }
 
@@ -658,6 +665,7 @@ impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Featu
         }
     }
 }
+
 
 #[macro_export]
 macro_rules! entity_field_assign {
@@ -720,6 +728,28 @@ macro_rules! entity {
             }
         }
 
+        impl TryGetMap<u64,$name> for HashMap<u64, $name> {
+
+            fn try_get(&self, key: &u64) -> Result<&$name,CommandError> {
+                self.get(key).ok_or_else(|| CommandError::MissingFeature($feature::LAYER_NAME, *key))
+            }
+
+            fn try_get_mut(&mut self, key: &u64) -> Result<&mut $name,CommandError> {
+                self.get_mut(key).ok_or_else(|| CommandError::MissingFeature($feature::LAYER_NAME, *key))
+            }
+        }
+        
+        impl TryGetMap<String,$name> for HashMap<String, $name> {
+
+            fn try_get(&self, key: &String) -> Result<&$name,CommandError> {
+                self.get(key).ok_or_else(|| CommandError::UnknownLookup($feature::LAYER_NAME, key.to_owned()))
+            }
+
+            fn try_get_mut(&mut self, key: &String) -> Result<&mut $name,CommandError> {
+                self.get_mut(key).ok_or_else(|| CommandError::UnknownLookup($feature::LAYER_NAME, key.to_owned()))
+            }
+        }
+                
     };
 }
 
@@ -1184,13 +1214,13 @@ pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity bec
 impl TileForCulturePrefSorting<'_> {
 
     pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TilesLayer, biomes: &'biomes HashMap<String,BiomeForCultureGen>, lakes: &HashMap<u64,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
-        let biome = biomes.get(&tile.biome).ok_or_else(|| CommandError::UnknownBiome(tile.biome))?;
+        let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.closest_water {
             let closest_water = closest_water as u64;
-            let closest_water = tiles.feature_by_id(&closest_water).ok_or_else(|| CommandError::MissingFeature(TileFeature::LAYER_NAME, closest_water))?;
+            let closest_water = tiles.try_feature_by_id(&closest_water)?;
             if let Some(lake_id) = closest_water.lake_id()? {
                 let lake_id = lake_id as u64;
-                let lake = lakes.get(&lake_id).ok_or_else(|| CommandError::MissingFeature(LakeFeature::LAYER_NAME, lake_id))?;
+                let lake = lakes.try_get(&lake_id)?;
                 Some(lake.size)
             } else {
                 None
@@ -1240,6 +1270,39 @@ entity!(TileForTowns TileFeature {
     grouping_id: i64
 });
 
+entity!(TileForTownPopulation TileFeature {
+    fid: u64,
+    geometry: Geometry,
+    habitability: f64,
+    site: Point,
+    grouping_id: i64,
+    closest_water: Option<i64>,
+    water_count: Option<i32>,
+    temperature: f64,
+    lake_id: Option<i64>,
+    water_flow: f64,
+    grouping: Grouping
+});
+
+impl TileForTownPopulation {
+
+    pub(crate) fn find_middle_point_between(&self, other: &Self) -> Result<Point,CommandError> {
+        let self_ring = self.geometry.get_geometry(0);
+        let other_ring = other.geometry.get_geometry(0);
+        let other_vertices = other_ring.get_point_vec();
+        let mut common_vertices = self_ring.get_point_vec();
+        common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
+        common_vertices.retain(|p| other_vertices.contains(p));
+        if common_vertices.len() == 2 {
+            let point1 = Point::from_f64(common_vertices[0].0,common_vertices[0].1)?;
+            let point2 = Point::from_f64(common_vertices[1].0,common_vertices[1].1)?;
+            Ok(point1.middle_point_between(&point2))
+        } else {
+            Err(CommandError::CantFindMiddlePoint(self.fid,other.fid,common_vertices.len()))
+        }
+
+    }
+}
 
 entity!(TileForNationExpand TileFeature {
     habitability: f64,
@@ -1511,6 +1574,10 @@ entity!(LakeForPopulation LakeFeature {
 });
 
 entity!(LakeForCultureGen LakeFeature {
+    size: i32
+});
+
+entity!(LakeForTownPopulation LakeFeature {
     size: i32
 });
 
@@ -1821,8 +1888,6 @@ impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeFo
     }
 }
 
-
-
 pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_life>>;
 
 impl BiomeLayer<'_> {
@@ -1847,7 +1912,7 @@ impl BiomeLayer<'_> {
     }
 
     // TODO: Replace with to_named_entities_index in TypedFeatureIterator
-    pub(crate) fn build_named_index<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+    pub(crate) fn build_lookup<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
         let mut result = HashMap::new();
 
         for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
@@ -1930,6 +1995,17 @@ impl<'feature, Entity: NamedEntity<'feature,CultureFeature<'feature>>> NamedCult
 pub(crate) trait CultureWithNamer {
 
     fn namer(&self) -> &String;
+
+    fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut LoadedNamers, default_namer: &str) -> Result<&'namers mut Namer, CommandError> {
+        let namer = if let Some(namer) = culture.map(|culture| culture.namer()) {
+            namer
+        } else {
+            default_namer
+        };
+        let namer = namers.get_mut(namer)?;
+        Ok(namer)
+    }
+    
 }
 
 pub(crate) trait CultureWithType {
@@ -2018,7 +2094,7 @@ impl CultureLayer<'_> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
-    pub(crate) fn get_lookup_and_load_namers<'local, Data: NamedCulture<'local> + CultureWithNamer, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(HashMap<String,Data>,HashMap<String,Namer>),CommandError> {
+    pub(crate) fn get_lookup_and_load_namers<'local, Data: NamedCulture<'local> + CultureWithNamer, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(HashMap<String,Data>,LoadedNamers),CommandError> {
         let mut result = HashMap::new();
         let mut load_namers = HashSet::new();
 
@@ -2045,7 +2121,17 @@ feature!(TownFeature "towns" wkbPoint {
     is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital" OGRFieldType::OFTInteger;
     tile_id #[allow(dead_code)] set_tile_id i64 FIELD_TILE_ID "tile_id" OGRFieldType::OFTInteger64;
     grouping_id #[allow(dead_code)] set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
+    #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
+    #[allow(dead_code)] is_port set_is_port bool FIELD_IS_PORT "is_port" OGRFieldType::OFTInteger;
 });
+
+impl TownFeature<'_> {
+
+    pub(crate) fn move_to(&mut self, new_location: Point) -> Result<(),CommandError> {
+        Ok(self.feature.set_geometry(new_location.create_geometry()?)?)
+    }
+
+}
 
 entity!(NewTown TownFeature {
     geometry: Geometry,
@@ -2054,6 +2140,12 @@ entity!(NewTown TownFeature {
     is_capital: bool,
     tile_id: i64,
     grouping_id: i64
+});
+
+entity!(TownForPopulation TownFeature {
+    fid: u64,
+    is_capital: bool,
+    tile_id: i64
 });
 
 entity!(TownForNations TownFeature {
@@ -2077,7 +2169,9 @@ impl TownLayer<'_> {
             town.culture.as_deref(),
             town.is_capital,
             town.tile_id,
-            town.grouping_id
+            town.grouping_id,
+            0,
+            false
         );
         self.add_feature(town.geometry, &field_names, &field_values)
     }

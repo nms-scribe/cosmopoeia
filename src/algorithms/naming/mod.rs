@@ -600,6 +600,17 @@ impl Namer {
 
 }
 
+pub(crate) struct LoadedNamers {
+    map: HashMap<String,Namer>
+}
+
+impl LoadedNamers {
+
+    pub(crate) fn get_mut(&mut self, name: &str) -> Result<&mut Namer,CommandError> {
+        self.map.get_mut(name).ok_or_else(|| CommandError::UnknownNamer(name.to_owned()))
+    }
+}
+
 pub(crate) struct NamerSet {
     source: HashMap<String,NamerSource>
 }
@@ -648,7 +659,7 @@ impl NamerSet {
         }
     }
 
-    pub(crate) fn into_loaded<StringType: AsRef<str>, Strings: IntoIterator<Item=StringType>, Progress: ProgressObserver>(mut self, load_namers: Strings, progress: &mut Progress) -> Result<HashMap<String,Namer>,CommandError> {
+    pub(crate) fn into_loaded<StringType: AsRef<str>, Strings: IntoIterator<Item=StringType>, Progress: ProgressObserver>(mut self, load_namers: Strings, progress: &mut Progress) -> Result<LoadedNamers,CommandError> {
         let mut result = HashMap::new();
         for name in load_namers {
             if let None = result.get(name.as_ref()) {
@@ -656,7 +667,9 @@ impl NamerSet {
                 result.insert(name.as_ref().to_owned(), namer);
             }
         }
-        Ok(result)
+        Ok(LoadedNamers {
+            map: result
+        })
         
     }
     

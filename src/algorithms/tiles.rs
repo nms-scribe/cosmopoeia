@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -9,6 +8,7 @@ use crate::world_map::TypedFeature;
 use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TilesLayer;
 use crate::utils::Point;
+use crate::utils::TryGetMap;
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -142,30 +142,28 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 }
 
 
-pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &Data, tile_map: &HashMap<u64,Data>) -> (Vec<u64>, Option<f64>) {
+pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation, TileMap: TryGetMap<u64,Data>>(entity: &Data, tile_map: &TileMap) -> Result<(Vec<u64>, Option<f64>),CommandError> {
     let mut lowest = Vec::new();
     let mut lowest_elevation = None;
 
     // find the lowest neighbors
     for (neighbor_fid,_) in entity.neighbors() {
-        if let Some(neighbor) = tile_map.get(&neighbor_fid) {
-            let neighbor_elevation = neighbor.elevation();
-            if let Some(lowest_elevation) = lowest_elevation.as_mut() {
-                if neighbor_elevation < *lowest_elevation {
-                    *lowest_elevation = neighbor_elevation;
-                    lowest = vec![*neighbor_fid];
-                } else if neighbor_elevation == *lowest_elevation {
-                    lowest.push(*neighbor_fid)
-                }
-            } else {
-                lowest_elevation = Some(neighbor_elevation);
+        let neighbor = tile_map.try_get(&neighbor_fid)?;
+        let neighbor_elevation = neighbor.elevation();
+        if let Some(lowest_elevation) = lowest_elevation.as_mut() {
+            if neighbor_elevation < *lowest_elevation {
+                *lowest_elevation = neighbor_elevation;
+                lowest = vec![*neighbor_fid];
+            } else if neighbor_elevation == *lowest_elevation {
                 lowest.push(*neighbor_fid)
             }
-
+        } else {
+            lowest_elevation = Some(neighbor_elevation);
+            lowest.push(*neighbor_fid)
         }
 
     }
-    (lowest,lowest_elevation.copied())
+    Ok((lowest,lowest_elevation.copied()))
 
 }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
@@ -11,6 +9,7 @@ use crate::world_map::TileForPopulation;
 use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
 use crate::world_map::LakeForPopulation;
+use crate::utils::TryGetMap;
 
 pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -22,18 +21,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeForPopulation>(progress)?;
 
     // and a biome map
-    let mut biome_map = HashMap::new();
-
-    {
-        // TODO: Need to use build_index on the biomes layer.
-        let mut biomes = target.edit_biomes_layer()?;
-
-        for biome in biomes.read_features().into_entities::<BiomeForPopulation>() {
-            let (_,biome) = biome?;
-            biome_map.insert(biome.name, biome.habitability);
-        }
-    
-    }
+    let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForPopulation>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 
@@ -63,7 +51,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
             let mut suitability = if tile.lake_id.is_some() {
                 0.0
             } else {
-                *biome_map.get(&tile.biome).ok_or_else(|| CommandError::UnknownBiome(tile.biome.clone()))? as f64
+                biome_map.try_get(&tile.biome)?.habitability as f64
             };
             if suitability > 0.0 {
                 if flow_mean > 0.0 {
@@ -76,7 +64,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                     }
                     if let Some(water_cell) = tile.closest_water {
                         let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&(water_cell as u64))?;
-                        if let Some(lake_type) = &water_cell.lake_id.and_then(|id| lake_map.get(&(id as u64)).map(|l| &l.type_)) {
+                        if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&(id as u64))).transpose()?.map(|l| &l.type_) {
                             match lake_type {
                                 LakeType::Fresh => suitability += 30.0,
                                 LakeType::Salt => suitability += 10.0,

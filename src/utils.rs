@@ -273,7 +273,7 @@ impl Point {
         Ok(Self::new(NotNan::try_from(x)?,NotNan::try_from(y)?))
     }
 
-    fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
+    pub(crate) fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
         Self { x, y }
     }
 
@@ -313,6 +313,14 @@ impl Point {
 
     pub(crate) fn distance(&self, other: &Self) -> f64 {
         ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt()
+    }
+
+    pub(crate) fn middle_point_between(&self, other: &Self) -> Self {
+        Self {
+            x: (self.x + other.x) / 2.0,
+            y: (self.y + other.y) / 2.0,
+        }
+
     }
 
     pub(crate) fn create_geometry(&self) -> Result<Geometry,CommandError> {
@@ -1037,3 +1045,12 @@ pub(crate) mod point_finder {
     
 
 }
+
+pub(crate) trait TryGetMap<Key,Value> {
+
+    fn try_get(&self, key: &Key) -> Result<&Value,CommandError>;
+
+    fn try_get_mut(&mut self, key: &Key) -> Result<&mut Value,CommandError>;
+
+}
+

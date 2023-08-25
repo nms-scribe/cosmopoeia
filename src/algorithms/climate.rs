@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::entity;
 use crate::entity_field_assign;
 use crate::world_map::TileFeature;
@@ -9,6 +11,8 @@ use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::Grouping;
+use crate::utils::TryGetMap;
+use crate::world_map::TypedFeature;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -130,137 +134,131 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     let working_tiles = working_tiles;
 
     for start_fid in working_tiles.iter().watch(progress,"Tracing winds.","Winds traced.") {
-        if let Some(tile) = tile_map.get(start_fid).cloned() {
+        let tile = tile_map.try_get(start_fid)?.clone();
+        let max_prec = 120.0 * tile.lat_modifier;
+        let mut humidity = max_prec - tile.elevation_scaled as f64;
 
-            let max_prec = 120.0 * tile.lat_modifier;
-            let mut humidity = max_prec - tile.elevation_scaled as f64;
+        let mut current = tile;
+        let mut current_fid = *start_fid;
+        let mut visited = vec![current_fid];
 
-            let mut current = tile;
-            let mut current_fid = *start_fid;
-            let mut visited = vec![current_fid];
+        loop {
+            if humidity < 0.0 {
+                // there is no humidity left to work with.
+                break;
+            }
 
-            loop {
-                if humidity < 0.0 {
-                    // there is no humidity left to work with.
-                    break;
-                }
+            // TODO: I think this will be improved if instead of just sending precipitation to one tile, I send it to all
+            // tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see
+            // now. Split up the precipitation evenly.
+            // -- This would require switching to a queue thing like I did for water flow.
+            // -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will
+            //    infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed 
+            //    along to the queue.
 
-                // TODO: I think this will be improved if instead of just sending precipitation to one tile, I send it to all
-                // tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see
-                // now. Split up the precipitation evenly.
-                // -- This would require switching to a queue thing like I did for water flow.
-                // -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will
-                //    infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed 
-                //    along to the queue.
-
-                // find neighbor closest to wind direction
-                let mut best_neighbor: Option<(_,_)> = None;
-                for (fid,direction) in &current.neighbors {
-                    // calculate angle difference
-                    let angle_diff = (direction - current.wind).abs();
-                    let angle_diff = if angle_diff > 180 {
-                        360 - angle_diff
-                    } else {
-                        angle_diff
-                    };
-                
-                    // if the angle difference is greater than 45, it's not going the right way, so don't even bother with this one.
-                    if angle_diff < 45 {
-                        if let Some(better_neighbor) = best_neighbor {
-                            if better_neighbor.1 > angle_diff {
-                                best_neighbor = Some((*fid,angle_diff));
-                            }
-
-                        } else {
+            // find neighbor closest to wind direction
+            let mut best_neighbor: Option<(_,_)> = None;
+            for (fid,direction) in &current.neighbors {
+                // calculate angle difference
+                let angle_diff = (direction - current.wind).abs();
+                let angle_diff = if angle_diff > 180 {
+                    360 - angle_diff
+                } else {
+                    angle_diff
+                };
+            
+                // if the angle difference is greater than 45, it's not going the right way, so don't even bother with this one.
+                if angle_diff < 45 {
+                    if let Some(better_neighbor) = best_neighbor {
+                        if better_neighbor.1 > angle_diff {
                             best_neighbor = Some((*fid,angle_diff));
                         }
 
+                    } else {
+                        best_neighbor = Some((*fid,angle_diff));
                     }
 
                 }
 
-                let next = if let Some((next_fid,_)) = best_neighbor {
-                    if visited.contains(&next_fid) {
-                        // we've reached one we've already visited, I don't want to go in circles.
-                        None
-                    } else {
-                        // visit it so we don't do this one again.
-                        visited.push(next_fid);
-                        tile_map.get(&next_fid).map(|tile| (next_fid,tile.clone()))
-                    }
-
-                } else {
-                    None
-                };
-
-                if let Some((next_fid,mut next)) = next {
-                    if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
-                        if current.grouping.is_ocean() {
-                            if !next.grouping.is_ocean() {
-                                // coastal precipitation
-                                // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
-                                // necessary considering it's the only randomness I would use, and nothing else is randomized.
-                                next.precipitation += (humidity / 15.0).max(1.0);
-                            } else {
-                                // add more humidity
-                                humidity = (humidity + 5.0 * current.lat_modifier).max(max_prec);
-                                // precipitation over water cells
-                                current.precipitation += 5.0 * modifier;
-                            }
-                        } else {
-                            let is_passable = next.elevation_scaled < MAX_PASSABLE_ELEVATION;
-                            let precipitation = if is_passable {
-                                // precipitation under normal conditions
-                                let normal_loss = (humidity / (10.0 * current.lat_modifier)).max(1.0);
-                                // difference in height
-                                let diff = (next.elevation_scaled - current.elevation_scaled).max(0) as f64;
-                                // additional modifier for high elevation of mountains
-                                let modifier = (next.elevation_scaled / 70).pow(2) as f64;
-                                (normal_loss + diff + modifier).clamp(1.0,humidity.max(1.0))
-                            } else {
-                                humidity
-                            };
-                            current.precipitation = precipitation;
-                            // sometimes precipitation evaporates
-                            humidity = if is_passable {
-                                // FUTURE: I feel like this evaporation was supposed to be a multiplier not an addition. Not much is evaporating.
-                                // FUTURE: Shouldn't it also depend on temperature?
-                                let evaporation = if precipitation > 1.5 { 1.0 } else { 0.0 };
-                                (humidity - precipitation + evaporation).clamp(0.0,max_prec)
-                            } else {
-                                0.0
-                            };
-
-                        }
-
-                        if let Some(real_current) = tile_map.get_mut(&current_fid) {
-                            real_current.precipitation = current.precipitation;
-                        }
-
-                        if let Some(real_next) = tile_map.get_mut(&next_fid) {
-                            real_next.precipitation = next.precipitation;
-                        }
-
-                    }
-
-                    (current_fid,current) = (next_fid,next);
-                } else {
-                    if current.grouping.is_ocean() {
-                        // precipitation over water cells
-                        current.precipitation += 5.0 * modifier;
-                    } else {
-                        current.precipitation = humidity;
-                    }
-
-                    if let Some(real_current) = tile_map.get_mut(&current_fid) {
-                        real_current.precipitation = current.precipitation;
-                    }
-
-                    break;
-
-                }
             }
-        
+
+            let next = if let Some((next_fid,_)) = best_neighbor {
+                if visited.contains(&next_fid) {
+                    // we've reached one we've already visited, I don't want to go in circles.
+                    None
+                } else {
+                    // visit it so we don't do this one again.
+                    visited.push(next_fid);
+                    Some((next_fid,tile_map.try_get(&next_fid)?.clone()))
+                }
+
+            } else {
+                None
+            };
+
+            if let Some((next_fid,mut next)) = next {
+                if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
+                    if current.grouping.is_ocean() {
+                        if !next.grouping.is_ocean() {
+                            // coastal precipitation
+                            // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
+                            // necessary considering it's the only randomness I would use, and nothing else is randomized.
+                            next.precipitation += (humidity / 15.0).max(1.0);
+                        } else {
+                            // add more humidity
+                            humidity = (humidity + 5.0 * current.lat_modifier).max(max_prec);
+                            // precipitation over water cells
+                            current.precipitation += 5.0 * modifier;
+                        }
+                    } else {
+                        let is_passable = next.elevation_scaled < MAX_PASSABLE_ELEVATION;
+                        let precipitation = if is_passable {
+                            // precipitation under normal conditions
+                            let normal_loss = (humidity / (10.0 * current.lat_modifier)).max(1.0);
+                            // difference in height
+                            let diff = (next.elevation_scaled - current.elevation_scaled).max(0) as f64;
+                            // additional modifier for high elevation of mountains
+                            let modifier = (next.elevation_scaled / 70).pow(2) as f64;
+                            (normal_loss + diff + modifier).clamp(1.0,humidity.max(1.0))
+                        } else {
+                            humidity
+                        };
+                        current.precipitation = precipitation;
+                        // sometimes precipitation evaporates
+                        humidity = if is_passable {
+                            // FUTURE: I feel like this evaporation was supposed to be a multiplier not an addition. Not much is evaporating.
+                            // FUTURE: Shouldn't it also depend on temperature?
+                            let evaporation = if precipitation > 1.5 { 1.0 } else { 0.0 };
+                            (humidity - precipitation + evaporation).clamp(0.0,max_prec)
+                        } else {
+                            0.0
+                        };
+
+                    }
+
+                    let real_current = tile_map.try_get_mut(&current_fid)?;
+                    real_current.precipitation = current.precipitation;
+
+                    let real_next = tile_map.try_get_mut(&next_fid)?;
+                    real_next.precipitation = next.precipitation;
+
+                }
+
+                (current_fid,current) = (next_fid,next);
+            } else {
+                if current.grouping.is_ocean() {
+                    // precipitation over water cells
+                    current.precipitation += 5.0 * modifier;
+                } else {
+                    current.precipitation = humidity;
+                }
+
+                let real_current = tile_map.try_get_mut(&current_fid)?; 
+                real_current.precipitation = current.precipitation;
+
+                break;
+
+            }
         }
 
     }
