@@ -4833,8 +4833,6 @@ TODO: I can add this to the town stuff earlier, I have everything I need.
 
 #### 5) Create Provinces
 
-TODO: This is where I am.
-
 * *input*: province_percentage -- defined as "burgs percentage to form separate province" -- Except I don't think that's what this is
 * provinces = []
 * town_map = index of towns
@@ -4862,6 +4860,7 @@ TODO: This is where I am.
 
 #### 6) Expand Provinces
 
+
 * *input*: province_percentage -- defined as "burgs percentage to form separate province" -- Except I don't think that's what this is
 * max = if percentage == 100 { 1000 } else { Normal(20,5).sample(rng).clamp(5,100) * province_percentage.pow(0.5)}
 * provinces = list of provinces
@@ -4887,6 +4886,9 @@ TODO: This is where I am.
 
 #### 6.5) Fill Missing Provinces
 
+TODO: This is where I am.
+
+* max = subnation_max_cost
 * provinces = []
 * town_map = index of towns
 * nations = list of nations
@@ -4915,13 +4917,8 @@ TODO: This is where I am.
         * province_seat = town on tile
       * for neighbor in tile.neighbors:
         * if new_provinces[tile] is set: continue;
-        -- I'm taking this directly from the normal province expansion, will this work?
-        * land = neighbor.grouping.is_land
-        * if !land && neighbor.shore_distance < -2: continue -- cannot pass deep ocen
-        * if land && neighbor.nation_id != province.nation_id: continue -- can not leave nation
-        * elevation_cost = if tile.elevation_scaled >= 70 { 100 } else if elevation >= 50 { 30 } else if tile.is_water { 100 } else { 10 }
-        * total_cost = prioirty + elevation_cost
-        * if total_cost > max: continue
+        -- I should be able to just use subnation_expansion_cost
+        * (land,total_cost) = subnation_expansion_cost(neighbor,subnation,priority)
         * if total_cost > max: continue
         * if !cost[neighbor] or total_cost < cost[neighbor]:
           * if land: new_provinces[neighbor] = province_id
@@ -5033,10 +5030,11 @@ To proceed on this, I can break it down into the following steps:
     [X] `gen-civil-create-nations`
     [X] `gen-civil-expand-nations`
     [X] `gen-civil-normalize-nations`
-    [ ] `gen-civil-create-subdivisions`
-    [ ] `gen-civil-expand-subdivisions`
-    [ ] `gen-civil-normalize-subdivisions`
-    [ ] `gen-civil-towns`
+    [X] `gen-civil-create-subnations`
+    [X] `gen-civil-expand-subnations`
+    [ ] `gen-civil-fill-empty-subnations`
+    [ ] `gen-civil-normalize-subnations`
+    [X] `gen-civil-towns`
     [ ] `gen-civil-subdivisions` -- wraps up all of the subdivision commands
     [X] `gen-civil-nations` -- wraps up all of the nation commands
     [ ] `gen-civil` all-encompassing command

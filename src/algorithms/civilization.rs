@@ -42,7 +42,7 @@ use crate::utils::Point;
 use crate::utils::TryGetMap;
 use crate::world_map::NewSubnation;
 use crate::world_map::SubnationForPlacement;
-use crate::world_map::TileForSubnationPlacement;
+use crate::world_map::TileForSubnationExpand;
 
 
 struct ScoredTileForTowns {
@@ -526,7 +526,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 };
 
                 if replace_nation {
-                    if !neighbor.grouping.is_ocean() {
+                    if neighbor.shore_distance >= -1 { // let nations spread out from shore, which will help with drawing later.
                         place_nations.push((*neighbor_id,nation.fid.clone()));
                         // even if we don't place the culture, because people can't live here, it will still spread.
                     }
@@ -888,15 +888,11 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
 
 pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let max = if subnation_percentage == 100.0 {
-        1000.0
-    } else {
-        Normal::new(20.0f64,5.0f64).unwrap().sample(rng).clamp(5.0,100.0) * subnation_percentage.powf(0.5)
-    };
+    let max = subnation_max_cost(rng, subnation_percentage);
 
     let mut tile_layer = target.edit_tile_layer()?;
 
-    let mut tile_map = tile_layer.read_features().to_entities_index::<_,TileForSubnationPlacement>(progress)?;
+    let mut tile_map = tile_layer.read_features().to_entities_index::<_,TileForSubnationExpand>(progress)?;
 
     let mut costs = HashMap::new();
 
@@ -919,8 +915,8 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
         let tile = tile_map.try_get(&(tile_id as u64))?;
         for (neighbor_id,_) in &tile.neighbors {
             let neighbor = tile_map.try_get(&neighbor_id)?;
-            
-            let (is_land, total_cost) = match subnation_expansion_cost(neighbor, &subnation, priority) {
+
+            let total_cost = match subnation_expansion_cost(neighbor, &subnation, priority) {
                 Some(value) => value,
                 None => continue,
             };
@@ -942,7 +938,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                 };
 
                 if replace_subnation {
-                    if is_land {
+                    if neighbor.shore_distance >= -1 { // this is also true for nations.
                         place_subnations.push((*neighbor_id,subnation.fid.clone()));
                     }
                     costs.insert(*neighbor_id, total_cost);
@@ -975,12 +971,19 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
     Ok(())
 }
 
-fn subnation_expansion_cost(neighbor: &TileForSubnationPlacement, subnation: &SubnationForPlacement, priority: Reverse<OrderedFloat<f64>>) -> Option<(bool, OrderedFloat<f64>)> {
-    let is_land = !neighbor.grouping.is_water();
-    if !is_land && neighbor.shore_distance < -2 {
+fn subnation_max_cost<Random: Rng>(rng: &mut Random, subnation_percentage: f64) -> f64 {
+    if subnation_percentage == 100.0 {
+        1000.0
+    } else {
+        Normal::new(20.0f64,5.0f64).unwrap().sample(rng).clamp(5.0,100.0) * subnation_percentage.powf(0.5)
+    }
+}
+
+fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnation: &SubnationForPlacement, priority: Reverse<OrderedFloat<f64>>) -> Option< OrderedFloat<f64>> {
+    if neighbor.shore_distance < -3 {
         return None; // don't pass through deep ocean
     }
-    if is_land && neighbor.nation_id != Some(subnation.nation_id) {
+    if neighbor.nation_id != Some(subnation.nation_id) {
         return None; // don't leave nation
     }
     let elevation_cost = if neighbor.elevation_scaled >= 70 {
@@ -993,5 +996,5 @@ fn subnation_expansion_cost(neighbor: &TileForSubnationPlacement, subnation: &Su
         10
     } as f64;
     let total_cost = priority.0 + elevation_cost;
-    Some((is_land, total_cost))
+    Some(total_cost)
 }

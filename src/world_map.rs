@@ -1315,8 +1315,8 @@ entity!(TileForNationExpand TileFeature {
     water_flow: f64,
     neighbors: Vec<(u64,i32)>,
     lake_id: Option<i64>,
-    culture: Option<String> = |_| Ok::<_,CommandError>(None),
-    nation_id: Option<i64>
+    culture: Option<String>,
+    nation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
 
 entity!(TileForNationNormalize TileFeature {
@@ -1334,7 +1334,7 @@ entity!(TileForSubnations TileFeature {
     population: i32
 });
 
-entity!(TileForSubnationPlacement TileFeature {
+entity!(TileForSubnationExpand TileFeature {
     neighbors: Vec<(u64,i32)>,
     grouping: Grouping,
     shore_distance: i32,
