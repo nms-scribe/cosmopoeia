@@ -87,8 +87,11 @@ command!{
     gen_civil::GenCivilCreateNations;
     gen_civil::GenCivilExpandNations;
     gen_civil::GenCivilNormalizeNations;
+    gen_civil::GenCivilSubnations;
     gen_civil::GenCivilCreateSubnations;
     gen_civil::GenCivilExpandSubnations;
+    gen_civil::GenCivilFillEmptySubnations;
+    gen_civil::GenCivilNormalizeSubnations;
 }
 
 

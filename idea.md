@@ -4965,8 +4965,7 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-create-subnations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-expand-subnations testing_output/Inannak.world.gpkg --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-subnations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
 
 ```
 

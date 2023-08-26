@@ -1327,7 +1327,7 @@ entity!(TileForNationNormalize TileFeature {
 });
 
 entity!(TileForSubnations TileFeature {
-    fid: u64,
+    fid: u64, // TODO: Do I really need this?
     town_id: Option<i64>,
     nation_id: Option<i64>,
     culture: Option<String>,
@@ -1342,6 +1342,25 @@ entity!(TileForSubnationExpand TileFeature {
     nation_id: Option<i64>,
     subnation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
+
+entity!(TileForEmptySubnations TileFeature {
+    neighbors: Vec<(u64,i32)>,
+    shore_distance: i32,
+    nation_id: Option<i64>, // TODO: What if I changed the features so it could store a u64, but it would be in String instead?
+    subnation_id: Option<i64>,
+
+    town_id: Option<i64>,
+    population: i32,
+    culture: Option<String>
+});
+
+entity!(TileForSubnationNormalize TileFeature {
+    neighbors: Vec<(u64,i32)>,
+    town_id: Option<i64>,
+    nation_id: Option<i64>,
+    subnation_id: Option<i64>
+});
+
 
 pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
 
@@ -2182,6 +2201,10 @@ entity!(TownForSubnations TownFeature {
     name: String
 });
 
+entity!(TownForEmptySubnations TownFeature {
+    name: String
+});
+
 pub(crate) type TownLayer<'data_life> = MapLayer<'data_life,TownFeature<'data_life>>;
 
 impl TownLayer<'_> {
@@ -2240,6 +2263,10 @@ entity!(NationForSubnations NationFeature {
     capital: i64 // TODO: This should be capital_town_id, or capital_id
 });
 
+entity!(NationForEmptySubnations NationFeature {
+    fid: u64
+});
+
 
 
 pub(crate) type NationsLayer<'data_life> = MapLayer<'data_life,NationFeature<'data_life>>;
@@ -2272,7 +2299,7 @@ feature!(SubnationFeature "subnations" wkbNone geometry: #[allow(dead_code)] {
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
-    seat #[allow(dead_code)] set_seat i64 FIELD_SEAT "seat" OGRFieldType::OFTInteger64;
+    seat #[allow(dead_code)] set_seat option_i64 FIELD_SEAT "seat" OGRFieldType::OFTInteger64;
     nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
 });
 
@@ -2282,7 +2309,7 @@ entity!(NewSubnation SubnationFeature {
     culture: Option<String>,
     center: i64,
     type_: CultureType,
-    seat: i64,
+    seat: Option<i64>,
     nation_id: i64
 });
 
