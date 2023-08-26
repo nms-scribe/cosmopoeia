@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -26,12 +27,12 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
     //use std::time::Instant;
 
-    // let mut time_map = HashMap::new();
+    //let mut time_map = HashMap::new();
 
     macro_rules! mark_time {
         {$name: literal: $($block: tt)*} => {
             // NOTE: Uncomment these lines to do some benchmarking
-            //let now = Instant::now();
+            // let now = Instant::now();
             $($block)*
             //match time_map.entry($name) {
             //    std::collections::hash_map::Entry::Occupied(mut entry) => *entry.get_mut() += now.elapsed().as_secs_f64(),
@@ -52,6 +53,11 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
             features.push(feature.fid()?);
         }
     };
+
+    // This cache of the disjoint result speeds this algorithm up by about one second (6.43 down to 5.45)
+    // A significant but still disappointing improvement. (There were less duplicate checks than I expected)
+    let mut disjoint_checked = HashMap::new();
+
 
     // # Loop through all features and find features that touch each feature
     // for f in feature_dict.values():
@@ -83,10 +89,23 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
                 if working_fid != &intersecting_fid {
 
-                    // NOTE: this is by far the slowest part of the process, apart from updating the feature. I can think of nothing to do to optimize this.
-                    mark_time!{"intersecting features: disjoint check":
-                        let is_disjoint = intersecting_feature.geometry().unwrap().disjoint(&working_geometry);
+                    mark_time!{"intersection features: get disjoint cache":
+                        let cached = disjoint_checked.get(&(*working_fid,intersecting_fid));
                     }
+                    
+                    let is_disjoint = if let Some(is_disjoint) = cached {
+                        // check the cache in the opposite way they were inserted, because they were inserted when working_id
+                        // was intersecting_id
+                        *is_disjoint
+                    } else {
+                        // NOTE: this is by far the slowest part of the process, apart from updating the feature. I can think of nothing to do to optimize this.
+                        mark_time!{"intersecting features: disjoint check":
+                            let is_disjoint = intersecting_feature.geometry().unwrap().disjoint(&working_geometry);
+                        }
+                        disjoint_checked.insert((intersecting_fid,*working_fid),is_disjoint);
+                        is_disjoint
+
+                    };
 
                     if !is_disjoint {
                         mark_time!{"intersecting features: neighbor geometry":

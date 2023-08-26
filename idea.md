@@ -4953,8 +4953,6 @@ TODO: This is where I am.
   * provinces[tile] = maximum adversary
 
 
-
-
 # Testing Commands:
 
 The following commands were used, in this order, to generate the testing maps of Inannak during development. `time` is not the bash command, but a GNU program you might have to install on your machine and call by path.
@@ -4967,6 +4965,8 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-create-subnations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-expand-subnations testing_output/Inannak.world.gpkg --seed 11418135282022031501
 
 ```
 
@@ -5040,6 +5040,10 @@ To proceed on this, I can break it down into the following steps:
     [ ] `gen-civil` all-encompassing command
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
+        -- If I go through every vertex in the outer rings and map them with:
+           * what shape id they belong to
+           * what index in the ring they are in that shape id
+        -- then I might be able to map them into segments, and retain their order... Okay, I'm not sure where I'm going with that now.
     [ ] is_ocean, or maybe groupings. The other layers do have to line up exactly with this, so they have to take this into account as well.
     [ ] biomes
     [ ] nations and provinces
@@ -5047,7 +5051,7 @@ To proceed on this, I can break it down into the following steps:
 [ ] `create-terrain` commands
     [ ] terrain template files
     [ ] Review AFMG terrain generation algorithms
-[ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well?
+[ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.
 [ ] Hide the sub-commands, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command.
 [ ] Documentation
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
