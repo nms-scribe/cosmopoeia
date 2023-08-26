@@ -10,7 +10,9 @@ mod gen_climate;
 mod gen_water;
 mod gen_biome;
 mod gen_people;
-mod gen_civil;
+mod gen_towns;
+mod gen_nations;
+mod gen_subnations;
 
 // NOTE: Further 'use' statements in the command macro below
 
@@ -80,18 +82,18 @@ command!{
     gen_people::GenPeoplePopulation;
     gen_people::GenPeopleCultures;
     gen_people::GenPeopleExpandCultures;
-    gen_civil::GenCivilTowns;
-    gen_civil::GenCivilCreateTowns;
-    gen_civil::GenCivilPopulateTowns;
-    gen_civil::GenCivilNations;
-    gen_civil::GenCivilCreateNations;
-    gen_civil::GenCivilExpandNations;
-    gen_civil::GenCivilNormalizeNations;
-    gen_civil::GenCivilSubnations;
-    gen_civil::GenCivilCreateSubnations;
-    gen_civil::GenCivilExpandSubnations;
-    gen_civil::GenCivilFillEmptySubnations;
-    gen_civil::GenCivilNormalizeSubnations;
+    gen_towns::GenTowns;
+    gen_towns::GenTownsCreate;
+    gen_towns::GenTownsPopulate;
+    gen_nations::GenNations;
+    gen_nations::GenNationsCreate;
+    gen_nations::GenNationsExpand;
+    gen_nations::GenNationsNormalize;
+    gen_subnations::GenSubnations;
+    gen_subnations::GenSubnationsCreate;
+    gen_subnations::GenSubnationsExpand;
+    gen_subnations::GenSubnationsFillEmpty;
+    gen_subnations::GenSubnationsNormalize;
 }
 
 

@@ -4963,9 +4963,9 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-civil-subnations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-subnations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
 
 ```
 
@@ -5023,20 +5023,19 @@ To proceed on this, I can break it down into the following steps:
     [X] various auxiliary files
     [X] Review AFMG people generation algorithms -- again, wait on improvements until later
     [X] Figure out how to break the task apart into sub commands and create those commands.
-[ ] `gen-civil` command:
-    [X] `gen-civil-create-towns`
-    [X] `gen-civil-populate-towns`
-    [X] `gen-civil-create-nations`
-    [X] `gen-civil-expand-nations`
-    [X] `gen-civil-normalize-nations`
-    [X] `gen-civil-create-subnations`
-    [X] `gen-civil-expand-subnations`
-    [ ] `gen-civil-fill-empty-subnations`
-    [ ] `gen-civil-normalize-subnations`
-    [X] `gen-civil-towns`
-    [ ] `gen-civil-subdivisions` -- wraps up all of the subdivision commands
-    [X] `gen-civil-nations` -- wraps up all of the nation commands
-    [ ] `gen-civil` all-encompassing command
+[X] civilization commands:
+    [X] `gen-create-towns`
+    [X] `gen-populate-towns`
+    [X] `gen-create-nations`
+    [X] `gen-expand-nations`
+    [X] `gen-normalize-nations`
+    [X] `gen-create-subnations`
+    [X] `gen-expand-subnations`
+    [X] `gen-fill-empty-subnations`
+    [X] `gen-normalize-subnations`
+    [X] `gen-towns`
+    [X] `gen-subdivisions` -- wraps up all of the subdivision commands
+    [X] `gen-nations` -- wraps up all of the nation commands
 [ ] `curve-borders` command
     [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
         -- If I go through every vertex in the outer rings and map them with:
