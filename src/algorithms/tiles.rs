@@ -13,7 +13,7 @@ use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TilesLayer;
 use crate::utils::Point;
 use crate::utils::TryGetMap;
-use crate::utils::bezierify_polygon_with_rings;
+use crate::utils::bezierify_polygon;
 use crate::utils::multipolygon_to_polygons;
 use crate::gdal_fixes::GeometryFix;
 
@@ -254,7 +254,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let union_polygons = multipolygon_to_polygons(tile_union);
         for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
             // TODO: Don't forget to make this the default functionality of bezierify_polygon instead, and then get rid of bezierify_polygon_with_rings
-            for new_polygon in bezierify_polygon_with_rings(&polygon,bezier_scale)? {
+            for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
                 if let Some(difference) = ocean.difference(&new_polygon) {
                     ocean = difference; 
                 } // TODO: Or what?

@@ -467,13 +467,15 @@ pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: f64, buffe
     let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
     if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
         for i in 0..lake_geometry.geometry_count() {
-            let geometry = bezierify_polygon(&lake_geometry.get_geometry(i),bezier_scale)?;
-            new_geometry.add_geometry(geometry)?;
+            for geometry in bezierify_polygon(&lake_geometry.get_geometry(i),bezier_scale)? {
+                new_geometry.add_geometry(geometry)?;
+            }
         }
 
     } else {
-        let geometry = bezierify_polygon(&lake_geometry,bezier_scale)?;
-        new_geometry.add_geometry(geometry)?;
+        for geometry in bezierify_polygon(&lake_geometry,bezier_scale)? {
+            new_geometry.add_geometry(geometry)?;
+        }
 
     };
 

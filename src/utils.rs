@@ -435,31 +435,10 @@ pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandEr
 
 }
 
-pub(crate) fn polygon_to_vertices(geometry: &Geometry) -> Result<Vec<Point>, CommandError> {
-    let mut input = Vec::new();
-    
-    if geometry.geometry_count() > 0 {
-        let line = geometry.get_geometry(0);
-        for i in 0..line.point_count() {
-            let (x,y,_) = line.get_point(i as i32);
-            input.push(Point::from_f64(x,y)?);
-        }
-    }
-    
-    Ok(input)
-}
-
-pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Geometry, CommandError> {
-    let input = polygon_to_vertices(&geometry)?;
-    let bezier = PolyBezier::from_poly_line(&input);
-    let geometry = create_polygon(&bezier.to_poly_line(scale)?)?;
-    Ok(geometry)
-}
-
-// TODO: This should be what bezierify_polygon actually does, but I'll have to test it after I change that.
 // NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
-// made valid by splitting them into multiple polygons, hence this returns a vec.
-pub(crate) fn bezierify_polygon_with_rings(geometry: &Geometry, scale: f64) -> Result<Vec<Geometry>,CommandError> {
+// made valid, which turns them into a multi-polygon, which I then split back into multiple polygons, 
+// hence this returns a vec.
+pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Vec<Geometry>,CommandError> {
     let mut output = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
     for i in 0..geometry.geometry_count() {
         let ring = geometry.get_geometry(i);
@@ -475,7 +454,8 @@ pub(crate) fn bezierify_polygon_with_rings(geometry: &Geometry, scale: f64) -> R
         }
         output.add_geometry(new_ring)?;
     }
-    // Primary causes: the original dissolved tiles meet at the same point, or a point that is very close.
+    // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
+    // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
     let validate_options = gdal::cpl::CslStringList::new();
     Ok(multipolygon_to_polygons(output.make_valid(&validate_options)?))
 }
