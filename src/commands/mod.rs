@@ -5,7 +5,8 @@ use crate::errors::CommandError;
 
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod dev;
-mod convert_heightmap;
+mod raster_tile;
+mod tile;
 mod gen_climate;
 mod gen_water;
 mod gen_biome;
@@ -60,11 +61,12 @@ command!{
     dev::DevVoronoiFromTriangles;
     dev::DevNamers;
     dev::DevCultures;
-    convert_heightmap::ConvertHeightmap;
-    convert_heightmap::ConvertHeightmapVoronoi;
-    convert_heightmap::ConvertHeightmapSample;
-    convert_heightmap::ConvertHeightmapOcean;
-    convert_heightmap::ConvertHeightmapNeighbors;
+    raster_tile::ConvertHeightmap;
+    raster_tile::ConvertHeightmapVoronoi;
+    raster_tile::ConvertHeightmapSample;
+    raster_tile::ConvertHeightmapOcean;
+    tile::CalcNeighbors;
+    tile::CreateCoastline;
     gen_climate::GenClimate;
     gen_climate::GenClimateTemperature;
     gen_climate::GenClimateWind;

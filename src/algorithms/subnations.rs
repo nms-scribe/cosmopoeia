@@ -146,7 +146,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                 };
 
                 if replace_subnation {
-                    if neighbor.shore_distance >= -1 { // this is also true for nations.
+                    if !neighbor.grouping.is_ocean() { // this is also true for nations.
                         place_subnations.push((*neighbor_id,subnation.fid.clone()));
                     }
                     costs.insert(*neighbor_id, total_cost);
@@ -318,7 +318,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                             };
         
                             if replace_subnation {
-                                if neighbor.shore_distance >= -1 { // this is also true for nations.
+                                if !neighbor.grouping.is_ocean() { 
                                     tile_subnation_changes.insert(*neighbor_id, subnation.fid);
                                 }
                                 nation_tiles.remove(neighbor_id);

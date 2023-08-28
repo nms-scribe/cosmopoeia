@@ -515,8 +515,8 @@ macro_rules! feature {
             ];
     
             // geometry field
-            $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Option<&Geometry> {
-                self.feature.geometry()
+            $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Result<&Geometry,CommandError> { // TODO: The regular geometry function should do this. But I need to test it after I switch that.
+                self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))
             }
     
             // feature initializer function
@@ -670,7 +670,7 @@ impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Featu
 #[macro_export]
 macro_rules! entity_field_assign {
     ($feature: ident geometry $type: ty) => {
-        $feature.geometry().cloned().ok_or_else(|| CommandError::MissingGeometry)?
+        $feature.geometry()?.clone()
     };
     ($feature: ident fid $type: ty) => {
         $feature.fid()?
@@ -1170,7 +1170,7 @@ entity!(TileForPopulation TileFeature {
     shore_distance: i32,
     water_count: Option<i32>,
     area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry().map(|g| g.area()).unwrap_or_else(|| 0.0))
+        Ok::<_,CommandError>(feature.geometry()?.area())
     },
     closest_water: Option<i64>,
     lake_id: Option<i64>
@@ -1258,7 +1258,7 @@ entity!(TileForCultureExpand TileFeature {
     neighbors: Vec<(u64,i32)>,
     lake_id: Option<i64>,
     area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry().map(|g| g.area()).unwrap_or_else(|| 0.0))
+        Ok::<_,CommandError>(feature.geometry()?.area())
     },
     culture: Option<String> = |_| Ok::<_,CommandError>(None)
 
@@ -1348,7 +1348,7 @@ entity!(TileForEmptySubnations TileFeature {
     shore_distance: i32,
     nation_id: Option<i64>, // TODO: What if I changed the features so it could store a u64, but it would be in String instead?
     subnation_id: Option<i64>,
-
+    grouping: Grouping,
     town_id: Option<i64>,
     population: i32,
     culture: Option<String>
@@ -1446,6 +1446,7 @@ pub(crate) enum RiverSegmentFrom {
 }
 
 impl TryFrom<String> for RiverSegmentFrom {
+    // TODO: Since I had to pull serde into this crate anyway, should I just implement Serialize/Deserialize for all of these types? As well as the neighbor thingie, then just use serde_json to copy things.
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -2345,6 +2346,36 @@ impl SubnationsLayer<'_> {
 
 }
 
+feature!(CoastlineFeature "coastlines" wkbPolygon geometry: #[allow(dead_code)] {
+});
+
+pub(crate) type CoastlineLayer<'data_life> = MapLayer<'data_life,CoastlineFeature<'data_life>>;
+
+impl CoastlineLayer<'_> {
+
+    pub(crate) fn add_land_mass(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
+        let (field_names,field_values) = CoastlineFeature::to_field_names_values();
+        self.add_feature(geometry, &field_names, &field_values)
+    }
+
+}
+
+feature!(OceanFeature "oceans" wkbPolygon geometry: #[allow(dead_code)] {
+});
+
+pub(crate) type OceanLayer<'data_life> = MapLayer<'data_life,OceanFeature<'data_life>>;
+
+impl OceanLayer<'_> {
+
+    pub(crate) fn add_ocean(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
+        let (field_names,field_values) = OceanFeature::to_field_names_values();
+        self.add_feature(geometry, &field_names, &field_values)
+    }
+
+}
+
+
+
 pub(crate) struct WorldMap {
     dataset: Dataset
 }
@@ -2509,6 +2540,14 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationsLayer,CommandError> {
         Ok(SubnationsLayer::open_from_dataset(&mut self.dataset)?)
+    }
+
+    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: bool) -> Result<CoastlineLayer,CommandError> {
+        Ok(CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline)?)
+    }
+
+    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: bool) -> Result<OceanLayer,CommandError> {
+        Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean)?)
     }
 
 

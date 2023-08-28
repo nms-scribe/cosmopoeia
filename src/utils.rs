@@ -156,6 +156,33 @@ impl Extent {
         create_polygon(&vertices)
     }
 
+    pub(crate) fn create_boundary_geometry(&self) -> Result<Geometry, CommandError> {
+        let north = NotNan::try_from(self.north())?;
+        let east = NotNan::try_from(self.east())?;
+        let west = NotNan::try_from(self.west)?;
+        let south = NotNan::try_from(self.south)?;
+        let mut border_points = Vec::new();
+        border_points.push(Point::new(west,south));
+        for y in south.ceil() as usize..north.ceil() as usize {
+            border_points.push(Point::new(west,NotNan::try_from(y as f64)?))
+        }
+        border_points.push(Point::new(west,north));
+        for x in west.ceil() as usize..east.floor() as usize {
+            border_points.push(Point::new(NotNan::try_from(x as f64)?,north))
+        }
+        border_points.push(Point::new(east,north));
+        for y in north.ceil() as usize..south.floor() as usize {
+            border_points.push(Point::new(east,NotNan::try_from(y as f64)?))
+        }
+        border_points.push(Point::new(east,south));
+        for x in east.ceil() as usize..west.floor() as usize {
+            border_points.push(Point::new(NotNan::try_from(x as f64)?,south))
+        }
+        border_points.push(Point::new(west,south));
+        let ocean = create_polygon(&border_points)?;
+        Ok(ocean)
+    }    
+
     pub(crate) fn east(&self) -> f64 {
         self.west + self.width
     }
@@ -429,6 +456,41 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Geome
     Ok(geometry)
 }
 
+// TODO: This should be what bezierify_polygon actually does, but I'll have to test it after I change that.
+// NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
+// made valid by splitting them into multiple polygons, hence this returns a vec.
+pub(crate) fn bezierify_polygon_with_rings(geometry: &Geometry, scale: f64) -> Result<Vec<Geometry>,CommandError> {
+    let mut output = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
+    for i in 0..geometry.geometry_count() {
+        let ring = geometry.get_geometry(i);
+        let mut points = Vec::new();
+        for i in 0..ring.point_count() {
+            let (x,y,_) = ring.get_point(i as i32);
+            points.push(Point::from_f64(x,y)?)
+        }
+        let bezier = PolyBezier::from_poly_line(&points);
+        let mut new_ring = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
+        for point in bezier.to_poly_line(scale)? {
+            new_ring.add_point_2d(point.to_tuple())
+        }
+        output.add_geometry(new_ring)?;
+    }
+    // Primary causes: the original dissolved tiles meet at the same point, or a point that is very close.
+    let validate_options = gdal::cpl::CslStringList::new();
+    Ok(multipolygon_to_polygons(output.make_valid(&validate_options)?))
+}
+
+pub(crate) fn multipolygon_to_polygons(geometry: Geometry) -> Vec<Geometry> {
+    if geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
+        let mut result = Vec::new();
+        for i in 0..geometry.geometry_count() {
+            result.push(geometry.get_geometry(i).clone())
+        }
+        result
+    } else {
+        vec![geometry]
+    }
+}
 
 
 pub(crate) fn create_line(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {

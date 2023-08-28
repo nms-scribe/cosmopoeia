@@ -164,7 +164,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 };
 
                 if replace_nation {
-                    if neighbor.shore_distance >= -1 { // let nations spread out from shore, which will help with drawing later.
+                    if !neighbor.grouping.is_ocean() { 
                         place_nations.push((*neighbor_id,nation.fid.clone()));
                         // even if we don't place the culture, because people can't live here, it will still spread.
                     }

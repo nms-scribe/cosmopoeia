@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use gdal::vector::OGRwkbGeometryType;
+use gdal::vector::Geometry;
+
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
@@ -10,6 +13,9 @@ use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TilesLayer;
 use crate::utils::Point;
 use crate::utils::TryGetMap;
+use crate::utils::bezierify_polygon_with_rings;
+use crate::utils::multipolygon_to_polygons;
+use crate::gdal_fixes::GeometryFix;
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -24,6 +30,9 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
 }
 
 pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+
+    // TODO: Would it speed things up to make use of a QuadTree structure? Index all the vertices, then just look for tiles that share vertices. It might
+    // be worth trying, as it would avoid the disjoint check.
 
     //use std::time::Instant;
 
@@ -67,7 +76,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
             let (site_x,site_y,envelope,working_geometry) = { // shelter mutable borrow
 
                 let feature = layer.feature_by_id(&working_fid).unwrap();
-                let working_geometry = feature.geometry().unwrap();
+                let working_geometry = feature.geometry()?;
                 let envelope = working_geometry.envelope();
                 (feature.site_x()?,feature.site_y()?,envelope,working_geometry.clone())
 
@@ -100,7 +109,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                     } else {
                         // NOTE: this is by far the slowest part of the process, apart from updating the feature. I can think of nothing to do to optimize this.
                         mark_time!{"intersecting features: disjoint check":
-                            let is_disjoint = intersecting_feature.geometry().unwrap().disjoint(&working_geometry);
+                            let is_disjoint = intersecting_feature.geometry()?.disjoint(&working_geometry);
                         }
                         disjoint_checked.insert((intersecting_fid,*working_fid),is_disjoint);
                         is_disjoint
@@ -186,8 +195,8 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation, TileMap: T
 
 }
 
-pub(crate) fn find_tile_site_point(previous_tile: Option<u64>, tiles: &TilesLayer<'_>) -> Result<Option<Point>, CommandError> {
-    Ok(if let Some(x) = previous_tile {
+pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TilesLayer<'_>) -> Result<Option<Point>, CommandError> {
+    Ok(if let Some(x) = tile {
         if let Some(x) = tiles.feature_by_id(&x) {
             Some(x.site()?)
         } else {
@@ -198,3 +207,79 @@ pub(crate) fn find_tile_site_point(previous_tile: Option<u64>, tiles: &TilesLaye
     })
 }
 
+pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, progress: &mut Progress) -> Result<(),CommandError> {
+
+    // TODO: In theory, I could write an ocean_id or coastline_id onto tiles if I really wanted to. This might take the place of grouping_id. In fact,
+    // I could determine almost every grouping type in this algorithm, except for lake and lake_island. If I could then generate those two in fill 
+    // lakes, then I could get rid of the grouping task.
+
+    // FUTURE: There is an issue with coastlines extending over the edge of the borders after curving. I will have to deal with these someday.
+    // FUTURE: After curving, towns which are along the coastline will sometimes now be in the ocean. I may need to deal with that as well, someday.
+
+    let mut tile_layer = target.edit_tile_layer()?;
+
+    let mut iterator = tile_layer.read_features().filter_map(|f| {
+        match f.grouping() {
+            Ok(g) if !g.is_ocean() => Some(Ok(f)),
+            Ok(_) => None,
+            Err(err) => Some(Err(err)),
+        }
+    } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
+
+    let tile_union = if let Some(tile) = iterator.next() {
+        let first_tile = tile?.geometry()?.clone(); // TODO: Make sure to change 'geometry' to just return an error, then test it with the other stuff after and replace try_geometry with geometry.
+
+        // it's much faster to union two geometries rather than union them one at a time.
+        let mut next_tiles = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
+        while let Some(tile) = iterator.next() {
+            next_tiles.add_geometry(tile?.geometry()?.clone())?;
+        }
+        progress.start_unknown_endpoint(|| "Uniting tiles.");
+        // TODO: Check it, though, that it's doing the right thing here, and not just adding the first_tile to the multipolygon.
+        let tile_union = first_tile.union(&next_tiles);
+        progress.finish(|| "Tiles united.");
+        tile_union
+    } else {
+        None
+    };
+
+    progress.start_unknown_endpoint(|| "Creating ocean polygon.");
+    // Create base ocean tile before differences.
+    let ocean = tile_layer.get_extent()?.create_boundary_geometry()?; 
+    progress.finish(|| "Ocean polygon created.");
+
+    let (land_polygons,ocean) = if let Some(tile_union) = tile_union {
+        let mut ocean = ocean;
+        let mut polygons = Vec::new();
+        let union_polygons = multipolygon_to_polygons(tile_union);
+        for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
+            // TODO: Don't forget to make this the default functionality of bezierify_polygon instead, and then get rid of bezierify_polygon_with_rings
+            for new_polygon in bezierify_polygon_with_rings(&polygon,bezier_scale)? {
+                if let Some(difference) = ocean.difference(&new_polygon) {
+                    ocean = difference; 
+                } // TODO: Or what?
+                polygons.push(new_polygon);
+            }
+        }
+        (Some(polygons),ocean)
+    } else {
+        (None,ocean)
+    };
+
+
+    let ocean_polygons = multipolygon_to_polygons(ocean);
+
+    let mut coastline_layer = target.create_coastline_layer(overwrite_coastline)?;
+    if let Some(land_polygons) = land_polygons {
+        for polygon in land_polygons.into_iter().watch(progress, "Writing land masses.", "Land masses written.") {
+            coastline_layer.add_land_mass(polygon)?;
+        }
+    }
+
+    let mut ocean_layer = target.create_ocean_layer(overwrite_ocean)?;
+    for polygon in ocean_polygons.into_iter().watch(progress, "Writing oceans.", "Oceans written.") {
+        ocean_layer.add_ocean(polygon)?;
+    }
+
+    Ok(())
+}

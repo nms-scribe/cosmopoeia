@@ -16,6 +16,7 @@ use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::raster_sampling::OceanSamplingMethod;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
+use crate::algorithms::tiles::calculate_coastline;
 use crate::algorithms::raster_sampling::sample_elevations_on_tiles;
 use crate::algorithms::raster_sampling::sample_ocean_on_tiles;
 
@@ -41,6 +42,10 @@ subcommand_def!{
         /// if specified, tiles below the specified value are considered ocean.
         #[arg(long)]
         ocean_below: Option<f64>,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy coastlines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
 
         #[arg(long,default_value="10000")]
         /// The rough number of tiles to generate for the image
@@ -135,7 +140,12 @@ impl Task for ConvertHeightmap {
             progress.announce("Calculate neighbors for tiles");
 
 
-            calculate_tile_neighbors(target, &mut progress)
+            calculate_tile_neighbors(target, &mut progress)?;
+
+            progress.announce("Creating coastline");
+
+            calculate_coastline(target, self.bezier_scale, self.overwrite, self.overwrite, &mut progress)
+
         })?;
 
         target.save(&mut progress)
@@ -199,6 +209,8 @@ impl Task for ConvertHeightmapVoronoi {
         triangles.start(&mut progress)?;
     
         // voronoi calculator
+
+        // TODO: What if we didn't bother with voronois? The triangles could be tiles as well, we just need to find their centroid (not circumcenter, which isn't always inside the tile). I don't know if the coastlines will look less game-like or not.
 
         let mut voronois = VoronoiGenerator::new(triangles,extent)?;
 
@@ -320,40 +332,6 @@ impl Task for ConvertHeightmapOcean {
             sample_ocean_on_tiles(target, &ocean, ocean_method, &mut progress)?;
 
             progress.announce("Calculating neighbors for tiles");
-
-            calculate_tile_neighbors(target, &mut progress)
-        })?;
-
-        target.save(&mut progress)
-
-    
-    }
-}
-
-
-// FUTURE: This will be an alias for a CreateTerrainNeighbors, since it doesn't matter how the tiles were created.
-subcommand_def!{
-    /// Calculates neighbors for tiles
-    pub(crate) struct ConvertHeightmapNeighbors {
-
-        /// The path to the world map GeoPackage file
-        target: PathBuf,
-
-
-    }
-}
-
-impl Task for ConvertHeightmapNeighbors {
-
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
-
-        let mut target = WorldMap::create_or_edit(self.target)?;
-
-        target.with_transaction(|target| {
-
-            progress.announce("Calculate neighbors for tiles");
 
             calculate_tile_neighbors(target, &mut progress)
         })?;

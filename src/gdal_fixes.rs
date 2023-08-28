@@ -1,5 +1,6 @@
 use gdal::errors::GdalError;
 use gdal::vector::Feature;
+use gdal::vector::Geometry;
 use gdal_sys;
 use std::ffi::CString;
 
@@ -23,5 +24,34 @@ impl FeatureFix for Feature<'_> {
 
         unsafe { gdal_sys::OGR_F_SetFieldNull(self.c_feature(), field_id) };
         Ok(())
+    }
+}
+
+pub(crate) trait GeometryFix: Sized {
+    fn difference(&self, other: &Self) -> Option<Self>;
+}
+
+impl GeometryFix for Geometry {
+    fn difference(&self, other: &Self) -> Option<Self>  {
+        if !self.has_gdal_ptr() {
+            return None;
+        }
+        if !other.has_gdal_ptr() {
+            return None;
+        }
+        unsafe {
+            let ogr_geom = gdal_sys::OGR_G_Difference(self.c_geometry(), other.c_geometry());
+            if ogr_geom.is_null() {
+                return None;
+            }
+            // TODO: Unfortunately, with_c_geometry is private, so I can't use it.
+            let geometry = Self::lazy_feature_geometry();
+            geometry.set_c_geometry(ogr_geom);
+            // TODO: DANGER!: I can't set owned = true on the thing, there's no way.
+            // However, I *think* cloning will take care of that. Because the original
+            // value won't dereference the API handle, as it's not owned, but clone
+            // will set it to owned.
+            Some(geometry.clone())
+        }
     }
 }

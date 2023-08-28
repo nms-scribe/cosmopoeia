@@ -35,7 +35,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
         let water_flow = feature.water_flow()?;
         flow_sum += water_flow;
         flow_max = flow_max.max(water_flow);
-        area_sum += feature.geometry().map(|g| g.area()).unwrap_or_default();
+        area_sum += feature.geometry()?.area();
         work_queue.push(fid);
 
     }

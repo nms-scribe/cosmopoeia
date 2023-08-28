@@ -29,21 +29,18 @@ struct Lake {
 
 impl Lake {
 
-    pub(crate) fn dissolve_tiles(&self, layer: &mut TilesLayer<'_>) -> Geometry {
-        let mut lake_geometry = None;
-        for tile in &self.contained_tiles {
-            if let Some(tile) = layer.feature_by_id(&tile) {
-                if let Some(tile) = tile.geometry() {
-                    if let Some(lake) = lake_geometry {
-                        lake_geometry = tile.union(&lake)
-                    } else {
-                        lake_geometry = Some(tile.clone())
-                    }
-                }
-    
-            }
+    pub(crate) fn dissolve_tiles(&self, layer: &mut TilesLayer<'_>) -> Result<Geometry,CommandError> {
+
+        let mut tiles = self.contained_tiles.iter();
+        let tile = layer.try_feature_by_id(tiles.next().unwrap())?; // there should be at least one.
+        let mut lake_geometry = tile.geometry()?.clone();
+        
+        for tile in tiles {
+            let tile = layer.try_feature_by_id(&tile)?; 
+            let tile = tile.geometry()?; 
+            lake_geometry = tile.union(&lake_geometry).unwrap(); // TODO: Should I return an error instead?
         }
-        lake_geometry.unwrap()
+        Ok(lake_geometry)
     }
 
     fn calc_temp_and_evap(&self) -> (f64,f64) {
@@ -400,7 +397,7 @@ pub(crate) fn generate_water_fill<TileMap: TryGetMap<u64,TileForWaterFill> + Int
 
     for (id,lake) in lake_map.into_iter().watch(progress,"Drawing lakes.","Lakes drawn.") {
         if lake.contained_tiles.len() > 0 {
-            let lake_geometry = lake.dissolve_tiles(&mut tiles_layer);
+            let lake_geometry = lake.dissolve_tiles(&mut tiles_layer)?;
             let (lake_temp,lake_evap,lake_type) = lake.get_temp_evap_and_type();
 
             let geometry = make_curvy_lakes(lake_geometry, lake_bezier_scale, buffer_distance, simplify_tolerance)?;
