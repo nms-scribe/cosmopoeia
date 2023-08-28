@@ -472,6 +472,17 @@ pub(crate) fn multipolygon_to_polygons(geometry: Geometry) -> Vec<Geometry> {
     }
 }
 
+pub(crate) fn force_multipolygon(geometry: Geometry) -> Result<Geometry,CommandError> {
+    if geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
+        Ok(geometry)
+    } else {
+        let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
+        new_geometry.add_geometry(geometry)?;
+        Ok(new_geometry)
+    }
+
+}
+
 
 pub(crate) fn create_line(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
     let mut line = Geometry::empty(OGRwkbGeometryType::wkbLineString)?;

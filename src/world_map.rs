@@ -444,6 +444,10 @@ pub(crate) trait TypedFeature<'data_life>: From<Feature<'data_life>>  {
 
     fn into_feature(self) -> Feature<'data_life>;
 
+    fn geometry(&self) -> Result<&Geometry,CommandError>;
+
+    fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError>;
+
 }
 
 macro_rules! feature_count_fields {
@@ -459,7 +463,7 @@ macro_rules! feature_count_fields {
 }
 
 macro_rules! feature {
-    ($struct_name:ident $layer_name: literal $geometry_type: ident $(fid: #[$fid_attr: meta])? $(geometry: #[$geometry_attr: meta])? $(to_field_names_values: #[$to_values_attr: meta])? {$(
+    ($struct_name:ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
         $(#[$get_attr: meta])* $prop: ident 
         $(#[$set_attr: meta])* $set_prop: ident 
         $prop_type: ident 
@@ -501,6 +505,13 @@ macro_rules! feature {
                 self.feature
             }
 
+            fn geometry(&self) -> Result<&Geometry,CommandError> { 
+                self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))
+            }
+    
+            fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError> { 
+                Ok(self.feature.set_geometry(geometry)?)
+            }
         }
         
         
@@ -513,11 +524,7 @@ macro_rules! feature {
             const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
                 $((Self::$field,$field_type)),*
             ];
-    
-            // geometry field
-            $(#[$geometry_attr])? pub(crate) fn geometry(&self) -> Result<&Geometry,CommandError> { // TODO: The regular geometry function should do this. But I need to test it after I switch that.
-                self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))
-            }
+
     
             // feature initializer function
             $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature_count_fields!($($field),*)],[Option<FieldValue>; feature_count_fields!($($field),*)]) {
@@ -603,7 +610,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
         Ok(result)
     }
 
-    #[allow(dead_code)] pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<'impl_life,Feature>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+    pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<'impl_life,Feature>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
         let mut result = HashMap::new();
 
         for feature in self.watch(progress,format!("Indexing {}.",Feature::LAYER_NAME),format!("{} indexed.",Feature::LAYER_NAME.to_title_case())) {
@@ -753,15 +760,15 @@ macro_rules! entity {
     };
 }
 
-pub(crate) struct MapLayer<'data_life, Feature: TypedFeature<'data_life>> {
-    layer: Layer<'data_life>,
-    _phantom: std::marker::PhantomData<Feature>
+pub(crate) struct MapLayer<'layer, 'feature: 'layer, Feature: TypedFeature<'feature>> {
+    layer: Layer<'layer>,
+    _phantom: std::marker::PhantomData<&'feature Feature>
 }
 
-impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature> {
+impl<'layer, 'feature, Feature: TypedFeature<'feature>> MapLayer<'layer,'feature,Feature> {
 
 
-    fn create_from_dataset(dataset: &'impl_life mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
+    fn create_from_dataset(dataset: &'layer mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
 
         let layer = dataset.create_layer(LayerOptions {
             name: Feature::LAYER_NAME,
@@ -781,7 +788,7 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
         })
     }
 
-    fn open_from_dataset(dataset: &'impl_life Dataset) -> Result<Self,CommandError> {
+    fn open_from_dataset(dataset: &'layer Dataset) -> Result<Self,CommandError> {
         
         let layer = dataset.layer_by_name(Feature::LAYER_NAME)?;
         Ok(Self {
@@ -792,11 +799,11 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
     }
     
     // FUTURE: I wish I could get rid of the lifetime thingie...
-    pub(crate) fn feature_by_id(&'impl_life self, fid: &u64) -> Option<Feature> {
+    pub(crate) fn feature_by_id(&'feature self, fid: &u64) -> Option<Feature> {
         self.layer.feature(*fid).map(Feature::from)
     }
 
-    pub(crate) fn try_feature_by_id(&'impl_life self, fid: &u64) -> Result<Feature,CommandError> {
+    pub(crate) fn try_feature_by_id(&'feature self, fid: &u64) -> Result<Feature,CommandError> {
         self.layer.feature(*fid).ok_or_else(|| CommandError::MissingFeature(Feature::LAYER_NAME,*fid)).map(Feature::from)
     }
 
@@ -857,12 +864,11 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> MapLayer<'impl_life,Feature>
 
 }
 
+feature!(PointFeature "points" wkbPoint to_field_names_values: #[allow(dead_code)] {});
+type PointsLayer<'layer,'feature> = MapLayer<'layer,'feature,PointFeature<'feature>>;
 
-feature!(PointFeature "points" wkbPoint geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
-type PointsLayer<'data_life> = MapLayer<'data_life,PointFeature<'data_life>>;
 
-
-impl PointsLayer<'_> {
+impl PointsLayer<'_,'_> {
 
     pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
@@ -873,12 +879,12 @@ impl PointsLayer<'_> {
 
 }
 
-feature!(TriangleFeature "triangles" wkbPolygon geometry: #[allow(dead_code)] to_field_names_values: #[allow(dead_code)] {});
-type TrianglesLayer<'data_life> = MapLayer<'data_life,TriangleFeature<'data_life>>;
+feature!(TriangleFeature "triangles" wkbPolygon to_field_names_values: #[allow(dead_code)] {});
+type TrianglesLayer<'layer,'feature> = MapLayer<'layer,'feature,TriangleFeature<'feature>>;
 
 
 
-impl TrianglesLayer<'_> {
+impl TrianglesLayer<'_,'_> {
 
     pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
 
@@ -1023,6 +1029,14 @@ pub(crate) trait TileWithElevation {
 
     fn elevation(&self) -> &f64;
 
+}
+
+pub(crate) trait TileWithGeometry {
+    fn geometry(&self) -> &Geometry;
+}
+
+pub(crate) trait TileWithShoreDistance {
+    fn shore_distance(&self) -> &i32;
 }
 
 pub(crate) trait TileWithNeighborsElevation: TileWithNeighbors + TileWithElevation {
@@ -1361,10 +1375,34 @@ entity!(TileForSubnationNormalize TileFeature {
     subnation_id: Option<i64>
 });
 
+entity!(TileForCultureDissolve TileFeature {
+    culture: Option<String>,
+    geometry: Geometry,
+    neighbors: Vec<(u64,i32)>,
+    shore_distance: i32
+});
 
-pub(crate) type TilesLayer<'data_life> = MapLayer<'data_life,TileFeature<'data_life>>;
+impl TileWithGeometry for TileForCultureDissolve {
+    fn geometry(&self) -> &Geometry {
+        &self.geometry
+    }
+}
 
-impl TilesLayer<'_> {
+impl TileWithShoreDistance for TileForCultureDissolve {
+    fn shore_distance(&self) -> &i32 {
+        &self.shore_distance
+    }
+}
+
+impl TileWithNeighbors for TileForCultureDissolve {
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+}
+
+pub(crate) type TilesLayer<'layer,'feature> = MapLayer<'layer,'feature,TileFeature<'feature>>;
+
+impl TilesLayer<'_,'_> {
 
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -1516,7 +1554,7 @@ impl Into<&str> for &RiverSegmentTo {
 }
 
 
-feature!(RiverFeature "rivers" wkbLineString geometry: #[allow(dead_code)] {
+feature!(RiverFeature "rivers" wkbLineString {
     from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
     from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
     from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
@@ -1536,9 +1574,9 @@ entity!(NewRiver RiverFeature {
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
-pub(crate) type RiversLayer<'data_life> = MapLayer<'data_life,RiverFeature<'data_life>>;
+pub(crate) type RiversLayer<'layer,'feature> = MapLayer<'layer,'feature,RiverFeature<'feature>>;
 
-impl RiversLayer<'_> {
+impl RiversLayer<'_,'_> {
 
     pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<u64,CommandError> {
         let geometry = create_line(&segment.line)?;
@@ -1595,7 +1633,8 @@ impl TryFrom<String> for LakeType {
     }
 }
 
-feature!(LakeFeature "lakes" wkbMultiPolygon geometry: #[allow(dead_code)] {
+// TODO: Do they really need to be multipolygon?
+feature!(LakeFeature "lakes" wkbMultiPolygon {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     #[allow(dead_code)] type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
     #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
@@ -1634,9 +1673,9 @@ pub(crate) struct NewLake {
 }
 
 
-pub(crate) type LakesLayer<'data_life> = MapLayer<'data_life,LakeFeature<'data_life>>;
+pub(crate) type LakesLayer<'layer,'feature> = MapLayer<'layer,'feature,LakeFeature<'feature>>;
 
-impl LakesLayer<'_> {
+impl LakesLayer<'_,'_> {
 
     pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<u64,CommandError> {
         let (field_names,field_values) = LakeFeature::to_field_names_values(
@@ -1721,7 +1760,7 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature "biomes" wkbNone geometry: #[allow(dead_code)] {
+feature!(BiomeFeature "biomes" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
@@ -1927,9 +1966,9 @@ impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeFo
     }
 }
 
-pub(crate) type BiomeLayer<'data_life> = MapLayer<'data_life,BiomeFeature<'data_life>>;
+pub(crate) type BiomeLayer<'layer,'feature> = MapLayer<'layer,'feature,BiomeFeature<'feature>>;
 
-impl BiomeLayer<'_> {
+impl BiomeLayer<'_,'_> {
 
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
 
@@ -2015,7 +2054,7 @@ impl TryFrom<String> for CultureType {
     }
 }
 
-feature!(CultureFeature "cultures" wkbNone geometry: #[allow(dead_code)] {
+feature!(CultureFeature "cultures" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer" OGRFieldType::OFTString;
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
@@ -2111,14 +2150,25 @@ impl<'impl_life> CultureWithType for CultureForNations {
 }
 
 
+entity!(CultureForDissolve CultureFeature {
+    fid: u64,
+    name: String
+});
+
+impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureForDissolve {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
 
 
 
 
-pub(crate) type CultureLayer<'data_life> = MapLayer<'data_life,CultureFeature<'data_life>>;
+
+pub(crate) type CultureLayer<'layer,'feature> = MapLayer<'layer,'feature,CultureFeature<'feature>>;
 
 
-impl CultureLayer<'_> {
+impl CultureLayer<'_,'_> {
 
     pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
 
@@ -2148,8 +2198,6 @@ impl CultureLayer<'_> {
 
         Ok((result,loaded_namers))
     }
-
-
 
 
 }
@@ -2206,9 +2254,9 @@ entity!(TownForEmptySubnations TownFeature {
     name: String
 });
 
-pub(crate) type TownLayer<'data_life> = MapLayer<'data_life,TownFeature<'data_life>>;
+pub(crate) type TownLayer<'layer,'feature> = MapLayer<'layer,'feature,TownFeature<'feature>>;
 
-impl TownLayer<'_> {
+impl TownLayer<'_,'_> {
 
     pub(crate) fn add_town(&mut self, town: NewTown) -> Result<u64,CommandError> {
         let (field_names,field_values) = TownFeature::to_field_names_values(
@@ -2232,7 +2280,7 @@ impl TownLayer<'_> {
 }
 
 
-feature!(NationFeature "nations" wkbNone geometry: #[allow(dead_code)] {
+feature!(NationFeature "nations" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
@@ -2270,9 +2318,9 @@ entity!(NationForEmptySubnations NationFeature {
 
 
 
-pub(crate) type NationsLayer<'data_life> = MapLayer<'data_life,NationFeature<'data_life>>;
+pub(crate) type NationsLayer<'layer,'feature> = MapLayer<'layer,'feature,NationFeature<'feature>>;
 
-impl NationsLayer<'_> {
+impl NationsLayer<'_,'_> {
 
     pub(crate) fn add_nation(&mut self, nation: NewNation) -> Result<u64,CommandError> {
         let (field_names,field_values) = NationFeature::to_field_names_values(
@@ -2295,7 +2343,7 @@ impl NationsLayer<'_> {
 
 }
 
-feature!(SubnationFeature "subnations" wkbNone geometry: #[allow(dead_code)] {
+feature!(SubnationFeature "subnations" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
@@ -2322,9 +2370,9 @@ entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationFeature {
 });
 
 
-pub(crate) type SubnationsLayer<'data_life> = MapLayer<'data_life,SubnationFeature<'data_life>>;
+pub(crate) type SubnationsLayer<'layer,'feature> = MapLayer<'layer,'feature,SubnationFeature<'feature>>;
 
-impl SubnationsLayer<'_> {
+impl SubnationsLayer<'_,'_> {
 
     pub(crate) fn add_subnation(&mut self, subnation: NewSubnation) -> Result<u64,CommandError> {
         let (field_names,field_values) = SubnationFeature::to_field_names_values(
@@ -2346,12 +2394,12 @@ impl SubnationsLayer<'_> {
 
 }
 
-feature!(CoastlineFeature "coastlines" wkbPolygon geometry: #[allow(dead_code)] {
+feature!(CoastlineFeature "coastlines" wkbPolygon  {
 });
 
-pub(crate) type CoastlineLayer<'data_life> = MapLayer<'data_life,CoastlineFeature<'data_life>>;
+pub(crate) type CoastlineLayer<'layer,'feature> = MapLayer<'layer,'feature,CoastlineFeature<'feature>>;
 
-impl CoastlineLayer<'_> {
+impl CoastlineLayer<'_,'_> {
 
     pub(crate) fn add_land_mass(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
         let (field_names,field_values) = CoastlineFeature::to_field_names_values();
@@ -2360,12 +2408,12 @@ impl CoastlineLayer<'_> {
 
 }
 
-feature!(OceanFeature "oceans" wkbPolygon geometry: #[allow(dead_code)] {
+feature!(OceanFeature "oceans" wkbPolygon {
 });
 
-pub(crate) type OceanLayer<'data_life> = MapLayer<'data_life,OceanFeature<'data_life>>;
+pub(crate) type OceanLayer<'layer,'feature> = MapLayer<'layer,'feature,OceanFeature<'feature>>;
 
-impl OceanLayer<'_> {
+impl OceanLayer<'_,'_> {
 
     pub(crate) fn add_ocean(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
         let (field_names,field_values) = OceanFeature::to_field_names_values();

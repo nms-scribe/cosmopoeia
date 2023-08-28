@@ -16,6 +16,12 @@ use crate::utils::TryGetMap;
 use crate::utils::bezierify_polygon;
 use crate::utils::multipolygon_to_polygons;
 use crate::gdal_fixes::GeometryFix;
+use crate::world_map::TileForCultureDissolve;
+use crate::utils::force_multipolygon;
+use crate::world_map::CultureForDissolve;
+use crate::world_map::TileWithGeometry;
+use crate::world_map::TileWithShoreDistance;
+use crate::world_map::TileWithNeighbors;
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -195,7 +201,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation, TileMap: T
 
 }
 
-pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TilesLayer<'_>) -> Result<Option<Point>, CommandError> {
+pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TilesLayer<'_,'_>) -> Result<Option<Point>, CommandError> {
     Ok(if let Some(x) = tile {
         if let Some(x) = tiles.feature_by_id(&x) {
             Some(x.site()?)
@@ -253,7 +259,6 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let mut polygons = Vec::new();
         let union_polygons = multipolygon_to_polygons(tile_union);
         for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
-            // TODO: Don't forget to make this the default functionality of bezierify_polygon instead, and then get rid of bezierify_polygon_with_rings
             for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
                 if let Some(difference) = ocean.difference(&new_polygon) {
                     ocean = difference; 
@@ -279,6 +284,150 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     let mut ocean_layer = target.create_ocean_layer(overwrite_ocean)?;
     for polygon in ocean_polygons.into_iter().watch(progress, "Writing oceans.", "Oceans written.") {
         ocean_layer.add_ocean(polygon)?;
+    }
+
+    Ok(())
+}
+
+pub(crate) trait Theme: Sized {
+
+    type TileForTheme: ToOwned;
+    type Feature<'feature>: TypedFeature<'feature>;
+
+    fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError>;
+
+    fn get_theme_id(&self, tile: &TileForCultureDissolve /* TODO: &Self::TileForTheme*/) -> Result<std::option::Option<&u64>, CommandError>;
+
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
+
+    fn try_get<'map>(map: &'map HashMap<u64,TileForCultureDissolve /* TODO: Self::TileForTheme*/>, key: &u64) -> Result<&'map TileForCultureDissolve /*TODO: Self::TileForTheme*/,CommandError>;
+
+}
+
+struct CultureTheme {
+    culture_id_map: HashMap<String, CultureForDissolve>
+}
+
+impl Theme for CultureTheme {
+
+    type TileForTheme = TileForCultureDissolve;
+    type Feature<'feature> = crate::world_map::CultureFeature<'feature>;
+
+    fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError> {
+        let culture_id_map: HashMap<String, CultureForDissolve> = target.edit_cultures_layer()?.read_features().to_named_entities_index::<_,CultureForDissolve>(progress)?;
+        Ok(Self {
+            culture_id_map
+        })
+    }
+
+    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<std::option::Option<&u64>, CommandError> {
+        if let Some(culture) = &tile.culture {
+            // TODO: Is TryGet implemented for this?
+            Ok::<_,CommandError>(Some(&self.culture_id_map.try_get(culture)?.fid))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn try_get<'map>(map: &'map HashMap<u64,TileForCultureDissolve>, key: &u64) -> Result<&'map TileForCultureDissolve,CommandError> {
+        map.try_get(key)
+    }
+
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+        target.edit_cultures_layer()        
+    }
+
+
+    
+}
+
+pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+    dissolve_tiles_by_theme_generic::<_,CultureTheme>(target, progress)
+}
+
+
+pub(crate) fn dissolve_tiles_by_theme_generic<'transaction, 'feature, Progress: ProgressObserver, ThemeType: Theme>(target: &'transaction mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
+// TODO: The following where should be done on the Theme itself, maybe?
+where <ThemeType as Theme>::TileForTheme: crate::world_map::Entity<'feature, crate::world_map::TileFeature<'feature>> + TileWithGeometry + TileWithShoreDistance + TileWithNeighbors + Clone {
+    // TODO: I'm testing this first with cultures, then I have to abstract it out so I can pass a field in later. Possibly,
+    // it's just a matter of passing some sort of entity type that implements a trait?
+
+    // TODO: In order to get this to work, I think the simplest answer is to get rid of the requirement of TryFrom for entities, so
+    // I don't need the original feature anymore. TryFrom will still be implemented, however, and the various functions which require them
+    // will now have a TryFrom initial requirement instead.
+
+    let mut new_polygon_map: HashMap<u64, _> = HashMap::new();
+
+    let theme = ThemeType::new(target,progress)?;
+
+
+    let mut tile_map = HashMap::new();
+    let mut tiles = Vec::new();
+    {
+        let mut tile_layer = target.edit_tile_layer()?;
+        for feature in tile_layer.read_features().watch(progress, "Indexing tiles.", "Tiles indexed.") {
+            let id = feature.fid()?;
+            let entity = TileForCultureDissolve::try_from(feature)?;
+            tile_map.insert(id, entity.clone());
+            tiles.push(entity);
+        }
+    
+    }
+
+    for tile in tiles.into_iter().watch(progress, "Gathering tiles.", "Tiles gathered.") {
+        let mapping: Option<(u64,_)> = if let Some(id) = theme.get_theme_id(&tile)? {
+            Some((*id,tile.geometry().clone()))
+        } else if tile.shore_distance() == &-1 {
+            let mut usable_neighbors = HashMap::new();
+            for (neighbor_id,_) in tile.neighbors() {
+                let neighbor = ThemeType::try_get(&tile_map,&neighbor_id)?;
+                if let Some(id) = theme.get_theme_id(neighbor)? {
+                    match usable_neighbors.get_mut(id) {
+                        None => {
+                            usable_neighbors.insert(id, 1);
+                        },
+                        Some(entry) => {
+                            *entry += 1
+                        }
+                    }
+                }
+            }
+
+            if usable_neighbors.len() > 0 {
+                let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).unwrap().0;
+                Some((**chosen_value,tile.geometry().clone()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some((key,geometry)) = mapping {
+            match new_polygon_map.get_mut(&key) {
+                None => {
+                    new_polygon_map.insert(key, vec![geometry]);
+                },
+                Some(entry) => entry.push(geometry),
+            }
+        }
+    }
+
+    let polygon_layer = ThemeType::edit_theme_layer(target)?;
+
+    for (key,geometries) in new_polygon_map.into_iter().watch(progress, "Dissolving tiles.", "Tiles dissolved.") {
+        let mut geometries = geometries.into_iter();
+        if let Some(first) = geometries.next() {
+            let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
+            for geometry in geometries {
+                remaining.add_geometry(geometry)?;
+            }
+            let united = first.union(&remaining).unwrap(); // TODO: Or what?
+            let united = force_multipolygon(united)?;
+            let mut feature: ThemeType::Feature<'_> = polygon_layer.try_feature_by_id(&key)?;
+            feature.set_geometry(united)?;
+            polygon_layer.update_feature(feature)?;
+        }
     }
 
     Ok(())

@@ -84,6 +84,7 @@ command!{
     gen_people::GenPeoplePopulation;
     gen_people::GenPeopleCultures;
     gen_people::GenPeopleExpandCultures;
+    gen_people::GenPeopleDissolveCultures;
     gen_towns::GenTowns;
     gen_towns::GenTownsCreate;
     gen_towns::GenTownsPopulate;

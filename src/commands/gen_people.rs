@@ -12,6 +12,7 @@ use crate::algorithms::cultures::generate_cultures;
 use crate::algorithms::cultures::expand_cultures;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
+use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::utils::random_number_generator;
 
 subcommand_def!{
@@ -155,6 +156,37 @@ impl Task for GenPeopleExpandCultures {
 
     }
 }
+
+subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenPeopleDissolveCultures {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenPeopleDissolveCultures {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Creating culture polygons");
+
+            dissolve_tiles_by_theme(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
 
 
 subcommand_def!{

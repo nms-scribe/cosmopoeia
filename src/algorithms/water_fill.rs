@@ -15,6 +15,7 @@ use crate::progress::WatchableQueue;
 use crate::world_map::TilesLayer;
 use crate::world_map::LakeType;
 use crate::utils::TryGetMap;
+use crate::world_map::TypedFeature;
 
 struct Lake {
     elevation: f64,
@@ -29,7 +30,7 @@ struct Lake {
 
 impl Lake {
 
-    pub(crate) fn dissolve_tiles(&self, layer: &mut TilesLayer<'_>) -> Result<Geometry,CommandError> {
+    pub(crate) fn dissolve_tiles(&self, layer: &mut TilesLayer<'_,'_>) -> Result<Geometry,CommandError> {
 
         let mut tiles = self.contained_tiles.iter();
         let tile = layer.try_feature_by_id(tiles.next().unwrap())?; // there should be at least one.
