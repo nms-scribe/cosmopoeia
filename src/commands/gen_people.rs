@@ -263,7 +263,12 @@ impl Task for GenPeople {
             generate_cultures(target, &mut random, cultures, namers, self.culture_count, size_variance, self.river_threshold, self.overwrite, &mut progress)?;
 
             progress.announce("Applying cultures to tiles");
-            expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)
+            expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)?;
+
+            progress.announce("Creating culture polygons");
+
+            dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)
+
         })?;
 
         target.save(&mut progress)

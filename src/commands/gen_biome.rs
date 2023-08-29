@@ -9,6 +9,8 @@ use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::algorithms::biomes::fill_biome_defaults;
 use crate::algorithms::biomes::apply_biomes;
+use crate::algorithms::tiles::dissolve_tiles_by_theme;
+use crate::algorithms::tiles::BiomeTheme;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -78,6 +80,39 @@ impl Task for GenBiomeApply {
     }
 }
 
+
+subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenBiomeDissolve {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenBiomeDissolve {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Creating biome polygons");
+
+            dissolve_tiles_by_theme::<_,BiomeTheme>(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
+
+
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     pub(crate) struct GenBiome {
@@ -113,7 +148,12 @@ impl Task for GenBiome {
 
             progress.announce("Applying biomes to tiles");
 
-            apply_biomes(target, biomes, &mut progress)
+            apply_biomes(target, biomes, &mut progress)?;
+
+            progress.announce("Creating biome polygons");
+
+            dissolve_tiles_by_theme::<_,BiomeTheme>(target, &mut progress)
+
         })?;
 
         target.save(&mut progress)

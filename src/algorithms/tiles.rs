@@ -28,6 +28,17 @@ use crate::world_map::CultureSchema;
 use crate::world_map::TileSchema;
 use crate::world_map::EntityIndex;
 use crate::world_map::EntityLookup;
+use crate::world_map::BiomeFeature;
+use crate::world_map::CultureFeature;
+use crate::world_map::BiomeSchema;
+use crate::world_map::BiomeForDissolve;
+use crate::world_map::TileForBiomeDissolve;
+use crate::world_map::NationSchema;
+use crate::world_map::TileForNationDissolve;
+use crate::world_map::NationFeature;
+use crate::world_map::SubnationSchema;
+use crate::world_map::TileForSubnationDissolve;
+use crate::world_map::SubnationFeature;
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -303,7 +314,7 @@ pub(crate) trait Theme: Sized {
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError>;
 
-    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<std::option::Option<&u64>, CommandError>;
+    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<std::option::Option<u64>, CommandError>;
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
 
@@ -317,7 +328,7 @@ impl Theme for CultureTheme {
 
     type ThemeSchema = CultureSchema;
     type TileForTheme = TileForCultureDissolve;
-    type Feature<'feature> = crate::world_map::CultureFeature<'feature>;
+    type Feature<'feature> = CultureFeature<'feature>;
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError> {
         let culture_id_map = target.edit_cultures_layer()?.read_features().to_named_entities_index::<_,CultureForDissolve>(progress)?;
@@ -326,10 +337,9 @@ impl Theme for CultureTheme {
         })
     }
 
-    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<std::option::Option<&u64>, CommandError> {
+    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<std::option::Option<u64>, CommandError> {
         if let Some(culture) = &tile.culture {
-            // TODO: Is TryGet implemented for this?
-            Ok::<_,CommandError>(Some(&self.culture_id_map.try_get(culture)?.fid))
+            Ok::<_,CommandError>(Some(self.culture_id_map.try_get(culture)?.fid))
         } else {
             Ok(None)
         }
@@ -342,6 +352,89 @@ impl Theme for CultureTheme {
 
     
 }
+
+
+pub(crate) struct BiomeTheme {
+    biome_id_map: EntityLookup<BiomeSchema, BiomeForDissolve>
+}
+
+impl Theme for BiomeTheme {
+
+    type ThemeSchema = BiomeSchema;
+    type TileForTheme = TileForBiomeDissolve;
+    type Feature<'feature> = BiomeFeature<'feature>;
+
+    fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError> {
+        let biome_id_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForDissolve>(progress)?;
+        Ok(Self {
+            biome_id_map
+        })
+    }
+
+    fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<std::option::Option<u64>, CommandError> {
+        let biome = &tile.biome; 
+        Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid))
+    }
+
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, BiomeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+        target.edit_biomes_layer()        
+    }
+
+
+    
+}
+
+
+pub(crate) struct NationTheme();
+
+impl Theme for NationTheme {
+
+    type ThemeSchema = NationSchema;
+    type TileForTheme = TileForNationDissolve;
+    type Feature<'feature> = NationFeature<'feature>;
+
+    fn new<Progress: ProgressObserver>(_: &mut WorldMapTransaction, _: &mut Progress) -> Result<Self,CommandError> {
+        Ok(Self())
+    }
+
+    fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<std::option::Option<u64>, CommandError> {
+        Ok(tile.nation_id.map(|n| n as u64))
+    }
+
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+        target.edit_nations_layer()        
+    }
+
+
+    
+}
+
+
+
+pub(crate) struct SubnationTheme();
+
+impl Theme for SubnationTheme {
+
+    type ThemeSchema = SubnationSchema;
+    type TileForTheme = TileForSubnationDissolve;
+    type Feature<'feature> = SubnationFeature<'feature>;
+
+    fn new<Progress: ProgressObserver>(_: &mut WorldMapTransaction, _: &mut Progress) -> Result<Self,CommandError> {
+        Ok(Self())
+    }
+
+    fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<std::option::Option<u64>, CommandError> {
+        Ok(tile.subnation_id.map(|n| n as u64))
+    }
+
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+        target.edit_subnations_layer()        
+    }
+
+
+    
+}
+
 
 pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
 {
@@ -373,13 +466,13 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
 
     for tile in tiles.into_iter().watch(progress, "Gathering tiles.", "Tiles gathered.") {
         let mapping: Option<(u64,_)> = if let Some(id) = theme.get_theme_id(&tile)? {
-            Some((*id,tile.geometry().clone()))
+            Some((id,tile.geometry().clone()))
         } else if tile.shore_distance() == &-1 {
             let mut usable_neighbors = HashMap::new();
             for (neighbor_id,_) in tile.neighbors() {
                 let neighbor = tile_map.try_get(&neighbor_id)?;
                 if let Some(id) = theme.get_theme_id(neighbor)? {
-                    match usable_neighbors.get_mut(id) {
+                    match usable_neighbors.get_mut(&id) {
                         None => {
                             usable_neighbors.insert(id, 1);
                         },
@@ -392,7 +485,7 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
 
             if usable_neighbors.len() > 0 {
                 let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).unwrap().0;
-                Some((**chosen_value,tile.geometry().clone()))
+                Some((*chosen_value,tile.geometry().clone()))
             } else {
                 None
             }

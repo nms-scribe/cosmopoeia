@@ -14,6 +14,8 @@ use crate::algorithms::subnations::generate_subnations;
 use crate::algorithms::subnations::expand_subnations;
 use crate::algorithms::subnations::fill_empty_subnations;
 use crate::algorithms::subnations::normalize_subnations;
+use crate::algorithms::tiles::dissolve_tiles_by_theme;
+use crate::algorithms::tiles::SubnationTheme;
 
 
 
@@ -224,6 +226,35 @@ impl Task for GenSubnationsNormalize {
 
 
 subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenSubnationsDissolve {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenSubnationsDissolve {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Creating subnation polygons");
+
+            dissolve_tiles_by_theme::<_,SubnationTheme>(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+subcommand_def!{
     /// Generates background population of tiles
     pub(crate) struct GenSubnations {
 
@@ -290,7 +321,12 @@ impl Task for GenSubnations {
 
             progress.announce("Normalizing subnation borders");
 
-            normalize_subnations(target, &mut progress)
+            normalize_subnations(target, &mut progress)?;
+
+            progress.announce("Creating subnation polygons");
+
+            dissolve_tiles_by_theme::<_,SubnationTheme>(target, &mut progress)
+
 
 
         })?;

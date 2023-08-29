@@ -13,6 +13,8 @@ use crate::utils::random_number_generator;
 use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
+use crate::algorithms::tiles::dissolve_tiles_by_theme;
+use crate::algorithms::tiles::NationTheme;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -145,6 +147,37 @@ impl Task for GenNationsNormalize {
     }
 }
 
+
+subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenNationsDissolve {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+    }
+}
+
+impl Task for GenNationsDissolve {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Creating nation polygons");
+
+            dissolve_tiles_by_theme::<_,NationTheme>(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
 subcommand_def!{
     /// Generates background population of tiles
     pub(crate) struct GenNations {
@@ -217,7 +250,12 @@ impl Task for GenNations {
 
             progress.announce("Normalizing nation borders");
 
-            normalize_nations(target, &mut progress)
+            normalize_nations(target, &mut progress)?;
+
+            progress.announce("Creating nation polygons");
+
+            dissolve_tiles_by_theme::<_,NationTheme>(target, &mut progress)
+
 
         })?;
 

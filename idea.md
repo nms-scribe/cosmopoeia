@@ -169,6 +169,11 @@ TODO: Note that, if my grouping_id didn't have separate items for lakes and lake
 
 ### Dissolve Tiles (for each layer Biomes, Cultures, Nations, Subnations):
 
+[X] Biomes
+[X] Cultures
+[X] Nations
+[X] Subnations
+
 * new_polygon_map = map
 * tile_map = map of all tiles
 * for tile in tile_layer
@@ -194,6 +199,14 @@ TODO: Note that, if my grouping_id didn't have separate items for lakes and lake
   * add a new feature to the output layer with the field_id = to key and the geometry from the value
 
 ### Bezierify a given polygon layer (for each layer Biomes, Cultures, Nations, Subnations):
+
+TODO: This is next.
+
+[ ] Biomes
+[ ] Cultures
+[ ] Nations
+[ ] Subnations
+
 
 * *input* coastline_vertex_index
 * vertex_counts = map
@@ -343,19 +356,21 @@ To proceed on this, I can break it down into the following steps:
     [X] `gen-towns`
     [X] `gen-subdivisions` -- wraps up all of the subdivision commands
     [X] `gen-nations` -- wraps up all of the nation commands
-[ ] `curve-borders` command
-    [ ] Rethink nations, subnations, biomes, cultures, as polygon data. Maybe the 'curve-borders' stuff is just something we generate at the end of each of those.
-    [ ] Creates new layers for several thematic layers that have less blocky borders. This is a matter of taking the shape line segments, and converting them to beziers. It makes for better visual appeal. One issue is making sure they all match up with the ocean shorelines, and that their edges line up.
-        -- If I go through every vertex in the outer rings and map them with:
-           * what shape id they belong to
-           * what index in the ring they are in that shape id
-        -- then I might be able to map them into segments, and retain their order... Okay, I'm not sure where I'm going with that now.
-    [ ] is_ocean, or maybe groupings. The other layers do have to line up exactly with this, so they have to take this into account as well.
-    [ ] biomes
-    [ ] cultures
-    [ ] nations
-    [ ] subnations
+[ ] curve-borders commands
+    [X] `gen-biomes-dissolve`
+    [X] `gen-people-cultures-dissolve`
+    [X] `gen-nations-dissolve`
+    [X] `gen-subnations-dissolve`
+    [ ] `gen-biomes-curvify`
+    [ ] `gen-cultures-curvify`
+    [ ] `gen-nations-curvify`
+    [ ] `gen-subnations-curvify`
+    [1] add the above to `gen-biomes`
+    [1] add the above to `gen-people`
+    [1] add the above to `gen-nations`
+    [1] add the above to `gen-subnations`
     [ ] topography? This one would be harder, but I suspect I divide the tiles into groups at certain intervals, and then just collect and curve those.
+[ ] I need colors for the thematic maps. I can then change QGIS to get the color from that field.
 [ ] `create-terrain` commands
     [ ] terrain template files
     [ ] Review AFMG terrain generation algorithms

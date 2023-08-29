@@ -50,6 +50,8 @@ use crate::algorithms::naming::LoadedNamers;
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
+// TODO: I need to set CRS for each layer.
+
 macro_rules! feature_conv {
     (id_list_to_string@ $value: ident) => {
         $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",")
@@ -1505,6 +1507,83 @@ impl TileWithNeighbors for TileForCultureDissolve {
     }
 }
 
+entity!(TileForBiomeDissolve TileSchema TileFeature {
+    biome: String,
+    geometry: Geometry,
+    neighbors: Vec<(u64,i32)>,
+    shore_distance: i32
+});
+
+impl TileWithGeometry for TileForBiomeDissolve {
+    fn geometry(&self) -> &Geometry {
+        &self.geometry
+    }
+}
+
+impl TileWithShoreDistance for TileForBiomeDissolve {
+    fn shore_distance(&self) -> &i32 {
+        &self.shore_distance
+    }
+}
+
+impl TileWithNeighbors for TileForBiomeDissolve {
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+}
+
+entity!(TileForNationDissolve TileSchema TileFeature {
+    nation_id: Option<i64>,
+    geometry: Geometry,
+    neighbors: Vec<(u64,i32)>,
+    shore_distance: i32
+});
+
+impl TileWithGeometry for TileForNationDissolve {
+    fn geometry(&self) -> &Geometry {
+        &self.geometry
+    }
+}
+
+impl TileWithShoreDistance for TileForNationDissolve {
+    fn shore_distance(&self) -> &i32 {
+        &self.shore_distance
+    }
+}
+
+impl TileWithNeighbors for TileForNationDissolve {
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+}
+
+entity!(TileForSubnationDissolve TileSchema TileFeature {
+    subnation_id: Option<i64>,
+    geometry: Geometry,
+    neighbors: Vec<(u64,i32)>,
+    shore_distance: i32
+});
+
+impl TileWithGeometry for TileForSubnationDissolve {
+    fn geometry(&self) -> &Geometry {
+        &self.geometry
+    }
+}
+
+impl TileWithShoreDistance for TileForSubnationDissolve {
+    fn shore_distance(&self) -> &i32 {
+        &self.shore_distance
+    }
+}
+
+impl TileWithNeighbors for TileForSubnationDissolve {
+    fn neighbors(&self) -> &Vec<(u64,i32)> {
+        &self.neighbors
+    }
+}
+
+
+
 pub(crate) type TilesLayer<'layer,'feature> = MapLayer<'layer,'feature,TileSchema,TileFeature<'feature>>;
 
 impl TilesLayer<'_,'_> {
@@ -1865,7 +1944,7 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature BiomeSchema "biomes" wkbNone {
+feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
@@ -2031,7 +2110,7 @@ entity!(BiomeForPopulation BiomeSchema BiomeFeature {
     habitability: i32
 });
 
-impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForPopulation {
+impl NamedEntity<BiomeSchema> for BiomeForPopulation {
     fn name(&self) -> &String {
         &self.name
     }
@@ -2043,7 +2122,7 @@ entity!(BiomeForCultureGen BiomeSchema BiomeFeature {
     supports_hunting: bool
 });
 
-impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForCultureGen {
+impl NamedEntity<BiomeSchema> for BiomeForCultureGen {
     fn name(&self) -> &String {
         &self.name
     }
@@ -2054,7 +2133,7 @@ entity!(BiomeForCultureExpand BiomeSchema BiomeFeature {
     movement_cost: i32
 });
 
-impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForCultureExpand {
+impl NamedEntity<BiomeSchema> for BiomeForCultureExpand {
     fn name(&self) -> &String {
         &self.name
     }
@@ -2065,11 +2144,23 @@ entity!(BiomeForNationExpand BiomeSchema BiomeFeature {
     movement_cost: i32
 });
 
-impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForNationExpand {
+impl NamedEntity<BiomeSchema> for BiomeForNationExpand {
     fn name(&self) -> &String {
         &self.name
     }
 }
+
+entity!(BiomeForDissolve BiomeSchema BiomeFeature {
+    fid: u64,
+    name: String
+});
+
+impl NamedEntity<BiomeSchema> for BiomeForDissolve {
+    fn name(&self) -> &String {
+        &self.name
+    }
+}
+
 
 pub(crate) type BiomeLayer<'layer,'feature> = MapLayer<'layer,'feature,BiomeSchema,BiomeFeature<'feature>>;
 
@@ -2377,7 +2468,7 @@ impl TownLayer<'_,'_> {
 }
 
 
-feature!(NationFeature NationSchema "nations" wkbNone {
+feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
@@ -2414,7 +2505,6 @@ entity!(NationForEmptySubnations NationSchema NationFeature {
 });
 
 
-
 pub(crate) type NationsLayer<'layer,'feature> = MapLayer<'layer,'feature,NationSchema,NationFeature<'feature>>;
 
 impl NationsLayer<'_,'_> {
@@ -2440,7 +2530,7 @@ impl NationsLayer<'_,'_> {
 
 }
 
-feature!(SubnationFeature SubnationSchema "subnations" wkbNone {
+feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;

@@ -80,6 +80,7 @@ command!{
     gen_biome::GenBiome;
     gen_biome::GenBiomeData;
     gen_biome::GenBiomeApply;
+    gen_biome::GenBiomeDissolve;
     gen_people::GenPeople;
     gen_people::GenPeoplePopulation;
     gen_people::GenPeopleCultures;
@@ -92,11 +93,13 @@ command!{
     gen_nations::GenNationsCreate;
     gen_nations::GenNationsExpand;
     gen_nations::GenNationsNormalize;
+    gen_nations::GenNationsDissolve;
     gen_subnations::GenSubnations;
     gen_subnations::GenSubnationsCreate;
     gen_subnations::GenSubnationsExpand;
     gen_subnations::GenSubnationsFillEmpty;
     gen_subnations::GenSubnationsNormalize;
+    gen_subnations::GenSubnationsDissolve;
 }
 
 
