@@ -9,7 +9,6 @@ use crate::world_map::TileForPopulation;
 use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
 use crate::world_map::LakeForPopulation;
-use crate::utils::TryGetMap;
 
 pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
 

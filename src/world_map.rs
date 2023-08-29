@@ -4,6 +4,9 @@ use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
 use std::hash::Hash;
 use std::collections::HashSet;
+use std::collections::hash_map::Keys;
+use std::collections::hash_map::Iter;
+use std::collections::hash_map::IntoIter;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -34,7 +37,6 @@ use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::naming::Namer;
 use crate::algorithms::naming::LoadedNamers;
-use crate::utils::TryGetMap;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -432,13 +434,17 @@ macro_rules! feature_to_value {
 
 }
 
-pub(crate) trait TypedFeature<'data_life>: From<Feature<'data_life>>  {
+pub(crate) trait Schema {
 
     const GEOMETRY_TYPE: OGRwkbGeometryType::Type;
 
     const LAYER_NAME: &'static str;
 
     fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)];
+
+}
+
+pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data_life>>  {
 
     fn fid(&self) -> Result<u64,CommandError>;
 
@@ -463,7 +469,7 @@ macro_rules! feature_count_fields {
 }
 
 macro_rules! feature {
-    ($struct_name:ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
+    ($struct_name:ident $schema_name: ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
         $(#[$get_attr: meta])* $prop: ident 
         $(#[$set_attr: meta])* $set_prop: ident 
         $prop_type: ident 
@@ -486,7 +492,23 @@ macro_rules! feature {
             }
         }
 
-        impl<'impl_life> TypedFeature<'impl_life> for $struct_name<'impl_life> {
+        pub(crate) struct $schema_name {
+
+        }
+
+        impl $schema_name {
+            // constant field names
+            $(pub(crate) const $field: &str = $name;)*
+
+            // field definitions
+            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
+                $((Self::$field,$field_type)),*
+            ];
+
+
+        }
+
+        impl Schema for $schema_name {
 
             const GEOMETRY_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::$geometry_type;
 
@@ -495,6 +517,11 @@ macro_rules! feature {
             fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)] {
                 &Self::FIELD_DEFS
             }
+
+
+        }
+
+        impl<'impl_life> TypedFeature<'impl_life,$schema_name> for $struct_name<'impl_life> {
 
             // fid field
             fn fid(&self) -> Result<u64,CommandError> {
@@ -517,19 +544,10 @@ macro_rules! feature {
         
         impl $struct_name<'_> {
 
-            // constant field names
-            $(pub(crate) const $field: &str = $name;)*
-
-            // field definitions
-            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
-                $((Self::$field,$field_type)),*
-            ];
-
-    
             // feature initializer function
             $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature_count_fields!($($field),*)],[Option<FieldValue>; feature_count_fields!($($field),*)]) {
                 ([
-                    $(Self::$field),*
+                    $($schema_name::$field),*
                 ],[
                     $(feature_to_value!($prop $prop_type)),*
                 ])
@@ -539,11 +557,11 @@ macro_rules! feature {
             // property functions
             $(
                 $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
-                    feature_get_field!(self $prop_type $layer_name $prop Self::$field)
+                    feature_get_field!(self $prop_type $layer_name $prop $schema_name::$field)
                 }
         
                 $(#[$set_attr])* pub(crate) fn $set_prop(&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
-                    feature_set_field!(self value $prop_type Self::$field)
+                    feature_set_field!(self value $prop_type $schema_name::$field)
                 }            
         
             )*
@@ -557,12 +575,13 @@ macro_rules! feature {
 
 
 
-pub(crate) struct TypedFeatureIterator<'data_life, Feature: TypedFeature<'data_life>> {
+pub(crate) struct TypedFeatureIterator<'data_life, SchemaType: Schema, Feature: TypedFeature<'data_life,SchemaType>> {
     features: FeatureIterator<'data_life>,
-    _phantom: std::marker::PhantomData<Feature>
+    _phantom_feature: std::marker::PhantomData<Feature>,
+    _phantom_schema: std::marker::PhantomData<SchemaType>
 }
 
-impl<'impl_life, Feature: TypedFeature<'impl_life>> Iterator for TypedFeatureIterator<'impl_life, Feature> {
+impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> Iterator for TypedFeatureIterator<'impl_life, SchemaType, Feature> {
     type Item = Feature;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -574,52 +593,53 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> Iterator for TypedFeatureIte
     }
 }
 
-impl<'impl_life, Feature: TypedFeature<'impl_life>> From<FeatureIterator<'impl_life>> for TypedFeatureIterator<'impl_life, Feature> {
+impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> From<FeatureIterator<'impl_life>> for TypedFeatureIterator<'impl_life,SchemaType, Feature> {
     fn from(features: FeatureIterator<'impl_life>) -> Self {
         Self {
             features,
-            _phantom: std::marker::PhantomData::default()
+            _phantom_feature: Default::default(),
+            _phantom_schema: Default::default()
         }
     }
 }
 
-impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_life, Feature> {
+impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> TypedFeatureIterator<'impl_life, SchemaType, Feature> {
 
     pub(crate) fn to_entities_vec<'local, Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
         let mut result = Vec::new();
-        for entity in self.watch(progress,format!("Reading {}.",Feature::LAYER_NAME),format!("{} read.",Feature::LAYER_NAME.to_title_case())) {
+        for entity in self.watch(progress,format!("Reading {}.",SchemaType::LAYER_NAME),format!("{} read.",SchemaType::LAYER_NAME.to_title_case())) {
             result.push(Data::try_from(entity)?);
         }
         Ok(result)
     }
 
-    pub(crate) fn into_entities<Data: Entity<'impl_life,Feature>>(self) -> EntityIterator<'impl_life,Feature, Data> {
+    pub(crate) fn into_entities<Data: Entity<SchemaType>>(self) -> EntityIterator<'impl_life, SchemaType, Feature, Data> {
         self.into()
     }
 
 
-    pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<'impl_life,Feature>>(&mut self, progress: &mut Progress) -> Result<HashMap<u64,Data>,CommandError> {
+    pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
         let mut result = HashMap::new();
-        for feature in self.watch(progress,format!("Indexing {}.",Feature::LAYER_NAME),format!("{} indexed.",Feature::LAYER_NAME.to_title_case())) {
+        for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
             let fid = feature.fid()?;
             let entity = Data::try_from(feature)?;
  
             result.insert(fid,entity);
         }
-        Ok(result)
+        Ok(EntityIndex::from(result))
     }
 
-    pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<'impl_life,Feature>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+    pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
         let mut result = HashMap::new();
 
-        for feature in self.watch(progress,format!("Indexing {}.",Feature::LAYER_NAME),format!("{} indexed.",Feature::LAYER_NAME.to_title_case())) {
+        for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
             let entity = Data::try_from(feature)?;
             let name = entity.name().clone();
             result.insert(name, entity);
         }
 
-        Ok(result)
+        Ok(EntityLookup::from(result))
 
     }
 
@@ -629,22 +649,22 @@ impl<'impl_life, Feature: TypedFeature<'impl_life>> TypedFeatureIterator<'impl_l
 }
 
 
-pub(crate) trait Entity<'trait_life, Feature: TypedFeature<'trait_life>>: TryFrom<Feature,Error=CommandError> {
+pub(crate) trait Entity<SchemaType: Schema> {
 
 }
 
-pub(crate) trait NamedEntity<'feature, Feature: TypedFeature<'feature>>: Entity<'feature, Feature> {
+pub(crate) trait NamedEntity<SchemaType: Schema>: Entity<SchemaType> {
     fn name(&self) -> &String;
 }
 
 
-pub(crate) struct EntityIterator<'data_life, Feature: TypedFeature<'data_life>, Data: Entity<'data_life,Feature>> {
-    features: TypedFeatureIterator<'data_life,Feature>,
+pub(crate) struct EntityIterator<'data_life, SchemaType: Schema, Feature: TypedFeature<'data_life,SchemaType>, Data: Entity<SchemaType>> {
+    features: TypedFeatureIterator<'data_life,SchemaType,Feature>,
     data: std::marker::PhantomData<Data>
 }
 
 // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
-impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Feature>> Iterator for EntityIterator<'impl_life,Feature,Data> {
+impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>> Iterator for EntityIterator<'impl_life,SchemaType,Feature,Data> {
     type Item = Result<(u64,Data),CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -664,15 +684,119 @@ impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Featu
     }
 }
 
-impl<'impl_life,Feature: TypedFeature<'impl_life>, Data: Entity<'impl_life,Feature>> From<TypedFeatureIterator<'impl_life,Feature>> for EntityIterator<'impl_life,Feature,Data> {
-    fn from(features: TypedFeatureIterator<'impl_life,Feature>) -> Self {
+impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life, SchemaType>, Data: Entity<SchemaType>> From<TypedFeatureIterator<'impl_life, SchemaType, Feature>> for EntityIterator<'impl_life, SchemaType, Feature, Data> {
+    fn from(features: TypedFeatureIterator<'impl_life,SchemaType,Feature>) -> Self {
         Self {
             features,
-            data: std::marker::PhantomData
+            data: Default::default()
         }
     }
 }
 
+pub(crate) struct EntityIndex<SchemaType: Schema, EntityType: Entity<SchemaType>> {
+    inner: HashMap<u64,EntityType>,
+    _phantom: std::marker::PhantomData<SchemaType>
+}
+
+impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,EntityType> {
+
+    fn from(inner: HashMap<u64,EntityType>) -> Self {
+        Self {
+            inner,
+            _phantom: Default::default()
+        }
+    }
+
+    pub(crate) fn new() -> Self {
+        Self::from(HashMap::new())
+    }
+
+
+
+    pub(crate) fn try_get(&self, key: &u64) -> Result<&EntityType,CommandError> {
+        self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
+    }
+
+    pub(crate) fn try_get_mut(&mut self, key: &u64) -> Result<&mut EntityType,CommandError> {
+        self.inner.get_mut(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
+    }
+
+    pub(crate) fn try_remove(&mut self, key: &u64) -> Result<EntityType,CommandError> {
+        self.inner.remove(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
+    }
+
+    pub(crate) fn keys(&self) -> Keys<'_, u64, EntityType> {
+        self.inner.keys()
+    }
+
+    pub(crate) fn iter(&self) -> Iter<'_, u64, EntityType> {
+        self.inner.iter()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
+        self.inner.get(key)
+    }
+
+    pub(crate) fn insert(&mut self, fid: u64, entity: EntityType) -> Option<EntityType> {
+        self.inner.insert(fid, entity)
+    }
+
+
+}
+
+impl<SchemaType: Schema, EntityType: Entity<SchemaType>> IntoIterator for EntityIndex<SchemaType,EntityType> {
+    type Item = (u64,EntityType);
+
+    type IntoIter = IntoIter<u64,EntityType>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+
+impl<SchemaType: Schema, EntityType: Entity<SchemaType>> FromIterator<(u64,EntityType)> for EntityIndex<SchemaType,EntityType> {
+
+    fn from_iter<Iter: IntoIterator<Item = (u64,EntityType)>>(iter: Iter) -> Self {
+        Self::from(HashMap::from_iter(iter))
+    }
+}
+        
+
+
+pub(crate) struct EntityLookup<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> {
+    inner: HashMap<String,EntityType>,
+    _phantom: std::marker::PhantomData<SchemaType>
+}
+
+impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> EntityLookup<SchemaType,EntityType> {
+
+    fn from(inner: HashMap<String,EntityType>) -> Self {
+        Self {
+            inner,
+            _phantom: Default::default()
+        }
+    }
+
+    pub(crate) fn try_get(&self, key: &str) -> Result<&EntityType,CommandError> {
+        self.inner.get(key).ok_or_else(|| CommandError::UnknownLookup(SchemaType::LAYER_NAME, key.to_owned()))
+    }
+
+}
+
+impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> IntoIterator for EntityLookup<SchemaType,EntityType> {
+    type Item = (String,EntityType);
+
+    type IntoIter = IntoIter<String,EntityType>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+        
 
 #[macro_export]
 macro_rules! entity_field_assign {
@@ -713,7 +837,7 @@ macro_rules! entity_field_def {
 
 #[macro_export]
 macro_rules! entity {
-    ($(#[$struct_attr: meta])* $name: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
+    ($(#[$struct_attr: meta])* $name: ident $schema: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]
         $(#[$struct_attr])* 
         pub(crate) struct $name {
@@ -722,7 +846,7 @@ macro_rules! entity {
             ),*
         }
 
-        impl<'impl_life> Entity<'impl_life, $feature<'impl_life>> for $name {
+        impl<'impl_life> Entity<$schema> for $name {
 
         }
 
@@ -735,44 +859,23 @@ macro_rules! entity {
             }
         }
 
-        impl TryGetMap<u64,$name> for HashMap<u64, $name> {
-
-            fn try_get(&self, key: &u64) -> Result<&$name,CommandError> {
-                self.get(key).ok_or_else(|| CommandError::MissingFeature($feature::LAYER_NAME, *key))
-            }
-
-            fn try_get_mut(&mut self, key: &u64) -> Result<&mut $name,CommandError> {
-                self.get_mut(key).ok_or_else(|| CommandError::MissingFeature($feature::LAYER_NAME, *key))
-            }
-        }
-        
-        impl TryGetMap<String,$name> for HashMap<String, $name> {
-
-            fn try_get(&self, key: &String) -> Result<&$name,CommandError> {
-                self.get(key).ok_or_else(|| CommandError::UnknownLookup($feature::LAYER_NAME, key.to_owned()))
-            }
-
-            fn try_get_mut(&mut self, key: &String) -> Result<&mut $name,CommandError> {
-                self.get_mut(key).ok_or_else(|| CommandError::UnknownLookup($feature::LAYER_NAME, key.to_owned()))
-            }
-        }
-                
     };
 }
 
-pub(crate) struct MapLayer<'layer, 'feature: 'layer, Feature: TypedFeature<'feature>> {
+pub(crate) struct MapLayer<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, SchemaType>> {
     layer: Layer<'layer>,
-    _phantom: std::marker::PhantomData<&'feature Feature>
+    _phantom_feature: std::marker::PhantomData<&'feature Feature>,
+    _phantom_schema: std::marker::PhantomData<SchemaType>
 }
 
-impl<'layer, 'feature, Feature: TypedFeature<'feature>> MapLayer<'layer,'feature,Feature> {
+impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, SchemaType>> MapLayer<'layer,'feature,SchemaType,Feature> {
 
 
     fn create_from_dataset(dataset: &'layer mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
 
         let layer = dataset.create_layer(LayerOptions {
-            name: Feature::LAYER_NAME,
-            ty: Feature::GEOMETRY_TYPE,
+            name: SchemaType::LAYER_NAME,
+            ty: SchemaType::GEOMETRY_TYPE,
             options: if overwrite { 
                 Some(&["OVERWRITE=YES"])
             } else {
@@ -780,20 +883,22 @@ impl<'layer, 'feature, Feature: TypedFeature<'feature>> MapLayer<'layer,'feature
             },
             ..Default::default()
         })?;
-        layer.create_defn_fields(Feature::get_field_defs())?;
+        layer.create_defn_fields(SchemaType::get_field_defs())?;
         
         Ok(Self {
             layer,
-            _phantom: Default::default()
+            _phantom_feature: Default::default(),
+            _phantom_schema: Default::default()
         })
     }
 
     fn open_from_dataset(dataset: &'layer Dataset) -> Result<Self,CommandError> {
         
-        let layer = dataset.layer_by_name(Feature::LAYER_NAME)?;
+        let layer = dataset.layer_by_name(SchemaType::LAYER_NAME)?;
         Ok(Self {
             layer,
-            _phantom: Default::default()
+            _phantom_feature: Default::default(),
+            _phantom_schema: Default::default()
         })
 
     }
@@ -804,7 +909,7 @@ impl<'layer, 'feature, Feature: TypedFeature<'feature>> MapLayer<'layer,'feature
     }
 
     pub(crate) fn try_feature_by_id(&'feature self, fid: &u64) -> Result<Feature,CommandError> {
-        self.layer.feature(*fid).ok_or_else(|| CommandError::MissingFeature(Feature::LAYER_NAME,*fid)).map(Feature::from)
+        self.layer.feature(*fid).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,*fid)).map(Feature::from)
     }
 
 
@@ -864,8 +969,8 @@ impl<'layer, 'feature, Feature: TypedFeature<'feature>> MapLayer<'layer,'feature
 
 }
 
-feature!(PointFeature "points" wkbPoint to_field_names_values: #[allow(dead_code)] {});
-type PointsLayer<'layer,'feature> = MapLayer<'layer,'feature,PointFeature<'feature>>;
+feature!(PointFeature PointSchema "points" wkbPoint to_field_names_values: #[allow(dead_code)] {});
+type PointsLayer<'layer,'feature> = MapLayer<'layer,'feature,PointSchema,PointFeature<'feature>>;
 
 
 impl PointsLayer<'_,'_> {
@@ -879,8 +984,8 @@ impl PointsLayer<'_,'_> {
 
 }
 
-feature!(TriangleFeature "triangles" wkbPolygon to_field_names_values: #[allow(dead_code)] {});
-type TrianglesLayer<'layer,'feature> = MapLayer<'layer,'feature,TriangleFeature<'feature>>;
+feature!(TriangleFeature TriangleSchema "triangles" wkbPolygon to_field_names_values: #[allow(dead_code)] {});
+type TrianglesLayer<'layer,'feature> = MapLayer<'layer,'feature,TriangleSchema,TriangleFeature<'feature>>;
 
 
 
@@ -951,7 +1056,7 @@ impl TryFrom<String> for Grouping {
     }
 }
 
-feature!(TileFeature "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
+feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     /// longitude of the node point for the tile's voronoi
     site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
     /// latitude of the node point for the tile's voronoi
@@ -1019,23 +1124,23 @@ impl TileFeature<'_> {
 
 }
 
-pub(crate) trait TileWithNeighbors {
+pub(crate) trait TileWithNeighbors: Entity<TileSchema> {
 
     fn neighbors(&self) -> &Vec<(u64,i32)>;
 
 }
 
-pub(crate) trait TileWithElevation {
+pub(crate) trait TileWithElevation: Entity<TileSchema> {
 
     fn elevation(&self) -> &f64;
 
 }
 
-pub(crate) trait TileWithGeometry {
+pub(crate) trait TileWithGeometry: Entity<TileSchema> {
     fn geometry(&self) -> &Geometry;
 }
 
-pub(crate) trait TileWithShoreDistance {
+pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
     fn shore_distance(&self) -> &i32;
 }
 
@@ -1048,27 +1153,27 @@ impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T 
 }
 
 
-entity!(NewTile TileFeature {
+entity!(NewTile TileSchema TileFeature {
     geometry: Geometry,
     site_x: f64, 
     site_y: f64
 }); 
-entity!(TileForSampling TileFeature {
+entity!(TileForSampling TileSchema TileFeature {
     fid: u64, 
     site_x: f64, 
     site_y: f64
 });
-entity!(TileForTemperatures TileFeature {
+entity!(TileForTemperatures TileSchema TileFeature {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
     grouping: Grouping
 });
-entity!(TileForWinds TileFeature {
+entity!(TileForWinds TileSchema TileFeature {
     fid: u64, 
     site_y: f64
 });
-entity!(TileForWaterflow TileFeature {
+entity!(TileForWaterflow TileSchema TileFeature {
     elevation: f64, 
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1097,7 +1202,7 @@ impl TileWithElevation for TileForWaterflow {
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
 // just use a different function because it's based on a trait. I could take this one out
 // of the macro and figure something out, but this is easier.
-entity!(TileForWaterFill TileFeature {
+entity!(TileForWaterFill TileSchema TileFeature {
     elevation: f64, 
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1142,42 +1247,42 @@ impl TileWithElevation for TileForWaterFill {
 }
 
 
-entity!(TileForRiverConnect TileFeature {
+entity!(TileForRiverConnect TileSchema TileFeature {
     water_flow: f64,
     flow_to: Vec<u64>,
     outlet_from: Vec<u64>
 });
 
 
-entity!(TileForWaterDistance TileFeature {
+entity!(TileForWaterDistance TileSchema TileFeature {
     site: Point,
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>
 });
 
-entity!(TileForWaterDistanceNeighbor TileFeature {
+entity!(TileForWaterDistanceNeighbor TileSchema TileFeature {
     site: Point,
     grouping: Grouping 
 });
 
-entity!(TileForWaterDistanceOuter TileFeature {
+entity!(TileForWaterDistanceOuter TileSchema TileFeature {
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
-entity!(TileForWaterDistanceOuterNeighbor TileFeature {
+entity!(TileForWaterDistanceOuterNeighbor TileSchema TileFeature {
     shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
 });
 
-entity!(TileForGroupingCalc TileFeature {
+entity!(TileForGroupingCalc TileSchema TileFeature {
     fid: u64,
     grouping: Grouping,
     lake_id: Option<i64>,
     neighbors: Vec<(u64,i32)>
 });
 
-entity!(TileForPopulation TileFeature {
+entity!(TileForPopulation TileSchema TileFeature {
     water_flow: f64,
     elevation_scaled: i32,
     biome: String,
@@ -1190,14 +1295,14 @@ entity!(TileForPopulation TileFeature {
     lake_id: Option<i64>
 });
 
-entity!(TileForPopulationNeighbor TileFeature {
+entity!(TileForPopulationNeighbor TileSchema TileFeature {
     grouping: Grouping,
     lake_id: Option<i64>
 });
 
 
 
-entity!(TileForCultureGen TileFeature {
+entity!(TileForCultureGen TileSchema TileFeature {
     fid: u64,
     site: Point,
     population: i32,
@@ -1229,7 +1334,7 @@ pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity bec
 
 impl TileForCulturePrefSorting<'_> {
 
-    pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TilesLayer, biomes: &'biomes HashMap<String,BiomeForCultureGen>, lakes: &HashMap<u64,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
+    pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TilesLayer, biomes: &'biomes EntityLookup<BiomeSchema,BiomeForCultureGen>, lakes: &EntityIndex<LakeSchema,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
         let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.closest_water {
             let closest_water = closest_water as u64;
@@ -1262,7 +1367,7 @@ impl TileForCulturePrefSorting<'_> {
 }
 
 
-entity!(TileForCultureExpand TileFeature {
+entity!(TileForCultureExpand TileSchema TileFeature {
     population: i32,
     shore_distance: i32,
     elevation_scaled: i32,
@@ -1278,7 +1383,7 @@ entity!(TileForCultureExpand TileFeature {
 
 });
 
-entity!(TileForTowns TileFeature {
+entity!(TileForTowns TileSchema TileFeature {
     fid: u64,
     habitability: f64,
     site: Point,
@@ -1286,7 +1391,7 @@ entity!(TileForTowns TileFeature {
     grouping_id: i64
 });
 
-entity!(TileForTownPopulation TileFeature {
+entity!(TileForTownPopulation TileSchema TileFeature {
     fid: u64,
     geometry: Geometry,
     habitability: f64,
@@ -1320,7 +1425,7 @@ impl TileForTownPopulation {
     }
 }
 
-entity!(TileForNationExpand TileFeature {
+entity!(TileForNationExpand TileSchema TileFeature {
     habitability: f64,
     shore_distance: i32,
     elevation_scaled: i32,
@@ -1333,14 +1438,14 @@ entity!(TileForNationExpand TileFeature {
     nation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileForNationNormalize TileFeature {
+entity!(TileForNationNormalize TileSchema TileFeature {
     grouping: Grouping,
     neighbors: Vec<(u64,i32)>,
     town_id: Option<i64>,
     nation_id: Option<i64>
 });
 
-entity!(TileForSubnations TileFeature {
+entity!(TileForSubnations TileSchema TileFeature {
     fid: u64, // TODO: Do I really need this?
     town_id: Option<i64>,
     nation_id: Option<i64>,
@@ -1348,7 +1453,7 @@ entity!(TileForSubnations TileFeature {
     population: i32
 });
 
-entity!(TileForSubnationExpand TileFeature {
+entity!(TileForSubnationExpand TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     grouping: Grouping,
     shore_distance: i32,
@@ -1357,7 +1462,7 @@ entity!(TileForSubnationExpand TileFeature {
     subnation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileForEmptySubnations TileFeature {
+entity!(TileForEmptySubnations TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32,
     nation_id: Option<i64>, // TODO: What if I changed the features so it could store a u64, but it would be in String instead?
@@ -1368,14 +1473,14 @@ entity!(TileForEmptySubnations TileFeature {
     culture: Option<String>
 });
 
-entity!(TileForSubnationNormalize TileFeature {
+entity!(TileForSubnationNormalize TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     town_id: Option<i64>,
     nation_id: Option<i64>,
     subnation_id: Option<i64>
 });
 
-entity!(TileForCultureDissolve TileFeature {
+entity!(TileForCultureDissolve TileSchema TileFeature {
     culture: Option<String>,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
@@ -1400,27 +1505,27 @@ impl TileWithNeighbors for TileForCultureDissolve {
     }
 }
 
-pub(crate) type TilesLayer<'layer,'feature> = MapLayer<'layer,'feature,TileFeature<'feature>>;
+pub(crate) type TilesLayer<'layer,'feature> = MapLayer<'layer,'feature,TileSchema,TileFeature<'feature>>;
 
 impl TilesLayer<'_,'_> {
 
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TileFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TileSchema,TileFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     // FUTURE: It would also be nice to get rid of the lifetimes
-    pub(crate) fn try_entity_by_id<'local, Data: Entity<'local,TileFeature<'local>>>(&'local mut self, fid: &u64) -> Result<Data,CommandError> {
+    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: &u64) -> Result<Data,CommandError> {
         self.try_feature_by_id(&fid)?.try_into()
     }
 
     pub(crate) fn add_tile(&mut self, tile: NewTile) -> Result<(),CommandError> {
 
         self.add_feature(tile.geometry,&[
-                TileFeature::FIELD_SITE_X,
-                TileFeature::FIELD_SITE_Y,
+                TileSchema::FIELD_SITE_X,
+                TileSchema::FIELD_SITE_Y,
             ],&[
                 Some(FieldValue::RealValue(tile.site_x)),
                 Some(FieldValue::RealValue(tile.site_y)),
@@ -1449,7 +1554,7 @@ impl TilesLayer<'_,'_> {
     }
 
    // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
-   pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(HashMap<u64,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
+   pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
         let mut tile_map = HashMap::new();
         let mut tile_queue = Vec::new();
@@ -1463,7 +1568,7 @@ impl TilesLayer<'_,'_> {
 
         }
 
-        Ok((tile_map,tile_queue))
+        Ok((EntityIndex::from(tile_map),tile_queue))
         
 
     }
@@ -1554,7 +1659,7 @@ impl Into<&str> for &RiverSegmentTo {
 }
 
 
-feature!(RiverFeature "rivers" wkbLineString {
+feature!(RiverFeature RiverSchema "rivers" wkbLineString {
     from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
     from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
     from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
@@ -1564,7 +1669,7 @@ feature!(RiverFeature "rivers" wkbLineString {
 });
 
 
-entity!(NewRiver RiverFeature {
+entity!(NewRiver RiverSchema RiverFeature {
     from_tile: i64,
     from_type: RiverSegmentFrom,
     from_flow: f64,
@@ -1574,7 +1679,7 @@ entity!(NewRiver RiverFeature {
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
-pub(crate) type RiversLayer<'layer,'feature> = MapLayer<'layer,'feature,RiverFeature<'feature>>;
+pub(crate) type RiversLayer<'layer,'feature> = MapLayer<'layer,'feature,RiverSchema,RiverFeature<'feature>>;
 
 impl RiversLayer<'_,'_> {
 
@@ -1634,7 +1739,7 @@ impl TryFrom<String> for LakeType {
 }
 
 // TODO: Do they really need to be multipolygon?
-feature!(LakeFeature "lakes" wkbMultiPolygon {
+feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     #[allow(dead_code)] type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
     #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
@@ -1643,19 +1748,19 @@ feature!(LakeFeature "lakes" wkbMultiPolygon {
     #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
 
-entity!(LakeForBiomes LakeFeature {
+entity!(LakeForBiomes LakeSchema LakeFeature {
     type_: LakeType
 });
 
-entity!(LakeForPopulation LakeFeature {
+entity!(LakeForPopulation LakeSchema LakeFeature {
     type_: LakeType
 });
 
-entity!(LakeForCultureGen LakeFeature {
+entity!(LakeForCultureGen LakeSchema LakeFeature {
     size: i32
 });
 
-entity!(LakeForTownPopulation LakeFeature {
+entity!(LakeForTownPopulation LakeSchema LakeFeature {
     size: i32
 });
 
@@ -1673,7 +1778,7 @@ pub(crate) struct NewLake {
 }
 
 
-pub(crate) type LakesLayer<'layer,'feature> = MapLayer<'layer,'feature,LakeFeature<'feature>>;
+pub(crate) type LakesLayer<'layer,'feature> = MapLayer<'layer,'feature,LakeSchema,LakeFeature<'feature>>;
 
 impl LakesLayer<'_,'_> {
 
@@ -1690,7 +1795,7 @@ impl LakesLayer<'_,'_> {
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<LakeFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<LakeSchema,LakeFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
@@ -1760,7 +1865,7 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature "biomes" wkbNone {
+feature!(BiomeFeature BiomeSchema "biomes" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
@@ -1912,7 +2017,7 @@ impl BiomeFeature<'_> {
 
 }
 
-entity!(NewBiome BiomeFeature {
+entity!(NewBiome BiomeSchema BiomeFeature {
     name: String,
     habitability: i32,
     criteria: BiomeCriteria,
@@ -1921,52 +2026,52 @@ entity!(NewBiome BiomeFeature {
     supports_hunting: bool
 });
 
-entity!(BiomeForPopulation BiomeFeature {
+entity!(BiomeForPopulation BiomeSchema BiomeFeature {
     name: String,
     habitability: i32
 });
 
-impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForPopulation {
+impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForPopulation {
     fn name(&self) -> &String {
         &self.name
     }
 }
 
-entity!(BiomeForCultureGen BiomeFeature {
+entity!(BiomeForCultureGen BiomeSchema BiomeFeature {
     name: String,
     supports_nomadic: bool,
     supports_hunting: bool
 });
 
-impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForCultureGen {
+impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForCultureGen {
     fn name(&self) -> &String {
         &self.name
     }
 }
 
-entity!(BiomeForCultureExpand BiomeFeature {
+entity!(BiomeForCultureExpand BiomeSchema BiomeFeature {
     name: String,
     movement_cost: i32
 });
 
-impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForCultureExpand {
+impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForCultureExpand {
     fn name(&self) -> &String {
         &self.name
     }
 }
 
-entity!(BiomeForNationExpand BiomeFeature {
+entity!(BiomeForNationExpand BiomeSchema BiomeFeature {
     name: String,
     movement_cost: i32
 });
 
-impl<'trait_life> NamedEntity<'trait_life,BiomeFeature<'trait_life>> for BiomeForNationExpand {
+impl<'trait_life> NamedEntity<BiomeSchema> for BiomeForNationExpand {
     fn name(&self) -> &String {
         &self.name
     }
 }
 
-pub(crate) type BiomeLayer<'layer,'feature> = MapLayer<'layer,'feature,BiomeFeature<'feature>>;
+pub(crate) type BiomeLayer<'layer,'feature> = MapLayer<'layer,'feature,BiomeSchema,BiomeFeature<'feature>>;
 
 impl BiomeLayer<'_,'_> {
 
@@ -1978,7 +2083,7 @@ impl BiomeLayer<'_,'_> {
 
     }
 
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<BiomeFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<BiomeSchema,BiomeFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
@@ -1990,7 +2095,7 @@ impl BiomeLayer<'_,'_> {
     }
 
     // TODO: Replace with to_named_entities_index in TypedFeatureIterator
-    pub(crate) fn build_lookup<'local, Progress: ProgressObserver, Data: NamedEntity<'local,BiomeFeature<'local>>>(&'local mut self, progress: &mut Progress) -> Result<HashMap<String, Data>,CommandError> {
+    pub(crate) fn build_lookup<'local, Progress: ProgressObserver, Data: NamedEntity<BiomeSchema> + TryFrom<BiomeFeature<'local>,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<BiomeSchema, Data>,CommandError> {
         let mut result = HashMap::new();
 
         for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
@@ -1999,7 +2104,7 @@ impl BiomeLayer<'_,'_> {
             result.insert(name, entity);
         }
 
-        Ok(result)
+        Ok(EntityLookup::from(result))
 
     }
 
@@ -2054,21 +2159,13 @@ impl TryFrom<String> for CultureType {
     }
 }
 
-feature!(CultureFeature "cultures" wkbMultiPolygon {
+feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer" OGRFieldType::OFTString;
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
     expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
 });
-
-pub(crate) trait NamedCulture<'feature>: NamedEntity<'feature,CultureFeature<'feature>> {
-
-}
-
-impl<'feature, Entity: NamedEntity<'feature,CultureFeature<'feature>>> NamedCulture<'feature> for Entity {
-    
-}
 
 pub(crate) trait CultureWithNamer {
 
@@ -2092,7 +2189,7 @@ pub(crate) trait CultureWithType {
 }
 
 
-entity!(NewCulture CultureFeature {
+entity!(NewCulture CultureSchema CultureFeature {
     name: String,
     namer: String,
     type_: CultureType,
@@ -2101,19 +2198,19 @@ entity!(NewCulture CultureFeature {
 });
 
 // needs to be hashable in order to fit into a priority queue
-entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement CultureFeature {
+entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement CultureSchema CultureFeature {
     name: String,
     center: i64,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &CultureFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
-entity!(CultureForTowns CultureFeature {
+entity!(CultureForTowns CultureSchema CultureFeature {
     name: String,
     namer: String
 });
 
-impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureForTowns {
+impl<'impl_life> NamedEntity<CultureSchema> for CultureForTowns {
     fn name(&self) -> &String {
         &self.name
     }
@@ -2125,13 +2222,13 @@ impl<'impl_life> CultureWithNamer for CultureForTowns {
     }
 }
 
-entity!(CultureForNations CultureFeature {
+entity!(CultureForNations CultureSchema CultureFeature {
     name: String,
     namer: String,
     type_: CultureType
 });
 
-impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureForNations {
+impl<'impl_life> NamedEntity<CultureSchema> for CultureForNations {
     fn name(&self) -> &String {
         &self.name
     }
@@ -2150,12 +2247,12 @@ impl<'impl_life> CultureWithType for CultureForNations {
 }
 
 
-entity!(CultureForDissolve CultureFeature {
+entity!(CultureForDissolve CultureSchema CultureFeature {
     fid: u64,
     name: String
 });
 
-impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureForDissolve {
+impl<'impl_life> NamedEntity<CultureSchema> for CultureForDissolve {
     fn name(&self) -> &String {
         &self.name
     }
@@ -2165,7 +2262,7 @@ impl<'impl_life> NamedEntity<'impl_life,CultureFeature<'impl_life>> for CultureF
 
 
 
-pub(crate) type CultureLayer<'layer,'feature> = MapLayer<'layer,'feature,CultureFeature<'feature>>;
+pub(crate) type CultureLayer<'layer,'feature> = MapLayer<'layer,'feature,CultureSchema,CultureFeature<'feature>>;
 
 
 impl CultureLayer<'_,'_> {
@@ -2179,11 +2276,11 @@ impl CultureLayer<'_,'_> {
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<CultureFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<CultureSchema,CultureFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
-    pub(crate) fn get_lookup_and_load_namers<'local, Data: NamedCulture<'local> + CultureWithNamer, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(HashMap<String,Data>,LoadedNamers),CommandError> {
+    pub(crate) fn get_lookup_and_load_namers<'local, Data: NamedEntity<CultureSchema> + TryFrom<CultureFeature<'local>,Error=CommandError> + CultureWithNamer, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(EntityLookup<CultureSchema,Data>,LoadedNamers),CommandError> {
         let mut result = HashMap::new();
         let mut load_namers = HashSet::new();
 
@@ -2196,13 +2293,13 @@ impl CultureLayer<'_,'_> {
 
         let loaded_namers = namer_set.into_loaded(load_namers.into_iter().chain([default_namer].into_iter()), progress)?;
 
-        Ok((result,loaded_namers))
+        Ok((EntityLookup::from(result),loaded_namers))
     }
 
 
 }
 
-feature!(TownFeature "towns" wkbPoint {
+feature!(TownFeature TownSchema "towns" wkbPoint {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital" OGRFieldType::OFTInteger;
@@ -2220,7 +2317,7 @@ impl TownFeature<'_> {
 
 }
 
-entity!(NewTown TownFeature {
+entity!(NewTown TownSchema TownFeature {
     geometry: Geometry,
     name: String,
     culture: Option<String>,
@@ -2229,32 +2326,32 @@ entity!(NewTown TownFeature {
     grouping_id: i64
 });
 
-entity!(TownForPopulation TownFeature {
+entity!(TownForPopulation TownSchema TownFeature {
     fid: u64,
     is_capital: bool,
     tile_id: i64
 });
 
-entity!(TownForNations TownFeature {
+entity!(TownForNations TownSchema TownFeature {
     fid: u64,
     is_capital: bool,
     culture: Option<String>,
     tile_id: i64
 });
 
-entity!(TownForNationNormalize TownFeature {
+entity!(TownForNationNormalize TownSchema TownFeature {
     is_capital: bool
 });
 
-entity!(TownForSubnations TownFeature {
+entity!(TownForSubnations TownSchema TownFeature {
     name: String
 });
 
-entity!(TownForEmptySubnations TownFeature {
+entity!(TownForEmptySubnations TownSchema TownFeature {
     name: String
 });
 
-pub(crate) type TownLayer<'layer,'feature> = MapLayer<'layer,'feature,TownFeature<'feature>>;
+pub(crate) type TownLayer<'layer,'feature> = MapLayer<'layer,'feature,TownSchema,TownFeature<'feature>>;
 
 impl TownLayer<'_,'_> {
 
@@ -2272,7 +2369,7 @@ impl TownLayer<'_,'_> {
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TownFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TownSchema,TownFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
@@ -2280,7 +2377,7 @@ impl TownLayer<'_,'_> {
 }
 
 
-feature!(NationFeature "nations" wkbNone {
+feature!(NationFeature NationSchema "nations" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
@@ -2289,7 +2386,7 @@ feature!(NationFeature "nations" wkbNone {
     capital #[allow(dead_code)] set_capital i64 FIELD_CAPITAL "capital" OGRFieldType::OFTInteger64;
 });
 
-entity!(NewNation NationFeature {
+entity!(NewNation NationSchema NationFeature {
     name: String,
     culture: Option<String>,
     center: i64,
@@ -2299,7 +2396,7 @@ entity!(NewNation NationFeature {
 });
 
 // needs to be hashable in order to fit into a priority queue
-entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationFeature {
+entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationSchema NationFeature {
     fid: u64,
     name: String,
     center: i64,
@@ -2307,18 +2404,18 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationFeature {
     expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
-entity!(NationForSubnations NationFeature {
+entity!(NationForSubnations NationSchema NationFeature {
     fid: u64,
     capital: i64 // TODO: This should be capital_town_id, or capital_id
 });
 
-entity!(NationForEmptySubnations NationFeature {
+entity!(NationForEmptySubnations NationSchema NationFeature {
     fid: u64
 });
 
 
 
-pub(crate) type NationsLayer<'layer,'feature> = MapLayer<'layer,'feature,NationFeature<'feature>>;
+pub(crate) type NationsLayer<'layer,'feature> = MapLayer<'layer,'feature,NationSchema,NationFeature<'feature>>;
 
 impl NationsLayer<'_,'_> {
 
@@ -2335,7 +2432,7 @@ impl NationsLayer<'_,'_> {
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<NationFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<NationSchema,NationFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
@@ -2343,7 +2440,7 @@ impl NationsLayer<'_,'_> {
 
 }
 
-feature!(SubnationFeature "subnations" wkbNone {
+feature!(SubnationFeature SubnationSchema "subnations" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
@@ -2353,7 +2450,7 @@ feature!(SubnationFeature "subnations" wkbNone {
 });
 
 
-entity!(NewSubnation SubnationFeature {
+entity!(NewSubnation SubnationSchema SubnationFeature {
     name: String,
     culture: Option<String>,
     center: i64,
@@ -2363,14 +2460,14 @@ entity!(NewSubnation SubnationFeature {
 });
 
 
-entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationFeature {
+entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationSchema SubnationFeature {
     fid: u64,
     center: i64,
     nation_id: i64
 });
 
 
-pub(crate) type SubnationsLayer<'layer,'feature> = MapLayer<'layer,'feature,SubnationFeature<'feature>>;
+pub(crate) type SubnationsLayer<'layer,'feature> = MapLayer<'layer,'feature,SubnationSchema,SubnationFeature<'feature>>;
 
 impl SubnationsLayer<'_,'_> {
 
@@ -2387,17 +2484,17 @@ impl SubnationsLayer<'_,'_> {
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<SubnationFeature> {
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<SubnationSchema,SubnationFeature> {
         TypedFeatureIterator::from(self.layer.features())
     }
 
 
 }
 
-feature!(CoastlineFeature "coastlines" wkbPolygon  {
+feature!(CoastlineFeature CoastlineSchema "coastlines" wkbPolygon  {
 });
 
-pub(crate) type CoastlineLayer<'layer,'feature> = MapLayer<'layer,'feature,CoastlineFeature<'feature>>;
+pub(crate) type CoastlineLayer<'layer,'feature> = MapLayer<'layer,'feature,CoastlineSchema,CoastlineFeature<'feature>>;
 
 impl CoastlineLayer<'_,'_> {
 
@@ -2408,10 +2505,10 @@ impl CoastlineLayer<'_,'_> {
 
 }
 
-feature!(OceanFeature "oceans" wkbPolygon {
+feature!(OceanFeature OceanSchema "oceans" wkbPolygon {
 });
 
-pub(crate) type OceanLayer<'layer,'feature> = MapLayer<'layer,'feature,OceanFeature<'feature>>;
+pub(crate) type OceanLayer<'layer,'feature> = MapLayer<'layer,'feature,OceanSchema,OceanFeature<'feature>>;
 
 impl OceanLayer<'_,'_> {
 

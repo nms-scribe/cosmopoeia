@@ -17,13 +17,14 @@ use crate::world_map::NewTown;
 use crate::errors::CommandError;
 use crate::algorithms::naming::LoadedNamers;
 use crate::world_map::WorldMapTransaction;
-use crate::utils::TryGetMap;
 use crate::progress::WatchableIterator;
 use crate::world_map::CultureWithNamer;
-use crate::world_map::NamedCulture;
+use crate::world_map::NamedEntity;
 use crate::world_map::TypedFeature;
 use crate::progress::ProgressObserver;
 use crate::world_map::TileForTowns;
+use crate::world_map::CultureSchema;
+use crate::world_map::EntityLookup;
 
 pub(crate) struct ScoredTileForTowns {
     pub(crate) tile: TileForTowns,
@@ -31,7 +32,7 @@ pub(crate) struct ScoredTileForTowns {
     pub(crate) town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // TODO: Certain culture "types" shouldn't generate towns, or should generate fewer towns. Nomads, for example. 
 

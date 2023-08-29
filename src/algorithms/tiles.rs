@@ -12,7 +12,6 @@ use crate::world_map::TypedFeature;
 use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TilesLayer;
 use crate::utils::Point;
-use crate::utils::TryGetMap;
 use crate::utils::bezierify_polygon;
 use crate::utils::multipolygon_to_polygons;
 use crate::gdal_fixes::GeometryFix;
@@ -22,6 +21,13 @@ use crate::world_map::CultureForDissolve;
 use crate::world_map::TileWithGeometry;
 use crate::world_map::TileWithShoreDistance;
 use crate::world_map::TileWithNeighbors;
+use crate::world_map::TileFeature;
+use crate::world_map::Entity;
+use crate::world_map::Schema;
+use crate::world_map::CultureSchema;
+use crate::world_map::TileSchema;
+use crate::world_map::EntityIndex;
+use crate::world_map::EntityLookup;
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -176,7 +182,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 }
 
 
-pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation, TileMap: TryGetMap<u64,Data>>(entity: &Data, tile_map: &TileMap) -> Result<(Vec<u64>, Option<f64>),CommandError> {
+pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &Data, tile_map: &EntityIndex<TileSchema,Data>) -> Result<(Vec<u64>, Option<f64>),CommandError> {
     let mut lowest = Vec::new();
     let mut lowest_elevation = None;
 
@@ -291,30 +297,30 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
 
 pub(crate) trait Theme: Sized {
 
-    type TileForTheme: ToOwned;
-    type Feature<'feature>: TypedFeature<'feature>;
+    type ThemeSchema: Schema;
+    type TileForTheme: Entity<TileSchema> + TileWithGeometry + TileWithShoreDistance + TileWithNeighbors + Clone + for<'feature> TryFrom<TileFeature<'feature>,Error=CommandError>;
+    type Feature<'feature>: TypedFeature<'feature,Self::ThemeSchema>;
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError>;
 
-    fn get_theme_id(&self, tile: &TileForCultureDissolve /* TODO: &Self::TileForTheme*/) -> Result<std::option::Option<&u64>, CommandError>;
+    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<std::option::Option<&u64>, CommandError>;
 
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
-
-    fn try_get<'map>(map: &'map HashMap<u64,TileForCultureDissolve /* TODO: Self::TileForTheme*/>, key: &u64) -> Result<&'map TileForCultureDissolve /*TODO: Self::TileForTheme*/,CommandError>;
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
 
 }
 
-struct CultureTheme {
-    culture_id_map: HashMap<String, CultureForDissolve>
+pub(crate) struct CultureTheme {
+    culture_id_map: EntityLookup<CultureSchema, CultureForDissolve>
 }
 
 impl Theme for CultureTheme {
 
+    type ThemeSchema = CultureSchema;
     type TileForTheme = TileForCultureDissolve;
     type Feature<'feature> = crate::world_map::CultureFeature<'feature>;
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError> {
-        let culture_id_map: HashMap<String, CultureForDissolve> = target.edit_cultures_layer()?.read_features().to_named_entities_index::<_,CultureForDissolve>(progress)?;
+        let culture_id_map = target.edit_cultures_layer()?.read_features().to_named_entities_index::<_,CultureForDissolve>(progress)?;
         Ok(Self {
             culture_id_map
         })
@@ -329,11 +335,7 @@ impl Theme for CultureTheme {
         }
     }
 
-    fn try_get<'map>(map: &'map HashMap<u64,TileForCultureDissolve>, key: &u64) -> Result<&'map TileForCultureDissolve,CommandError> {
-        map.try_get(key)
-    }
-
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, CultureSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
         target.edit_cultures_layer()        
     }
 
@@ -341,14 +343,8 @@ impl Theme for CultureTheme {
     
 }
 
-pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
-    dissolve_tiles_by_theme_generic::<_,CultureTheme>(target, progress)
-}
-
-
-pub(crate) fn dissolve_tiles_by_theme_generic<'transaction, 'feature, Progress: ProgressObserver, ThemeType: Theme>(target: &'transaction mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
-// TODO: The following where should be done on the Theme itself, maybe?
-where <ThemeType as Theme>::TileForTheme: crate::world_map::Entity<'feature, crate::world_map::TileFeature<'feature>> + TileWithGeometry + TileWithShoreDistance + TileWithNeighbors + Clone {
+pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
+{
     // TODO: I'm testing this first with cultures, then I have to abstract it out so I can pass a field in later. Possibly,
     // it's just a matter of passing some sort of entity type that implements a trait?
 
@@ -361,13 +357,14 @@ where <ThemeType as Theme>::TileForTheme: crate::world_map::Entity<'feature, cra
     let theme = ThemeType::new(target,progress)?;
 
 
-    let mut tile_map = HashMap::new();
+    let mut tile_map = EntityIndex::new();
     let mut tiles = Vec::new();
+
     {
         let mut tile_layer = target.edit_tile_layer()?;
         for feature in tile_layer.read_features().watch(progress, "Indexing tiles.", "Tiles indexed.") {
             let id = feature.fid()?;
-            let entity = TileForCultureDissolve::try_from(feature)?;
+            let entity = ThemeType::TileForTheme::try_from(feature)?;
             tile_map.insert(id, entity.clone());
             tiles.push(entity);
         }
@@ -380,7 +377,7 @@ where <ThemeType as Theme>::TileForTheme: crate::world_map::Entity<'feature, cra
         } else if tile.shore_distance() == &-1 {
             let mut usable_neighbors = HashMap::new();
             for (neighbor_id,_) in tile.neighbors() {
-                let neighbor = ThemeType::try_get(&tile_map,&neighbor_id)?;
+                let neighbor = tile_map.try_get(&neighbor_id)?;
                 if let Some(id) = theme.get_theme_id(neighbor)? {
                     match usable_neighbors.get_mut(id) {
                         None => {
@@ -429,6 +426,7 @@ where <ThemeType as Theme>::TileForTheme: crate::world_map::Entity<'feature, cra
             polygon_layer.update_feature(feature)?;
         }
     }
-
+ 
     Ok(())
 }
+

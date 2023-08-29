@@ -14,8 +14,9 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
 use crate::world_map::TilesLayer;
 use crate::world_map::LakeType;
-use crate::utils::TryGetMap;
 use crate::world_map::TypedFeature;
+use crate::world_map::EntityIndex;
+use crate::world_map::TileSchema;
 
 struct Lake {
     elevation: f64,
@@ -95,7 +96,7 @@ impl Lake {
 }
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<TileMap: TryGetMap<u64,TileForWaterFill> + IntoIterator<Item=(u64,TileForWaterFill)>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: TileMap, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // TODO: I may need to add some modifiers for the lake filling values, so that I end up with more endorheic lakes.
     // TODO: I predict there will be a problem with lakes on the edges of the maps, which will also be part of the flow algorithm, but I haven't gotten that far yet. I will need a lot more real-world testing to get this figured out.

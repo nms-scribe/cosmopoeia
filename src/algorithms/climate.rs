@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::entity;
 use crate::entity_field_assign;
 use crate::world_map::TileFeature;
@@ -11,8 +9,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::Grouping;
-use crate::utils::TryGetMap;
-use crate::world_map::TypedFeature;
+use crate::world_map::TileSchema;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -105,7 +102,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     let prec_input_modifier = moisture as f64/100.0;
     let modifier = cells_number_modifier * prec_input_modifier;
 
-    entity!(TileDataForPrecipitation TileFeature {
+    entity!(TileDataForPrecipitation TileSchema TileFeature {
         elevation_scaled: i32, 
         wind: i32, 
         grouping: Grouping, 

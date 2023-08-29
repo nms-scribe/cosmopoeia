@@ -1098,12 +1098,3 @@ pub(crate) mod point_finder {
     
 
 }
-
-pub(crate) trait TryGetMap<Key,Value> {
-
-    fn try_get(&self, key: &Key) -> Result<&Value,CommandError>;
-
-    fn try_get_mut(&mut self, key: &Key) -> Result<&mut Value,CommandError>;
-
-}
-

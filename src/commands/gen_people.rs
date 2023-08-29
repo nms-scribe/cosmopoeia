@@ -14,6 +14,7 @@ use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::utils::random_number_generator;
+use crate::algorithms::tiles::CultureTheme;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -178,7 +179,7 @@ impl Task for GenPeopleDissolveCultures {
         target.with_transaction(|target| {
             progress.announce("Creating culture polygons");
 
-            dissolve_tiles_by_theme(target, &mut progress)
+            dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)
         })?;
 
         target.save(&mut progress)

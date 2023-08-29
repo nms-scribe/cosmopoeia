@@ -18,15 +18,17 @@ use crate::world_map::TownForNations;
 use crate::errors::CommandError;
 use crate::algorithms::naming::LoadedNamers;
 use crate::world_map::WorldMapTransaction;
-use crate::utils::TryGetMap;
 use crate::world_map::CultureWithType;
 use crate::world_map::CultureWithNamer;
-use crate::world_map::NamedCulture;
+use crate::world_map::NamedEntity;
+use crate::world_map::CultureSchema;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
+use crate::world_map::EntityLookup;
+use crate::world_map::EntityIndex;
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
@@ -379,7 +381,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
-    let mut tile_map = HashMap::new();
+    let mut tile_map = EntityIndex::new();
     let mut tile_list = Vec::new();
 
     for tile in tiles_layer.read_features().into_entities::<TileForNationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {

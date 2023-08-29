@@ -26,8 +26,9 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
     progress.start_known_endpoint(|| ("Calculating group types.",original_table_len));
 
     // pop the next one off of the table.
-    // TODO: The 'watch' isn't going to work here since it only watches when it picks.
-    while let Some(tile) = table.keys().next().cloned().and_then(|first| table.remove(&first)) {
+    // 'watch_queue' isn't going to work here since it only watches when it picks.
+    while let Some(tile) = table.keys().next().cloned().map(|first| table.try_remove(&first)) {
+        let tile = tile?;
         progress.update(|| original_table_len - table.len());
 
 
@@ -45,12 +46,12 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
             while let Some((neighbor_fid,_)) = neighbors.pop() {
-                if let Some(neighbor) = table.get(&neighbor_fid) {
+                if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
                     if neighbor.grouping.is_ocean() {
                         // it's part of the same group
                         ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
                         neighbors.extend(neighbor.neighbors.iter());
-                        table.remove(&neighbor_fid);
+                        table.try_remove(&neighbor_fid)?;
                         progress.update(|| original_table_len - table.len());
                         group.push(neighbor_fid);
                     }
@@ -67,14 +68,14 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
     
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
             while let Some((neighbor_fid,_)) = neighbors.pop() {
-                if let Some(neighbor) = table.get(&neighbor_fid) {
+                if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
                     if neighbor.grouping.is_ocean() {
                         // it's not part of the group, but we now know this body is next to the ocean
                         found_ocean_neighbor = true
                     } else if is_lake == neighbor.lake_id {
                         // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
                         neighbors.extend(neighbor.neighbors.iter());
-                        table.remove(&neighbor_fid);
+                        table.try_remove(&neighbor_fid)?;
                         progress.update(|| original_table_len - table.len());
                         group.push(neighbor_fid);
                     }

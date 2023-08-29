@@ -27,7 +27,10 @@ use crate::world_map::TilesLayer;
 use crate::world_map::CultureType;
 use crate::world_map::NewCulture;
 use crate::world_map::CultureForPlacement;
-use crate::utils::TryGetMap;
+use crate::world_map::EntityIndex;
+use crate::world_map::LakeSchema;
+use crate::world_map::EntityLookup;
+use crate::world_map::BiomeSchema;
 
 
 impl CultureType {
@@ -204,7 +207,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     Ok(())
 }
 
-fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mut TilesLayer, biomes: &'biome_life HashMap<String, BiomeForCultureGen>, lake_map: &HashMap<u64, LakeForCultureGen>, progress: &mut Progress) -> Result<(f64, Vec<TileForCulturePrefSorting<'biome_life>>), CommandError> {
+fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mut TilesLayer, biomes: &'biome_life EntityLookup<BiomeSchema, BiomeForCultureGen>, lake_map: &EntityIndex<LakeSchema, LakeForCultureGen>, progress: &mut Progress) -> Result<(f64, Vec<TileForCulturePrefSorting<'biome_life>>), CommandError> {
 
     let mut max_habitability: f64 = 0.0;
     

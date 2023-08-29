@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::cmp::Ordering;
 
 use crate::world_map::TileForWaterflow;
@@ -7,9 +6,10 @@ use crate::world_map::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::utils::TryGetMap;
+use crate::world_map::EntityIndex;
+use crate::world_map::TileSchema;
 
-pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(HashMap<u64,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
+pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
     let mut layer = target.edit_tile_layer()?;
 
@@ -17,7 +17,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let cells_number_modifier = ((layer.feature_count() / 10000) as f64).powf(0.25);
 
     // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
-    let mut tile_map = HashMap::new();
+    let mut tile_map = EntityIndex::new();
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();
 

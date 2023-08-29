@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::entity;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileFeature;
@@ -13,7 +11,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::world_map::LakeType;
 use crate::world_map::LakeForBiomes;
 use crate::world_map::Grouping;
-use crate::utils::TryGetMap;
+use crate::world_map::TileSchema;
 
 pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -43,7 +41,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
     // based on AFMG algorithm
 
-    entity!(BiomeSource TileFeature {
+    entity!(BiomeSource TileSchema TileFeature {
         fid: u64,
         temperature: f64,
         elevation_scaled: i32,

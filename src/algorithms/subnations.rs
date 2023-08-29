@@ -21,16 +21,18 @@ use crate::world_map::TownForSubnations;
 use crate::errors::CommandError;
 use crate::algorithms::naming::LoadedNamers;
 use crate::world_map::WorldMapTransaction;
-use crate::utils::TryGetMap;
 use crate::world_map::CultureWithType;
 use crate::world_map::CultureWithNamer;
-use crate::world_map::NamedCulture;
+use crate::world_map::NamedEntity;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
+use crate::world_map::CultureSchema;
+use crate::world_map::EntityLookup;
+use crate::world_map::EntityIndex;
 
 
-pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForSubnations>(progress)?;
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForSubnations>(progress)?; 
@@ -207,7 +209,7 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
     Some(total_cost)
 }
 
-pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedCulture<'culture> + CultureWithNamer + CultureWithType, CultureMap: TryGetMap<String,Culture>>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &CultureMap, namers: &mut LoadedNamers, default_namer: &str, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
     let max = subnation_max_cost(rng, subnation_percentage);
 
@@ -215,7 +217,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
     let mut tiles_by_nation = HashMap::new();
 
-    let mut tile_map = HashMap::new();
+    let mut tile_map = EntityIndex::new();
 
     for tile in tile_layer.read_features().into_entities::<TileForEmptySubnations>().watch(progress, "Reading tiles.", "Tiles read.") {
         let (fid,tile) = tile?;
@@ -399,7 +401,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
-    let mut tile_map = HashMap::new();
+    let mut tile_map = EntityIndex::new();
     let mut tile_list = Vec::new();
 
     for tile in tiles_layer.read_features().into_entities::<TileForSubnationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {
