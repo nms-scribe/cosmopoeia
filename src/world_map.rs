@@ -1933,7 +1933,8 @@ struct BiomeDefault {
     criteria: BiomeCriteria,
     movement_cost: i32,
     supports_nomadic: bool,
-    supports_hunting: bool
+    supports_hunting: bool,
+    color: &'static str,
 }
         
 
@@ -1952,6 +1953,7 @@ feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
     // FUTURE: These should be replaced with amore configurable culture-type system, or at least build these into the culture data.
     supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic" OGRFieldType::OFTInteger;
     supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting" OGRFieldType::OFTInteger;
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
 impl BiomeFeature<'_> {
@@ -1971,19 +1973,19 @@ impl BiomeFeature<'_> {
     pub(crate) const WETLAND: &str = "Wetland";
     
     const DEFAULT_BIOMES: [BiomeDefault; 13] = [ // name, index, habitability, supports_nomadic, supports_hunting
-        BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, movement_cost: 10, supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::HOT_DESERT, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: true, supports_hunting: false},
-        BiomeDefault { name: Self::COLD_DESERT, habitability: 10, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 150, supports_nomadic: true, supports_hunting: false},
-        BiomeDefault { name: Self::SAVANNA, habitability: 22, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 60, supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::GRASSLAND, habitability: 30, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 50, supports_nomadic: true, supports_hunting: false},
-        BiomeDefault { name: Self::TROPICAL_SEASONAL_FOREST, habitability: 50, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 70, supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::TEMPERATE_DECIDUOUS_FOREST, habitability: 100, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 70, supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::TROPICAL_RAINFOREST, habitability: 80, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 80, supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::TEMPERATE_RAINFOREST, habitability: 90, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 90, supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::TAIGA, habitability: 12, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::TUNDRA, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 1000, supports_nomadic: false, supports_hunting: true},
-        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier, movement_cost: 5000, supports_nomadic: false, supports_hunting: false},
-        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland, movement_cost: 150, supports_nomadic: false, supports_hunting: true},
+        BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, movement_cost: 10, supports_nomadic: false, supports_hunting: false, color: "#1F78B4"},
+        BiomeDefault { name: Self::HOT_DESERT, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: true, supports_hunting: false, color: "#FBE79F"},
+        BiomeDefault { name: Self::COLD_DESERT, habitability: 10, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 150, supports_nomadic: true, supports_hunting: false, color: "#B5B887"},
+        BiomeDefault { name: Self::SAVANNA, habitability: 22, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 60, supports_nomadic: false, supports_hunting: true, color: "#D2D082"},
+        BiomeDefault { name: Self::GRASSLAND, habitability: 30, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 50, supports_nomadic: true, supports_hunting: false, color: "#C8D68F"},
+        BiomeDefault { name: Self::TROPICAL_SEASONAL_FOREST, habitability: 50, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 70, supports_nomadic: false, supports_hunting: false, color: "#B6D95D"},
+        BiomeDefault { name: Self::TEMPERATE_DECIDUOUS_FOREST, habitability: 100, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 70, supports_nomadic: false, supports_hunting: true, color: "#29BC56"},
+        BiomeDefault { name: Self::TROPICAL_RAINFOREST, habitability: 80, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 80, supports_nomadic: false, supports_hunting: false, color: "#7DCB35"},
+        BiomeDefault { name: Self::TEMPERATE_RAINFOREST, habitability: 90, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 90, supports_nomadic: false, supports_hunting: true, color: "#409C43"},
+        BiomeDefault { name: Self::TAIGA, habitability: 12, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: false, supports_hunting: true, color: "#4B6B32"},
+        BiomeDefault { name: Self::TUNDRA, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 1000, supports_nomadic: false, supports_hunting: true, color: "#96784B"},
+        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier, movement_cost: 5000, supports_nomadic: false, supports_hunting: false, color: "#D5E7EB"},
+        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland, movement_cost: 150, supports_nomadic: false, supports_hunting: true, color: "#0B9131"},
     ];
 
     //these constants make the default matrix easier to read.
@@ -2033,7 +2035,8 @@ impl BiomeFeature<'_> {
                 criteria,
                 movement_cost: default.movement_cost,
                 supports_nomadic: default.supports_nomadic,
-                supports_hunting: default.supports_hunting
+                supports_hunting: default.supports_hunting,
+                color: default.color.to_owned()
             }
 
         }).collect()
@@ -2102,7 +2105,8 @@ entity!(NewBiome BiomeSchema BiomeFeature {
     criteria: BiomeCriteria,
     movement_cost: i32,
     supports_nomadic: bool,
-    supports_hunting: bool
+    supports_hunting: bool,
+    color: String
 });
 
 entity!(BiomeForPopulation BiomeSchema BiomeFeature {
@@ -2169,7 +2173,7 @@ impl BiomeLayer<'_,'_> {
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
-            &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting);
+            &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting,&biome.color);
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -2256,6 +2260,7 @@ feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
     expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
     center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
 pub(crate) trait CultureWithNamer {
@@ -2285,7 +2290,8 @@ entity!(NewCulture CultureSchema CultureFeature {
     namer: String,
     type_: CultureType,
     expansionism: f64,
-    center: i64
+    center: i64,
+    color: String
 });
 
 // needs to be hashable in order to fit into a priority queue
@@ -2361,7 +2367,7 @@ impl CultureLayer<'_,'_> {
     pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = CultureFeature::to_field_names_values(
-            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center);
+            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center,&culture.color);
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -2475,6 +2481,7 @@ feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
     expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
     capital #[allow(dead_code)] set_capital i64 FIELD_CAPITAL "capital" OGRFieldType::OFTInteger64;
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
 entity!(NewNation NationSchema NationFeature {
@@ -2483,7 +2490,8 @@ entity!(NewNation NationSchema NationFeature {
     center: i64,
     type_: CultureType,
     expansionism: f64,
-    capital: i64
+    capital: i64,
+    color: String
 });
 
 // needs to be hashable in order to fit into a priority queue
@@ -2497,11 +2505,13 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationSchema NationFeatu
 
 entity!(NationForSubnations NationSchema NationFeature {
     fid: u64,
-    capital: i64 // TODO: This should be capital_town_id, or capital_id
+    capital: i64, // TODO: This should be capital_town_id, or capital_id
+    color: String
 });
 
 entity!(NationForEmptySubnations NationSchema NationFeature {
-    fid: u64
+    fid: u64,
+    color: String
 });
 
 
@@ -2516,7 +2526,8 @@ impl NationsLayer<'_,'_> {
             nation.center,
             &nation.type_,
             nation.expansionism,
-            nation.capital
+            nation.capital,
+            &nation.color
         );
         self.add_feature_without_geometry(&field_names, &field_values)
     }
@@ -2537,6 +2548,7 @@ feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
     seat #[allow(dead_code)] set_seat option_i64 FIELD_SEAT "seat" OGRFieldType::OFTInteger64;
     nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
 
@@ -2546,7 +2558,8 @@ entity!(NewSubnation SubnationSchema SubnationFeature {
     center: i64,
     type_: CultureType,
     seat: Option<i64>,
-    nation_id: i64
+    nation_id: i64,
+    color: String
 });
 
 
@@ -2568,7 +2581,8 @@ impl SubnationsLayer<'_,'_> {
             subnation.center,
             &subnation.type_,
             subnation.seat,
-            subnation.nation_id
+            subnation.nation_id,
+            &subnation.color
         );
         self.add_feature_without_geometry(&field_names, &field_values)
     }

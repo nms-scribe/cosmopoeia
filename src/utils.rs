@@ -12,6 +12,9 @@ use gdal::vector::FeatureIterator;
 use gdal::vector::OGRwkbGeometryType;
 use adaptive_bezier::adaptive_bezier_curve; 
 use adaptive_bezier::Vector2;
+use colourado::PaletteType;
+use colourado::ColorPalette;
+use colourado::Color;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -1097,4 +1100,21 @@ pub(crate) mod point_finder {
     }
     
 
+}
+
+macro_rules! color_to_u8 {
+    ($color: ident) => {
+        let $color = (($color * u8::MAX as f32).round()) as u8;
+    };
+}
+
+pub(crate) fn generate_colors(count: usize) -> Vec<String> {
+    let palette = ColorPalette::new(count as u32, PaletteType::Dark, false);
+    palette.colors.into_iter().map(|Color{red, blue, green}| {
+        color_to_u8!(red);
+        color_to_u8!(blue);
+        color_to_u8!(green);
+        format!("#{red:02X?}{blue:02X?}{green:02X?}")
+
+    }).collect()
 }

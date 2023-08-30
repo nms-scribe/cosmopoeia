@@ -76,6 +76,7 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
                 let namer = Culture::get_namer(culture_data, namers, default_namer)?;
                 namer.make_state_name(rng)                  
             };
+            let color = nation.color.clone();
 
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
 
@@ -87,7 +88,8 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
                 center,
                 type_,
                 seat,
-                nation_id: nation.fid as i64
+                nation_id: nation.fid as i64,
+                color
             })?;
         }
     }
@@ -260,6 +262,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                 let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
 
                 let nation_id = nation.fid as i64;
+                let color = nation.color.clone();
 
 
                 let subnation = SubnationForPlacement {
@@ -355,6 +358,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                     type_,
                     seat,
                     nation_id,
+                    color
                 }))
 
 

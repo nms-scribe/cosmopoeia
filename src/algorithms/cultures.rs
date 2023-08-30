@@ -31,7 +31,7 @@ use crate::world_map::EntityIndex;
 use crate::world_map::LakeSchema;
 use crate::world_map::EntityLookup;
 use crate::world_map::BiomeSchema;
-
+use crate::utils::generate_colors;
 
 impl CultureType {
 
@@ -103,6 +103,8 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     // I need to avoid duplicate names
     let mut culture_names = HashMap::new();
 
+    let mut colors = generate_colors(culture_count).into_iter();
+
     for culture_source in culture_sources {
 
         // find the cultural center
@@ -164,6 +166,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             type_: culture_type,
             expansionism,
             center: center.fid as i64,
+            color: colors.next().unwrap()
         });
         
     }

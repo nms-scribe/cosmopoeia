@@ -27,12 +27,14 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
 use crate::world_map::EntityIndex;
+use crate::utils::generate_colors;
 
 pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
     let mut nations = Vec::new();
+
 
     for town in towns.read_features().into_entities::<TownForNations>().watch(progress,"Reading towns.","Towns read.") {
         let (_,town) = town?;
@@ -51,11 +53,19 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
                 culture,
                 type_,
                 expansionism,
-                capital
+                capital,
+                color: String::new()
             })
 
         }
     }
+
+    // assign colors now that I know the count:
+    let mut colors = generate_colors(nations.len()).into_iter();
+    for nation in nations.iter_mut().watch(progress, "Assigning colors.", "Colors assigned.") {
+        nation.color = colors.next().unwrap();
+    }
+
 
     let mut nations_layer = target.create_nations_layer(overwrite_layer)?;
     for nation in nations.into_iter().watch(progress,"Writing nations.","Nations written.") {
