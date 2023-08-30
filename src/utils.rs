@@ -1110,7 +1110,7 @@ macro_rules! color_to_u8 {
 }
 
 pub(crate) fn generate_colors(count: usize) -> Vec<String> {
-    let palette = ColorPalette::new(count as u32, PaletteType::Dark, false);
+    let palette = ColorPalette::new(count as u32, PaletteType::Pastel, false);
     palette.colors.into_iter().map(|Color{red, blue, green}| {
         color_to_u8!(red);
         color_to_u8!(blue);

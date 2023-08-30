@@ -2570,6 +2570,11 @@ entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationSchema Subna
     nation_id: i64
 });
 
+entity!(SubnationForNormalize SubnationSchema SubnationFeature {
+    center: i64,
+    seat: Option<i64>
+});
+
 
 pub(crate) type SubnationsLayer<'layer,'feature> = MapLayer<'layer,'feature,SubnationSchema,SubnationFeature<'feature>>;
 

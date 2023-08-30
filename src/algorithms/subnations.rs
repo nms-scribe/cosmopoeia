@@ -30,6 +30,7 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
 use crate::world_map::EntityIndex;
+use crate::world_map::SubnationForNormalize;
 
 
 pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
@@ -399,6 +400,8 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 // TODO: is 'normalize' the right word?
 pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let subnations_map = target.edit_subnations_layer()?.read_features().to_entities_index::<_,SubnationForNormalize>(progress)?;
+
     let mut tiles_layer = target.edit_tile_layer()?;
 
     let mut tile_map = EntityIndex::new();
@@ -415,6 +418,19 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
         if tile.town_id.is_some() {
             continue; // don't overwrite towns
+        }
+
+        if let Some(subnation_id) = tile.subnation_id {
+            // if the subnation doesn't have a seat, don't erase it's center tile.
+            // (if it did have a seat, then it has towns, and the above check would hold it.)
+            // This prevents very small subnations which were created with "Fill Empty" from being
+            // deleted.
+            let subnation = subnations_map.try_get(&(subnation_id as u64))?;
+            if subnation.seat.is_none() {
+                if tile_id == subnation.center as u64 {
+                    continue;
+                }
+            }
         }
 
         let mut adversaries = HashMap::new();
