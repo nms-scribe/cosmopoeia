@@ -223,21 +223,20 @@ To proceed on this, I can break it down into the following steps:
     [X] `gen-towns`
     [X] `gen-subdivisions` -- wraps up all of the subdivision commands
     [X] `gen-nations` -- wraps up all of the nation commands
-[ ] curve-borders commands
+[X] curve-borders commands
     [X] `gen-biomes-dissolve`
     [X] `gen-people-cultures-dissolve`
     [X] `gen-nations-dissolve`
     [X] `gen-subnations-dissolve`
-    [ ] `gen-biomes-curvify`
-    [ ] `gen-cultures-curvify`
-    [ ] `gen-nations-curvify`
-    [ ] `gen-subnations-curvify`
-    [1] add the above to `gen-biomes`
-    [1] add the above to `gen-people`
-    [1] add the above to `gen-nations`
-    [1] add the above to `gen-subnations`
-    [ ] topography? This one would be harder, but I suspect I divide the tiles into groups at certain intervals, and then just collect and curve those.
-[ ] I need colors for the thematic maps. I can then change QGIS to get the color from that field.
+    [X] `gen-biomes-curvify`
+    [X] `gen-cultures-curvify`
+    [X] `gen-nations-curvify`
+    [X] `gen-subnations-curvify`
+    [X] add the above to `gen-biomes`
+    [X] add the above to `gen-people`
+    [X] add the above to `gen-nations`
+    [X] add the above to `gen-subnations`
+[X] I need colors for the thematic maps. I can then change QGIS to get the color from that field.
 [ ] `create-terrain` commands
     [ ] terrain template files
     [ ] Review AFMG terrain generation algorithms

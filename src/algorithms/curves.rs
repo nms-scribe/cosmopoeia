@@ -39,7 +39,6 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
         }
     }
 
-    // TODO: * segment_cache = some sort of collection where it is easy to store segments and find out if they're duplicated, and then get a unique id back. I have to be able to look for segments reversed as well, and return the same id, but provide an indicator that it's reversed. -- I could possibly use a QuadTree for this, combined with a list for storing the things. I only need to index from the beginning and the end points, and store multiple segments. Then, when I want to find if a segment is cached, I just need to compare if there are multiple segments stored in the cache. -- Alternatively, I only need to index from one point. When inserting, that's the start point, when checking I'll be checking with the end point.
     let mut segment_cache: HashMap<Point, Vec<Vec<Point>>> = HashMap::new();
     let mut polygon_segments = HashMap::new();
 

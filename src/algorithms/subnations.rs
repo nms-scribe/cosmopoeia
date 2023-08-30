@@ -291,8 +291,16 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                     }
 
                     for (neighbor_id,_) in &tile.neighbors {
+
+                        if nation_tiles.get(neighbor_id).is_none() {
+                            // we've already placed this in another subnation, or it wasn't available.
+                            continue;
+                        }
+
+
                         let neighbor = tile_map.try_get(&neighbor_id)?;
                         if neighbor.subnation_id.is_some() {
+                            // FUTURE: Wouldn't this have been handled by not being available to place?
                             continue;
                         }
 
@@ -302,6 +310,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                             continue; // don't pass through deep ocean
                         }
                         if neighbor.nation_id != Some(subnation.nation_id) {
+                            // FUTURE: Wouldn't this have been handled by not being available to place?
                             continue; // don't leave nation
                         }
 
