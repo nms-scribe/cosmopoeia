@@ -256,7 +256,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                 let mut seat = None;
                 let center = tile_id as i64;
 
-                let culture = tile.culture.clone();
+                let culture = tile.culture.as_ref().or_else(|| nation.culture.as_ref()).cloned();
                 let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
 
                 let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);

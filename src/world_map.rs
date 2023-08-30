@@ -2511,7 +2511,8 @@ entity!(NationForSubnations NationSchema NationFeature {
 
 entity!(NationForEmptySubnations NationSchema NationFeature {
     fid: u64,
-    color: String
+    color: String,
+    culture: Option<String>
 });
 
 
