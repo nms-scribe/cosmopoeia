@@ -73,7 +73,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 let previous_point = find_tile_site_point(previous_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
                 let next_point = find_tile_site_point(next_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));
                 // create the bezier
-                let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point,&[start_point,end_point],next_point);
+                let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point.as_ref(),&[start_point,end_point],next_point.as_ref());
                 // convert that to a polyline.
                 let line = bezier.to_poly_line(bezier_scale)?;
                 segments.push(NewRiver {

@@ -11,6 +11,7 @@ use crate::algorithms::biomes::fill_biome_defaults;
 use crate::algorithms::biomes::apply_biomes;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::algorithms::tiles::BiomeTheme;
+use crate::algorithms::curves::curvify_layer_by_theme;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -112,6 +113,40 @@ impl Task for GenBiomeDissolve {
 
 
 
+subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenBiomeCurvify {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
+
+    }
+}
+
+impl Task for GenBiomeCurvify {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Making biome polygons curvy");
+
+            curvify_layer_by_theme::<_,BiomeTheme>(target, self.bezier_scale, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -119,6 +154,10 @@ subcommand_def!{
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
 
         #[arg(long)]
         /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -152,7 +191,11 @@ impl Task for GenBiome {
 
             progress.announce("Creating biome polygons");
 
-            dissolve_tiles_by_theme::<_,BiomeTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,BiomeTheme>(target, &mut progress)?;
+
+            progress.announce("Making biome polygons curvy");
+
+            curvify_layer_by_theme::<_,BiomeTheme>(target, self.bezier_scale, &mut progress)
 
         })?;
 

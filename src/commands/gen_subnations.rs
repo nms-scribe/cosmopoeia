@@ -16,6 +16,7 @@ use crate::algorithms::subnations::fill_empty_subnations;
 use crate::algorithms::subnations::normalize_subnations;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::algorithms::tiles::SubnationTheme;
+use crate::algorithms::curves::curvify_layer_by_theme;
 
 
 
@@ -254,6 +255,46 @@ impl Task for GenSubnationsDissolve {
     }
 }
 
+
+
+subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenSubnationsCurvify {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
+
+    }
+}
+
+impl Task for GenSubnationsCurvify {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Making subnation polygons curvy");
+
+            // FUTURE: Technically, subnations have to follow the curves of their owning nations as priority over their own. 
+            // Right now, it doesn't seem to make a big difference if you have the nation borders thick enough. But it
+            // may become important later.
+            curvify_layer_by_theme::<_,SubnationTheme>(target, self.bezier_scale, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
+
 subcommand_def!{
     /// Generates background population of tiles
     pub(crate) struct GenSubnations {
@@ -277,6 +318,10 @@ subcommand_def!{
         #[arg(long,default_value("20"))]
         /// The percent of towns in each nation to use for subnations
         subnation_percentage: f64,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
@@ -325,8 +370,11 @@ impl Task for GenSubnations {
 
             progress.announce("Creating subnation polygons");
 
-            dissolve_tiles_by_theme::<_,SubnationTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,SubnationTheme>(target, &mut progress)?;
 
+            progress.announce("Making subnation polygons curvy");
+
+            curvify_layer_by_theme::<_,SubnationTheme>(target, self.bezier_scale, &mut progress)
 
 
         })?;

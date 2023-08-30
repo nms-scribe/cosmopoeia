@@ -350,7 +350,6 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                     namer.make_state_name(rng)                  
                 };
 
-
                 new_subnations.push((subnation.fid,NewSubnation {
                     name,
                     culture,
@@ -392,9 +391,6 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
         tiles_layer.update_feature(tile)?;
 
     }
-
-
-
 
 
     Ok(())

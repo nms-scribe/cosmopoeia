@@ -450,6 +450,7 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Vec<G
             let (x,y,_) = ring.get_point(i as i32);
             points.push(Point::from_f64(x,y)?)
         }
+
         let bezier = PolyBezier::from_poly_line(&points);
         let mut new_ring = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
         for point in bezier.to_poly_line(scale)? {
@@ -542,25 +543,25 @@ impl PolyBezier {
 
     // finds a curve from a line where the first points and last points are curved with influence of optional extended points.
     // The curves created by these end segments are not included in the result.
-    pub(crate) fn from_poly_line_with_phantoms(phantom_start: Option<Point>, line: &[Point], phantom_end: Option<Point>) -> Self {
+    pub(crate) fn from_poly_line_with_phantoms(phantom_start: Option<&Point>, line: &[Point], phantom_end: Option<&Point>) -> Self {
         match (phantom_start,phantom_end) {
             (None, None) => Self::from_poly_line(line),
             (None, Some(end)) => {
                 let mut vertices = line.to_vec();
-                vertices.push(end);
+                vertices.push(end.clone());
                 let result = Self::from_poly_line(&vertices);
                 result.trim_end()
             },
             (Some(start), None) => {
-                let mut vertices = vec![start];
+                let mut vertices = vec![start.clone()];
                 vertices.extend(line.into_iter().cloned());
                 let result = Self::from_poly_line(&vertices);
                 result.trim_start()
             },
             (Some(start), Some(end)) => {
-                let mut vertices = vec![start];
+                let mut vertices = vec![start.clone()];
                 vertices.extend(line.into_iter().cloned());
-                vertices.push(end);
+                vertices.push(end.clone());
                 let result = Self::from_poly_line(&vertices);
                 result.trim_both()
             },

@@ -207,8 +207,6 @@ TODO: This is next.
 [ ] Nations
 [ ] Subnations
 
-
-* *input* coastline_vertex_index
 * vertex_counts = map
 * For each polygon in the layer:
   * for each vertex in all rings:

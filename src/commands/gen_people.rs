@@ -15,6 +15,7 @@ use crate::algorithms::naming::NamerSet;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::utils::random_number_generator;
 use crate::algorithms::tiles::CultureTheme;
+use crate::algorithms::curves::curvify_layer_by_theme;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -123,7 +124,7 @@ impl Task for GenPeopleCultures {
 
 subcommand_def!{
     /// Generates background population of tiles
-    pub(crate) struct GenPeopleExpandCultures {
+    pub(crate) struct GenPeopleCulturesExpand {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -139,7 +140,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenPeopleExpandCultures {
+impl Task for GenPeopleCulturesExpand {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -160,7 +161,7 @@ impl Task for GenPeopleExpandCultures {
 
 subcommand_def!{
     /// Generates polygons in cultures layer
-    pub(crate) struct GenPeopleDissolveCultures {
+    pub(crate) struct GenPeopleCulturesDissolve {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -168,7 +169,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenPeopleDissolveCultures {
+impl Task for GenPeopleCulturesDissolve {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -180,6 +181,41 @@ impl Task for GenPeopleDissolveCultures {
             progress.announce("Creating culture polygons");
 
             dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
+
+subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenPeopleCulturesCurvify {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
+
+    }
+}
+
+impl Task for GenPeopleCulturesCurvify {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Making culture polygons curvy");
+
+            curvify_layer_by_theme::<_,CultureTheme>(target, self.bezier_scale, &mut progress)
         })?;
 
         target.save(&mut progress)
@@ -225,6 +261,10 @@ subcommand_def!{
         /// A number, clamped to 0-10, which controls how much cultures can vary in size
         size_variance: f64,
 
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
+
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
         seed: Option<u64>,
@@ -267,7 +307,11 @@ impl Task for GenPeople {
 
             progress.announce("Creating culture polygons");
 
-            dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)?;
+
+            progress.announce("Making culture polygons curvy");
+
+            curvify_layer_by_theme::<_,CultureTheme>(target, self.bezier_scale, &mut progress)
 
         })?;
 

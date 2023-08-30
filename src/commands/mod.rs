@@ -81,11 +81,13 @@ command!{
     gen_biome::GenBiomeData;
     gen_biome::GenBiomeApply;
     gen_biome::GenBiomeDissolve;
+    gen_biome::GenBiomeCurvify;
     gen_people::GenPeople;
     gen_people::GenPeoplePopulation;
     gen_people::GenPeopleCultures;
-    gen_people::GenPeopleExpandCultures;
-    gen_people::GenPeopleDissolveCultures;
+    gen_people::GenPeopleCulturesExpand;
+    gen_people::GenPeopleCulturesDissolve;
+    gen_people::GenPeopleCulturesCurvify;
     gen_towns::GenTowns;
     gen_towns::GenTownsCreate;
     gen_towns::GenTownsPopulate;
@@ -94,12 +96,14 @@ command!{
     gen_nations::GenNationsExpand;
     gen_nations::GenNationsNormalize;
     gen_nations::GenNationsDissolve;
+    gen_nations::GenNationsCurvify;
     gen_subnations::GenSubnations;
     gen_subnations::GenSubnationsCreate;
     gen_subnations::GenSubnationsExpand;
     gen_subnations::GenSubnationsFillEmpty;
     gen_subnations::GenSubnationsNormalize;
     gen_subnations::GenSubnationsDissolve;
+    gen_subnations::GenSubnationsCurvify;
 }
 
 

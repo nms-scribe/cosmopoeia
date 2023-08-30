@@ -15,6 +15,7 @@ use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::algorithms::tiles::NationTheme;
+use crate::algorithms::curves::curvify_layer_by_theme;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -179,6 +180,41 @@ impl Task for GenNationsDissolve {
 
 
 subcommand_def!{
+    /// Generates polygons in cultures layer
+    pub(crate) struct GenNationsCurvify {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
+
+    }
+}
+
+impl Task for GenNationsCurvify {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::edit(self.target)?;
+
+        target.with_transaction(|target| {
+            progress.announce("Making nation polygons curvy");
+
+            curvify_layer_by_theme::<_,NationTheme>(target, self.bezier_scale, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+    }
+}
+
+
+
+subcommand_def!{
     /// Generates background population of tiles
     pub(crate) struct GenNations {
 
@@ -213,6 +249,10 @@ subcommand_def!{
         #[arg(long,default_value("1"))]
         /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
         limit_factor: f64,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
 
         #[arg(long)]
         /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -254,7 +294,11 @@ impl Task for GenNations {
 
             progress.announce("Creating nation polygons");
 
-            dissolve_tiles_by_theme::<_,NationTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,NationTheme>(target, &mut progress)?;
+
+            progress.announce("Making nation polygons curvy");
+
+            curvify_layer_by_theme::<_,NationTheme>(target, self.bezier_scale, &mut progress)
 
 
         })?;

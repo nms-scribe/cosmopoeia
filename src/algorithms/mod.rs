@@ -17,6 +17,7 @@ pub(crate) mod cultures;
 pub(crate) mod towns;
 pub(crate) mod nations;
 pub(crate) mod subnations;
+pub(crate) mod curves;
 
 // FUTURE: It might make some of the code easier to work with if there were an Algorithm trait, and each of the algorithms are structs, which you have to fill with their dependencies, before calling a simple 'run(progress)' or something like that. Then I can break some of the more complex algorithms into simpler functions. The only issue are the fact that I'll have to borrow individual properties as mutable at the same time. But that might force me to separate my code better.
 // -- another thing this can allow: for related algorithms, I can have 'from' functions which grab the input/output from a previous algorithm. so it can be more easily re-used.

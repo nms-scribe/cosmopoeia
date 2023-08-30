@@ -2623,6 +2623,19 @@ impl OceanLayer<'_,'_> {
 
 }
 
+// TODO: Temporary layer for checking lines during curvifying.
+feature!(LineFeature LineSchema "lines" wkbLineString to_field_names_values: #[allow(dead_code)] {
+});
+
+pub(crate) type LineLayer<'layer,'feature> = MapLayer<'layer,'feature,LineSchema,LineFeature<'feature>>;
+
+impl LineLayer<'_,'_> {
+
+    #[allow(dead_code)] pub(crate) fn add_line(&mut self, line: &Vec<Point>) -> Result<u64,CommandError> {
+        let geometry = crate::utils::create_line(line)?;
+        self.add_feature(geometry, &[], &[])
+    }
+}
 
 
 pub(crate) struct WorldMap {
@@ -2797,6 +2810,10 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: bool) -> Result<OceanLayer,CommandError> {
         Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean)?)
+    }
+
+    #[allow(dead_code)] pub(crate) fn create_lines_layer(&mut self, overwrite: bool) -> Result<LineLayer,CommandError> {
+        Ok(LineLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
 
 

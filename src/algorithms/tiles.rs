@@ -39,6 +39,8 @@ use crate::world_map::NationFeature;
 use crate::world_map::SubnationSchema;
 use crate::world_map::TileForSubnationDissolve;
 use crate::world_map::SubnationFeature;
+use crate::world_map::TypedFeatureIterator;
+use crate::world_map::MapLayer;
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -316,7 +318,10 @@ pub(crate) trait Theme: Sized {
 
     fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<std::option::Option<u64>, CommandError>;
 
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
+
+    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature;
+
 
 }
 
@@ -345,8 +350,12 @@ impl Theme for CultureTheme {
         }
     }
 
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, CultureSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, CultureSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
         target.edit_cultures_layer()        
+    }
+
+    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, CultureSchema, CultureFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+        layer.read_features()
     }
 
 
@@ -376,8 +385,12 @@ impl Theme for BiomeTheme {
         Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid))
     }
 
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, BiomeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, BiomeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
         target.edit_biomes_layer()        
+    }
+
+    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, BiomeSchema, BiomeFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+        layer.read_features()
     }
 
 
@@ -401,8 +414,12 @@ impl Theme for NationTheme {
         Ok(tile.nation_id.map(|n| n as u64))
     }
 
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
         target.edit_nations_layer()        
+    }
+
+    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, NationSchema, NationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+        layer.read_features()
     }
 
 
@@ -427,8 +444,12 @@ impl Theme for SubnationTheme {
         Ok(tile.subnation_id.map(|n| n as u64))
     }
 
-    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<crate::world_map::MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
+    fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
         target.edit_subnations_layer()        
+    }
+
+    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, SubnationSchema, SubnationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+        layer.read_features()
     }
 
 
