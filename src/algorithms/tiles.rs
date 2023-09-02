@@ -357,8 +357,6 @@ impl Theme for CultureTheme {
     fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, CultureSchema, CultureFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
         layer.read_features()
     }
-
-
     
 }
 

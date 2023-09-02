@@ -65,10 +65,7 @@ pub(crate) fn sample_elevations_on_tiles<Progress: ProgressObserver>(target: &mu
 
 pub(crate) enum OceanSamplingMethod {
     Below(f64), // any elevation below the specified value is ocean
-    AllData, // any elevation that is not nodata is ocean
-    NoData, // any elevation that is nodata is ocean
-    NoDataAndBelow(f64), // any elevation that is no data or below the specified value is ocean.
-    // TODO: Another option: a list of points to act as seeds, along with an elevation, use a flood-fill to mark oceans that are connected to these and under that elevation.
+    AllData // any elevation that is not nodata is ocean
 }
 
 pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut WorldMapTransaction, raster: &RasterMap, method: OceanSamplingMethod, progress: &mut Progress) -> Result<(),CommandError> {
@@ -105,19 +102,12 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
                 match method {
                     OceanSamplingMethod::Below(_) if is_no_data => false,
                     OceanSamplingMethod::Below(below) => elevation < &below,
-                    OceanSamplingMethod::AllData => !is_no_data,
-                    OceanSamplingMethod::NoData => is_no_data,
-                    OceanSamplingMethod::NoDataAndBelow(below) => is_no_data || (elevation < &below),
+                    OceanSamplingMethod::AllData => !is_no_data
                 }
 
             } else {
 
-                match method {
-                    OceanSamplingMethod::Below(_) => false,
-                    OceanSamplingMethod::AllData => false,
-                    OceanSamplingMethod::NoData => true,
-                    OceanSamplingMethod::NoDataAndBelow(_) => true,
-                }
+                false
 
             };
 
@@ -125,16 +115,13 @@ pub(crate) fn sample_ocean_on_tiles<Progress: ProgressObserver>(target: &mut Wor
                 bad_ocean_tile_found = true;
             }
 
-            let grouping = if is_ocean {
-                Grouping::Ocean
-            } else {
-                // process of setting lake, island, continent, etc. will have to be redone.
-                Grouping::Continent
-            };
+            // only apply if the data actually is ocean now, so one can use multiple ocean methods
+            if is_ocean {
+                feature.set_grouping(&Grouping::Ocean)?;
 
-            feature.set_grouping(&grouping)?;
-
-            layer.update_feature(feature)?;
+                layer.update_feature(feature)?;
+    
+            }
 
         }
 

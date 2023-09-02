@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::cmp::Reverse;
+use std::collections::HashSet;
 
 use rand::Rng;
 use priority_queue::PriorityQueue;
@@ -298,8 +299,12 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     // TODO: We should change all of the 'as' in this crate into 'into'
     // This is how far the cultures will be able to spread.
     let max_expansion_cost = OrderedFloat::from(tiles.feature_count() as f64 * 0.6 * limit_factor);
+
+    let mut culture_centers = HashSet::new();
     
     for culture in cultures {
+
+        culture_centers.insert(culture.center as u64);
 
         // place the culture center
         let tile = tile_map.try_get_mut(&(culture.center as u64))?;
@@ -323,6 +328,11 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         let tile = tile_map.try_get(&tile_id)?;
 
         for (neighbor_id,_) in &tile.neighbors {
+
+            if culture_centers.contains(neighbor_id) {
+                // don't overwrite a culture center
+                continue;
+            }
 
             let neighbor = tile_map.try_get(&neighbor_id)?;
 

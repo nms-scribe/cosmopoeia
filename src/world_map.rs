@@ -1605,9 +1605,12 @@ impl TilesLayer<'_,'_> {
         self.add_feature(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
+                TileSchema::FIELD_GROUPING,
             ],&[
                 Some(FieldValue::RealValue(tile.site_x)),
                 Some(FieldValue::RealValue(tile.site_y)),
+                // tiles are continent by default until someone samples some ocean.
+                Some(FieldValue::StringValue(Into::<String>::into(&Grouping::Continent)))
             ])?;
         Ok(())
 

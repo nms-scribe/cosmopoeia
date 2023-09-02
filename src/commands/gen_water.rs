@@ -12,6 +12,57 @@ use crate::algorithms::water_fill::generate_water_fill;
 use crate::algorithms::rivers::generate_water_rivers;
 use crate::algorithms::water_distance::generate_water_distance;
 use crate::algorithms::grouping::calculate_grouping;
+use crate::algorithms::tiles::calculate_coastline;
+
+
+subcommand_def!{
+    /// Calculates neighbors for tiles
+    pub(crate) struct GenWaterCoastline {
+
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="100")]
+        /// This number is used for generating points to make curvy coastlines. The higher the number, the smoother the curves.
+        bezier_scale: f64,
+
+        #[arg(long)]
+        /// If true and the coastline or oceans layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite: bool,
+
+        #[arg(long)]
+        /// If true and the coastline layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite_coastline: bool,
+
+        #[arg(long)]
+        /// If true and the oceans layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite_ocean: bool,
+
+
+
+    }
+}
+
+impl Task for GenWaterCoastline {
+
+    fn run(self) -> Result<(),CommandError> {
+
+        let mut progress = ConsoleProgressBar::new();
+
+        let mut target = WorldMap::create_or_edit(self.target)?;
+
+        target.with_transaction(|target| {
+
+            progress.announce("Creating coastline");
+
+            calculate_coastline(target, self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, &mut progress)
+        })?;
+
+        target.save(&mut progress)
+
+
+    }
+}
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
@@ -207,6 +258,13 @@ subcommand_def!{
         /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
         overwrite_lakes: bool,
 
+        #[arg(long)]
+        /// If true and the coastline layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite_coastline: bool,
+
+        #[arg(long)]
+        /// If true and the oceans layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite_ocean: bool,
 
 
 
@@ -222,6 +280,10 @@ impl Task for GenWater {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
+
+            progress.announce("Creating coastline");
+
+            calculate_coastline(target, self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, &mut progress)?;
 
             progress.announce("Calculating water flow");
             let (tile_map,tile_queue) = generate_water_flow(target, &mut progress)?;
