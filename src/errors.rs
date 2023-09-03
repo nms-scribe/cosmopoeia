@@ -40,6 +40,8 @@ pub(crate) enum CommandError {
     CantFindMiddlePoint(u64,u64,usize),
     #[allow(dead_code)] RasterDatasetRequired,
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType),
+    MaxElevationMustBePositive(f64),
+    MinElevationMustBeLess(f64, f64),
 }
 
 impl Error for CommandError {
@@ -101,6 +103,8 @@ impl Display for CommandError {
             },
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
+            Self::MaxElevationMustBePositive(a) => write!(f,"maximum elevation {} must be positive",a),
+            Self::MinElevationMustBeLess(a, b) => write!(f,"minimum elevation {} must be less than maximum {}",a,b)
         }
     }
 }

@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::collections::hash_map::Keys;
 use std::collections::hash_map::Iter;
 use std::collections::hash_map::IntoIter;
+use std::collections::hash_map::IterMut;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -53,10 +54,10 @@ use crate::algorithms::naming::LoadedNamers;
 // TODO: I need to set CRS for each layer.
 
 macro_rules! feature_conv {
-    (id_list_to_string@ $value: ident) => {
+    (id_list_to_string@ $value: expr) => {
         $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",")
     };
-    (neighbor_directions_to_string@ $value: ident) => {
+    (neighbor_directions_to_string@ $value: expr) => {
         $value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",")
     };
 }
@@ -366,71 +367,71 @@ macro_rules! feature_set_field {
 }
 
 macro_rules! feature_to_value {
-    ($prop: ident f64) => {
+    ($prop: expr; f64) => {
         Some(FieldValue::RealValue($prop))
     };
-    ($prop: ident i32) => {
+    ($prop: expr; i32) => {
         Some(FieldValue::IntegerValue($prop))
     };
-    ($prop: ident bool) => {
+    ($prop: expr; bool) => {
         Some(FieldValue::IntegerValue($prop.into()))
     };
-    ($prop: ident option_f64) => {
+    ($prop: expr; option_f64) => {
         if let Some(value) = $prop {
             Some(FieldValue::RealValue(value))
         } else {
             to_field_null_value()
         }
     };
-    ($prop: ident option_i32) => {
+    ($prop: expr; option_i32) => {
         if let Some(value) = $prop {
             Some(FieldValue::IntegerValue(value))
         } else {
             None
         }
     };
-    ($prop: ident option_i64) => {
+    ($prop: expr; option_i64) => {
         if let Some(value) = $prop {
             Some(FieldValue::Integer64Value(value))
         } else {
             None
         }
     };
-    ($prop: ident id_list) => {
+    ($prop: expr; id_list) => {
         Some(FieldValue::StringValue(feature_conv!(id_list_to_string@ $prop)))
     };
-    ($prop: ident neighbor_directions) => {
+    ($prop: expr; neighbor_directions) => {
         Some(FieldValue::StringValue(feature_conv!(neighbor_directions_to_string@ $prop)))
     };
-    ($prop: ident i64) => {
+    ($prop: expr; i64) => {
         Some(FieldValue::Integer64Value($prop))
     };
-    ($prop: ident river_segment_from) => {{
+    ($prop: expr; river_segment_from) => {{
         Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
     }};
-    ($prop: ident river_segment_to) => {{
+    ($prop: expr; river_segment_to) => {{
         Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
     }};
-    ($prop: ident string) => {{
+    ($prop: expr; string) => {{
         Some(FieldValue::StringValue($prop.to_owned()))
     }};
-    ($prop: ident option_string) => {{
+    ($prop: expr; option_string) => {{
         if let Some(value) = $prop {
             Some(FieldValue::StringValue(value.to_owned()))
         } else {
             None
         }
     }};
-    ($prop: ident biome_criteria) => {{
+    ($prop: expr; biome_criteria) => {{
         Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
-    ($prop: ident lake_type) => {{
+    ($prop: expr; lake_type) => {{
         Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
-    ($prop: ident grouping) => {{
+    ($prop: expr; grouping) => {{
         Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
-    ($prop: ident culture_type) => {{
+    ($prop: expr; culture_type) => {{
         Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
 
@@ -551,7 +552,7 @@ macro_rules! feature {
                 ([
                     $($schema_name::$field),*
                 ],[
-                    $(feature_to_value!($prop $prop_type)),*
+                    $(feature_to_value!($prop; $prop_type)),*
                 ])
     
             }
@@ -733,6 +734,10 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
 
     pub(crate) fn iter(&self) -> Iter<'_, u64, EntityType> {
         self.inner.iter()
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> IterMut<'_, u64, EntityType> {
+        self.inner.iter_mut()
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -1003,7 +1008,7 @@ impl TrianglesLayer<'_,'_> {
 
 }
 
-#[derive(Clone)]
+#[derive(Clone,PartialEq)]
 pub(crate) enum Grouping {
     LakeIsland,
     Islet,
@@ -1160,21 +1165,40 @@ entity!(NewTile TileSchema TileFeature {
     site_x: f64, 
     site_y: f64
 }); 
-entity!(TileForSampling TileSchema TileFeature {
-    fid: u64, 
+
+entity!(TileForTerrain TileSchema TileFeature {
     site_x: f64, 
-    site_y: f64
+    site_y: f64,
+    elevation: f64,
+    grouping: Grouping,
+    // 'old' values so the algorithm can check if it's changed.
+    old_elevation: f64 = |feature: &TileFeature| feature.elevation(),
+    old_grouping: Grouping = |feature: &TileFeature| feature.grouping()
 });
+
+impl TileForTerrain {
+
+    pub(crate) fn elevation_changed(&self) -> bool {
+        self.elevation != self.old_elevation
+    }
+
+    pub(crate) fn grouping_changed(&self) -> bool {
+        self.grouping != self.old_grouping
+    }
+}
+
 entity!(TileForTemperatures TileSchema TileFeature {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
     grouping: Grouping
 });
+
 entity!(TileForWinds TileSchema TileFeature {
     fid: u64, 
     site_y: f64
 });
+
 entity!(TileForWaterflow TileSchema TileFeature {
     elevation: f64, 
     grouping: Grouping, 
@@ -1605,12 +1629,18 @@ impl TilesLayer<'_,'_> {
         self.add_feature(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
+                TileSchema::FIELD_ELEVATION,
+                TileSchema::FIELD_ELEVATION_SCALED,
                 TileSchema::FIELD_GROUPING,
             ],&[
-                Some(FieldValue::RealValue(tile.site_x)),
-                Some(FieldValue::RealValue(tile.site_y)),
+                feature_to_value!(tile.site_x; f64),
+                feature_to_value!(tile.site_y; f64),
+                // initial tiles start with 0 elevation, terrain commands will edit this...
+                feature_to_value!(0.0; f64), // FUTURE: Watch that this type stays correct
+                // and scaled elevation starts with 20.
+                feature_to_value!(20; i32), // FUTURE: Watch that this type stays correct
                 // tiles are continent by default until someone samples some ocean.
-                Some(FieldValue::StringValue(Into::<String>::into(&Grouping::Continent)))
+                feature_to_value!(&Grouping::Continent; grouping)
             ])?;
         Ok(())
 

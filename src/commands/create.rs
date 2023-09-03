@@ -15,7 +15,8 @@ use crate::utils::ToGeometryCollection;
 use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
-use crate::algorithms::raster_sampling::sample_elevations_on_tiles;
+use crate::algorithms::terrain::TerrainSettings;
+use crate::algorithms::terrain::SampleElevationWithRaster;
 
 
 
@@ -202,10 +203,12 @@ impl Task for CreateFromHeightmap {
 
             calculate_tile_neighbors(target, &mut progress)?;
 
-            // even though this is technically a terrain command, it's something I should do while I've got the raster open.
-            progress.announce("Sample elevations from heightmap");
+            progress.announce("Sampling elevations from raster");
 
-            sample_elevations_on_tiles(target, &source, &mut progress)
+            // even though this is technically a terrain command, it's something that is probably expected
+            let settings = TerrainSettings::from_raster(&source, &mut progress)?;
+            let process = SampleElevationWithRaster::new(source);
+            process.process_terrain(settings,target,&mut progress)
 
         })?;
 

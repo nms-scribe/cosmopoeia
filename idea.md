@@ -694,21 +694,18 @@ window.HeightmapGenerator = (function () {
 
 ### Analysys
 
-TODO: I think I'm going to have to have each task separate, in order to get it to work with CLAP. When clap supports chained or multiple subcommands, that can change. But I can still do multiple tasks with recipes. 
-
-TODO: This also means 'create-coastline' doesn't have a good location. Maybe move this to water stuff? As long as it's before biomes.
+TODO: I think I'm going to have to have each task separate, in order to get it to work with clap. When clap supports chained or multiple subcommands, that can change. But I can still do multiple tasks with recipes. 
 
 TODO: Since I don't necessarily need to skip this stuff with a heightmap, I'm rethinking the first commands. I'm going to get rid of convert-heightmap and add the following commands:
 * [X] `create-from-heightmap`: takes the extent of the heightmap and generates points, then samples the elevations from that heightmap.
 * [ ] `create-from-blank`: takes an extent and creates points in that extent with elevations of 0
-* [ ] `create-from-random-uniform`: takes an extent and creates points with elevations randomly chosen from a given range of values.
+* [ ] `create-from-random-uniform`: takes an extent and creates points with elevations randomly chosen from a given range of values. TODO: Actually, this would be better as a processing thing
 * [X] `create-source-from-heightmap` -- same as above, but doesn't calc neighbors
 * [ ] `create-source-from-blank`:  -- same as above, but doesn't calc neighbors
 * [ ] `create-source-from-random-uniform` -- same as above, but doesn't calc neighbors
 * [X] `create-calc-neighbors` -- for dividing up the neighbors after any creation.
-* [ ] `terrain-*` -- various tasks to run. These correspond to the tasks in the enum listed below. 
-
--- The "templates" of AFMG are converted to recipes which are to be processed.
+* [X] `terrain-*` -- various tasks to run. These correspond to the tasks in the enum listed below. 
+TODO: The "templates" of AFMG are converted to recipes which are to be processed.
 
 
 *Terrain Command*
@@ -785,7 +782,7 @@ TODO: Since I don't necessarily need to skip this stuff with a heightmap, I'm re
       * let y = rng.gen_range(range_y) * extent.height
       * start = point_index.find_nearest(x,y)
       * limit += 1
-      * if (limit >= 50) || ((tile_map[start].elevation_scaled + h <= (max_elevation * 0.9)) && ((tile_map[start].elevation_scaled + h >= (min_elevation * 0.9)))): break
+      * if (limit >= 50) || ((tile_map[start].elevation + h <= (max_elevation * 0.9)) && ((tile_map[start].elevation + h >= (min_elevation * 0.9)))): break
     * let queue = VecDequeue[start] -- allows popping from front
     * while let Some(tile_id) = queue.pop_front()
       * tile_map[tile_id].elevation = (tile_map[tile_id].elevation + h).clamp(min_elevation,max_elevation);
@@ -1007,7 +1004,7 @@ The following commands were used, in this order, to generate the testing maps of
 
 ```sh
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- create-from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif testing_output/Inannak.world.gpkg --overwrite --seed 9543572450198918714
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- terrain-sample-ocean-masked testing_output/Inannak.world.gpkg /home/neil/Cartography/Inannak/Inannak-Ocean.tif
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- terrain testing_output/Inannak.world.gpkg --min-elevation -3536 --max-elevation 10011 sample-ocean-masked /home/neil/Cartography/Inannak/Inannak-Ocean.tif
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-climate testing_output/Inannak.world.gpkg 
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite

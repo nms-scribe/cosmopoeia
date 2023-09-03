@@ -34,6 +34,8 @@ pub(crate) trait ProgressObserver {
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback);
 
+    fn announce(&self, message: &str);    
+
 }
 
 
@@ -63,6 +65,9 @@ impl ProgressObserver for () {
     }
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, _: Callback) {
+    }
+
+    fn announce(&self, _: &str) {
     }
 }
 
@@ -200,6 +205,10 @@ impl ProgressObserver for ConsoleProgressBar {
             bar.finish_with_message(callback().as_ref().to_owned());
             self.bar = None;
         }
+    }
+
+    fn announce(&self, message: &str) {
+        ConsoleProgressBar::announce(&self, message)
     }
 
 }

@@ -64,8 +64,7 @@ command!{
     create::CreateFromHeightmap;
     create::CreateSourceFromHeightmap;
     create::CreateCalcNeighbors;
-    terrain::TerrainSampleOceanBelow;
-    terrain::TerrainSampleOceanMasked;
+    terrain::Terrain;
     gen_climate::GenClimate;
     gen_climate::GenClimateTemperature;
     gen_climate::GenClimateWind;

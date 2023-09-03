@@ -1,55 +1,35 @@
 use std::path::PathBuf;
 
 use clap::Args;
+use clap::Subcommand;
 
 use super::Task;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
-use crate::raster::RasterMap;
-use crate::algorithms::raster_sampling::OceanSamplingMethod;
-use crate::algorithms::raster_sampling::sample_ocean_on_tiles;
+use crate::algorithms::terrain::TerrainSettings;
+use crate::algorithms::terrain::SampleElevation;
+use crate::algorithms::terrain::SampleOceanBelow;
+use crate::algorithms::terrain::SampleOceanMasked;
+use crate::algorithms::terrain::TerrainProcess;
 
 
-subcommand_def!{
-    /// Calculates neighbors for tiles
-    pub(crate) struct TerrainSampleOceanBelow {
-
-        /// The path to the world map GeoPackage file
-        target: PathBuf,
-
-        /// Source file
-        source: PathBuf,
-
-        /// Elevation below which the terrain will be marked as ocean
-        elevation: f64
-
-    }
+#[derive(Subcommand)]
+enum TerrainProcessCommand {
+    SampleElevation(SampleElevation),
+    SampleOceanMasked(SampleOceanMasked),
+    SampleOceanBelow(SampleOceanBelow),
 }
 
-impl Task for TerrainSampleOceanBelow {
+impl TerrainProcessCommand {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
-
-        let mut target = WorldMap::create_or_edit(self.target)?;
-
-        let source = RasterMap::open(self.source)?;
-
-        target.with_transaction(|target| {
-
-            progress.announce("Sample ocean data from heightmap");
-
-
-            sample_ocean_on_tiles(target, &source, OceanSamplingMethod::Below(self.elevation), &mut progress)
-    
-
-        })?;
-
-        target.save(&mut progress)
-
+    fn into_process(self) -> TerrainProcess {
+        match self {
+            TerrainProcessCommand::SampleElevation(process) => TerrainProcess::SampleElevation(process),
+            TerrainProcessCommand::SampleOceanMasked(process) => TerrainProcess::SampleOceanMasked(process),
+            TerrainProcessCommand::SampleOceanBelow(process) => TerrainProcess::SampleOceanBelow(process),
+        }
 
     }
 }
@@ -57,18 +37,26 @@ impl Task for TerrainSampleOceanBelow {
 
 subcommand_def!{
     /// Calculates neighbors for tiles
-    pub(crate) struct TerrainSampleOceanMasked {
+    pub(crate) struct Terrain {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
-        /// Source file
-        source: PathBuf,
+        #[command(subcommand)]
+        process: TerrainProcessCommand,
+
+        #[arg(long,allow_negative_numbers=true)]
+        /// minimum elevation for heightmap
+        min_elevation: f64,
+
+        #[arg(long)]
+        /// maximum elevation for heightmap
+        max_elevation: f64
 
     }
 }
 
-impl Task for TerrainSampleOceanMasked {
+impl Task for Terrain {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -76,13 +64,11 @@ impl Task for TerrainSampleOceanMasked {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        let source = RasterMap::open(self.source)?;
-
         target.with_transaction(|target| {
 
-            progress.announce("Sample ocean data from heightmap");
-
-            sample_ocean_on_tiles(target, &source, OceanSamplingMethod::AllData, &mut progress)
+            let settings = TerrainSettings::new(self.min_elevation,self.max_elevation)?;
+            let process = self.process.into_process();
+            process.process_terrain(settings,target,&mut progress)
     
 
         })?;
