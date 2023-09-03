@@ -1,6 +1,11 @@
 use std::path::PathBuf;
+use std::fs::File;
+use std::io::BufReader;
 
 use clap::Args;
+use serde::Deserialize;
+use serde::Serialize;
+use serde_json;
 
 use crate::errors::CommandError;
 use crate::world_map::EntityIndex;
@@ -12,6 +17,7 @@ use crate::progress::WatchableIterator;
 use crate::raster::RasterMap;
 use crate::world_map::Grouping;
 use crate::subcommand_def;
+use crate::world_map::ElevationLimits;
 
 /*
 TODO: (see ideas for algorithms)
@@ -31,51 +37,44 @@ TODO: (see ideas for algorithms)
 
 */
 
-pub(crate) struct TerrainSettings {
-    min_elevation: f64,
-    max_elevation: f64
-}
-
-impl TerrainSettings {
-
-    pub(crate) fn new(min_elevation: f64, max_elevation: f64) -> Result<Self,CommandError> {
-        if max_elevation < 0.0 {
-            Err(CommandError::MaxElevationMustBePositive(max_elevation))
-            // FUTURE: or should it? What if they want to create an underwater world? That won't be possible until we allow mermaid-like cultures, however,
-            // and I'm not sure how "biomes" work down there.
-        } else if min_elevation >= max_elevation {
-            // it doesn't necessarily have to be negative, however.
-            Err(CommandError::MinElevationMustBeLess(min_elevation,max_elevation))
-        } else {
-            Ok(Self {
-                min_elevation,
-                max_elevation,
-            })
-        }
-    }
-
-    pub(crate) fn from_raster<Progress: ProgressObserver>(raster: &RasterMap, progress: &mut Progress) -> Result<Self,CommandError> {
-        progress.start_unknown_endpoint(|| "Calculating min/max from raster.");
-        let (min_elevation,max_elevation) = raster.compute_min_max(1,true)?;
-        progress.finish(|| "Min/max calculated.");
-        // FUTURE: Should I use progress to output this? I want to make sure the user sees this when it's calculated,
-        // they'll need it for the next one.
-        println!("Using min elevation {}",min_elevation);
-        println!("Using max elevation {}",max_elevation);
-
-        Self::new(min_elevation,max_elevation)
-
-    }
-}
-
 trait ProcessTerrain {
 
-    fn process_terrain_tiles<Progress: ProgressObserver>(&self, settings: TerrainSettings, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError>;
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, limits: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError>;
 }
 
 subcommand_def!{
 
+    /// Replaces elevations by sampling from a heightmap
+    #[derive(Deserialize,Serialize)]
+    pub(crate) struct Recipe {
+
+        /// Raster file defining new elevations
+        source: PathBuf
+    }
+}
+
+impl ProcessTerrain for Recipe {
+
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, limits: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+
+        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let reader = BufReader::new(recipe_data);
+        let tasks: Vec<TerrainProcess> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+
+        for task in tasks {
+            task.process_terrain_tiles(limits, tile_map, progress)?;
+        }
+
+        
+        Ok(())
+    }
+}
+
+
+subcommand_def!{
+
     /// Sets tiles to ocean by sampling data from a heightmap. If value in heightmap is less than specified elevation, it becomes ocean.
+    #[derive(Deserialize,Serialize)]
     pub(crate) struct SampleOceanBelow {
 
         /// The raster to sample from
@@ -89,7 +88,7 @@ subcommand_def!{
 
 impl ProcessTerrain for SampleOceanBelow {
 
-    fn process_terrain_tiles<Progress: ProgressObserver>(&self, _: TerrainSettings, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, _: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
         progress.announce("Sampling ocean data");
 
@@ -141,6 +140,7 @@ impl ProcessTerrain for SampleOceanBelow {
 subcommand_def!{
 
     /// Sets tiles to ocean by sampling data from a heightmap. If data in heightmap is not nodata, the tile becomes ocean.
+    #[derive(Deserialize,Serialize)]
     pub(crate) struct SampleOceanMasked {
 
         /// The raster to read ocean data from
@@ -150,7 +150,7 @@ subcommand_def!{
 
 impl ProcessTerrain for SampleOceanMasked {
 
-    fn process_terrain_tiles<Progress: ProgressObserver>(&self, _: TerrainSettings, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, _: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
         progress.announce("Sampling ocean data");
 
@@ -206,7 +206,7 @@ impl SampleElevationWithRaster {
 
 impl ProcessTerrain for SampleElevationWithRaster {
 
-    fn process_terrain_tiles<Progress: ProgressObserver>(&self, _: TerrainSettings, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, _: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
         // NOTE: No 'announce', this is called by functions which have already announced the algorithm.
 
@@ -240,6 +240,7 @@ impl ProcessTerrain for SampleElevationWithRaster {
 subcommand_def!{
 
     /// Replaces elevations by sampling from a heightmap
+    #[derive(Deserialize,Serialize)]
     pub(crate) struct SampleElevation {
 
         /// Raster file defining new elevations
@@ -248,51 +249,49 @@ subcommand_def!{
 }
 
 impl ProcessTerrain for SampleElevation {
-    fn process_terrain_tiles<Progress: ProgressObserver>(&self, settings: TerrainSettings, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, limits: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
         progress.announce("Sampling elevations");
 
         let raster = RasterMap::open(&self.source)?;
 
-        SampleElevationWithRaster { raster }.process_terrain_tiles(settings, tile_map, progress)
+        SampleElevationWithRaster { raster }.process_terrain_tiles(limits, tile_map, progress)
     
     }
 }
 
 
-
+#[derive(Deserialize,Serialize)]
 pub(crate) enum TerrainProcess {
+    Recipe(Recipe),
     SampleOceanMasked(SampleOceanMasked),
     SampleOceanBelow(SampleOceanBelow),
     SampleElevation(SampleElevation),
-    // Create-from-heightmap already has the raster open, this makes things easier to get this done.
+
+    #[serde(skip)]
+    // Create-from-heightmap already has the raster open, this makes things easier to get this done. However, this is otherwise not exposed to the CLI 
+    // and shouldn't be deserialized for a recipe either (how could you?)
     SampleElevationWithRaster(SampleElevationWithRaster)
 }
 
 impl TerrainProcess {
 
-    pub(crate) fn process_terrain<Progress: ProgressObserver>(&self,settings: TerrainSettings, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+    pub(crate) fn process_terrain<Progress: ProgressObserver>(&self, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
+        let limits = target.edit_properties_layer()?.get_elevation_limits()?;
 
         let mut layer = target.edit_tile_layer()?;
 
         let mut tile_map = layer.read_features().to_entities_index::<_,TileForTerrain>(progress)?;
 
-        let positive_elevation_scale = 80.0/settings.max_elevation;
-        let negative_elevation_scale = if settings.min_elevation < 0.0 { 
-            20.0/settings.min_elevation.abs()
+        let positive_elevation_scale = 80.0/limits.max_elevation;
+        let negative_elevation_scale = if limits.min_elevation < 0.0 { 
+            20.0/limits.min_elevation.abs()
         } else {
             0.0
         };
     
-    //    * find the max_elevation from the raster, if possible
-    //    * find the absolute value of the min_elevation from the raster, if possible
-    //    * if elevation >= 0
-    //      * elevation_scaled = (elevation*80)/max_elevation
-    //    * else
-    //      * elevation_scaled = 20 - (elevation.abs()*20)/min_elevation.abs()
-
-        self.process_terrain_tiles(settings, &mut tile_map, progress)?;
+        self.process_terrain_tiles(&limits, &mut tile_map, progress)?;
 
         let mut bad_ocean_tiles_found = Vec::new();
     
@@ -305,7 +304,7 @@ impl TerrainProcess {
                 let mut feature = layer.try_feature_by_id(&fid)?;
                 if elevation_changed {
 
-                    let elevation = tile.elevation;
+                    let elevation = tile.elevation.clamp(limits.min_elevation, limits.max_elevation);
                     let elevation_scaled = if elevation >= 0.0 {
                         20 + (elevation * positive_elevation_scale).floor() as i32
                     } else {
@@ -341,18 +340,24 @@ impl TerrainProcess {
         Ok(())
     }
 
+    pub(crate) fn to_json(&self) -> Result<String,CommandError> {
+        // NOTE: Not technically a recipe read error, but this shouldn't be used very often.
+        Ok(serde_json::to_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{}",e)))?)
+    }
+
 
 
 }
 
 impl ProcessTerrain for TerrainProcess {
 
-    fn process_terrain_tiles<Progress: ProgressObserver>(&self, settings: TerrainSettings, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+    fn process_terrain_tiles<Progress: ProgressObserver>(&self, limits: &ElevationLimits, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
         match self {
-            Self::SampleOceanMasked(params) => params.process_terrain_tiles(settings,tile_map,progress),
-            Self::SampleOceanBelow(params) => params.process_terrain_tiles(settings,tile_map,progress),
-            Self::SampleElevation(params) => params.process_terrain_tiles(settings,tile_map,progress),
-            Self::SampleElevationWithRaster(params) => params.process_terrain_tiles(settings,tile_map,progress),
+            Self::Recipe(params) => params.process_terrain_tiles(limits,tile_map,progress),
+            Self::SampleOceanMasked(params) => params.process_terrain_tiles(limits,tile_map,progress),
+            Self::SampleOceanBelow(params) => params.process_terrain_tiles(limits,tile_map,progress),
+            Self::SampleElevation(params) => params.process_terrain_tiles(limits,tile_map,progress),
+            Self::SampleElevationWithRaster(params) => params.process_terrain_tiles(limits,tile_map,progress),
         }
     }
 

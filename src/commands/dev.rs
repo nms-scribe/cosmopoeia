@@ -24,6 +24,7 @@ use crate::world_map::NewTile;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::culture_sets::CultureSource;
+use crate::world_map::ElevationLimits;
 
 
 subcommand_def!{
@@ -183,7 +184,17 @@ subcommand_def!{
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        overwrite: bool,
+
+        #[arg(long,allow_negative_numbers=true,default_value="-11000")]
+        /// minimum elevation for heightmap
+        min_elevation: f64,
+
+        #[arg(long,default_value="9000")]
+        /// maximum elevation for heightmap
+        max_elevation: f64,
+
+
     }
 }
 
@@ -198,6 +209,8 @@ impl Task for DevVoronoiFromTriangles {
             source.bounds()?.extent()
         };
 
+        let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
+
         let mut target = WorldMap::edit(self.target)?;
 
         let mut triangles = target.triangles_layer()?;
@@ -211,7 +224,7 @@ impl Task for DevVoronoiFromTriangles {
         let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(&mut progress,"Copying voronoi.","Voronoi copied.").collect();
 
         target.with_transaction(|target| {
-            load_tile_layer(target,self.overwrite,voronoi.into_iter(),&mut progress)
+            load_tile_layer(target,self.overwrite,voronoi.into_iter(),limits,&mut progress)
         })?;
 
         target.save(&mut progress)

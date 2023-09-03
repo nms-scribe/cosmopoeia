@@ -6,6 +6,7 @@ use gdal::raster::GdalType;
 
 use crate::errors::CommandError;
 use crate::utils::Extent;
+use crate::world_map::ElevationLimits;
 
 pub(crate) struct RasterBounds {
     coord_min_x: f64,
@@ -143,7 +144,7 @@ impl RasterMap {
 
     }
 
-    pub(crate) fn compute_min_max(&self, index: isize, is_approx_ok: bool) -> Result<(f64,f64),CommandError> {
+    pub(crate) fn compute_min_max(&self, index: isize, is_approx_ok: bool) -> Result<ElevationLimits,CommandError> {
         let band = if self.dataset.raster_count() > (index - 1) {
             self.dataset.rasterband(index)? // 1-based array
         } else {
@@ -151,7 +152,7 @@ impl RasterMap {
         };
 
         let statistics = band.compute_raster_min_max(is_approx_ok)?;
-        Ok((statistics.min,statistics.max))
+        Ok(ElevationLimits::new(statistics.min,statistics.max)?)
     }
 
 

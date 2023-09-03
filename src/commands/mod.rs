@@ -62,7 +62,9 @@ command!{
     dev::DevNamers;
     dev::DevCultures;
     create::CreateFromHeightmap;
+    create::CreateBlank;
     create::CreateSourceFromHeightmap;
+    create::CreateSourceBlank;
     create::CreateCalcNeighbors;
     terrain::Terrain;
     gen_climate::GenClimate;

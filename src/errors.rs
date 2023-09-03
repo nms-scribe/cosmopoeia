@@ -42,6 +42,10 @@ pub(crate) enum CommandError {
     #[allow(dead_code)] UnsupportedRasterSourceBand(GdalDataType),
     MaxElevationMustBePositive(f64),
     MinElevationMustBeLess(f64, f64),
+    RecipeFileRead(String),
+    TerrainProcessWrite(String),
+    InvalidPropertyValue(String,String),
+    PropertyNotSet(String),
 }
 
 impl Error for CommandError {
@@ -104,7 +108,11 @@ impl Display for CommandError {
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
             Self::MaxElevationMustBePositive(a) => write!(f,"maximum elevation {} must be positive",a),
-            Self::MinElevationMustBeLess(a, b) => write!(f,"minimum elevation {} must be less than maximum {}",a,b)
+            Self::MinElevationMustBeLess(a, b) => write!(f,"minimum elevation {} must be less than maximum {}",a,b),
+            Self::RecipeFileRead(a) => write!(f,"Error reading recipe file: {}",a),
+            Self::TerrainProcessWrite(a)  => write!(f,"Error serializing terrain process: {}",a),
+            Self::InvalidPropertyValue(a,b) => write!(f,"Invalid value for property {} ('{}')",a,b),
+            Self::PropertyNotSet(a) => write!(f,"Property {} has not been set.",a)
         }
     }
 }

@@ -909,7 +909,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         })
 
     }
-    
+
     // FUTURE: I wish I could get rid of the lifetime thingie...
     pub(crate) fn feature_by_id(&'feature self, fid: &u64) -> Option<Feature> {
         self.layer.feature(*fid).map(Feature::from)
@@ -1989,6 +1989,7 @@ feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
+// TODO: Should be BiomeSchema
 impl BiomeFeature<'_> {
 
     pub(crate) const OCEAN: &str = "Ocean";
@@ -2676,6 +2677,110 @@ impl LineLayer<'_,'_> {
     }
 }
 
+// TODO: Temporary layer for checking lines during curvifying.
+feature!(PropertyFeature PropertySchema "properties" wkbNone to_field_names_values: #[allow(dead_code)] {
+    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
+    value #[allow(dead_code)] set_value string FIELD_VALUE "value" OGRFieldType::OFTString;
+});
+
+pub(crate) type PropertyLayer<'layer,'feature> = MapLayer<'layer,'feature,PropertySchema,PropertyFeature<'feature>>;
+
+impl PropertySchema {
+    const PROP_ELEVATION_LIMITS: &str = "elevation-limits";
+
+}
+
+pub(crate) struct ElevationLimits {
+    pub(crate) min_elevation: f64,
+    pub(crate) max_elevation: f64
+}
+
+impl ElevationLimits {
+
+    pub(crate) fn new(min_elevation: f64, max_elevation: f64) -> Result<Self,CommandError> {
+        if max_elevation < 0.0 {
+            Err(CommandError::MaxElevationMustBePositive(max_elevation))
+            // FUTURE: or should it? What if they want to create an underwater world? That won't be possible until we allow mermaid-like cultures, however,
+            // and I'm not sure how "biomes" work down there.
+        } else if min_elevation >= max_elevation {
+            // it doesn't necessarily have to be negative, however.
+            Err(CommandError::MinElevationMustBeLess(min_elevation,max_elevation))
+        } else {
+            Ok(Self {
+                min_elevation,
+                max_elevation,
+            })
+        }
+    }
+}
+
+impl Into<String> for ElevationLimits {
+
+    fn into(self) -> String {
+        format!("{},{}",self.min_elevation,self.max_elevation)
+    }
+}
+
+
+impl TryFrom<String> for ElevationLimits {
+    type Error = CommandError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let mut min_max = value.splitn(2, ',');
+        let min_elevation = min_max.next().ok_or_else(|| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        let min_elevation = min_elevation.parse().map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        let max_elevation = min_max.next().ok_or_else(|| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        let max_elevation = max_elevation.parse().map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        Ok(Self {
+            min_elevation,
+            max_elevation,
+        })
+    }
+}
+
+impl PropertyLayer<'_,'_> {
+
+    fn get_property(&mut self, name: &str) -> Result<String,CommandError> {
+        for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
+            if feature.name()? == name {
+                return Ok(feature.value()?)
+            }
+        }
+        Err(CommandError::PropertyNotSet(name.to_owned()))
+
+    }
+
+    pub(crate) fn get_elevation_limits(&mut self) -> Result<ElevationLimits,CommandError> {
+        self.get_property(PropertySchema::PROP_ELEVATION_LIMITS)?.try_into()
+    }
+
+    fn set_property(&mut self, name: &str, value: &str) -> Result<(),CommandError> {
+        let mut found = None;
+        for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
+            if feature.name()? == name {
+                found = Some(feature.fid()?);
+                break;
+            }
+        }
+        if let Some(found) = found {
+            let mut feature = self.try_feature_by_id(&found)?;
+            feature.set_value(value)?;
+            self.update_feature(feature)?;
+        } else {
+            let (fields,values) = PropertyFeature::to_field_names_values(name, value);
+            self.add_feature_without_geometry(&fields,&values)?;
+   
+        }
+        Ok(())
+    }
+
+    pub(crate) fn set_elevation_limits(&mut self, value: ElevationLimits) -> Result<(),CommandError> {
+        self.set_property(PropertySchema::PROP_ELEVATION_LIMITS, &Into::<String>::into(value))
+    }
+
+
+}
+
 
 pub(crate) struct WorldMap {
     dataset: Dataset
@@ -2855,6 +2960,13 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         Ok(LineLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
 
+    pub(crate) fn create_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
+        Ok(PropertyLayer::create_from_dataset(&mut self.dataset,true)?)
+    }
+
+    pub(crate) fn edit_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
+        Ok(PropertyLayer::open_from_dataset(&mut self.dataset)?)
+    }
 
 }
 

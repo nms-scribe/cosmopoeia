@@ -41,14 +41,19 @@ use crate::world_map::TileForSubnationDissolve;
 use crate::world_map::SubnationFeature;
 use crate::world_map::TypedFeatureIterator;
 use crate::world_map::MapLayer;
+use crate::world_map::ElevationLimits;
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, limits: ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let mut target = target.create_tile_layer(overwrite_layer)?;
+    let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
     for tile in generator.watch(progress,"Writing tiles.","Tiles written.") {
-        target.add_tile(tile?)?;
+        tiles.add_tile(tile?)?;
     }
+
+    let mut props = target.create_properties_layer()?;
+
+    props.set_elevation_limits(limits)?;
 
     Ok(())
 

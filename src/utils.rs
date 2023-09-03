@@ -140,6 +140,15 @@ impl Extent {
         }
     }
 
+    pub(crate) fn new_with_dimensions(west: f64, south: f64, width: f64, height: f64) -> Self {
+        Self {
+            height,
+            width,
+            south,
+            west,
+        }
+    }
+
     pub(crate) fn contains(&self,point: &Point) -> bool {
         let x = point.x.into_inner();
         let y = point.y.into_inner();
