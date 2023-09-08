@@ -24,6 +24,7 @@ use gdal::vector::Feature;
 use gdal::vector::FeatureIterator;
 use gdal::Transaction;
 use ordered_float::OrderedFloat;
+use ordered_float::NotNan;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -294,11 +295,13 @@ macro_rules! feature_get_field {
 
 macro_rules! feature_set_field {
     ($self: ident $value: ident f64 $field: path) => {
-        Ok($self.feature.set_field_double($field, $value)?)
+        // The NotNan thing verifies that the value is not NaN, which would be treated as null.
+        // This can help me catch math problems early...
+        Ok($self.feature.set_field_double($field, NotNan::try_from($value)?.into_inner())?)
     };
     ($self: ident $value: ident option_f64 $field: path) => {
         if let Some(value) = $value {
-            Ok($self.feature.set_field_double($field, value)?)
+            Ok($self.feature.set_field_double($field, NotNan::try_from(value)?.into_inner())?)
         } else {
             // There's no unsetfield, but this should have the same effect.
             // FUTURE: I've put in a feature request to gdal crate.
@@ -1167,10 +1170,10 @@ entity!(NewTile TileSchema TileFeature {
 }); 
 
 entity!(TileForTerrain TileSchema TileFeature {
-    site_x: f64, 
-    site_y: f64,
+    site: Point, 
     elevation: f64,
-    grouping: Grouping,
+    grouping: Grouping, 
+    neighbors: Vec<(u64,i32)>,
     // 'old' values so the algorithm can check if it's changed.
     old_elevation: f64 = |feature: &TileFeature| feature.elevation(),
     old_grouping: Grouping = |feature: &TileFeature| feature.grouping()
@@ -1666,7 +1669,7 @@ impl TilesLayer<'_,'_> {
     }
 
    // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
-   pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
+    pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
         let mut tile_map = HashMap::new();
         let mut tile_queue = Vec::new();
@@ -2739,6 +2742,11 @@ impl TryFrom<String> for ElevationLimits {
 }
 
 impl PropertyLayer<'_,'_> {
+
+    // TODO: Another option for the properties layer: A 'status' that tells immediately what "steps" have been processed. This will
+    // make it easier to know whether the climat gen commands have been completed before doing the water. This would have to take
+    // into account "re-gens", and don't change the status if it's later in the process than expected (although do print a warning
+    // in that case.)
 
     fn get_property(&mut self, name: &str) -> Result<String,CommandError> {
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {

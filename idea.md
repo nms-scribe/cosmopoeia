@@ -912,21 +912,22 @@ TODO: Okay, now I'm ready to convert algorithms and test some of the templates f
 
 * enum HeightmapTask:
   * [X] Recipe(path)
-  * [ ] AddHill(count: Range<usize>, height: Range, range_x, range_y); -- can also work to add pits if the height range is negative
-  * [ ] AddRange(count: Range, height: Range, range_x, range_y); -- can also work to add a trench if the height range is negative
-  * [ ] AddStrait(width: Range, direction: (Horizontal,Vertical));
-  * [ ] Mask(power = 1);
-  * [ ] Invert(probability, axes: X, Y, or XY); -- probability is a probability that the inversion will actually happen
-  * [ ] Modify(range: Range<f64>, add, mult); -- range is a range of elevations to process. add is a number to add to the elevation (or 0), mul is a number to multiply (or 1)
-  * [ ] Smooth(a2);
-  * [ ] RandomUniform(min,max,range_x,range_y) -- generates random elevations in the range
-  * [ ] RandomNormal(mean,sd,range_x,range_y) -- generates random elevations with a normal distribution
-  * [ ] SeedOcean(seeds: usize, range_x, range_y)
-  * [ ] FillOcean
+  * [X] AddHill(count: Range<usize>, height: Range, range_x, range_y); -- can also work to add pits if the height range is negative
+  * [X] AddRange(count: Range, height: Range, range_x, range_y); -- can also work to add a trench if the height range is negative
+  * [X] AddStrait(width: Range, direction: (Horizontal,Vertical));
+  * [X] Mask(power = 1);
+  * [X] Invert(probability, axes: X, Y, or XY); -- probability is a probability that the inversion will actually happen
+  * [X] Modify(range: Range<f64>, add, mult); -- range is a range of elevations to process. add is a number to add to the elevation (or 0), mul is a number to multiply (or 1)
+  * [X] Smooth(a2);
+  * [X] RandomUniform(min,max,range_x,range_y) -- generates random elevations in the range
+  * [X] RandomNormal(mean,sd,range_x,range_y) -- generates random elevations with a normal distribution
+  * [X] SeedOcean(seeds: usize, range_x, range_y)
+  * [X] FillOcean
   * [X] SampleHeightmap(path)
   * [X] SampleOceanMask(path)
   * [X] SampleOceanBelow(path,elevation)
-  * [ ] FloodOcean
+  * [X] FloodOcean
+  * [X] Clear -- clears all elevations and ocean settings on the map.
 
 * run_recipe(path):
   * load tasks from file at path
@@ -1094,7 +1095,7 @@ TODO: Okay, now I'm ready to convert algorithms and test some of the templates f
     * if mul != 1: elevation *= mul
     * tile.elevation = elevation.clamp(min_elevation,max_elevation)
 
-* Smooth(fr = 2):
+* Smooth(fr = 2): -- not supposed to be < 1 or weird things happen
   * changes = map
   * for tile in tile_map:
     * let elevations = vec![tile.elevation]
@@ -1103,6 +1104,9 @@ TODO: Okay, now I'm ready to convert algorithms and test some of the templates f
     * let new_elevation = 
       * if fr == 1: elevations.average()
       * else: ((tile.elevation * (fr - 1) + elevations.average) / fr).clamp(min_elevation,max_elevation)
+
+
+
 
 * SeedOcean(attempts: usize, range_x, range_y) -- seeds an ocean in a general area. Places random drops on the land, and follows their path until they find a suitable tile below 0 within the range. Must use flood ocean to complete the process
   * let seeds = Vec::new()
@@ -1157,6 +1161,18 @@ TODO: Okay, now I'm ready to convert algorithms and test some of the templates f
     * if tile.elevation < 0: tile.is_ocean = true
 
 
+TODO: Continents recipe looks weird, maybe I'm not doing the strait correctly.
+TODO: Same with archipelago
+TODO: Atoll doesn't form a ring. Should it form a ring?
+TODO: mediterranean looks strange as well
+TODO: Peninsula doesn't have much ocean
+TODO: Same with pangea, Okay, really, I think I'm putting all of these up too high
+TODO: And isthmus
+TODO: shattered might be too *low*.
+TODO: Not sure what taklamakan is supposed to look like.
+
+
+TODO: The 'create-blank' commands could simply take a 'recipe' or even any 'terrain' command to finish the job. This will turn the first step into one instead of two. I can always have a separate terrain command still.
 
 
 

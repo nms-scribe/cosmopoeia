@@ -46,6 +46,8 @@ pub(crate) enum CommandError {
     TerrainProcessWrite(String),
     InvalidPropertyValue(String,String),
     PropertyNotSet(String),
+    InvalidRangeArgument(String),
+    CantFindTileNearPoint,
 }
 
 impl Error for CommandError {
@@ -112,7 +114,9 @@ impl Display for CommandError {
             Self::RecipeFileRead(a) => write!(f,"Error reading recipe file: {}",a),
             Self::TerrainProcessWrite(a)  => write!(f,"Error serializing terrain process: {}",a),
             Self::InvalidPropertyValue(a,b) => write!(f,"Invalid value for property {} ('{}')",a,b),
-            Self::PropertyNotSet(a) => write!(f,"Property {} has not been set.",a)
+            Self::PropertyNotSet(a) => write!(f,"Property {} has not been set.",a),
+            Self::InvalidRangeArgument(a) => write!(f,"Invalid range expression '{}' in terrain processing parameters.",a),
+            Self::CantFindTileNearPoint => write!(f,"No tile was found close to a supplied point, even at max expansion."),
         }
     }
 }

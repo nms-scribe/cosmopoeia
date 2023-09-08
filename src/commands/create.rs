@@ -18,11 +18,15 @@ use crate::utils::ToGeometryCollection;
 use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
-use crate::algorithms::terrain::SampleElevationWithRaster;
+use crate::algorithms::terrain::SampleElevationLoaded;
+use crate::algorithms::terrain::TerrainProcess;
 use crate::world_map::ElevationLimits;
 
-fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
+fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
 
+    // yes, the random variable is a mutable reference, and PointGenerator doesn't take a reference as it's generic, 
+    // but the reference implements the random number generator stuff so it works.
+    // I assume if I was leaking the PointGenerator out of the function that I would get an error.
     let mut points = PointGenerator::new(random, extent.clone(), tile_count);
     let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?);
     
@@ -70,7 +74,7 @@ impl Task for CreateSourceFromHeightmap {
 
         let mut progress = ConsoleProgressBar::new();
 
-        let random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.seed);
 
         let source = RasterMap::open(self.source)?;
 
@@ -82,7 +86,7 @@ impl Task for CreateSourceFromHeightmap {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        let voronois = generate_random_tiles(random, extent, self.tiles, &mut progress)?;
+        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
     
         target.with_transaction(|target| {
             progress.announce("Create tiles from voronoi polygons");
@@ -146,7 +150,7 @@ impl Task for CreateSourceBlank {
 
         let mut progress = ConsoleProgressBar::new();
 
-        let random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.seed);
 
         let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
 
@@ -154,7 +158,7 @@ impl Task for CreateSourceBlank {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        let voronois = generate_random_tiles(random, extent, self.tiles, &mut progress)?;
+        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
     
         target.with_transaction(|target| {
             progress.announce("Create tiles from voronoi polygons");
@@ -235,7 +239,7 @@ impl Task for CreateFromHeightmap {
 
         let mut progress = ConsoleProgressBar::new();
 
-        let random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.seed);
 
         let source = RasterMap::open(self.source)?;
 
@@ -247,7 +251,7 @@ impl Task for CreateFromHeightmap {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        let voronois = generate_random_tiles(random, extent, self.tiles, &mut progress)?;
+        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
     
     
         target.with_transaction(|target| {
@@ -259,10 +263,8 @@ impl Task for CreateFromHeightmap {
 
             calculate_tile_neighbors(target, &mut progress)?;
 
-            progress.announce("Sampling elevations from raster");
-
-            let process = SampleElevationWithRaster::new(source);
-            process.process_terrain(target,&mut progress)
+            let process = SampleElevationLoaded::new(source);
+            TerrainProcess::process_terrain(&[process],&mut random,target,&mut progress)
 
         })?;
 
@@ -325,7 +327,7 @@ impl Task for CreateBlank {
 
         let mut progress = ConsoleProgressBar::new();
 
-        let random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.seed);
 
         let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
 
@@ -333,7 +335,7 @@ impl Task for CreateBlank {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        let voronois = generate_random_tiles(random, extent, self.tiles, &mut progress)?;
+        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
     
     
         target.with_transaction(|target| {

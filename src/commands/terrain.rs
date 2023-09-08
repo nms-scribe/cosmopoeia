@@ -1,40 +1,15 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use clap::Subcommand;
 
 use super::Task;
 use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
-use crate::algorithms::terrain::SampleElevation;
-use crate::algorithms::terrain::SampleOceanBelow;
-use crate::algorithms::terrain::SampleOceanMasked;
+use crate::algorithms::terrain::TerrainProcessCommand; 
 use crate::algorithms::terrain::TerrainProcess;
-use crate::algorithms::terrain::Recipe;
-
-
-#[derive(Subcommand)]
-enum TerrainProcessCommand {
-    SampleElevation(SampleElevation),
-    SampleOceanMasked(SampleOceanMasked),
-    SampleOceanBelow(SampleOceanBelow),
-    Recipe(Recipe)
-}
-
-impl TerrainProcessCommand {
-
-    fn into_process(self) -> TerrainProcess {
-        match self {
-            TerrainProcessCommand::SampleElevation(process) => TerrainProcess::SampleElevation(process),
-            TerrainProcessCommand::SampleOceanMasked(process) => TerrainProcess::SampleOceanMasked(process),
-            TerrainProcessCommand::SampleOceanBelow(process) => TerrainProcess::SampleOceanBelow(process),
-            TerrainProcessCommand::Recipe(process) => TerrainProcess::Recipe(process)
-        }
-
-    }
-}
+use crate::utils::random_number_generator;
 
 
 subcommand_def!{
@@ -46,6 +21,10 @@ subcommand_def!{
 
         #[command(subcommand)]
         process: TerrainProcessCommand,
+
+        #[arg(long)]
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Option<u64>,
 
         #[arg(long)]
         /// Instead of processing, display the serialized value for inclusion in a recipe file.
@@ -60,18 +39,23 @@ impl Task for Terrain {
 
         let mut progress = ConsoleProgressBar::new();
 
+        let mut random = random_number_generator(self.seed);
+
         let mut target = WorldMap::create_or_edit(self.target)?;
 
         target.with_transaction(|target| {
 
-            let process = self.process.into_process();
             if self.serialize {
-                println!("{}",process.to_json()?);
-                Ok(())
+                println!("{}",self.process.to_json()?);
             } else {
-                process.process_terrain(target,&mut progress)
+                progress.announce("Loading terrain processes.");
+
+                let processes = self.process.load_terrain_processes(&mut random, &mut progress)?;
+
+                TerrainProcess::process_terrain(&processes,&mut random,target,&mut progress)?;
             }
     
+            Ok(())
 
         })?;
 

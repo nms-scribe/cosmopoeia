@@ -1,5 +1,6 @@
 use std::time::Duration;
 use std::iter::Enumerate;
+use std::collections::VecDeque;
 
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
@@ -318,6 +319,66 @@ impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
     fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         QueueWatcher { 
+            finish: finish, 
+            progress: progress, 
+            inner: self,
+            pushed: 0,
+            popped: 0
+        }
+
+    }
+
+
+}
+
+
+pub(crate) struct DequeWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> {
+    finish: Message,
+    progress: &'progress mut Progress,
+    inner: VecDeque<ItemType>,
+    popped: usize,
+    pushed: usize,
+}
+
+impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> DequeWatcher<'progress,Message,Progress,ItemType> {
+
+    pub(crate) fn pop_front(&mut self) -> Option<ItemType> {
+        let result = self.inner.pop_front();
+        self.popped += 1;
+        let len = self.inner.len();
+        if len == 0 {
+            self.progress.finish(|| &self.finish)
+        } else {
+            self.progress.update(|| self.popped);
+        }
+        result
+    }
+
+    pub(crate) fn push_back(&mut self, value: ItemType) {
+        self.inner.push_back(value);
+        self.pushed += 1;
+        self.progress.update_step_length(|| self.pushed);
+    }
+
+} 
+
+pub(crate) trait WatchableDeque<ItemType: Sized> {
+
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType>;
+}
+
+impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
+
+    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
+    // - patterns which deal with popping items off a queue -- see below
+    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
+    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
+    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
+    // bar as well as updating the current step.
+
+    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType> {
+        progress.start(|| (start,Some(self.len())));
+        DequeWatcher { 
             finish: finish, 
             progress: progress, 
             inner: self,
