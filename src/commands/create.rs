@@ -20,6 +20,7 @@ use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
 use crate::algorithms::terrain::SampleElevationLoaded;
 use crate::algorithms::terrain::TerrainProcess;
+use crate::algorithms::terrain::TerrainProcessCommand;
 use crate::world_map::ElevationLimits;
 
 fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -227,7 +228,11 @@ subcommand_def!{
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        overwrite: bool,
+
+        #[command(subcommand)]
+        /// A processing command to run after creation and elevation sampling. (see 'terrain' command)
+        post_process: Option<TerrainProcessCommand>,
 
 
     }
@@ -242,6 +247,19 @@ impl Task for CreateFromHeightmap {
         let mut random = random_number_generator(self.seed);
 
         let source = RasterMap::open(self.source)?;
+
+        // load terrain process early so it can fail early if there's a loading error.
+        // I can't add the elevation_sample process yet because I need the source for some other things.
+        let mut post_processes = if let Some(process) = self.post_process {
+            progress.announce("Loading terrain processes.");
+
+            process.load_terrain_processes(&mut random, &mut progress)?
+
+        } else {
+            // otherwise, we'll just have the elevation sample process to run
+            vec![]
+        };
+
 
         progress.start_unknown_endpoint(|| "Calculating min/max from raster.");
         let limits = source.compute_min_max(1,true)?;
@@ -263,8 +281,12 @@ impl Task for CreateFromHeightmap {
 
             calculate_tile_neighbors(target, &mut progress)?;
 
-            let process = SampleElevationLoaded::new(source);
-            TerrainProcess::process_terrain(&[process],&mut random,target,&mut progress)
+            let sample_process = SampleElevationLoaded::new(source);
+
+            post_processes.insert(0,sample_process);
+
+            TerrainProcess::process_terrain(&post_processes,&mut random,target,&mut progress)
+    
 
         })?;
 
@@ -315,7 +337,11 @@ subcommand_def!{
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        overwrite: bool,
+
+        #[command(subcommand)]
+        /// A processing command to run after creation. (see 'terrain' command)
+        post_process: Option<TerrainProcessCommand>,
 
 
     }
@@ -328,6 +354,16 @@ impl Task for CreateBlank {
         let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
+
+        // load these earlier so we can fail quickly on loading error.
+        let processes = if let Some(process) = self.post_process {
+            progress.announce("Loading terrain processes.");
+
+            Some(process.load_terrain_processes(&mut random, &mut progress)?)
+
+        } else {
+            None
+        };
 
         let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
 
@@ -345,7 +381,16 @@ impl Task for CreateBlank {
 
             progress.announce("Calculate neighbors for tiles");
 
-            calculate_tile_neighbors(target, &mut progress)
+            calculate_tile_neighbors(target, &mut progress)?;
+
+            if let Some(processes) = processes {
+
+                TerrainProcess::process_terrain(&processes,&mut random,target,&mut progress)
+    
+            } else {
+                Ok(())
+            }
+
 
         })?;
 

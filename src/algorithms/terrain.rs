@@ -35,14 +35,7 @@ use crate::progress::WatchableDeque;
 use crate::progress::WatchableQueue;
 
 
-/*
-TODO: Make a note of conversions from AFMG, in case anyone asks:
-- height_filters: positive: ((old-20)/80)* 100
-- height_filters: "land": 0..=100
-- height_filters: "all": -100..=100
-- height_deltas: positive (old/100)*120
-- height_deltas: negative (old/100)*120
-*/
+// TODO: I think that in order to guarantee reproducibility on random numbers, I'm going to have to be able to sort the tiles before generating. And in order to do that consistently, I might need to add a 'gen_order' field to the tiles, incremented when adding tiles. That has to go all the way back to points. This will help with reproducibility on the other stuff as well. I would also need to move into a sorted HashMap of some sort in order to make sure the iterator comes out correctly.
 
 trait TruncOrSelf {
 
@@ -867,7 +860,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                 let frontier = std::mem::replace(&mut queue, Vec::new());
                 spread_count += 1;
                 for tile_id in frontier {
-                    tile_map.try_get_mut(&tile_id)?.elevation += height_delta.copysign(sign) * (rng.gen_range(0.0..0.3) + 0.85);
+                    tile_map.try_get_mut(&tile_id)?.elevation += (height_delta * (rng.gen_range(0.0..0.3) + 0.85)).copysign(sign);
                     for (neighbor_id,_) in &tile_map.try_get(&tile_id)?.neighbors {
                         if !used.contains(neighbor_id) {
                             queue.push(*neighbor_id);

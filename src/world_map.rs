@@ -2831,9 +2831,17 @@ impl WorldMap {
     pub(crate) fn with_transaction<ResultType, Callback: FnOnce(&mut WorldMapTransaction) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
         let transaction = self.dataset.start_transaction()?;
         let mut transaction = WorldMapTransaction::new(transaction);
-        let result = callback(&mut transaction)?;
-        transaction.dataset.commit()?;    
-        Ok(result)
+        // TODO: Is there any way to tell gdal *not* to print errors, but to return them as errors so we can report them on the first one.
+        match callback(&mut transaction) {
+            Ok(result) => {
+                transaction.dataset.commit()?;
+                Ok(result)
+            },
+            Err(err) => {
+                transaction.dataset.rollback()?;
+                Err(err)
+            },
+        }
 
     }
 
