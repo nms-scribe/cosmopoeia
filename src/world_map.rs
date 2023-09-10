@@ -661,19 +661,24 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
     pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
-        let mut result = EntityIndex::new();
-        result.with_insertor(|insertor| {
-            for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
-                let fid = feature.fid()?;
-                let entity = Data::try_from(feature)?;
-     
-                insertor.insert(fid,entity);
-            }
+        self.to_entities_index_for_each(|_,_| Ok(()), progress)
 
-            Ok(())
+    }
+
+    pub(crate) fn to_entities_index_for_each<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>, Callback: FnMut(&u64,&Data) -> Result<(),CommandError>>(&mut self, mut callback: Callback, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
+
+        let mut result = IndexMap::new();
+        // TODO: If we make everything that calls with_insertor use this function to build the index instead, then I don't need with_insertor anymore.
+        for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
+            let fid = feature.fid()?;
+            let entity = Data::try_from(feature)?;
+
+            callback(&fid,&entity)?;
     
-        })?;
-        Ok(result)
+            result.insert(fid,entity);
+        }
+
+        Ok(EntityIndex::from(result))
     }
 
     pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
@@ -746,19 +751,9 @@ pub(crate) struct EntityIndex<SchemaType: Schema, EntityType: Entity<SchemaType>
     _phantom: std::marker::PhantomData<SchemaType>
 }
 
-pub(crate) struct EntityIndexInsertor<'inner,SchemaType: Schema, EntityType: Entity<SchemaType>> {
-    inner: &'inner mut EntityIndex<SchemaType,EntityType>
-}
-
-impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexInsertor<'_,SchemaType,EntityType> {
-
-    pub(crate) fn insert(&mut self, fid: u64, entity: EntityType) -> Option<EntityType> {
-        let result = self.inner.inner.insert(fid, entity);
-        result
-    }
-}
-
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,EntityType> {
+
+    // NOTE: There is no 'insert' or 'new' function because this should be created with to_entities_index.
 
     fn from(mut inner: IndexMap<u64,EntityType>) -> Self {
         // I want to ensure that the tiles are sorted in insertion order (by fid). So do this here.
@@ -769,12 +764,6 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
             _phantom: Default::default()
         }
     }
-
-    pub(crate) fn new() -> Self {
-        Self::from(IndexMap::new())
-    }
-
-
 
     pub(crate) fn try_get(&self, key: &u64) -> Result<&EntityType,CommandError> {
         self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
@@ -807,26 +796,6 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
     pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
         self.inner.get(key)
     }
-
-    pub(crate) fn ensure_fid_order(&mut self) {
-        // TODO: If I can find a way to 'insert' above in order, using binary_search or partition_by, then
-        // this would work.
-        self.inner.sort_keys();
-    }
-
-    pub(crate) fn with_insertor<ResultType, Callback: FnOnce(&mut EntityIndexInsertor<SchemaType,EntityType>) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
-        // This makes sure we can sort it when we're done, rather than just let them insert and hope they do.
-        // TODO: A better idea might be to add a closure parameter to the function that creates an index, so that one can create an index
-        // while also doing other things, and perhaps even filter them. That's the primary purpose for this function.
-        let mut insertor = EntityIndexInsertor {
-            inner: self
-        };
-        let result = callback(&mut insertor)?;
-        self.ensure_fid_order();
-        Ok(result)
-    }
-
-
 
 }
 
@@ -1740,25 +1709,20 @@ impl TilesLayer<'_,'_> {
 
     }
 
-   // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
+    // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
+    // It's a function here because it's used in a command, which I want to be as simple as possible.
     pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
-        let mut tile_map = EntityIndex::new();
         let mut tile_queue = Vec::new();
 
-        tile_map.with_insertor(|insertor| {
-            for data in self.read_features().into_entities::<TileForWaterFill>().watch(progress,"Indexing tiles.","Tiles indexed.") {
-                let (fid,entity) = data?;
-                if entity.water_accumulation > 0.0 {
-                    tile_queue.push((fid,entity.water_accumulation));
-                }
-                insertor.insert(fid, entity);
-    
+        let tile_map = self.read_features().to_entities_index_for_each::<_,TileForWaterFill,_>(|fid,tile| {
+            if tile.water_accumulation > 0.0 {
+                tile_queue.push((*fid,tile.water_accumulation));
             }
 
             Ok(())
-    
-        })?;
+        },progress)?;
+
 
         Ok((tile_map,tile_queue))
         

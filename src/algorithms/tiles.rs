@@ -483,25 +483,12 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
 
     let theme = ThemeType::new(target,progress)?;
 
-
-    let mut tile_map = EntityIndex::new();
     let mut tiles = Vec::new();
 
-    {
-        let mut tile_layer = target.edit_tile_layer()?;
-        tile_map.with_insertor(|insertor| {
-            for feature in tile_layer.read_features().watch(progress, "Indexing tiles.", "Tiles indexed.") {
-                let id = feature.fid()?;
-                let entity = ThemeType::TileForTheme::try_from(feature)?;
-                insertor.insert(id, entity.clone());
-                tiles.push(entity);
-            }
-
-            Ok(())
-    
-        })?;
-    
-    }
+    let tile_map = target.edit_tile_layer()?.read_features().to_entities_index_for_each::<_,ThemeType::TileForTheme,_>(|_,tile| {
+        tiles.push(tile.clone());
+        Ok(())
+    },progress)?;
 
     for tile in tiles.into_iter().watch(progress, "Gathering tiles.", "Tiles gathered.") {
         let mapping: Option<(u64,_)> = if let Some(id) = theme.get_theme_id(&tile)? {

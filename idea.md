@@ -242,6 +242,7 @@ To proceed on this, I can break it down into the following steps:
 [X] `create-terrain` commands
     [X] terrain template files
     [X] Review AFMG terrain generation algorithms
+[X] Replace 'with_insertor' with a callback in the indexing functions.
 [ ] Speed up the shore_distance algorithm by using the cost-expand process as with cultures, states, etc.
 [X] Improve reproducibility
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.

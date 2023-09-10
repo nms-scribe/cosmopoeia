@@ -26,7 +26,6 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
-use crate::world_map::EntityIndex;
 use crate::utils::generate_colors;
 
 pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
@@ -391,18 +390,11 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
-    let mut tile_map = EntityIndex::new();
     let mut tile_list = Vec::new();
-
-    tile_map.with_insertor(|insertor| {
-        for tile in tiles_layer.read_features().into_entities::<TileForNationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {
-            let (fid,tile) = tile?;
-            tile_list.push(fid);
-            insertor.insert(fid,tile);
-        };
+    let tile_map = tiles_layer.read_features().to_entities_index_for_each::<_,TileForNationNormalize,_>(|fid,_| {
+        tile_list.push(*fid);
         Ok(())
-    
-    })?;
+    }, progress)?;
 
     for tile_id in tile_list.into_iter().watch(progress,"Normalizing nations.","Nations normalized.") {
         let tile = tile_map.try_get(&tile_id)?;

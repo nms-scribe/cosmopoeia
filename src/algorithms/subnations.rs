@@ -29,7 +29,6 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
 use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
-use crate::world_map::EntityIndex;
 use crate::world_map::SubnationForNormalize;
 
 
@@ -220,31 +219,23 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
     let mut tiles_by_nation = HashMap::new();
 
-    let mut tile_map = EntityIndex::new();
-
-
-    tile_map.with_insertor(|insertor| {
-        for tile in tile_layer.read_features().into_entities::<TileForEmptySubnations>().watch(progress, "Reading tiles.", "Tiles read.") {
-            let (fid,tile) = tile?;
-            if let (Some(nation_id),None) = (tile.nation_id,tile.subnation_id) {
-                let nation_id = nation_id as u64;
-                // use a priority queue to make it easier to remove by value as well.
-                match tiles_by_nation.get_mut(&nation_id) {
-                    None => { 
-                        let mut queue = PriorityQueue::new();
-                        queue.push(fid, tile.population);
-                        tiles_by_nation.insert(nation_id, queue); 
-                    },
-                    Some(queue) => {
-                        queue.push(fid, tile.population);
-                    },
-                }
+    let tile_map = tile_layer.read_features().to_entities_index_for_each::<_,TileForEmptySubnations,_>(|fid,tile| {
+        if let (Some(nation_id),None) = (tile.nation_id,tile.subnation_id) {
+            let nation_id = nation_id as u64;
+            // use a priority queue to make it easier to remove by value as well.
+            match tiles_by_nation.get_mut(&nation_id) {
+                None => { 
+                    let mut queue = PriorityQueue::new();
+                    queue.push(*fid, tile.population);
+                    tiles_by_nation.insert(nation_id, queue); 
+                },
+                Some(queue) => {
+                    queue.push(*fid, tile.population);
+                },
             }
-            insertor.insert(fid, tile);
         }
-
         Ok(())
-    })?;
+    }, progress)?;
 
     let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForEmptySubnations>(progress)?;
 
@@ -418,19 +409,11 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
-    let mut tile_map = EntityIndex::new();
     let mut tile_list = Vec::new();
-
-    tile_map.with_insertor(|insertor| {
-        for tile in tiles_layer.read_features().into_entities::<TileForSubnationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {
-            let (fid,tile) = tile?;
-            tile_list.push(fid);
-            insertor.insert(fid,tile);
-        }
-
+    let tile_map = tiles_layer.read_features().to_entities_index_for_each::<_,TileForSubnationNormalize,_>(|fid,_| {
+        tile_list.push(*fid);
         Ok(())
-    
-    })?;
+    },progress)?;
 
     for tile_id in tile_list.into_iter().watch(progress,"Normalizing subnations.","Subnations normalized.") {
         let tile = tile_map.try_get(&tile_id)?;
