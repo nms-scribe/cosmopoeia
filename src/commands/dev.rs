@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::io::stdout;
 
 use clap::Args;
+use clap::Subcommand;
 use rand::Rng;
 
 use super::Task;
@@ -25,12 +26,12 @@ use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::culture_sets::CultureSource;
 use crate::world_map::ElevationLimits;
+use crate::command_def;
 
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
-    #[command(hide=true)]
-    pub(crate) struct DevPointsFromHeightmap {
+    pub(crate) struct PointsFromHeightmap {
         // Path to the source height map to get extents from
         source: PathBuf,
 
@@ -51,7 +52,7 @@ subcommand_def!{
     }
 }
 
-impl Task for DevPointsFromHeightmap {
+impl Task for PointsFromHeightmap {
 
     fn run(self) -> Result<(),CommandError> {
         let source = RasterMap::open(self.source)?;
@@ -75,8 +76,7 @@ impl Task for DevPointsFromHeightmap {
 
 subcommand_def!{
     /// Creates a random points vector layer given an extent
-    #[command(hide=true)]
-    pub(crate) struct DevPointsFromExtent {
+    pub(crate) struct PointsFromExtent {
         #[arg(allow_hyphen_values=true)]
         west: f64,
 
@@ -110,7 +110,7 @@ subcommand_def!{
     }
 }
 
-impl Task for DevPointsFromExtent {
+impl Task for PointsFromExtent {
 
     fn run(self) -> Result<(),CommandError> {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
@@ -133,8 +133,7 @@ impl Task for DevPointsFromExtent {
 
 subcommand_def!{
     /// Creates delaunay triangles from a points layer
-    #[command(hide=true)]
-    pub(crate) struct DevTrianglesFromPoints {
+    pub(crate) struct TrianglesFromPoints {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -145,7 +144,7 @@ subcommand_def!{
     }
 }
 
-impl Task for DevTrianglesFromPoints {
+impl Task for TrianglesFromPoints {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -173,8 +172,7 @@ impl Task for DevTrianglesFromPoints {
 
 subcommand_def!{
     /// Creates voronoi tiles out of a delaunay triangles layer
-    #[command(hide=true)]
-    pub(crate) struct DevVoronoiFromTriangles {
+    pub(crate) struct VoronoiFromTriangles {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -198,7 +196,7 @@ subcommand_def!{
     }
 }
 
-impl Task for DevVoronoiFromTriangles {
+impl Task for VoronoiFromTriangles {
 
     fn run(self) -> Result<(),CommandError> {
 
@@ -236,8 +234,7 @@ impl Task for DevVoronoiFromTriangles {
 
 subcommand_def!{
     /// Tool for testing name generator data
-    #[command(hide=true)]
-    pub(crate) struct DevNamers {
+    pub(crate) struct Namers {
 
         /// Files to load namer-data from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         namer_data: Vec<PathBuf>,
@@ -271,7 +268,7 @@ subcommand_def!{
 }
 
 
-impl Task for DevNamers {
+impl Task for Namers {
 
 
     fn run(self) -> Result<(),CommandError> {
@@ -322,8 +319,7 @@ impl Task for DevNamers {
 
 subcommand_def!{
     /// Tool for testing name generator data
-    #[command(hide=true)]
-    pub(crate) struct DevCultures {
+    pub(crate) struct Cultures {
 
         /// Files to load culture data from, more than one may be specified to load multiple cultures into the set.
         culture_data: Vec<PathBuf>,
@@ -337,7 +333,7 @@ subcommand_def!{
 }
 
 
-impl Task for DevCultures {
+impl Task for Cultures {
 
 
     fn run(self) -> Result<(),CommandError> {
@@ -369,5 +365,34 @@ impl Task for DevCultures {
 
     
     
+    }
+}
+
+
+command_def!(
+    DevCommand {
+        PointsFromHeightmap,
+        PointsFromExtent,
+        TrianglesFromPoints,
+        VoronoiFromTriangles,
+        Namers,
+        Cultures
+    }
+);
+
+
+subcommand_def!{
+    /// Runs some tasks intended for testing and debugging
+    #[command(hide=true)]
+    pub(crate) struct Dev {
+        #[command(subcommand)]
+        command: DevCommand
+
+    }
+}
+
+impl Task for Dev {
+    fn run(self) -> Result<(),CommandError> {
+        self.command.run()        
     }
 }

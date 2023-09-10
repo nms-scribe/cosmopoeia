@@ -16,12 +16,7 @@ mod gen_nations;
 mod gen_subnations;
 
 use gdal_dev::Gdal;
-use dev::DevPointsFromHeightmap;
-use dev::DevPointsFromExtent;
-use dev::DevTrianglesFromPoints;
-use dev::DevVoronoiFromTriangles;
-use dev::DevNamers;
-use dev::DevCultures;
+use dev::Dev;
 use create::CreateFromHeightmap;
 use create::CreateBlank;
 use create::CreateSourceFromHeightmap;
@@ -69,6 +64,7 @@ use gen_subnations::GenSubnationsCurvify;
 
 // NOTE: Further 'use' statements in the command macro below
 
+
 pub(crate) trait Task {
 
     fn run(self) -> Result<(),CommandError>;
@@ -101,14 +97,9 @@ macro_rules! command_def {
 // "Dev" commands are generally hidden, intended for testing during development. While they should be usable by users, they rarely are, and are hidden to keep the UI clean.
 
 command_def!{
-    Command {
+    MainCommand {
         Gdal,
-        DevPointsFromHeightmap,
-        DevPointsFromExtent,
-        DevTrianglesFromPoints,
-        DevVoronoiFromTriangles,
-        DevNamers,
-        DevCultures,
+        Dev,
         CreateFromHeightmap,
         CreateBlank,
         CreateSourceFromHeightmap,

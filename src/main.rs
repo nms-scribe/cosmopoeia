@@ -13,7 +13,7 @@ pub(crate) mod algorithms;
 use errors::ProgramError;
 
 use commands::Task;
-use commands::Command;
+use commands::MainCommand;
 
 
 #[macro_export]
@@ -42,7 +42,7 @@ macro_rules! subcommand_def {
 pub(crate) struct CommandLine {
 
     #[command(subcommand)]
-    pub(crate) command: Command
+    pub(crate) command: MainCommand
 
 }
 
