@@ -81,6 +81,9 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     // 5 seconds for 10,000 tiles, and this one was almost instantaneous for that number. I blame my algorithm for curvifying
     // polygons for coming up with this idea.
 
+    // NOTE 2: This could easily be part of the Tile generating code, wherein I already have the point indexes. However, I do
+    // not have fid's yet for building maps, so that parts a little tricky.
+
     let mut point_tile_index = HashMap::new();
 
     let mut layer = target.edit_tile_layer()?;

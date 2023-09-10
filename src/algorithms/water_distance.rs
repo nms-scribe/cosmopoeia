@@ -1,11 +1,14 @@
+use std::cmp::Reverse;
+use std::collections::HashMap;
+
+use priority_queue::PriorityQueue;
+
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
+use crate::progress::WatchableQueue;
+use crate::progress::WatchablePriorityQueue;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::TypedFeature;
 use crate::world_map::TileForWaterDistance;
-use crate::world_map::TileForWaterDistanceNeighbor;
-use crate::world_map::TileForWaterDistanceOuter;
-use crate::world_map::TileForWaterDistanceOuterNeighbor;
 use crate::errors::CommandError;
 
 pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
@@ -13,139 +16,135 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     let mut tiles = target.edit_tile_layer()?;
 
     let mut queue = Vec::new();
-    let mut next_queue = Vec::new();
+    let mut land_queue = PriorityQueue::new();
+    let mut water_queue = PriorityQueue::new();
 
-    for feature in tiles.read_features().watch(progress,"Queuing tiles.","Tiles queued.") {
-        let fid = feature.fid()?;
-        queue.push(fid);
+    let mut tile_map = tiles.read_features().to_entities_index_for_each::<_,TileForWaterDistance,_>(|fid,_| {
+        queue.push(*fid);
+        Ok(())
+    }, progress)?;
 
-    }
-
-    let total_queue = queue.len();
-    let mut processed = 0;
-    // Can't use a queue watcher here because we're creating multiple queues, and I need to update the message in between without creating a new bar.
-    progress.start_known_endpoint(|| ("Finding tiles at distance 1.",total_queue));
+    let mut queue = queue.watch_queue(progress, "Finding shoreline tiles.", "Shoreline tiles found.");
+    let mut shore_distances = HashMap::new();
 
     while let Some(fid) = queue.pop() {
 
-        let mut shore_distance = None;
+        let mut on_shore = false;
         let mut closest_water = None;
         let mut water_distance = None;
-        let mut water_count = 0;
+        let mut water_count = None;
 
-        let tile = tiles.try_entity_by_id::<TileForWaterDistance>(&fid)?;
+        let tile = tile_map.try_get(&fid)?;
         let is_land = !tile.grouping.is_water();
 
         for (neighbor_fid,_) in &tile.neighbors {
-            let neighbor = tiles.try_entity_by_id::<TileForWaterDistanceNeighbor>(&neighbor_fid)?;
+            let neighbor = tile_map.try_get(&neighbor_fid)?;
             if is_land && (neighbor.grouping.is_water()) {
-                shore_distance.get_or_insert_with(|| 1);
+
+                on_shore = true;
                 let neighbor_water_distance = tile.site.distance(&neighbor.site);
                 if let Some(old_water_distance) = water_distance {
                     if neighbor_water_distance < old_water_distance {
                         water_distance = Some(neighbor_water_distance);
-                        closest_water = Some(*neighbor_fid);
+                        closest_water = Some(*neighbor_fid as i64);
                     }
                 } else {
                     water_distance = Some(neighbor_water_distance);
-                    closest_water = Some(*neighbor_fid);
+                    closest_water = Some(*neighbor_fid as i64);
                 }
-                water_count += 1;
+                *water_count.get_or_insert_with(|| 0) += 1;
             } else if !is_land && !neighbor.grouping.is_water() {
-                shore_distance.get_or_insert_with(|| -1);
+
+                on_shore = true;
             }
         }
 
-        let mut tile = tiles.try_feature_by_id(&fid)?;
-        if (water_count > 0) || closest_water.is_some() || shore_distance.is_some() {
-
-            if water_count > 0 {
-                tile.set_water_count(Some(water_count))?;
-            }
-            tile.set_closest_water(closest_water.map(|n| n as i64))?;
-
-            if let Some(shore_distance) = shore_distance {
-                tile.set_shore_distance(shore_distance)?;
-            }
-
-            processed += 1;
-    
-        } else {
-            // we couldn't calculate, but I need to fill in the blanks
-            tile.set_water_count(None)?;
-            tile.set_closest_water(None)?;
-            // we'll do shore_distance later, it will be taken care of in the next queue.
-            next_queue.push(fid);
-        }
-        tiles.update_feature(tile)?;
-
-        progress.update(|| processed);
-    }
-
-    // TODO: I could possibly use the cost algorithm (like in cultures and states) here, instead of just going through. In this case, the cost for traversing a tile is always 1, or -1 in water, and the algorithm is allowed to complete without stopping anywhere.
-
-    // now iterate outwards from there, if the tile is not marked, but it has a neighbor that was marked for the previous distance, then
-    // it is marked with the next distance. There might be a more efficient algorithm, but I'd have to think about it. I know I can't calculate
-    // the distance n until distance n-1 is calculated, or I might mismark it.
-    let mut queue = next_queue;
-    for calc_distance in 2.. {
-        let mut next_queue = Vec::new();
-        progress.message(|| format!("Finding tiles at distance {}.",calc_distance));
-        while let Some(fid) = queue.pop() {
-
-            let mut shore_distance = None;
-            {
-                let tile = tiles.try_entity_by_id::<TileForWaterDistanceOuter>(&fid)?; 
-
-                if tile.shore_distance.is_none() {
-                    let is_land = !tile.grouping.is_water();
-    
-                    for (neighbor_fid,_) in &tile.neighbors {
-                        let neighbor = tiles.try_entity_by_id::<TileForWaterDistanceOuterNeighbor>(neighbor_fid)?; 
-                        
-                        if let Some(neighbor_shore_distance) = neighbor.shore_distance {
-                            if is_land {
-                                if neighbor_shore_distance == (calc_distance - 1) {
-                                    shore_distance.get_or_insert_with(|| calc_distance);
-                                }
-                            } else {
-                                if neighbor_shore_distance == (-calc_distance + 1) {
-                                    shore_distance.get_or_insert_with(|| -calc_distance);
-                                }
-                            }
-                        }
-    
-                    }
-                    
-                } else {
-                    // else we already have the shore distance, so don't do anything.
-                    continue;
-                }
-    
-            }
-
-            // apply any changed shore distance
-            if let Some(shore_distance) = shore_distance {
-                let mut tile = tiles.try_feature_by_id(&fid)?;
-                tile.set_shore_distance(shore_distance)?;
-                tiles.update_feature(tile)?;
-                
-                processed += 1;
-                progress.update(|| processed);
+        let mut tile = tile_map.try_get_mut(&fid)?;
+        tile.water_count = water_count;
+        tile.closest_water = closest_water;
+        if on_shore {
+            if is_land {
+                shore_distances.insert(fid,1);
+                land_queue.push(fid,Reverse(1));
             } else {
-                next_queue.push(fid)
+                shore_distances.insert(fid,-1);
+                water_queue.push(fid,Reverse(1));
+            }
+        }
+
+    }
+
+    // use the cost-expansion algorithm, as was done with expanding cultures, nations, subnations, etc. Except
+    // there is no limit and cost is exactly 1 per tile.
+
+    let mut land_queue = land_queue.watch_queue(progress, "Measuring land tiles.", "Land tiles measured.");
+
+    while let Some((fid,priority)) = land_queue.pop() {
+
+        let tile = tile_map.try_get(&fid)?;
+        for (neighbor_id,_) in &tile.neighbors {
+
+            let cost = priority.0 + 1;
+
+            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(&neighbor_id) {
+                if &cost < neighbor_cost {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                true
+            };
+
+            if replace_distance {
+                shore_distances.insert(*neighbor_id,cost);
+                land_queue.push(*neighbor_id, Reverse(cost));
             }
 
         }
 
-        if next_queue.len() == 0 {
-            progress.update(|| processed);
-            break;
+    }
+
+    let mut water_queue = water_queue.watch_queue(progress, "Measuring water tiles.", "Water tiles measured.");
+
+    while let Some((fid,priority)) = water_queue.pop() {
+
+        let tile = tile_map.try_get(&fid)?;
+        for (neighbor_id,_) in &tile.neighbors {
+
+            let cost = priority.0 + 1;
+
+            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(&neighbor_id) {
+                if &cost < neighbor_cost {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                true
+            };
+
+            if replace_distance {
+                shore_distances.insert(*neighbor_id,-cost);
+                water_queue.push(*neighbor_id, Reverse(cost));
+            }
+
         }
-        queue = next_queue;
 
     }
-    progress.finish(|| "Found distances for tiles.");
+
+    for (fid,tile) in tile_map.into_iter().watch(progress, "Writing data.", "Data written.") {
+
+        let mut feature = tiles.try_feature_by_id(&fid)?;
+        let shore_distance = shore_distances.remove(&fid).unwrap(); // There should be no reason the shore_distance wasn't generated for the tile
+        feature.set_shore_distance(shore_distance)?;
+        feature.set_closest_water(tile.closest_water)?;
+        feature.set_water_count(tile.water_count)?;
+        tiles.update_feature(feature)?;
+
+
+    }
+
 
     Ok(())
 }

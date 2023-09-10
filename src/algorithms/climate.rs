@@ -13,6 +13,8 @@ use crate::world_map::TileSchema;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
+    // TODO: I think I need to play around with this curve, possibly have three curves, representing solaration at solstices and equinoxes (there's only one curve for both). Also, I need to let the user specify a tilt.
+
     let mut layer = target.edit_tile_layer()?;
 
     // Algorithm borrowed from AFMG with some modifications

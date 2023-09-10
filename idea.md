@@ -245,6 +245,7 @@ To proceed on this, I can break it down into the following steps:
 [X] Replace 'with_insertor' with a callback in the indexing functions.
 [X] Improve reproducibility by iterating layer features in the insertion order.
 [ ] Speed up the shore_distance algorithm by using the cost-expand process as with cultures, states, etc.
+[ ] `genesis` command
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.
     [ ] I could just provide a QGIS file called World.qgz with defaults, and as long as the user places this in the same directory and calles their file 'world.gpkg' then it will work. If they want to rename things, they'll have to change the data source.
     [ ] TODO: If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.

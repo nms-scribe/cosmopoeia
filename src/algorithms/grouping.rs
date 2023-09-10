@@ -27,6 +27,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
     // pop the next one off of the table.
     // 'watch_queue' isn't going to work here since it only watches when it picks.
+    // TODO: With the new IndexMap backing, I actually could use pop here.
     while let Some(tile) = table.keys().next().cloned().map(|first| table.try_remove(&first)) {
         let tile = tile?;
         progress.update(|| original_table_len - table.len());

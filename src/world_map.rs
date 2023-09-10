@@ -39,7 +39,6 @@ use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::utils::Extent;
 use crate::utils::create_line;
-use crate::errors::MissingErrorToOption;
 use crate::utils::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::NamerSet;
@@ -1320,27 +1319,14 @@ entity!(TileForRiverConnect TileSchema TileFeature {
     outlet_from: Vec<u64>
 });
 
-
 entity!(TileForWaterDistance TileSchema TileFeature {
     site: Point,
     grouping: Grouping, 
-    neighbors: Vec<(u64,i32)>
-});
-
-entity!(TileForWaterDistanceNeighbor TileSchema TileFeature {
-    site: Point,
-    grouping: Grouping 
-});
-
-entity!(TileForWaterDistanceOuter TileSchema TileFeature {
-    grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
-    shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
+    water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
+    closest_water: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileForWaterDistanceOuterNeighbor TileSchema TileFeature {
-    shore_distance: Option<i32> = |feature: &TileFeature| feature.shore_distance().missing_to_option()
-});
 
 entity!(TileForGroupingCalc TileSchema TileFeature {
     fid: u64,
