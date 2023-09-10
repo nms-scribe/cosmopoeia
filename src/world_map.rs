@@ -968,15 +968,6 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         Ok(self.layer.set_feature(feature.into_feature())?)
     }
 
-    // FUTURE: It would be nice if we could set the filter and retrieve the features all at once. But then I have to implement drop.
-    pub(crate) fn set_spatial_filter_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
-        self.layer.set_spatial_filter_rect(min_x, min_y, max_x, max_y)
-    }
-
-    pub(crate) fn clear_spatial_filter(&mut self) {
-        self.layer.clear_spatial_filter()
-    }
-
     pub(crate) fn feature_count(&self) -> usize {
         self.layer.feature_count() as usize
     }
@@ -1209,6 +1200,12 @@ entity!(NewTile TileSchema TileFeature {
     site_x: f64, 
     site_y: f64
 }); 
+
+entity!(TileForCalcNeighbors TileSchema TileFeature {
+    geometry: Geometry,
+    site: Point,
+    neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
+});
 
 entity!(TileForTerrain TileSchema TileFeature {
     site: Point, 

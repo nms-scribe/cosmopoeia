@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use gdal::vector::OGRwkbGeometryType;
 use gdal::vector::Geometry;
@@ -8,6 +9,7 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::errors::CommandError;
 use crate::world_map::NewTile;
+use crate::world_map::TileForCalcNeighbors;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TilesLayer;
@@ -69,141 +71,86 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
 
 pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: Would it speed things up to make use of a QuadTree structure? Index all the vertices, then just look for tiles that share vertices. It might
-    // be worth trying, as it would avoid the disjoint check.
+    // TODO: I should also be able to do some additional things:
+    // 1. Figure out if a tile is on the edge of the map, which may be important later.
+    // 2. Find neighbors on the other side of the world, if a configuration property tells us to wrap east and west.
+    // 3. Make all polar tiles neighbors, if a configuration property tells us that we should do that.
 
-    //use std::time::Instant;
+    // NOTE: At one point I tried an algorithm which iterated through each polygon, set a spatial index for its bounds, then
+    // found all non-disjoint polygons in that index to mark them as a neighbor. This is hugely faster. The old way took about 
+    // 5 seconds for 10,000 tiles, and this one was almost instantaneous for that number. I blame my algorithm for curvifying
+    // polygons for coming up with this idea.
 
-    //let mut time_map = HashMap::new();
+    let mut point_tile_index = HashMap::new();
 
-    macro_rules! mark_time {
-        {$name: literal: $($block: tt)*} => {
-            // NOTE: Uncomment these lines to do some benchmarking
-            // let now = Instant::now();
-            $($block)*
-            //match time_map.entry($name) {
-            //    std::collections::hash_map::Entry::Occupied(mut entry) => *entry.get_mut() += now.elapsed().as_secs_f64(),
-            //    std::collections::hash_map::Entry::Vacant(entry) => {entry.insert(now.elapsed().as_secs_f64());},
-            //}
+    let mut layer = target.edit_tile_layer()?;
+
+    // Find all tiles which share the same vertex.
+    let mut tile_map = layer.read_features().to_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
+        let ring = tile.geometry.get_geometry(0);
+        for i in 0..ring.point_count() as i32 {
+            let (x,y,_) = ring.get_point(i);
+            let point = Point::from_f64(x, y)?;
+            match point_tile_index.get_mut(&point) {
+                None => {
+                    point_tile_index.insert(point, HashSet::from([*fid]));
+                },
+                Some(set) => {
+                    set.insert(*fid);
+                }
+            }
+        }
+
+        Ok(())
+
+    }, progress)?;
+
+    // map all of the tiles that share each vertex as their own neighbors.
+    for (_,tiles) in point_tile_index.into_iter().watch(progress, "Matching vertices.", "Vertices matched.") {
+
+        for tile in &tiles {
             
-        };
+            // I can't calculate the angle yet, because I'm still deduplicating any intersections. I'll do that in the next loop.
+            let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).map(|neighbor| *neighbor);
+
+            tile_map.try_get_mut(tile)?.neighbor_set.extend(neighbors)
+
+        }
+
     }
 
-    // TODO: Memory usage for this isn't much more than other algorithms. The problem is almost entirely time.
-    // There's CPU usage as well, but the best way to reduce that is to reduce the time (I can reduce usage by sleeping for occasional milliseconds, but that
-    // slows the whole process down.)
-    let mut layer = target.edit_tile_layer()?;
-    
-    mark_time!{"reading tiles": 
-        let mut features = Vec::new();
-        for feature in layer.read_features().watch(progress,"Reading tiles.","Tiles read.") {
-            features.push(feature.fid()?);
-        }
-    };
-
-    // This cache of the disjoint result speeds this algorithm up by about one second (6.43 down to 5.45)
-    // A significant but still disappointing improvement. (There were less duplicate checks than I expected)
-    let mut disjoint_checked = HashMap::new();
-
-
-    // # Loop through all features and find features that touch each feature
-    // for f in feature_dict.values():
-    for working_fid in features.iter().watch(progress,"Calculating neighbors.","Neighbors calculated.") {
-
-        mark_time!{"feature geometry":
-            let (site_x,site_y,envelope,working_geometry) = { // shelter mutable borrow
-
-                let feature = layer.feature_by_id(&working_fid).unwrap();
-                let working_geometry = feature.geometry()?;
-                let envelope = working_geometry.envelope();
-                (feature.site_x()?,feature.site_y()?,envelope,working_geometry.clone())
-
-            };
-        }
-
-        mark_time!{"set_spatial_filter_rect":
-            layer.set_spatial_filter_rect(envelope.MinX, envelope.MinY, envelope.MaxX, envelope.MaxY);
-        }
+    for (fid,tile) in tile_map.iter().watch(progress, "Writing neighbors.", "Neighbors written.") {
 
         let mut neighbors = Vec::new();
+        for neighbor_id in &tile.neighbor_set {
+            let neighbor = tile_map.try_get(&neighbor_id)?;
 
-        mark_time!{"intersecting features":
-            for intersecting_feature in layer.read_features() {
+            let neighbor_angle = {
+                let (site_x,site_y) = tile.site.to_tuple();
+                let (neighbor_site_x,neighbor_site_y) = neighbor.site.to_tuple();
 
-                mark_time!{"intersecting features: get fid":
-                    let intersecting_fid = intersecting_feature.fid()?;
-                }
+                // needs to be clockwise, from the north, with a value from 0..360
+                // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+                let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+                let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
+                // And then, to get the values in the range from 0..360, mod it.
+                let clamped = clockwise_from_north % 360.0;
+                clamped.floor() as i32
+            };
 
-                if working_fid != &intersecting_fid {
+            neighbors.push((*neighbor_id,neighbor_angle))
 
-                    mark_time!{"intersection features: get disjoint cache":
-                        let cached = disjoint_checked.get(&(*working_fid,intersecting_fid));
-                    }
-                    
-                    let is_disjoint = if let Some(is_disjoint) = cached {
-                        // check the cache in the opposite way they were inserted, because they were inserted when working_id
-                        // was intersecting_id
-                        *is_disjoint
-                    } else {
-                        // NOTE: this is by far the slowest part of the process, apart from updating the feature. I can think of nothing to do to optimize this.
-                        mark_time!{"intersecting features: disjoint check":
-                            let is_disjoint = intersecting_feature.geometry()?.disjoint(&working_geometry);
-                        }
-                        disjoint_checked.insert((intersecting_fid,*working_fid),is_disjoint);
-                        is_disjoint
-
-                    };
-
-                    if !is_disjoint {
-                        mark_time!{"intersecting features: neighbor geometry":
-                            let neighbor_site_x = intersecting_feature.site_x()?;
-                            let neighbor_site_y = intersecting_feature.site_y()?;
-                        }
-
-                        mark_time!{"intersecting features: neighbor angle":
-                            let neighbor_angle = {
-                                let (site_x,site_y,neighbor_site_x,neighbor_site_y) = (site_x,site_y,neighbor_site_x,neighbor_site_y);
-                                // needs to be clockwise, from the north, with a value from 0..360
-                                // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-                                let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
-                                // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-                                let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
-                                // And then, to get the values in the range from 0..360, mod it.
-                                let clamped = clockwise_from_north % 360.0;
-                                clamped
-                            };
-                        }
-                
-                        mark_time!{"intersecting features: push neighbor":
-                            neighbors.push((intersecting_fid,neighbor_angle.floor() as i32)); 
-                        }
-
-                    }
-
-                }
-
-            }
         }
 
-        mark_time!{"clear_spatial_filter":
-            layer.clear_spatial_filter();
-        }
+        // sort the neighbors by tile_id, to help ensure random reproducibility
+        neighbors.sort_by_key(|n| n.0);
 
-        mark_time!{"update feature":
-            if let Some(mut working_feature) = layer.feature_by_id(&working_fid) {
-                // Sort the neighbors by key, which helps us maintain reproducible results with the same random seed.
-                neighbors.sort_by_key(|neighbor| neighbor.0);
-                working_feature.set_neighbors(&neighbors)?;
-
-                layer.update_feature(working_feature)?;
-
-            }
-        }
-
+        let mut feature = layer.try_feature_by_id(fid)?;
+        feature.set_neighbors(&neighbors)?;
+        layer.update_feature(feature)?;
 
     }
-
-    //println!("{:#?}",time_map);
     
     Ok(())
 

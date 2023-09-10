@@ -243,12 +243,12 @@ To proceed on this, I can break it down into the following steps:
     [X] terrain template files
     [X] Review AFMG terrain generation algorithms
 [X] Replace 'with_insertor' with a callback in the indexing functions.
+[X] Improve reproducibility by iterating layer features in the insertion order.
 [ ] Speed up the shore_distance algorithm by using the cost-expand process as with cultures, states, etc.
-[X] Improve reproducibility
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.
     [ ] I could just provide a QGIS file called World.qgz with defaults, and as long as the user places this in the same directory and calles their file 'world.gpkg' then it will work. If they want to rename things, they'll have to change the data source.
     [ ] TODO: If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.
-[ ] Hide the sub-commands, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command.
+[ ] Hide the sub-commands from help, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command.
 [ ] Clean up and triage TODOs into things I must do now, simple things I could do now, and things that can wait until sometime later.
 [ ] Documentation
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
@@ -258,18 +258,14 @@ To proceed on this, I can break it down into the following steps:
     [ ] Include explanation of the data (layers and fields) in the output file.
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, a few other places), and start updating those places when changes are made.
-    -- I feel like having all the above is enough to announce, as long as "creating terrain", a large task, will be the next thing on the list.
+[ ] Improved, Similar-area voronoization algorithm vaguely described above
+[ ] Improved climate generation commands
 [ ] Some additions to `gen-civil`, or perhaps another command:
     [ ] `gen-civil-roads`
     [ ] `gen-civil-trails`
     [ ] `gen-civil-ocean-routes`
     [ ] Update `gen-civil-town-details` so that the population of towns are effected by connection to roads
-[ ] Improved, Similar-area voronoization algorithm vaguely described above
-[ ] Improved climate generation commands
-[ ] Improved people and culture generation commands
-[ ] `gen-features` command?
-    [ ] Various auxiliar files
-    [ ] Review AFMG markers and zones algorithm
+[ ] Improved people and culture generation commands if I can think of anything...
 [ ] `regen-*` commands
     [ ] Based on what is done in `gen-people` and some other things, but keep things that shouldn't be regenerated. -- Do I want to allow them to "lock" things? This almost has to be the same algorithms that I'm using. In which case, do I really need this? The only way this would be useful is if I could lock, because otherwise you could just continue.
 [ ] `dissolve` commands
@@ -280,4 +276,5 @@ To proceed on this, I can break it down into the following steps:
 [ ] `submap` command
 [ ] `convert-image` command if I can't just use convert-heightmap
 [ ] `import-biomes` command
+[ ] FUTURE: I'm not reproducing the same colors for subnations, perhaps even different borders. I'll have to deal with that later. (I wonder if the culture set has to be an IndexMap?)
 
