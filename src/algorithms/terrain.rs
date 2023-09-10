@@ -398,9 +398,9 @@ trait ProcessTerrainTilesWithPointIndex {
     }
 }
 
-trait LoadTerrainProcess {
+trait LoadTerrainTask {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError>;
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError>;
 }
 
 
@@ -415,17 +415,17 @@ subcommand_def!{
     }
 }
 
-impl LoadTerrainProcess for Recipe {
+impl LoadTerrainTask for Recipe {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading recipe tasks.");
         let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
         let reader = BufReader::new(recipe_data);
-        let tasks: Vec<TerrainProcessCommand> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let tasks: Vec<TerrainCommand> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
         progress.finish(|| "Recipe tasks loaded.");
         let mut result = Vec::new();
         for task in tasks {
-            result.extend(task.load_terrain_processes(random,progress)?)
+            result.extend(task.load_terrain_task(random,progress)?)
         }
         Ok(result)
     }
@@ -448,13 +448,13 @@ subcommand_def!{
 
 }
 
-impl LoadTerrainProcess for RecipeSet {
+impl LoadTerrainTask for RecipeSet {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading recipe set.");
         let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
         let reader = BufReader::new(recipe_data);
-        let mut tasks: HashMap<String,Vec<TerrainProcessCommand>> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let mut tasks: HashMap<String,Vec<TerrainCommand>> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
         progress.finish(|| "Recipe set loaded.");
         if tasks.len() > 0 {
             let chosen_key = if let Some(recipe) = self.recipe {
@@ -465,7 +465,7 @@ impl LoadTerrainProcess for RecipeSet {
             if let Some(tasks) = tasks.remove(&chosen_key) {
                 let mut result = Vec::new();
                 for task in tasks {
-                    result.extend(task.load_terrain_processes(random,progress)?)
+                    result.extend(task.load_terrain_task(random,progress)?)
                 }
                 Ok(result)
             } else {
@@ -500,13 +500,13 @@ pub(crate) struct SampleOceanBelowLoaded {
 }
 
 
-impl LoadTerrainProcess for SampleOceanBelow {
+impl LoadTerrainTask for SampleOceanBelow {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading ocean raster.");
         let raster = RasterMap::open(&self.source)?;
         progress.finish(|| "Ocean raster loaded.");
-        Ok(vec![TerrainProcess::SampleOceanBelow(SampleOceanBelowLoaded {
+        Ok(vec![TerrainTask::SampleOceanBelow(SampleOceanBelowLoaded {
             raster,
             elevation: self.elevation
         })])
@@ -580,13 +580,13 @@ pub(crate) struct SampleOceanMaskedLoaded {
 }
 
 
-impl LoadTerrainProcess for SampleOceanMasked {
+impl LoadTerrainTask for SampleOceanMasked {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading ocean raster.");
         let raster = RasterMap::open(&self.source)?;
         progress.finish(|| "Ocean raster loaded.");
-        Ok(vec![TerrainProcess::SampleOceanMasked(SampleOceanMaskedLoaded {
+        Ok(vec![TerrainTask::SampleOceanMasked(SampleOceanMaskedLoaded {
             raster
         })])
     }
@@ -640,8 +640,8 @@ pub(crate) struct SampleElevationLoaded {
 }
 
 impl SampleElevationLoaded {
-    pub(crate) fn new(raster: RasterMap) -> TerrainProcess {
-        TerrainProcess::SampleElevation(Self {
+    pub(crate) fn new(raster: RasterMap) -> TerrainTask {
+        TerrainTask::SampleElevation(Self {
             raster
         })
     }
@@ -691,13 +691,13 @@ subcommand_def!{
     }
 }
 
-impl LoadTerrainProcess for SampleElevation {
+impl LoadTerrainTask for SampleElevation {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading elevation raster.");
         let raster = RasterMap::open(&self.source)?;
         progress.finish(|| "Elevation raster loaded.");
-        Ok(vec![TerrainProcess::SampleElevation(SampleElevationLoaded {
+        Ok(vec![TerrainTask::SampleElevation(SampleElevationLoaded {
             raster
         })])
     }
@@ -720,10 +720,10 @@ subcommand_def!{
     }
 }
 
-impl LoadTerrainProcess for AddHill {
+impl LoadTerrainTask for AddHill {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::AddHill(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::AddHill(self)])
     }
 }
 
@@ -797,10 +797,10 @@ subcommand_def!{
     }
 }
 
-impl LoadTerrainProcess for AddRange {
+impl LoadTerrainTask for AddRange {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::AddRange(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::AddRange(self)])
     }
 }
 
@@ -972,10 +972,10 @@ subcommand_def!{
 
 }
 
-impl LoadTerrainProcess for AddStrait {
+impl LoadTerrainTask for AddStrait {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::AddStrait(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::AddStrait(self)])
     }
 
 }
@@ -1101,10 +1101,10 @@ subcommand_def!{
     }
 }
 
-impl LoadTerrainProcess for Mask {
+impl LoadTerrainTask for Mask {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::Mask(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Mask(self)])
     }
 
 
@@ -1162,10 +1162,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for Invert {
+impl LoadTerrainTask for Invert {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::Invert(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Invert(self)])
     }
 
 
@@ -1268,10 +1268,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for Add {
+impl LoadTerrainTask for Add {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::Add(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Add(self)])
     }
 
 
@@ -1310,10 +1310,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for Multiply {
+impl LoadTerrainTask for Multiply {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::Multiply(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Multiply(self)])
     }
 
 
@@ -1350,10 +1350,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for Smooth {
+impl LoadTerrainTask for Smooth {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::Smooth(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Smooth(self)])
     }
 
 
@@ -1407,10 +1407,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for SeedOcean {
+impl LoadTerrainTask for SeedOcean {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::SeedOcean(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::SeedOcean(self)])
     }
 
 
@@ -1494,10 +1494,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for FloodOcean {
+impl LoadTerrainTask for FloodOcean {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::FloodOcean(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::FloodOcean(self)])
     }
 
 
@@ -1553,10 +1553,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for FillOcean {
+impl LoadTerrainTask for FillOcean {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::FillOcean(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::FillOcean(self)])
     }
 
 
@@ -1587,10 +1587,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for ClearOcean {
+impl LoadTerrainTask for ClearOcean {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::ClearOcean(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::ClearOcean(self)])
     }
 
 
@@ -1620,10 +1620,10 @@ subcommand_def!{
     
 }
 
-impl LoadTerrainProcess for Clear {
+impl LoadTerrainTask for Clear {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::Multiply(Multiply { 
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Multiply(Multiply { 
             height_filter: None, 
             height_factor: 0.0
         })])
@@ -1646,10 +1646,10 @@ subcommand_def!{
 }
 
 
-impl LoadTerrainProcess for RandomUniform {
+impl LoadTerrainTask for RandomUniform {
 
-    fn load_terrain_process<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
-        Ok(vec![TerrainProcess::RandomUniform(self)])
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::RandomUniform(self)])
     }
 
 
@@ -1676,7 +1676,7 @@ impl ProcessTerrainTiles for RandomUniform {
 }
 
 #[derive(Deserialize,Serialize,Subcommand)]
-pub(crate) enum TerrainProcessCommand {
+pub(crate) enum TerrainCommand {
     Recipe(Recipe),
     RecipeSet(RecipeSet),
     Clear(Clear),
@@ -1698,42 +1698,42 @@ pub(crate) enum TerrainProcessCommand {
     SampleElevation(SampleElevation),
 }
 
-impl TerrainProcessCommand {
+impl TerrainCommand {
 
     pub(crate) fn to_json(&self) -> Result<String,CommandError> {
         // NOTE: Not technically a recipe read error, but this shouldn't be used very often.
         Ok(serde_json::to_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{}",e)))?)
     }
 
-    pub(crate) fn load_terrain_processes<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainProcess>,CommandError> {
+    pub(crate) fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
 
         match self {
-            TerrainProcessCommand::Clear(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::ClearOcean(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::RandomUniform(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::Recipe(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::RecipeSet(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::AddHill(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::AddRange(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::AddStrait(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::Mask(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::Invert(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::Add(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::Multiply(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::Smooth(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::SeedOcean(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::FillOcean(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::FloodOcean(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::SampleOceanMasked(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::SampleOceanBelow(params) => params.load_terrain_process(random,progress),
-            TerrainProcessCommand::SampleElevation(params) => params.load_terrain_process(random,progress),
+            TerrainCommand::Clear(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::ClearOcean(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::RandomUniform(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::Recipe(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::RecipeSet(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::AddHill(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::AddRange(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::AddStrait(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::Mask(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::Invert(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::Add(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::Multiply(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::Smooth(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::SeedOcean(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::FillOcean(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::FloodOcean(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::SampleOceanMasked(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::SampleOceanBelow(params) => params.load_terrain_task(random,progress),
+            TerrainCommand::SampleElevation(params) => params.load_terrain_task(random,progress),
         }
     }
 
 }
 
 
-pub(crate) enum TerrainProcess {
+pub(crate) enum TerrainTask {
     RandomUniform(RandomUniform),
     ClearOcean(ClearOcean),
     AddHill(AddHill),
@@ -1752,7 +1752,7 @@ pub(crate) enum TerrainProcess {
     SampleElevation(SampleElevationLoaded),
 }
 
-impl TerrainProcess {
+impl TerrainTask {
 
     pub(crate) fn process_terrain<Random: Rng, Progress: ProgressObserver>(selves: &[Self], rng: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -1847,22 +1847,22 @@ impl TerrainProcess {
 
     fn requires_point_index(&self) -> bool {
         match self {
-            TerrainProcess::ClearOcean(params) => params.requires_point_index(),
-            TerrainProcess::RandomUniform(params) => params.requires_point_index(),
-            TerrainProcess::AddHill(params) => params.requires_point_index(),
-            TerrainProcess::AddRange(params) => params.requires_point_index(),
-            TerrainProcess::AddStrait(params) => params.requires_point_index(),
-            TerrainProcess::Mask(params) => params.requires_point_index(),
-            TerrainProcess::Invert(params) => params.requires_point_index(),
-            TerrainProcess::Add(params) => params.requires_point_index(),
-            TerrainProcess::Multiply(params) => params.requires_point_index(),
-            TerrainProcess::Smooth(params) => params.requires_point_index(),
-            TerrainProcess::SeedOcean(params) => params.requires_point_index(),
-            TerrainProcess::FillOcean(params) => params.requires_point_index(),
-            TerrainProcess::FloodOcean(params) => params.requires_point_index(),
-            TerrainProcess::SampleOceanMasked(params) => params.requires_point_index(),
-            TerrainProcess::SampleOceanBelow(params) => params.requires_point_index(),
-            TerrainProcess::SampleElevation(params) => params.requires_point_index(),
+            TerrainTask::ClearOcean(params) => params.requires_point_index(),
+            TerrainTask::RandomUniform(params) => params.requires_point_index(),
+            TerrainTask::AddHill(params) => params.requires_point_index(),
+            TerrainTask::AddRange(params) => params.requires_point_index(),
+            TerrainTask::AddStrait(params) => params.requires_point_index(),
+            TerrainTask::Mask(params) => params.requires_point_index(),
+            TerrainTask::Invert(params) => params.requires_point_index(),
+            TerrainTask::Add(params) => params.requires_point_index(),
+            TerrainTask::Multiply(params) => params.requires_point_index(),
+            TerrainTask::Smooth(params) => params.requires_point_index(),
+            TerrainTask::SeedOcean(params) => params.requires_point_index(),
+            TerrainTask::FillOcean(params) => params.requires_point_index(),
+            TerrainTask::FloodOcean(params) => params.requires_point_index(),
+            TerrainTask::SampleOceanMasked(params) => params.requires_point_index(),
+            TerrainTask::SampleOceanBelow(params) => params.requires_point_index(),
+            TerrainTask::SampleElevation(params) => params.requires_point_index(),
         }
     }
 

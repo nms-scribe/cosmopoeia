@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 
 use clap::Args;
+use clap::Subcommand;
 use gdal::Dataset;
 use gdal::DriverManager;
 use gdal::version::VersionInfo;
@@ -11,17 +12,17 @@ use gdal::MetadataEntry;
 use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
+use crate::command_def;
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    #[command(hide=true)]
-    pub(crate) struct DevGdalInfo {
+    pub(crate) struct DatasetInfo {
         /// Name of user to greet.
         source: PathBuf
     }
 }
 
-impl Task for DevGdalInfo {
+impl Task for DatasetInfo {
 
     fn run(self) -> Result<(),CommandError> {
         let ds = Dataset::open(self.source)?;
@@ -48,12 +49,11 @@ impl Task for DevGdalInfo {
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    #[command(hide=true)]
-    pub(crate) struct DevGdalVersion {
+    pub(crate) struct Version {
     }
 }
 
-impl Task for DevGdalVersion {
+impl Task for Version {
 
     fn run(self) -> Result<(),CommandError> {
         println!("{}",VersionInfo::version_report());
@@ -63,12 +63,11 @@ impl Task for DevGdalVersion {
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    #[command(hide=true)]
-    pub(crate) struct DevGdalDrivers {
+    pub(crate) struct Drivers {
     }
 }
 
-impl Task for DevGdalDrivers {
+impl Task for Drivers {
 
     fn run(self) -> Result<(),CommandError> {
         let mut drivers = Vec::new();
@@ -84,4 +83,27 @@ impl Task for DevGdalDrivers {
     }
 }
 
+command_def!(
+    GdalCommand {
+        DatasetInfo,
+        Version,
+        Drivers 
+    }
+);
 
+
+subcommand_def!{
+    /// Retrieves information about local gdal library
+    #[command(hide=true)]
+    pub(crate) struct Gdal {
+        #[command(subcommand)]
+        command: GdalCommand
+
+    }
+}
+
+impl Task for Gdal {
+    fn run(self) -> Result<(),CommandError> {
+        self.command.run()        
+    }
+}

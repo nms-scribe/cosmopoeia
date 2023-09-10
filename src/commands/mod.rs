@@ -15,6 +15,58 @@ mod gen_towns;
 mod gen_nations;
 mod gen_subnations;
 
+use gdal_dev::Gdal;
+use dev::DevPointsFromHeightmap;
+use dev::DevPointsFromExtent;
+use dev::DevTrianglesFromPoints;
+use dev::DevVoronoiFromTriangles;
+use dev::DevNamers;
+use dev::DevCultures;
+use create::CreateFromHeightmap;
+use create::CreateBlank;
+use create::CreateSourceFromHeightmap;
+use create::CreateSourceBlank;
+use create::CreateCalcNeighbors;
+use terrain::Terrain;
+use gen_climate::GenClimate;
+use gen_climate::GenClimateTemperature;
+use gen_climate::GenClimateWind;
+use gen_climate::GenClimatePrecipitation;
+use gen_water::GenWater;
+use gen_water::GenWaterCoastline;
+use gen_water::GenWaterFlow;
+use gen_water::GenWaterFill;
+use gen_water::GenWaterRivers;
+use gen_water::GenWaterDistance;
+use gen_water::GenWaterGrouping;
+use gen_biome::GenBiome;
+use gen_biome::GenBiomeData;
+use gen_biome::GenBiomeApply;
+use gen_biome::GenBiomeDissolve;
+use gen_biome::GenBiomeCurvify;
+use gen_people::GenPeople;
+use gen_people::GenPeoplePopulation;
+use gen_people::GenPeopleCultures;
+use gen_people::GenPeopleCulturesExpand;
+use gen_people::GenPeopleCulturesDissolve;
+use gen_people::GenPeopleCulturesCurvify;
+use gen_towns::GenTowns;
+use gen_towns::GenTownsCreate;
+use gen_towns::GenTownsPopulate;
+use gen_nations::GenNations;
+use gen_nations::GenNationsCreate;
+use gen_nations::GenNationsExpand;
+use gen_nations::GenNationsNormalize;
+use gen_nations::GenNationsDissolve;
+use gen_nations::GenNationsCurvify;
+use gen_subnations::GenSubnations;
+use gen_subnations::GenSubnationsCreate;
+use gen_subnations::GenSubnationsExpand;
+use gen_subnations::GenSubnationsFillEmpty;
+use gen_subnations::GenSubnationsNormalize;
+use gen_subnations::GenSubnationsDissolve;
+use gen_subnations::GenSubnationsCurvify;
+
 // NOTE: Further 'use' statements in the command macro below
 
 pub(crate) trait Task {
@@ -23,21 +75,18 @@ pub(crate) trait Task {
 
 }
 
-macro_rules! command {
-    ($($command_mod: ident::$command_name: ident;)*) => {
-
-        $(
-            pub(crate) use $command_mod::$command_name;
-        )*
+#[macro_export]
+macro_rules! command_def {
+    ($struct_name: ident {$($command_name: ident),*}) => {
 
         #[derive(Subcommand)]
-        pub(crate) enum Command {
+        pub(crate) enum $struct_name {
             $(
                 $command_name($command_name)
             ),*
         }
 
-        impl Task for Command {
+        impl Task for $struct_name {
 
             fn run(self) -> Result<(),CommandError> {
                 match self {
@@ -51,60 +100,59 @@ macro_rules! command {
 
 // "Dev" commands are generally hidden, intended for testing during development. While they should be usable by users, they rarely are, and are hidden to keep the UI clean.
 
-command!{
-    gdal_dev::DevGdalVersion;
-    gdal_dev::DevGdalInfo;
-    gdal_dev::DevGdalDrivers;
-    dev::DevPointsFromHeightmap;
-    dev::DevPointsFromExtent;
-    dev::DevTrianglesFromPoints;
-    dev::DevVoronoiFromTriangles;
-    dev::DevNamers;
-    dev::DevCultures;
-    create::CreateFromHeightmap;
-    create::CreateBlank;
-    create::CreateSourceFromHeightmap;
-    create::CreateSourceBlank;
-    create::CreateCalcNeighbors;
-    terrain::Terrain;
-    gen_climate::GenClimate;
-    gen_climate::GenClimateTemperature;
-    gen_climate::GenClimateWind;
-    gen_climate::GenClimatePrecipitation;
-    gen_water::GenWater;
-    gen_water::GenWaterCoastline;
-    gen_water::GenWaterFlow;
-    gen_water::GenWaterFill;
-    gen_water::GenWaterRivers;
-    gen_water::GenWaterDistance;
-    gen_water::GenWaterGrouping;
-    gen_biome::GenBiome;
-    gen_biome::GenBiomeData;
-    gen_biome::GenBiomeApply;
-    gen_biome::GenBiomeDissolve;
-    gen_biome::GenBiomeCurvify;
-    gen_people::GenPeople;
-    gen_people::GenPeoplePopulation;
-    gen_people::GenPeopleCultures;
-    gen_people::GenPeopleCulturesExpand;
-    gen_people::GenPeopleCulturesDissolve;
-    gen_people::GenPeopleCulturesCurvify;
-    gen_towns::GenTowns;
-    gen_towns::GenTownsCreate;
-    gen_towns::GenTownsPopulate;
-    gen_nations::GenNations;
-    gen_nations::GenNationsCreate;
-    gen_nations::GenNationsExpand;
-    gen_nations::GenNationsNormalize;
-    gen_nations::GenNationsDissolve;
-    gen_nations::GenNationsCurvify;
-    gen_subnations::GenSubnations;
-    gen_subnations::GenSubnationsCreate;
-    gen_subnations::GenSubnationsExpand;
-    gen_subnations::GenSubnationsFillEmpty;
-    gen_subnations::GenSubnationsNormalize;
-    gen_subnations::GenSubnationsDissolve;
-    gen_subnations::GenSubnationsCurvify;
+command_def!{
+    Command {
+        Gdal,
+        DevPointsFromHeightmap,
+        DevPointsFromExtent,
+        DevTrianglesFromPoints,
+        DevVoronoiFromTriangles,
+        DevNamers,
+        DevCultures,
+        CreateFromHeightmap,
+        CreateBlank,
+        CreateSourceFromHeightmap,
+        CreateSourceBlank,
+        CreateCalcNeighbors,
+        Terrain,
+        GenClimate,
+        GenClimateTemperature,
+        GenClimateWind,
+        GenClimatePrecipitation,
+        GenWater,
+        GenWaterCoastline,
+        GenWaterFlow,
+        GenWaterFill,
+        GenWaterRivers,
+        GenWaterDistance,
+        GenWaterGrouping,
+        GenBiome,
+        GenBiomeData,
+        GenBiomeApply,
+        GenBiomeDissolve,
+        GenBiomeCurvify,
+        GenPeople,
+        GenPeoplePopulation,
+        GenPeopleCultures,
+        GenPeopleCulturesExpand,
+        GenPeopleCulturesDissolve,
+        GenPeopleCulturesCurvify,
+        GenTowns,
+        GenTownsCreate,
+        GenTownsPopulate,
+        GenNations,
+        GenNationsCreate,
+        GenNationsExpand,
+        GenNationsNormalize,
+        GenNationsDissolve,
+        GenNationsCurvify,
+        GenSubnations,
+        GenSubnationsCreate,
+        GenSubnationsExpand,
+        GenSubnationsFillEmpty,
+        GenSubnationsNormalize,
+        GenSubnationsDissolve,
+        GenSubnationsCurvify
+    }
 }
-
 

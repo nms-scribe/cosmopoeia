@@ -19,8 +19,8 @@ use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
 use crate::algorithms::terrain::SampleElevationLoaded;
-use crate::algorithms::terrain::TerrainProcess;
-use crate::algorithms::terrain::TerrainProcessCommand;
+use crate::algorithms::terrain::TerrainTask;
+use crate::algorithms::terrain::TerrainCommand;
 use crate::world_map::ElevationLimits;
 
 fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -232,7 +232,7 @@ subcommand_def!{
 
         #[command(subcommand)]
         /// A processing command to run after creation and elevation sampling. (see 'terrain' command)
-        post_process: Option<TerrainProcessCommand>,
+        post_process: Option<TerrainCommand>,
 
 
     }
@@ -253,7 +253,7 @@ impl Task for CreateFromHeightmap {
         let mut post_processes = if let Some(process) = self.post_process {
             progress.announce("Loading terrain processes.");
 
-            process.load_terrain_processes(&mut random, &mut progress)?
+            process.load_terrain_task(&mut random, &mut progress)?
 
         } else {
             // otherwise, we'll just have the elevation sample process to run
@@ -285,7 +285,7 @@ impl Task for CreateFromHeightmap {
 
             post_processes.insert(0,sample_process);
 
-            TerrainProcess::process_terrain(&post_processes,&mut random,target,&mut progress)
+            TerrainTask::process_terrain(&post_processes,&mut random,target,&mut progress)
     
 
         })?;
@@ -341,7 +341,7 @@ subcommand_def!{
 
         #[command(subcommand)]
         /// A processing command to run after creation. (see 'terrain' command)
-        post_process: Option<TerrainProcessCommand>,
+        post_process: Option<TerrainCommand>,
 
 
     }
@@ -359,7 +359,7 @@ impl Task for CreateBlank {
         let processes = if let Some(process) = self.post_process {
             progress.announce("Loading terrain processes.");
 
-            Some(process.load_terrain_processes(&mut random, &mut progress)?)
+            Some(process.load_terrain_task(&mut random, &mut progress)?)
 
         } else {
             None
@@ -385,7 +385,7 @@ impl Task for CreateBlank {
 
             if let Some(processes) = processes {
 
-                TerrainProcess::process_terrain(&processes,&mut random,target,&mut progress)
+                TerrainTask::process_terrain(&processes,&mut random,target,&mut progress)
     
             } else {
                 Ok(())

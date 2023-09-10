@@ -287,7 +287,7 @@ impl<Iter: Iterator<Item=Result<Geometry,CommandError>>> ToGeometryCollection fo
 
     fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Geometry,CommandError> {
         let mut result = Geometry::empty(OGRwkbGeometryType::wkbGeometryCollection)?;
-        for geometry in self.watch(progress,"Reading geometries.","Geometries read.") {
+        for geometry in self.watch(progress,"Collecting geometries.","Geometries collected.") {
             result.add_geometry(geometry?)?;
         }
         Ok(result)

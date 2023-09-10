@@ -7,8 +7,8 @@ use crate::world_map::WorldMap;
 use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
-use crate::algorithms::terrain::TerrainProcessCommand; 
-use crate::algorithms::terrain::TerrainProcess;
+use crate::algorithms::terrain::TerrainCommand; 
+use crate::algorithms::terrain::TerrainTask;
 use crate::utils::random_number_generator;
 
 
@@ -20,7 +20,7 @@ subcommand_def!{
         target: PathBuf,
 
         #[command(subcommand)]
-        process: TerrainProcessCommand,
+        command: TerrainCommand,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
@@ -46,13 +46,13 @@ impl Task for Terrain {
         target.with_transaction(|target| {
 
             if self.serialize {
-                println!("{}",self.process.to_json()?);
+                println!("{}",self.command.to_json()?);
             } else {
                 progress.announce("Loading terrain processes.");
 
-                let processes = self.process.load_terrain_processes(&mut random, &mut progress)?;
+                let processes = self.command.load_terrain_task(&mut random, &mut progress)?;
 
-                TerrainProcess::process_terrain(&processes,&mut random,target,&mut progress)?;
+                TerrainTask::process_terrain(&processes,&mut random,target,&mut progress)?;
             }
     
             Ok(())
