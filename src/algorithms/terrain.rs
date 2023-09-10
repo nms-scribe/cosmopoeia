@@ -1779,12 +1779,22 @@ impl TerrainProcess {
 
             let mut point_index = TileFinder::new(&tile_extents, tile_count, tile_search_radius);
             let mut tile_map = EntityIndex::new();
-            for tile in layer.read_features().into_entities::<TileForTerrain>().watch(progress, "Indexing tiles.", "Tiles indexed.") {
-                let (fid,tile) = tile?;
-                point_index.add_tile(tile.site.clone(), fid)?;
-                tile_map.insert(fid, tile);
+            let mut last_fid = 0;
+            tile_map.with_insertor(|insertor| {
+                for tile in layer.read_features().into_entities::<TileForTerrain>().watch(progress, "Indexing tiles.", "Tiles indexed.") {
+                    let (fid,tile) = tile?;
+                    if fid != last_fid + 1 {
+                        println!("1");
+                    };
+                    last_fid = fid;
+                    point_index.add_tile(tile.site.clone(), fid)?;
+                    insertor.insert(fid, tile);
+    
+                }
 
-            }
+                Ok(())
+    
+            })?;
 
             for me in selves {
                 me.process_terrain_tiles_with_point_index(rng, &parameters, &point_index, &mut tile_map, progress)?;

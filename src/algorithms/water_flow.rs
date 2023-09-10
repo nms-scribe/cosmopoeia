@@ -21,16 +21,21 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();
 
-    for data in layer.read_features().into_entities::<TileForWaterflow>().watch(progress,"Indexing tiles.","Tiles indexed.") {
-        let (fid,entity) = data?;
-        if !entity.grouping.is_ocean() {
-            // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 
-            // FUTURE: Although it takes about twice as much memory, which could be important in the future.
-            tile_list.push((fid,entity.elevation));
+    tile_map.with_insertor(|insertor| {
+        for data in layer.read_features().into_entities::<TileForWaterflow>().watch(progress,"Indexing tiles.","Tiles indexed.") {
+            let (fid,entity) = data?;
+            if !entity.grouping.is_ocean() {
+                // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 
+                // FUTURE: Although it takes about twice as much memory, which could be important in the future.
+                tile_list.push((fid,entity.elevation));
+            }
+            insertor.insert(fid, entity);
+    
         }
-        tile_map.insert(fid, entity);
 
-    }
+        Ok(())
+    
+    })?;
 
     // sort tile list so the highest is first.
     tile_list.sort_by(|(_,a),(_,b)| 

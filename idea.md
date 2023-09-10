@@ -243,7 +243,7 @@ To proceed on this, I can break it down into the following steps:
     [X] terrain template files
     [X] Review AFMG terrain generation algorithms
 [ ] Speed up the shore_distance algorithm by using the cost-expand process as with cultures, states, etc.
-[ ] Improve reproducibility by adding a 'gen_order' field to tiles, created when tiles are added, and using that to sort when generating terrain, and possibly other things. I believe the reproducbility is hampered by a randomness introduced by 1) gdal when reading records in a database where order isn't guaranteed and 2) storing and retrieving data from hashmaps (which have a "RandomState" generic parameter, which I don't think I can utilize across program runs)
+[X] Improve reproducibility
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.
     [ ] I could just provide a QGIS file called World.qgz with defaults, and as long as the user places this in the same directory and calles their file 'world.gpkg' then it will work. If they want to rename things, they'll have to change the data source.
     [ ] TODO: If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.

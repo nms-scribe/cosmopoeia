@@ -394,11 +394,15 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
     let mut tile_map = EntityIndex::new();
     let mut tile_list = Vec::new();
 
-    for tile in tiles_layer.read_features().into_entities::<TileForNationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {
-        let (fid,tile) = tile?;
-        tile_list.push(fid);
-        tile_map.insert(fid,tile);
-    }
+    tile_map.with_insertor(|insertor| {
+        for tile in tiles_layer.read_features().into_entities::<TileForNationNormalize>().watch(progress,"Reading tiles.","Tiles read.") {
+            let (fid,tile) = tile?;
+            tile_list.push(fid);
+            insertor.insert(fid,tile);
+        };
+        Ok(())
+    
+    })?;
 
     for tile_id in tile_list.into_iter().watch(progress,"Normalizing nations.","Nations normalized.") {
         let tile = tile_map.try_get(&tile_id)?;

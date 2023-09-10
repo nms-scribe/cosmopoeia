@@ -47,8 +47,16 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
-    for tile in generator.watch(progress,"Writing tiles.","Tiles written.") {
-        tiles.add_tile(tile?)?;
+    // TODO: The delaunay process seems to process the points in a random order. However, I need to always insert the tiles from the same
+    // generated points in the same order. If I could somehow "map" the sites with their original points, I could apply an incrementing
+    // id to the points while I'm generating and have it here to sort by. Until that time, I'm sorting by x,y. This sort is a little
+    // bit heavy, so there might be a better way.
+    let collected_tiles: Result<Vec<NewTile>,CommandError> = generator.watch(progress,"Collecting tiles", "Tiles collected.").collect();
+    let mut collected_tiles = collected_tiles?;
+    collected_tiles.sort_by_cached_key(|tile| (ordered_float::OrderedFloat::from(tile.site_x),ordered_float::OrderedFloat::from(tile.site_y)));
+
+    for tile in collected_tiles.into_iter().watch(progress,"Writing tiles.","Tiles written.") {
+        tiles.add_tile(tile)?;
     }
 
     let mut props = target.create_properties_layer()?;
@@ -183,6 +191,8 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         mark_time!{"update feature":
             if let Some(mut working_feature) = layer.feature_by_id(&working_fid) {
+                // Sort the neighbors by key, which helps us maintain reproducible results with the same random seed.
+                neighbors.sort_by_key(|neighbor| neighbor.0);
                 working_feature.set_neighbors(&neighbors)?;
 
                 layer.update_feature(working_feature)?;
@@ -479,12 +489,17 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
 
     {
         let mut tile_layer = target.edit_tile_layer()?;
-        for feature in tile_layer.read_features().watch(progress, "Indexing tiles.", "Tiles indexed.") {
-            let id = feature.fid()?;
-            let entity = ThemeType::TileForTheme::try_from(feature)?;
-            tile_map.insert(id, entity.clone());
-            tiles.push(entity);
-        }
+        tile_map.with_insertor(|insertor| {
+            for feature in tile_layer.read_features().watch(progress, "Indexing tiles.", "Tiles indexed.") {
+                let id = feature.fid()?;
+                let entity = ThemeType::TileForTheme::try_from(feature)?;
+                insertor.insert(id, entity.clone());
+                tiles.push(entity);
+            }
+
+            Ok(())
+    
+        })?;
     
     }
 

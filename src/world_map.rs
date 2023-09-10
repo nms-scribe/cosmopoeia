@@ -4,10 +4,7 @@ use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
 use std::hash::Hash;
 use std::collections::HashSet;
-use std::collections::hash_map::Keys;
-use std::collections::hash_map::Iter;
 use std::collections::hash_map::IntoIter;
-use std::collections::hash_map::IterMut;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -25,6 +22,15 @@ use gdal::vector::FeatureIterator;
 use gdal::Transaction;
 use ordered_float::OrderedFloat;
 use ordered_float::NotNan;
+use indexmap::IndexMap;
+// rename these imports in case I want to use these from hash_map sometime.
+use indexmap::map::Keys as IndexKeys;
+use indexmap::map::Iter as IndexIter;
+use indexmap::map::IterMut as IndexIterMut;
+use indexmap::map::IntoIter as IndexIntoIter;
+
+
+
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -53,6 +59,35 @@ use crate::algorithms::naming::LoadedNamers;
 // the gdal crate, maybe it would be better.
 
 // TODO: I need to set CRS for each layer.
+
+/*
+TODO: Add to documentation:
+
+# On Crates
+
+I will not release this as a crate, at least for a very long time. You can include it in your cargo file with a github address. For the following reasons:
+* I do not consider this a professional program, as specified elsewhere, it is not based on scientific principles nor should it be used in scientific projects. So it is not built with the intention of being used by other projects.
+* I do not intend to maintain the API or the output data backwards compatible. If I see something that isn't working, I will be changing it, hopefully with documentation on how to upgrade your own world files.
+* I do not intend on writing tests which are necessary to make sure it works, and is safe to use.
+
+# On Tests
+
+I have not been good about creating test modules for this code, despite this being a standard of most rust packages. This is one reason I'm not releasing it as a crate. My testing has been done by simply running a few commands and looking at the results. This is more than just laziness, however, there are three reasons why testing this is difficult:
+* Subjective results: Whether an algorithm produces "good" results is highly subjective. The only thing I can do is look at it, and possibly watch for error messages. While I could develop tests that guarantee that the same results are always output, this is not proof that the algorithm is working correctly.
+* Nondeterministic results: Much of the program revolves around randomness, which means that it is often difficult to reproduce the same results, even with the same seed for the random number generator. This and the unstabilized api mean that any tests that are created are going to fail with even the smallest change.
+* Dependency on external files: Most of the algorithms work on external database files, which are difficult to compare the results of. Mocking the database file wouldn't actually be an appropriate test for much of it. While I could write database comparison routines to compare against previous output -- such tests would take a long time, and combined with the other reasons stated above, I don't feel it is worth doing.
+
+# On Layer FID fields:
+
+* According to the [Geopackage standard](http://www.geopackage.org/spec131/index.html#feature_user_tables), the identifier field (which is called fid by default in gdal), is created with the following constraint in SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`.
+* According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
+* According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
+* According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
+
+
+
+
+*/
 
 macro_rules! feature_conv {
     (id_list_to_string@ $value: expr) => {
@@ -626,14 +661,19 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
     pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
-        let mut result = HashMap::new();
-        for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
-            let fid = feature.fid()?;
-            let entity = Data::try_from(feature)?;
- 
-            result.insert(fid,entity);
-        }
-        Ok(EntityIndex::from(result))
+        let mut result = EntityIndex::new();
+        result.with_insertor(|insertor| {
+            for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
+                let fid = feature.fid()?;
+                let entity = Data::try_from(feature)?;
+     
+                insertor.insert(fid,entity);
+            }
+
+            Ok(())
+    
+        })?;
+        Ok(result)
     }
 
     pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
@@ -700,13 +740,30 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life, SchemaTyp
 }
 
 pub(crate) struct EntityIndex<SchemaType: Schema, EntityType: Entity<SchemaType>> {
-    inner: HashMap<u64,EntityType>,
+    // I use an IndexMap instead of HashMap as it ensures that the map maintains an order when iterating.
+    // This helps me get reproducible results with the same random seed.
+    inner: IndexMap<u64,EntityType>,
     _phantom: std::marker::PhantomData<SchemaType>
+}
+
+pub(crate) struct EntityIndexInsertor<'inner,SchemaType: Schema, EntityType: Entity<SchemaType>> {
+    inner: &'inner mut EntityIndex<SchemaType,EntityType>
+}
+
+impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexInsertor<'_,SchemaType,EntityType> {
+
+    pub(crate) fn insert(&mut self, fid: u64, entity: EntityType) -> Option<EntityType> {
+        let result = self.inner.inner.insert(fid, entity);
+        result
+    }
 }
 
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,EntityType> {
 
-    fn from(inner: HashMap<u64,EntityType>) -> Self {
+    fn from(mut inner: IndexMap<u64,EntityType>) -> Self {
+        // I want to ensure that the tiles are sorted in insertion order (by fid). So do this here.
+        // if there were an easy way to insert_sorted from the beginning, then I wouldn't need to do this.
+        inner.sort_keys();
         Self {
             inner,
             _phantom: Default::default()
@@ -714,7 +771,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
     }
 
     pub(crate) fn new() -> Self {
-        Self::from(HashMap::new())
+        Self::from(IndexMap::new())
     }
 
 
@@ -731,15 +788,15 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         self.inner.remove(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
     }
 
-    pub(crate) fn keys(&self) -> Keys<'_, u64, EntityType> {
+    pub(crate) fn keys(&self) -> IndexKeys<'_, u64, EntityType> {
         self.inner.keys()
     }
 
-    pub(crate) fn iter(&self) -> Iter<'_, u64, EntityType> {
+    pub(crate) fn iter(&self) -> IndexIter<'_, u64, EntityType> {
         self.inner.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> IterMut<'_, u64, EntityType> {
+    pub(crate) fn iter_mut(&mut self) -> IndexIterMut<'_, u64, EntityType> {
         self.inner.iter_mut()
     }
 
@@ -751,9 +808,24 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         self.inner.get(key)
     }
 
-    pub(crate) fn insert(&mut self, fid: u64, entity: EntityType) -> Option<EntityType> {
-        self.inner.insert(fid, entity)
+    pub(crate) fn ensure_fid_order(&mut self) {
+        // TODO: If I can find a way to 'insert' above in order, using binary_search or partition_by, then
+        // this would work.
+        self.inner.sort_keys();
     }
+
+    pub(crate) fn with_insertor<ResultType, Callback: FnOnce(&mut EntityIndexInsertor<SchemaType,EntityType>) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
+        // This makes sure we can sort it when we're done, rather than just let them insert and hope they do.
+        // TODO: A better idea might be to add a closure parameter to the function that creates an index, so that one can create an index
+        // while also doing other things, and perhaps even filter them. That's the primary purpose for this function.
+        let mut insertor = EntityIndexInsertor {
+            inner: self
+        };
+        let result = callback(&mut insertor)?;
+        self.ensure_fid_order();
+        Ok(result)
+    }
+
 
 
 }
@@ -761,7 +833,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> IntoIterator for EntityIndex<SchemaType,EntityType> {
     type Item = (u64,EntityType);
 
-    type IntoIter = IntoIter<u64,EntityType>;
+    type IntoIter = IndexIntoIter<u64,EntityType>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
@@ -771,7 +843,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> IntoIterator for Entity
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> FromIterator<(u64,EntityType)> for EntityIndex<SchemaType,EntityType> {
 
     fn from_iter<Iter: IntoIterator<Item = (u64,EntityType)>>(iter: Iter) -> Self {
-        Self::from(HashMap::from_iter(iter))
+        Self::from(IndexMap::from_iter(iter))
     }
 }
         
@@ -1671,19 +1743,24 @@ impl TilesLayer<'_,'_> {
    // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
     pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
 
-        let mut tile_map = HashMap::new();
+        let mut tile_map = EntityIndex::new();
         let mut tile_queue = Vec::new();
 
-        for data in self.read_features().into_entities::<TileForWaterFill>().watch(progress,"Indexing tiles.","Tiles indexed.") {
-            let (fid,entity) = data?;
-            if entity.water_accumulation > 0.0 {
-                tile_queue.push((fid,entity.water_accumulation));
+        tile_map.with_insertor(|insertor| {
+            for data in self.read_features().into_entities::<TileForWaterFill>().watch(progress,"Indexing tiles.","Tiles indexed.") {
+                let (fid,entity) = data?;
+                if entity.water_accumulation > 0.0 {
+                    tile_queue.push((fid,entity.water_accumulation));
+                }
+                insertor.insert(fid, entity);
+    
             }
-            tile_map.insert(fid, entity);
 
-        }
+            Ok(())
+    
+        })?;
 
-        Ok((EntityIndex::from(tile_map),tile_queue))
+        Ok((tile_map,tile_queue))
         
 
     }
