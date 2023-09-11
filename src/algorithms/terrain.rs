@@ -1756,90 +1756,95 @@ impl TerrainTask {
 
     pub(crate) fn process_terrain<Random: Rng, Progress: ProgressObserver>(selves: &[Self], rng: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-        progress.announce("Preparing for processes.");
-
-        let limits = target.edit_properties_layer()?.get_elevation_limits()?;
-
-        let mut layer = target.edit_tile_layer()?;
-        let tile_extents = layer.get_extent()?;
-        let tile_count = layer.feature_count();
-        let parameters = TerrainParameters::new(limits, tile_extents.clone(), tile_count);
+        if selves.len() > 0 {
 
 
+            progress.announce("Preparing for processes.");
 
-        // I only want to create the point index if any of the tasks require it. If none of them
-        // require it, it's a waste of time to create it.
-        let tile_map = if selves.iter().any(|s| s.requires_point_index()) {
-            // estimate the spacing between tiles:
-            // * divide the area of the extents up by the number of tiles to get the average area covered by a tile.
-            // * the distance across, if the tiles were square, is the square root of this area.
-            let tile_spacing = ((tile_extents.height * tile_extents.width)/tile_count as f64).sqrt();
-            let tile_search_radius = tile_spacing * 2.0; // multiply by two to make darn sure we cover something.
-
-
-            let mut point_index = TileFinder::new(&tile_extents, tile_count, tile_search_radius);
-            let mut tile_map = layer.read_features().to_entities_index_for_each::<_,TileForTerrain,_>(|fid,tile| {
-                point_index.add_tile(tile.site.clone(), *fid)
-            }, progress)?;
-
-            for me in selves {
-                me.process_terrain_tiles_with_point_index(rng, &parameters, &point_index, &mut tile_map, progress)?;
-            }
-
-            tile_map    
-
-        } else {
-            let mut tile_map = layer.read_features().to_entities_index::<_,TileForTerrain>(progress)?;
-            for me in selves {
-                me.process_terrain_tiles(rng, &parameters, &mut tile_map, progress)?;
-            }
-
-            tile_map
+            let limits = target.edit_properties_layer()?.get_elevation_limits()?;
     
-        };
-
+            let mut layer = target.edit_tile_layer()?;
+            let tile_extents = layer.get_extent()?;
+            let tile_count = layer.feature_count();
+            let parameters = TerrainParameters::new(limits, tile_extents.clone(), tile_count);
     
-        let mut bad_ocean_tiles_found = Vec::new();
     
-        for (fid,tile) in tile_map.into_iter().watch(progress,"Writing data.","Data written.") {
-
-            
-            let elevation_changed = tile.elevation_changed();
-            let grouping_changed = tile.grouping_changed();
-            if elevation_changed || grouping_changed {
-
-                // warn user if a tile was set to ocean that's above 0.
-                if matches!(tile.grouping,Grouping::Ocean) && (tile.elevation > 0.0) {
-                    bad_ocean_tiles_found.push(fid);
-                }        
-
-
-                let mut feature = layer.try_feature_by_id(&fid)?;
-                if elevation_changed {
-
-                    let elevation = parameters.clamp_elevation(tile.elevation);
-                    let elevation_scaled = parameters.scale_elevation(elevation);
     
-   
-                    feature.set_elevation(elevation)?;
-                    feature.set_elevation_scaled(elevation_scaled)?;
+            // I only want to create the point index if any of the tasks require it. If none of them
+            // require it, it's a waste of time to create it.
+            let tile_map = if selves.iter().any(|s| s.requires_point_index()) {
+                // estimate the spacing between tiles:
+                // * divide the area of the extents up by the number of tiles to get the average area covered by a tile.
+                // * the distance across, if the tiles were square, is the square root of this area.
+                let tile_spacing = ((tile_extents.height * tile_extents.width)/tile_count as f64).sqrt();
+                let tile_search_radius = tile_spacing * 2.0; // multiply by two to make darn sure we cover something.
+    
+    
+                let mut point_index = TileFinder::new(&tile_extents, tile_count, tile_search_radius);
+                let mut tile_map = layer.read_features().to_entities_index_for_each::<_,TileForTerrain,_>(|fid,tile| {
+                    point_index.add_tile(tile.site.clone(), *fid)
+                }, progress)?;
+    
+                for me in selves {
+                    me.process_terrain_tiles_with_point_index(rng, &parameters, &point_index, &mut tile_map, progress)?;
                 }
-                if grouping_changed {
-
+    
+                tile_map    
+    
+            } else {
+                let mut tile_map = layer.read_features().to_entities_index::<_,TileForTerrain>(progress)?;
+                for me in selves {
+                    me.process_terrain_tiles(rng, &parameters, &mut tile_map, progress)?;
+                }
+    
+                tile_map
         
-                    // Should I check to make sure?
-                    feature.set_grouping(&tile.grouping)?;
+            };
+    
+        
+            let mut bad_ocean_tiles_found = Vec::new();
+        
+            for (fid,tile) in tile_map.into_iter().watch(progress,"Writing data.","Data written.") {
+    
+                
+                let elevation_changed = tile.elevation_changed();
+                let grouping_changed = tile.grouping_changed();
+                if elevation_changed || grouping_changed {
+    
+                    // warn user if a tile was set to ocean that's above 0.
+                    if matches!(tile.grouping,Grouping::Ocean) && (tile.elevation > 0.0) {
+                        bad_ocean_tiles_found.push(fid);
+                    }        
+    
+    
+                    let mut feature = layer.try_feature_by_id(&fid)?;
+                    if elevation_changed {
+    
+                        let elevation = parameters.clamp_elevation(tile.elevation);
+                        let elevation_scaled = parameters.scale_elevation(elevation);
+        
+       
+                        feature.set_elevation(elevation)?;
+                        feature.set_elevation_scaled(elevation_scaled)?;
+                    }
+                    if grouping_changed {
+    
+            
+                        // Should I check to make sure?
+                        feature.set_grouping(&tile.grouping)?;
+                    }
+                    layer.update_feature(feature)?;
+    
                 }
-                layer.update_feature(feature)?;
-
+    
             }
+    
+            if bad_ocean_tiles_found.len() > 0 {
+                progress.warning(|| format!("At least one ocean tile was found with an elevation above 0 (id: {}).",bad_ocean_tiles_found[0]))
+            }
+                
 
-        }
-
-        if bad_ocean_tiles_found.len() > 0 {
-            progress.warning(|| format!("At least one ocean tile was found with an elevation above 0 (id: {}).",bad_ocean_tiles_found[0]))
-        }
-
+        } // else there are no processes, so don't bother doing anything.
 
 
         Ok(())

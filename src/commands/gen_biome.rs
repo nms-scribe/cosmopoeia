@@ -6,12 +6,14 @@ use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
 use crate::algorithms::biomes::fill_biome_defaults;
 use crate::algorithms::biomes::apply_biomes;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::algorithms::tiles::BiomeTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
+use crate::progress::ProgressObserver;
+use crate::world_map::WorldMapTransaction;
+use crate::world_map::BiomeMatrix;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -29,21 +31,28 @@ subcommand_def!{
 
 impl Task for GenBiomeData {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
 
-            progress.announce("Filling biome defaults");
-
-            fill_biome_defaults(target, self.overwrite, &mut progress)
+            Self::run(self.overwrite, target, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
+    }
+}
+
+impl GenBiomeData {
+
+    fn run<Progress: ProgressObserver>(overwrite: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+
+        progress.announce("Filling biome defaults");
+
+        fill_biome_defaults(target, overwrite, progress)
     }
 }
 
@@ -59,26 +68,34 @@ subcommand_def!{
 
 impl Task for GenBiomeApply {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let biomes = target.biomes_layer()?.get_matrix(&mut progress)?;
+        let biomes = target.biomes_layer()?.get_matrix(progress)?;
 
         target.with_transaction(|target| {
 
-            progress.announce("Applying biomes to tiles");
-
-            apply_biomes(target, biomes, &mut progress)
+            Self::run(target, biomes, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
 
     }
+}
+
+impl GenBiomeApply {
+
+    // TODO: Make all of these take the progress observer thingie
+    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
+        progress.announce("Applying biomes to tiles");
+    
+        apply_biomes(target, biomes, progress)
+    }
+    
 }
 
 
@@ -94,21 +111,27 @@ subcommand_def!{
 
 impl Task for GenBiomeDissolve {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Creating biome polygons");
-
-            dissolve_tiles_by_theme::<_,BiomeTheme>(target, &mut progress)
+            Self::run(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
+}
+
+impl GenBiomeDissolve {
+    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+        progress.announce("Creating biome polygons");
+    
+        dissolve_tiles_by_theme::<_,BiomeTheme>(target, progress)
+    }
+    
 }
 
 
@@ -129,20 +152,25 @@ subcommand_def!{
 
 impl Task for GenBiomeCurvify {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            progress.announce("Making biome polygons curvy");
-
-            curvify_layer_by_theme::<_,BiomeTheme>(target, self.bezier_scale, &mut progress)
+            Self::run(self.bezier_scale, target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
+    }
+}
+
+impl GenBiomeCurvify {
+    fn run<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+        progress.announce("Making biome polygons curvy");
+
+        curvify_layer_by_theme::<_,BiomeTheme>(target, bezier_scale, progress)
     }
 }
 
@@ -168,37 +196,31 @@ subcommand_def!{
 
 impl Task for GenBiome {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        target.with_transaction(|target| {
+        Self::run(self.overwrite, self.bezier_scale, &mut target, progress)
 
-            progress.announce("Filling biome defaults");
+    }
+}
 
-            fill_biome_defaults(target, self.overwrite, &mut progress)
+impl GenBiome {
+    fn run<Progress: ProgressObserver>(overwrite: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+        target.with_transaction(|target| {            
+            GenBiomeData::run(overwrite, target, progress)
+
         })?;
+        let biomes = target.biomes_layer()?.get_matrix(progress)?;
+        target.with_transaction(|target| {            
+            GenBiomeApply::run(target, biomes, progress)?;
 
-        let biomes = target.biomes_layer()?.get_matrix(&mut progress)?;
+            GenBiomeDissolve::run(target, progress)?;
 
-        target.with_transaction(|target| {
-
-            progress.announce("Applying biomes to tiles");
-
-            apply_biomes(target, biomes, &mut progress)?;
-
-            progress.announce("Creating biome polygons");
-
-            dissolve_tiles_by_theme::<_,BiomeTheme>(target, &mut progress)?;
-
-            progress.announce("Making biome polygons curvy");
-
-            curvify_layer_by_theme::<_,BiomeTheme>(target, self.bezier_scale, &mut progress)
+            GenBiomeCurvify::run(bezier_scale, target, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
     }
 }

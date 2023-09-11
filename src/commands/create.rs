@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Args;
+use clap::Subcommand;
 use rand::Rng;
 
 use super::Task;
@@ -10,172 +11,20 @@ use crate::utils::random_number_generator;
 use crate::utils::Extent;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
 use crate::progress::ProgressObserver;
-use crate::algorithms::random_points::PointGenerator;
-use crate::algorithms::triangles::DelaunayGenerator;
-use crate::utils::ToGeometryCollection;
-use crate::algorithms::voronoi::VoronoiGenerator;
+use crate::algorithms::tiles::generate_random_tiles;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
 use crate::algorithms::terrain::SampleElevationLoaded;
 use crate::algorithms::terrain::TerrainTask;
 use crate::algorithms::terrain::TerrainCommand;
 use crate::world_map::ElevationLimits;
-
-fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
-
-    // yes, the random variable is a mutable reference, and PointGenerator doesn't take a reference as it's generic, 
-    // but the reference implements the random number generator stuff so it works.
-    // I assume if I was leaking the PointGenerator out of the function that I would get an error.
-    let mut points = PointGenerator::new(random, extent.clone(), tile_count);
-    let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?);
-    
-    progress.announce("Generate random points");
-    triangles.start(progress)?;
-    let mut voronois = VoronoiGenerator::new(triangles,extent)?;
-    
-    progress.announce("Generate delaunay triangles");
-    voronois.start(progress)?;
-    
-    Ok(voronois)
-}
-
-
-
-subcommand_def!{
-    /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    pub(crate) struct CreateSourceFromHeightmap {
-
-        /// The path to the heightmap containing the elevation data
-        source: PathBuf,
-
-        /// The path to the world map GeoPackage file
-        target: PathBuf,
-
-        #[arg(long,default_value="10000")]
-        /// The rough number of tiles to generate for the image
-        tiles: usize,
-
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
-
-        #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
-
-
-    }
-}
-
-impl Task for CreateSourceFromHeightmap {
-
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
-
-        let mut random = random_number_generator(self.seed);
-
-        let source = RasterMap::open(self.source)?;
-
-        progress.start_unknown_endpoint(|| "Calculating min/max from raster.");
-        let limits = source.compute_min_max(1,true)?;
-        progress.finish(|| "Min/max calculated.");
-
-        let extent = source.bounds()?.extent();
-
-        let mut target = WorldMap::create_or_edit(self.target)?;
-
-        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
-    
-        target.with_transaction(|target| {
-            progress.announce("Create tiles from voronoi polygons");
-
-
-            load_tile_layer(target, self.overwrite, voronois, limits, &mut progress)
-        })?;
-
-
-        target.save(&mut progress)
-    
-    }
-}
-
-subcommand_def!{
-    /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    pub(crate) struct CreateSourceBlank {
-
-        /// the height (from north to south) in degrees of the world extents
-        height: f64,
-
-        /// the width in degrees of the world extents
-        width: f64,
-
-        /// the latitude of the southern border of the world extents
-        south: f64, 
-
-        /// the longitude of the western border of the world extents
-        west: f64,
-
-        #[arg(long,allow_negative_numbers=true,default_value="-11000")]
-        /// minimum elevation for heightmap
-        min_elevation: f64,
-
-        #[arg(long,default_value="9000")]
-        /// maximum elevation for heightmap
-        max_elevation: f64,
-
-        /// The path to the world map GeoPackage file
-        target: PathBuf,
-
-        #[arg(long,default_value="10000")]
-        /// The rough number of tiles to generate for the image
-        tiles: usize,
-
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
-
-        #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
-
-
-    }
-}
-
-impl Task for CreateSourceBlank {
-
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
-
-        let mut random = random_number_generator(self.seed);
-
-        let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
-
-        let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
-
-        let mut target = WorldMap::create_or_edit(self.target)?;
-
-        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
-    
-        target.with_transaction(|target| {
-            progress.announce("Create tiles from voronoi polygons");
-
-            load_tile_layer(target, self.overwrite, voronois, limits, &mut progress)
-        })?;
-
-
-        target.save(&mut progress)
-    
-    }
-}
+use crate::world_map::WorldMapTransaction;
 
 
 subcommand_def!{
     /// Calculates neighbors for tiles
+    #[command(hide=true)]
     pub(crate) struct CreateCalcNeighbors {
 
         /// The path to the world map GeoPackage file
@@ -185,50 +34,62 @@ subcommand_def!{
     }
 }
 
+impl CreateCalcNeighbors {
+
+    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+        progress.announce("Calculate neighbors for tiles");
+
+        calculate_tile_neighbors(target, progress)
+    }
+}
+
 impl Task for CreateCalcNeighbors {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
         target.with_transaction(|target| {
 
-            progress.announce("Calculate neighbors for tiles");
+            Self::run(target, progress)
 
-            calculate_tile_neighbors(target, &mut progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
 
     }
+}
+
+struct LoadedSource {
+    extent: Extent,
+    limits: ElevationLimits,
+    post_processes: Vec<TerrainTask>
+}
+
+trait LoadCreateSource {
+
+    fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError>;
+
+}
+
+trait LoadedCreateSource {
+
+    fn load_extents(&self) -> Extent;
+
+    fn load_limits(&self) -> ElevationLimits;
+
+    fn into_post_processes(self) -> Option<Vec<TerrainTask>>;
 }
 
 
 
 subcommand_def!{
     /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    pub(crate) struct CreateFromHeightmap {
+    pub(crate) struct FromHeightmap {
 
         /// The path to the heightmap containing the elevation data
         source: PathBuf,
-
-        /// The path to the world map GeoPackage file
-        target: PathBuf,
-
-        #[arg(long,default_value="10000")]
-        /// The rough number of tiles to generate for the image
-        tiles: usize,
-
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
-
-        #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
 
         #[command(subcommand)]
         /// A processing command to run after creation and elevation sampling. (see 'terrain' command)
@@ -238,69 +99,41 @@ subcommand_def!{
     }
 }
 
-impl Task for CreateFromHeightmap {
+impl LoadCreateSource for FromHeightmap {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
-
-        let mut random = random_number_generator(self.seed);
+    fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
+        progress.announce(&format!("Loading {}",self.source.to_string_lossy()));
 
         let source = RasterMap::open(self.source)?;
 
-        // load terrain process early so it can fail early if there's a loading error.
-        // I can't add the elevation_sample process yet because I need the source for some other things.
-        let mut post_processes = if let Some(process) = self.post_process {
-            progress.announce("Loading terrain processes.");
-
-            process.load_terrain_task(&mut random, &mut progress)?
-
-        } else {
-            // otherwise, we'll just have the elevation sample process to run
-            vec![]
-        };
-
+        let extent = source.bounds()?.extent();
 
         progress.start_unknown_endpoint(|| "Calculating min/max from raster.");
         let limits = source.compute_min_max(1,true)?;
         progress.finish(|| "Min/max calculated.");
 
-        let extent = source.bounds()?.extent();
+        // the post_processes always starts with loading the samples from the source
+        let mut post_processes = vec![SampleElevationLoaded::new(source)];
 
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        if let Some(process) = self.post_process {
+            progress.announce("Loading terrain processes.");
 
-        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
-    
-    
-        target.with_transaction(|target| {
-            progress.announce("Create tiles from voronoi polygons");
+            post_processes.extend(process.load_terrain_task(random, progress)?);
 
-            load_tile_layer(target, self.overwrite, voronois, limits, &mut progress)?;
+        };
 
-            progress.announce("Calculate neighbors for tiles");
-
-            calculate_tile_neighbors(target, &mut progress)?;
-
-            let sample_process = SampleElevationLoaded::new(source);
-
-            post_processes.insert(0,sample_process);
-
-            TerrainTask::process_terrain(&post_processes,&mut random,target,&mut progress)
-    
-
-        })?;
-
-
-        target.save(&mut progress)
-    
+        Ok(LoadedSource {
+            extent,
+            limits,
+            post_processes
+        })
     }
+
 }
-
-
 
 subcommand_def!{
     /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    pub(crate) struct CreateBlank {
+    pub(crate) struct Blank {
 
         /// the height (from north to south) in degrees of the world extents
         height: f64,
@@ -324,6 +157,64 @@ subcommand_def!{
         /// maximum elevation for heightmap
         max_elevation: f64,
 
+        #[command(subcommand)]
+        /// A processing command to run after creation. (see 'terrain' command)
+        post_process: Option<TerrainCommand>,
+
+
+    }
+}
+
+impl LoadCreateSource for Blank {
+
+    fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
+
+        let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
+
+        let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
+        // load these earlier so we can fail quickly on loading error.
+        let post_processes = if let Some(process) = self.post_process {
+            progress.announce("Loading terrain processes.");
+
+            process.load_terrain_task(random, progress)?
+
+        } else {
+            Vec::new()
+        };
+
+        Ok(LoadedSource {
+            extent,
+            limits,
+            post_processes,
+        })
+
+    }
+
+}
+
+
+#[derive(Subcommand)]
+enum CreateSource {
+    FromHeightmap(FromHeightmap),
+    Blank(Blank)
+}
+
+impl LoadCreateSource for CreateSource {
+
+    fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
+        match self {
+            CreateSource::FromHeightmap(source) => source.load(random,progress),
+            CreateSource::Blank(source) => source.load(random,progress),
+        }
+    }
+
+}
+
+
+
+subcommand_def!{
+    /// Creates the random tiles and initial elevations for a world.
+    pub(crate) struct CreateTiles {
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
@@ -340,62 +231,102 @@ subcommand_def!{
         overwrite: bool,
 
         #[command(subcommand)]
-        /// A processing command to run after creation. (see 'terrain' command)
-        post_process: Option<TerrainCommand>,
-
+        source: CreateSource,
 
     }
 }
 
-impl Task for CreateBlank {
+impl CreateTiles {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: ElevationLimits, tiles: usize, overwrite: bool, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+        let voronois = generate_random_tiles(random, extent, tiles, progress)?;
+    
+        progress.announce("Create tiles from voronoi polygons");
 
-        let mut progress = ConsoleProgressBar::new();
+        load_tile_layer(target, overwrite, voronois, &limits, progress)    
+    }
+
+}
+
+
+impl Task for CreateTiles {
+
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let mut random = random_number_generator(self.seed);
 
-        // load these earlier so we can fail quickly on loading error.
-        let processes = if let Some(process) = self.post_process {
-            progress.announce("Loading terrain processes.");
-
-            Some(process.load_terrain_task(&mut random, &mut progress)?)
-
-        } else {
-            None
-        };
-
-        let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
-
-        let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
+        let loaded_source = self.source.load(&mut random, progress)?; // TODO: for the heightmap, we load the source raster, otherwise I'm not certain.
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        let voronois = generate_random_tiles(&mut random, extent, self.tiles, &mut progress)?;
-    
-    
         target.with_transaction(|target| {
-            progress.announce("Create tiles from voronoi polygons");
 
-            load_tile_layer(target, self.overwrite, voronois, limits, &mut progress)?;
-
-            progress.announce("Calculate neighbors for tiles");
-
-            calculate_tile_neighbors(target, &mut progress)?;
-
-            if let Some(processes) = processes {
-
-                TerrainTask::process_terrain(&processes,&mut random,target,&mut progress)
-    
-            } else {
-                Ok(())
-            }
-
+            Self::run(loaded_source.extent, loaded_source.limits, self.tiles, self.overwrite, &mut random, target, progress)
 
         })?;
 
+        target.save(progress)
 
-        target.save(&mut progress)
-    
     }
 }
+
+
+subcommand_def!{
+    /// Creates the random tiles and initial elevations for a world.
+    pub(crate) struct Create {
+        /// The path to the world map GeoPackage file
+        target: PathBuf,
+
+        #[arg(long,default_value="10000")]
+        /// The rough number of tiles to generate for the image
+        tiles: usize,
+
+        #[arg(long)]
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        seed: Option<u64>,
+
+        #[arg(long)]
+        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+        overwrite: bool,
+
+        #[command(subcommand)]
+        source: CreateSource,
+
+    }
+}
+
+
+impl Task for Create {
+
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+
+        let mut random = random_number_generator(self.seed);
+
+        let loaded_source = self.source.load(&mut random, progress)?; // TODO: for the heightmap, we load the source raster, otherwise I'm not certain.
+
+        let mut target = WorldMap::create_or_edit(self.target)?;
+
+        Self::run(self.tiles,self.overwrite,loaded_source, &mut target, &mut random, progress)
+
+    }
+}
+
+impl Create {
+    fn run<Random: Rng, Progress: ProgressObserver>(tiles: usize, overwrite: bool, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+        target.with_transaction(|target| {
+            CreateTiles::run(loaded_source.extent, loaded_source.limits, tiles, overwrite, random, target, progress)?;
+
+            CreateCalcNeighbors::run(target, progress)?;
+
+            TerrainTask::process_terrain(&loaded_source.post_processes, random, target,progress)?;
+
+            Ok(())
+
+    
+
+        })?;
+
+        target.save(progress)
+    }
+}
+

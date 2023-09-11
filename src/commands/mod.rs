@@ -2,6 +2,7 @@
 use clap::Subcommand;
 
 use crate::errors::CommandError;
+use crate::progress::ProgressObserver;
 
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod dev;
@@ -17,11 +18,9 @@ mod gen_subnations;
 
 use gdal_dev::Gdal;
 use dev::Dev;
-use create::CreateFromHeightmap;
-use create::CreateBlank;
-use create::CreateSourceFromHeightmap;
-use create::CreateSourceBlank;
+use create::Create;
 use create::CreateCalcNeighbors;
+use create::CreateTiles;
 use terrain::Terrain;
 use gen_climate::GenClimate;
 use gen_climate::GenClimateTemperature;
@@ -62,12 +61,10 @@ use gen_subnations::GenSubnationsNormalize;
 use gen_subnations::GenSubnationsDissolve;
 use gen_subnations::GenSubnationsCurvify;
 
-// NOTE: Further 'use' statements in the command macro below
-
 
 pub(crate) trait Task {
 
-    fn run(self) -> Result<(),CommandError>;
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError>;
 
 }
 
@@ -84,9 +81,9 @@ macro_rules! command_def {
 
         impl Task for $struct_name {
 
-            fn run(self) -> Result<(),CommandError> {
+            fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
                 match self {
-                    $(Self::$command_name(a) => a.run()),*
+                    $(Self::$command_name(a) => a.run(progress)),*
                 }
             }
 
@@ -100,11 +97,9 @@ command_def!{
     MainCommand {
         Gdal,
         Dev,
-        CreateFromHeightmap,
-        CreateBlank,
-        CreateSourceFromHeightmap,
-        CreateSourceBlank,
+        Create,
         CreateCalcNeighbors,
+        CreateTiles,
         Terrain,
         GenClimate,
         GenClimateTemperature,

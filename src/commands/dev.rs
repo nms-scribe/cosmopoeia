@@ -12,7 +12,6 @@ use crate::utils::random_number_generator;
 use crate::utils::Extent;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
 use crate::algorithms::random_points::PointGenerator;
 use crate::progress::WatchableIterator;
 use crate::algorithms::triangles::DelaunayGenerator;
@@ -27,6 +26,7 @@ use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::culture_sets::CultureSource;
 use crate::world_map::ElevationLimits;
 use crate::command_def;
+use crate::progress::ProgressObserver;
 
 
 subcommand_def!{
@@ -54,21 +54,20 @@ subcommand_def!{
 
 impl Task for PointsFromHeightmap {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let source = RasterMap::open(self.source)?;
         let extent = source.bounds()?.extent();
         let mut target = WorldMap::create_or_edit(self.target)?;
         let random = random_number_generator(self.seed);
-        let mut progress = ConsoleProgressBar::new();
         let generator = PointGenerator::new(random, extent, self.points);
 
         target.with_transaction(|target| {
             progress.announce("Generating random points");
 
-            load_points_layer(target, self.overwrite, generator, &mut progress)
+            load_points_layer(target, self.overwrite, generator, progress)
         })?;
 
-        target.save(&mut progress)?;
+        target.save(progress)?;
         
         Ok(())
     }
@@ -112,20 +111,19 @@ subcommand_def!{
 
 impl Task for PointsFromExtent {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
         let mut target = WorldMap::create_or_edit(self.target)?;
         let random = random_number_generator(self.seed);
-        let mut progress = ConsoleProgressBar::new();
         let generator = PointGenerator::new(random, extent, self.points);
         
         target.with_transaction(|target| {
             progress.announce("Generating random points");
 
-            load_points_layer(target, self.overwrite, generator, &mut progress)
+            load_points_layer(target, self.overwrite, generator, progress)
         })?;
 
-        target.save(&mut progress)?;
+        target.save(progress)?;
 
         Ok(())
     }
@@ -146,25 +144,23 @@ subcommand_def!{
 
 impl Task for TrianglesFromPoints {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let mut target = WorldMap::edit(self.target)?;
 
         let mut points = target.points_layer()?;
     
-        let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(&mut progress)?);
+        let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(progress)?);
     
         progress.announce("Generating delaunay triangles");
 
-        generator.start(&mut progress)?;
+        generator.start(progress)?;
     
         target.with_transaction(|target| {
-            load_triangles_layer(target, self.overwrite, generator, &mut progress)
+            load_triangles_layer(target, self.overwrite, generator, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
         
         
     }
@@ -198,9 +194,7 @@ subcommand_def!{
 
 impl Task for VoronoiFromTriangles {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let extent = {
             let source = RasterMap::open(self.extents)?;
@@ -217,15 +211,15 @@ impl Task for VoronoiFromTriangles {
 
         progress.announce("Create tiles from voronoi polygons");
     
-        generator.start(&mut progress)?;
+        generator.start(progress)?;
     
-        let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(&mut progress,"Copying voronoi.","Voronoi copied.").collect();
+        let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
 
         target.with_transaction(|target| {
-            load_tile_layer(target,self.overwrite,voronoi.into_iter(),limits,&mut progress)
+            load_tile_layer(target,self.overwrite,voronoi.into_iter(),&limits,progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
     
     
     }
@@ -271,11 +265,9 @@ subcommand_def!{
 impl Task for Namers {
 
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
-
-        fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, progress: &mut ConsoleProgressBar, rng: &mut Random) {
+        fn test_namer<Random: Rng, Progress: ProgressObserver>(namers: &mut NamerSet, language: &String, progress: &mut Progress, rng: &mut Random) {
             let mut namer = namers.load_one(language,progress).unwrap();
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
@@ -295,12 +287,12 @@ impl Task for Namers {
             let mut random = random_number_generator(self.seed);
 
             if let Some(key) = self.language {
-                test_namer(&mut namers, &key, &mut progress, &mut random)
+                test_namer(&mut namers, &key, progress, &mut random)
             } else {
                 let mut languages = namers.list_names();
                 languages.sort(); // so the tests are reproducible.
                 for language in languages {
-                    test_namer(&mut namers, &language, &mut progress, &mut random)
+                    test_namer(&mut namers, &language, progress, &mut random)
                 }
     
             }
@@ -336,7 +328,7 @@ subcommand_def!{
 impl Task for Cultures {
 
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
 
         fn test_culture(culture: &CultureSource) {
             println!("{}",culture.name());
@@ -392,7 +384,7 @@ subcommand_def!{
 }
 
 impl Task for Dev {
-    fn run(self) -> Result<(),CommandError> {
-        self.command.run()        
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+        self.command.run(progress)
     }
 }

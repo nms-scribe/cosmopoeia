@@ -13,6 +13,7 @@ use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;
+use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
@@ -24,7 +25,7 @@ subcommand_def!{
 
 impl Task for DatasetInfo {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
         let ds = Dataset::open(self.source)?;
         println!("projection: {}",ds.projection()); 
         //println!("spatial reference: {:?}",ds.spatial_ref()?); // TODO: This causes an error in gpkg
@@ -55,7 +56,7 @@ subcommand_def!{
 
 impl Task for Version {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
         println!("{}",VersionInfo::version_report());
         Ok(())
     }
@@ -69,7 +70,7 @@ subcommand_def!{
 
 impl Task for Drivers {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
         let mut drivers = Vec::new();
         for i in 0..DriverManager::count() {
             let driver = DriverManager::get_driver(i)?;
@@ -103,7 +104,7 @@ subcommand_def!{
 }
 
 impl Task for Gdal {
-    fn run(self) -> Result<(),CommandError> {
-        self.command.run()        
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+        self.command.run(progress)        
     }
 }

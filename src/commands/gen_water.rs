@@ -6,13 +6,13 @@ use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
 use crate::algorithms::water_flow::generate_water_flow;
 use crate::algorithms::water_fill::generate_water_fill;
 use crate::algorithms::rivers::generate_water_rivers;
 use crate::algorithms::water_distance::generate_water_distance;
 use crate::algorithms::grouping::calculate_grouping;
 use crate::algorithms::tiles::calculate_coastline;
+use crate::progress::ProgressObserver;
 
 
 subcommand_def!{
@@ -45,9 +45,8 @@ subcommand_def!{
 
 impl Task for GenWaterCoastline {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
@@ -55,10 +54,10 @@ impl Task for GenWaterCoastline {
 
             progress.announce("Creating coastline");
 
-            calculate_coastline(target, self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, &mut progress)
+            calculate_coastline(target, self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
 
     }
@@ -76,18 +75,17 @@ subcommand_def!{
 
 impl Task for GenWaterFlow {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Calculating water flow");
-            generate_water_flow(target, &mut progress)
+            generate_water_flow(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -118,21 +116,20 @@ subcommand_def!{
 
 impl Task for GenWaterFill {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(&mut progress)?;
+        let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
         target.with_transaction(|target| {
             progress.announce("Filling lakes");
-            generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, &mut progress)
+            generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
     }
 }
 
@@ -156,18 +153,17 @@ subcommand_def!{
 
 impl Task for GenWaterRivers {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Generating rivers");
-            generate_water_rivers(target, self.bezier_scale, self.overwrite, &mut progress)
+            generate_water_rivers(target, self.bezier_scale, self.overwrite, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -184,18 +180,17 @@ subcommand_def!{
 
 impl Task for GenWaterDistance {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Calculating distance from shores");
-            generate_water_distance(target, &mut progress)
+            generate_water_distance(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -213,18 +208,17 @@ subcommand_def!{
 
 impl Task for GenWaterGrouping {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Delineating land and water bodies");
-            calculate_grouping(target, &mut progress)
+            calculate_grouping(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -273,9 +267,8 @@ subcommand_def!{
 
 impl Task for GenWater {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
@@ -283,26 +276,26 @@ impl Task for GenWater {
 
             progress.announce("Creating coastline");
 
-            calculate_coastline(target, self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, &mut progress)?;
+            calculate_coastline(target, self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, progress)?;
 
             progress.announce("Calculating water flow");
-            let (tile_map,tile_queue) = generate_water_flow(target, &mut progress)?;
+            let (tile_map,tile_queue) = generate_water_flow(target, progress)?;
 
             progress.announce("Filling lakes");
-            generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite_lakes || self.overwrite, &mut progress)?;
+            generate_water_fill(target, tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite_lakes || self.overwrite, progress)?;
 
             progress.announce("Generating rivers");
-            generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, &mut progress)?;
+            generate_water_rivers(target, self.bezier_scale, self.overwrite_rivers || self.overwrite, progress)?;
 
             progress.announce("Calculating distance from shore");
-            generate_water_distance(target, &mut progress)?;
+            generate_water_distance(target, progress)?;
 
             progress.announce("Delineating land and water bodies");
-            calculate_grouping(target, &mut progress)
+            calculate_grouping(target, progress)
 
         })?;
 
-        target.save(&mut progress)?;
+        target.save(progress)?;
 
         Ok(())
 

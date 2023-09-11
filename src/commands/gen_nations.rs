@@ -10,12 +10,12 @@ use crate::world_map::CultureForNations;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMap;
 use crate::utils::random_number_generator;
-use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::algorithms::tiles::NationTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
+use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -56,9 +56,8 @@ subcommand_def!{
 
 impl Task for GenNationsCreate {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -68,15 +67,15 @@ impl Task for GenNationsCreate {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating nations");
-            generate_nations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.size_variance, self.overwrite, &mut progress)
+            generate_nations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.size_variance, self.overwrite, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -101,19 +100,18 @@ subcommand_def!{
 
 impl Task for GenNationsExpand {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Applying nations to tiles");
 
-            expand_nations(target, self.river_threshold, self.limit_factor, &mut progress)
+            expand_nations(target, self.river_threshold, self.limit_factor, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -131,19 +129,18 @@ subcommand_def!{
 
 impl Task for GenNationsNormalize {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Normalizing nation borders");
 
-            normalize_nations(target, &mut progress)
+            normalize_nations(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -161,19 +158,18 @@ subcommand_def!{
 
 impl Task for GenNationsDissolve {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Creating nation polygons");
 
-            dissolve_tiles_by_theme::<_,NationTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,NationTheme>(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -195,19 +191,18 @@ subcommand_def!{
 
 impl Task for GenNationsCurvify {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Making nation polygons curvy");
 
-            curvify_layer_by_theme::<_,NationTheme>(target, self.bezier_scale, &mut progress)
+            curvify_layer_by_theme::<_,NationTheme>(target, self.bezier_scale, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -265,9 +260,8 @@ subcommand_def!{
 
 impl Task for GenNations {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -277,33 +271,33 @@ impl Task for GenNations {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating nations");
-            generate_nations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.size_variance, self.overwrite, &mut progress)?;
+            generate_nations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.size_variance, self.overwrite, progress)?;
 
             progress.announce("Applying nations to tiles");
 
-            expand_nations(target, self.river_threshold, self.limit_factor, &mut progress)?;
+            expand_nations(target, self.river_threshold, self.limit_factor, progress)?;
 
             progress.announce("Normalizing nation borders");
 
-            normalize_nations(target, &mut progress)?;
+            normalize_nations(target, progress)?;
 
             progress.announce("Creating nation polygons");
 
-            dissolve_tiles_by_theme::<_,NationTheme>(target, &mut progress)?;
+            dissolve_tiles_by_theme::<_,NationTheme>(target, progress)?;
 
             progress.announce("Making nation polygons curvy");
 
-            curvify_layer_by_theme::<_,NationTheme>(target, self.bezier_scale, &mut progress)
+            curvify_layer_by_theme::<_,NationTheme>(target, self.bezier_scale, progress)
 
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }

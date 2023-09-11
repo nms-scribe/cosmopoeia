@@ -6,7 +6,7 @@ use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
+use crate::progress::ProgressObserver;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::CultureForNations;
 use crate::utils::random_number_generator;
@@ -59,9 +59,8 @@ subcommand_def!{
 
 impl Task for GenSubnationsCreate {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -71,15 +70,15 @@ impl Task for GenSubnationsCreate {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating subnations");
-            generate_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, self.overwrite, &mut progress)
+            generate_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, self.overwrite, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -109,9 +108,8 @@ subcommand_def!{
 
 impl Task for GenSubnationsExpand {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -121,10 +119,10 @@ impl Task for GenSubnationsExpand {
         target.with_transaction(|target| {
             progress.announce("Applying subnations to tiles");
 
-            expand_subnations(target, &mut random, self.subnation_percentage, &mut progress)
+            expand_subnations(target, &mut random, self.subnation_percentage, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -168,9 +166,8 @@ subcommand_def!{
 
 impl Task for GenSubnationsFillEmpty {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -180,15 +177,15 @@ impl Task for GenSubnationsFillEmpty {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
             progress.announce("Creating new subnations to fill rest of nations");
 
-            fill_empty_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, &mut progress)
+            fill_empty_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -208,19 +205,18 @@ subcommand_def!{
 
 impl Task for GenSubnationsNormalize {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Normalizing subnation borders");
 
-            normalize_subnations(target, &mut progress)
+            normalize_subnations(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -238,19 +234,18 @@ subcommand_def!{
 
 impl Task for GenSubnationsDissolve {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Creating subnation polygons");
 
-            dissolve_tiles_by_theme::<_,SubnationTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,SubnationTheme>(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -273,9 +268,8 @@ subcommand_def!{
 
 impl Task for GenSubnationsCurvify {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
@@ -285,10 +279,10 @@ impl Task for GenSubnationsCurvify {
             // FUTURE: Technically, subnations have to follow the curves of their owning nations as priority over their own. 
             // Right now, it doesn't seem to make a big difference if you have the nation borders thick enough. But it
             // may become important later.
-            curvify_layer_by_theme::<_,SubnationTheme>(target, self.bezier_scale, &mut progress)
+            curvify_layer_by_theme::<_,SubnationTheme>(target, self.bezier_scale, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -337,9 +331,8 @@ subcommand_def!{
 
 impl Task for GenSubnations {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -349,37 +342,37 @@ impl Task for GenSubnations {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForNations,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating subnations");
-            generate_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, self.overwrite, &mut progress)?;
+            generate_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, self.overwrite, progress)?;
 
             progress.announce("Applying subnations to tiles");
 
-            expand_subnations(target, &mut random, self.subnation_percentage, &mut progress)?;
+            expand_subnations(target, &mut random, self.subnation_percentage, progress)?;
 
             progress.announce("Creating new subnations to fill rest of nations");
 
-            fill_empty_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, &mut progress)?;
+            fill_empty_subnations(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.subnation_percentage, progress)?;
 
             progress.announce("Normalizing subnation borders");
 
-            normalize_subnations(target, &mut progress)?;
+            normalize_subnations(target, progress)?;
 
             progress.announce("Creating subnation polygons");
 
-            dissolve_tiles_by_theme::<_,SubnationTheme>(target, &mut progress)?;
+            dissolve_tiles_by_theme::<_,SubnationTheme>(target, progress)?;
 
             progress.announce("Making subnation polygons curvy");
 
-            curvify_layer_by_theme::<_,SubnationTheme>(target, self.bezier_scale, &mut progress)
+            curvify_layer_by_theme::<_,SubnationTheme>(target, self.bezier_scale, progress)
 
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }

@@ -8,9 +8,9 @@ use crate::world_map::CultureForTowns;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMap;
 use crate::utils::random_number_generator;
-use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
+use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -55,9 +55,8 @@ subcommand_def!{
 
 impl Task for GenTownsCreate {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -67,15 +66,15 @@ impl Task for GenTownsCreate {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForTowns,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForTowns,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating towns");
-            generate_towns(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.capital_count, self.town_count, self.overwrite, &mut progress)
+            generate_towns(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.capital_count, self.town_count, self.overwrite, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -96,19 +95,18 @@ subcommand_def!{
 
 impl Task for GenTownsPopulate {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Populating towns");
-            populate_towns(target, self.river_threshold, &mut progress)
+            populate_towns(target, self.river_threshold, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -160,9 +158,8 @@ subcommand_def!{
 
 impl Task for GenTowns {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut random = random_number_generator(self.seed);
 
@@ -172,19 +169,19 @@ impl Task for GenTowns {
 
         progress.announce("Preparing");
 
-        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForTowns,_>(namers,self.default_namer.clone(),&mut progress)?;
+        let (culture_lookup,mut loaded_namers) = target.cultures_layer()?.get_lookup_and_load_namers::<CultureForTowns,_>(namers,self.default_namer.clone(),progress)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating towns");
-            generate_towns(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.capital_count, self.town_count, self.overwrite, &mut progress)?;
+            generate_towns(target, &mut random, &culture_lookup, &mut loaded_namers, &self.default_namer, self.capital_count, self.town_count, self.overwrite, progress)?;
 
             progress.announce("Populating towns");
-            populate_towns(target, self.river_threshold, &mut progress)
+            populate_towns(target, self.river_threshold, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }

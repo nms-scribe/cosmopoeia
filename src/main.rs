@@ -14,6 +14,7 @@ use errors::ProgramError;
 
 use commands::Task;
 use commands::MainCommand;
+use progress::ConsoleProgressBar;
 
 
 #[macro_export]
@@ -52,8 +53,9 @@ where
     Arg: Clone + Into<std::ffi::OsString>, 
     Args: Iterator<Item = Arg> 
 {
+    let mut progress = ConsoleProgressBar::new();
     let command = CommandLine::try_parse_from(args)?.command;
-    command.run()?;
+    command.run(&mut progress)?;
     Ok(())
 }
 

@@ -6,11 +6,10 @@ use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
 use crate::algorithms::climate::generate_temperatures;
 use crate::algorithms::climate::generate_winds;
 use crate::algorithms::climate::generate_precipitation;
-
+use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Generates temperature data
@@ -32,9 +31,7 @@ subcommand_def!{
 
 impl Task for GenClimateTemperature {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let mut target = WorldMap::edit(self.target)?;
 
@@ -42,10 +39,10 @@ impl Task for GenClimateTemperature {
 
             progress.announce("Generating temperatures");
 
-            generate_temperatures(target, self.equator_temp,self.polar_temp,&mut progress)
+            generate_temperatures(target, self.equator_temp,self.polar_temp,progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
         
     
     }
@@ -89,9 +86,8 @@ subcommand_def!{
 
 impl Task for GenClimateWind {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
@@ -108,11 +104,11 @@ impl Task for GenClimateWind {
 
             progress.announce("Generating winds");
 
-            generate_winds(target, winds, &mut progress)
+            generate_winds(target, winds, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
     
     }
 }
@@ -135,9 +131,8 @@ subcommand_def!{
 
 impl Task for GenClimatePrecipitation {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
@@ -145,11 +140,11 @@ impl Task for GenClimatePrecipitation {
 
             progress.announce("Generating precipitation");
 
-            generate_precipitation(target, self.moisture, &mut progress)
+            generate_precipitation(target, self.moisture, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
     
     }
 }
@@ -205,9 +200,8 @@ subcommand_def!{
 
 impl Task for GenClimate {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
@@ -223,16 +217,16 @@ impl Task for GenClimate {
         target.with_transaction(|target| {
 
             progress.announce("Generating temperatures");
-            generate_temperatures(target, self.equator_temp, self.polar_temp, &mut progress)?;
+            generate_temperatures(target, self.equator_temp, self.polar_temp, progress)?;
 
             progress.announce("Generating winds");
-            generate_winds(target, winds, &mut progress)?;
+            generate_winds(target, winds, progress)?;
 
             progress.announce("Generating precipitation");
-            generate_precipitation(target, self.moisture_factor, &mut progress)
+            generate_precipitation(target, self.moisture_factor, progress)
         })?;
         
-        target.save(&mut progress)
+        target.save(progress)
     
 
 

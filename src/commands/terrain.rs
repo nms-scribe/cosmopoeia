@@ -4,12 +4,12 @@ use clap::Args;
 
 use super::Task;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::algorithms::terrain::TerrainCommand; 
 use crate::algorithms::terrain::TerrainTask;
 use crate::utils::random_number_generator;
+use crate::progress::ProgressObserver;
 
 
 subcommand_def!{
@@ -35,9 +35,7 @@ subcommand_def!{
 
 impl Task for Terrain {
 
-    fn run(self) -> Result<(),CommandError> {
-
-        let mut progress = ConsoleProgressBar::new();
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let mut random = random_number_generator(self.seed);
 
@@ -50,16 +48,16 @@ impl Task for Terrain {
             } else {
                 progress.announce("Loading terrain processes.");
 
-                let processes = self.command.load_terrain_task(&mut random, &mut progress)?;
+                let processes = self.command.load_terrain_task(&mut random, progress)?;
 
-                TerrainTask::process_terrain(&processes,&mut random,target,&mut progress)?;
+                TerrainTask::process_terrain(&processes,&mut random,target,progress)?;
             }
     
             Ok(())
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
 
     }

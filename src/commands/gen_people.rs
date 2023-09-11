@@ -6,7 +6,7 @@ use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::world_map::WorldMap;
-use crate::progress::ConsoleProgressBar;
+use crate::progress::ProgressObserver;
 use crate::algorithms::population::generate_populations;
 use crate::algorithms::cultures::generate_cultures;
 use crate::algorithms::cultures::expand_cultures;
@@ -33,19 +33,18 @@ subcommand_def!{
 
 impl Task for GenPeoplePopulation {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
 
             progress.announce("Generating population");
-            generate_populations(target, self.estuary_threshold, &mut progress)
+            generate_populations(target, self.estuary_threshold, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -95,9 +94,8 @@ subcommand_def!{
 
 impl Task for GenPeopleCultures {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut cultures = CultureSet::empty();
         for file in self.cultures {
@@ -114,10 +112,10 @@ impl Task for GenPeopleCultures {
 
         target.with_transaction(|target| {
             progress.announce("Generating cultures");
-            generate_cultures(target, &mut random, cultures, namers, self.count, size_variance, self.river_threshold, self.overwrite, &mut progress)
+            generate_cultures(target, &mut random, cultures, namers, self.count, size_variance, self.river_threshold, self.overwrite, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -142,19 +140,18 @@ subcommand_def!{
 
 impl Task for GenPeopleCulturesExpand {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Applying cultures to tiles");
 
-            expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)
+            expand_cultures(target, self.river_threshold, self.limit_factor, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -171,19 +168,18 @@ subcommand_def!{
 
 impl Task for GenPeopleCulturesDissolve {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Creating culture polygons");
 
-            dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)
+            dissolve_tiles_by_theme::<_,CultureTheme>(target, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -206,19 +202,18 @@ subcommand_def!{
 
 impl Task for GenPeopleCulturesCurvify {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
             progress.announce("Making culture polygons curvy");
 
-            curvify_layer_by_theme::<_,CultureTheme>(target, self.bezier_scale, &mut progress)
+            curvify_layer_by_theme::<_,CultureTheme>(target, self.bezier_scale, progress)
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }
@@ -278,9 +273,8 @@ subcommand_def!{
 
 impl Task for GenPeople {
 
-    fn run(self) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut progress = ConsoleProgressBar::new();
 
         let mut cultures = CultureSet::empty();
         for file in self.cultures {
@@ -297,25 +291,25 @@ impl Task for GenPeople {
 
         target.with_transaction(|target| {
             progress.announce("Generating population");
-            generate_populations(target, self.river_threshold, &mut progress)?;
+            generate_populations(target, self.river_threshold, progress)?;
 
             progress.announce("Generating cultures");
-            generate_cultures(target, &mut random, cultures, namers, self.culture_count, size_variance, self.river_threshold, self.overwrite, &mut progress)?;
+            generate_cultures(target, &mut random, cultures, namers, self.culture_count, size_variance, self.river_threshold, self.overwrite, progress)?;
 
             progress.announce("Applying cultures to tiles");
-            expand_cultures(target, self.river_threshold, self.limit_factor, &mut progress)?;
+            expand_cultures(target, self.river_threshold, self.limit_factor, progress)?;
 
             progress.announce("Creating culture polygons");
 
-            dissolve_tiles_by_theme::<_,CultureTheme>(target, &mut progress)?;
+            dissolve_tiles_by_theme::<_,CultureTheme>(target, progress)?;
 
             progress.announce("Making culture polygons curvy");
 
-            curvify_layer_by_theme::<_,CultureTheme>(target, self.bezier_scale, &mut progress)
+            curvify_layer_by_theme::<_,CultureTheme>(target, self.bezier_scale, progress)
 
         })?;
 
-        target.save(&mut progress)
+        target.save(progress)
 
     }
 }

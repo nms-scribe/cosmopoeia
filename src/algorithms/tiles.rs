@@ -3,6 +3,7 @@ use std::collections::HashSet;
 
 use gdal::vector::OGRwkbGeometryType;
 use gdal::vector::Geometry;
+use rand::Rng;
 
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -44,8 +45,34 @@ use crate::world_map::SubnationFeature;
 use crate::world_map::TypedFeatureIterator;
 use crate::world_map::MapLayer;
 use crate::world_map::ElevationLimits;
+use crate::utils::Extent;
+use crate::algorithms::voronoi::VoronoiGenerator;
+use crate::algorithms::triangles::DelaunayGenerator;
+use crate::algorithms::random_points::PointGenerator;
+use crate::utils::ToGeometryCollection;
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, limits: ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
+
+pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
+
+    progress.announce("Generate random tiles");
+
+    // yes, the random variable is a mutable reference, and PointGenerator doesn't take a reference as it's generic, 
+    // but the reference implements the random number generator stuff so it works.
+    // I assume if I was leaking the PointGenerator out of the function that I would get an error.
+    let mut points = PointGenerator::new(random, extent.clone(), tile_count);
+    let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?);
+    
+    triangles.start(progress)?;
+    let mut voronois = VoronoiGenerator::new(triangles,extent)?;
+    
+    voronois.start(progress)?;
+    
+    Ok(voronois)
+}
+
+
+
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 

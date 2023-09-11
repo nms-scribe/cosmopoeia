@@ -2741,7 +2741,7 @@ impl ElevationLimits {
     }
 }
 
-impl Into<String> for ElevationLimits {
+impl Into<String> for &ElevationLimits {
 
     fn into(self) -> String {
         format!("{},{}",self.min_elevation,self.max_elevation)
@@ -2806,7 +2806,7 @@ impl PropertyLayer<'_,'_> {
         Ok(())
     }
 
-    pub(crate) fn set_elevation_limits(&mut self, value: ElevationLimits) -> Result<(),CommandError> {
+    pub(crate) fn set_elevation_limits(&mut self, value: &ElevationLimits) -> Result<(),CommandError> {
         self.set_property(PropertySchema::PROP_ELEVATION_LIMITS, &Into::<String>::into(value))
     }
 
