@@ -485,6 +485,8 @@ pub(crate) trait Schema {
 
 }
 
+
+
 pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data_life>>  {
 
     fn fid(&self) -> Result<u64,CommandError>;
@@ -494,6 +496,12 @@ pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data
     fn geometry(&self) -> Result<&Geometry,CommandError>;
 
     fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError>;
+
+}
+
+pub(crate) trait NamedFeature<'data_life,SchemaType: Schema>: TypedFeature<'data_life,SchemaType> {
+
+    fn name(&self) -> Result<String,CommandError>;
 
 }
 
@@ -2017,6 +2025,13 @@ feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
+impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
+    fn name(&self) -> Result<String,CommandError> {
+        self.name()
+    }
+}
+
+
 // TODO: Should be BiomeSchema
 impl BiomeFeature<'_> {
 
@@ -2325,6 +2340,12 @@ feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
+impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
+    fn name(&self) -> Result<String,CommandError> {
+        self.name()
+    }
+}
+
 impl CultureSchema {
 
     pub(crate) fn get_lookup_and_namers<CultureEntity, Progress>(namers: NamerSet, default_namer: String, target: &WorldMap, progress: &mut Progress) -> Result<(EntityLookup<CultureSchema, CultureEntity>, LoadedNamers), CommandError> 
@@ -2552,6 +2573,13 @@ feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
+impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
+    fn name(&self) -> Result<String,CommandError> {
+        self.name()
+    }
+}
+
+
 entity!(NewNation NationSchema NationFeature {
     name: String,
     culture: Option<String>,
@@ -2619,6 +2647,12 @@ feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
     nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
+
+impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
+    fn name(&self) -> Result<String,CommandError> {
+        self.name()
+    }
+}
 
 
 entity!(NewSubnation SubnationSchema SubnationFeature {

@@ -221,6 +221,7 @@ dependencies = [
  "adaptive-bezier",
  "clap",
  "colourado",
+ "console",
  "gdal",
  "gdal-sys",
  "indexmap 2.0.0",

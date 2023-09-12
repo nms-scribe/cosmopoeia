@@ -50,6 +50,7 @@ use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::triangles::DelaunayGenerator;
 use crate::algorithms::random_points::PointGenerator;
 use crate::utils::ToGeometryCollection;
+use crate::world_map::NamedFeature;
 
 
 pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -304,7 +305,7 @@ pub(crate) trait Theme: Sized {
 
     type ThemeSchema: Schema;
     type TileForTheme: Entity<TileSchema> + TileWithGeometry + TileWithShoreDistance + TileWithNeighbors + Clone + for<'feature> TryFrom<TileFeature<'feature>,Error=CommandError>;
-    type Feature<'feature>: TypedFeature<'feature,Self::ThemeSchema>;
+    type Feature<'feature>: NamedFeature<'feature,Self::ThemeSchema>;
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError>;
 
@@ -449,12 +450,6 @@ impl Theme for SubnationTheme {
 
 pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
 {
-    // TODO: I'm testing this first with cultures, then I have to abstract it out so I can pass a field in later. Possibly,
-    // it's just a matter of passing some sort of entity type that implements a trait?
-
-    // TODO: In order to get this to work, I think the simplest answer is to get rid of the requirement of TryFrom for entities, so
-    // I don't need the original feature anymore. TryFrom will still be implemented, however, and the various functions which require them
-    // will now have a TryFrom initial requirement instead.
 
     let mut new_polygon_map: HashMap<u64, _> = HashMap::new();
 
@@ -506,21 +501,53 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
         }
     }
 
+    let mut polygon_layer = ThemeType::edit_theme_layer(target)?;
+
+    let mut empty_features = Vec::new();
+
+    let mut changed_features = Vec::new();
+
+    for feature in ThemeType::read_features(&mut polygon_layer).watch(progress, "Dissolving tiles.", "Tiles dissolved.") {
+        let fid = feature.fid()?;
+        let geometry = if let Some(geometries) = new_polygon_map.remove(&fid) {
+            // it should never be 0 if it's in the map, but since I'm already allowing for empty geographies, might as well check.
+            if geometries.len() > 0 {
+                let mut geometries = geometries.into_iter();
+                let first = geometries.next().unwrap(); 
+                let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
+                for geometry in geometries {
+                    remaining.add_geometry(geometry)?;
+                }
+                let united = first.union(&remaining).unwrap(); // TODO: Or what?
+                let united = force_multipolygon(united)?;
+                united
+            } else {
+                empty_features.push((fid,feature.name()?));
+                Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?            
+            }
+        } else {
+            empty_features.push((fid,feature.name()?));
+            // An empty multipolygon appears to be the answer, at the very least I no longer get the null geometry pointer
+            // errors in the later ones.
+            Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?
+        };
+
+        changed_features.push((fid,geometry));
+
+    }
+
     let polygon_layer = ThemeType::edit_theme_layer(target)?;
 
-    for (key,geometries) in new_polygon_map.into_iter().watch(progress, "Dissolving tiles.", "Tiles dissolved.") {
-        let mut geometries = geometries.into_iter();
-        if let Some(first) = geometries.next() {
-            let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-            for geometry in geometries {
-                remaining.add_geometry(geometry)?;
-            }
-            let united = first.union(&remaining).unwrap(); // TODO: Or what?
-            let united = force_multipolygon(united)?;
-            let mut feature: ThemeType::Feature<'_> = polygon_layer.try_feature_by_id(&key)?;
-            feature.set_geometry(united)?;
-            polygon_layer.update_feature(feature)?;
-        }
+    for (fid,geometry) in changed_features.into_iter().watch(progress, "Writing geometries.", "Geometries written.") {
+
+        let mut feature: ThemeType::Feature<'_> = polygon_layer.try_feature_by_id(&fid)?;
+        feature.set_geometry(geometry)?;
+        polygon_layer.update_feature(feature)?;    
+
+    }
+
+    for (key,name) in empty_features {
+        progress.warning(|| format!("Feature {} ({}) in {} is not used in any tiles.",name,key,ThemeType::ThemeSchema::LAYER_NAME))
     }
  
     Ok(())

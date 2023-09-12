@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use console::style;
 use priority_queue::PriorityQueue;
 
 
@@ -146,10 +147,19 @@ impl ConsoleProgressBar {
         if let Some(bar) = &self.bar {
             bar.println(message)
         } else {
-            println!("{}",message)
+            eprintln!("{}",message)
         }
     }
 
+    pub(crate) fn warning(&self, message: &str) {
+        // FUTURE: Make this in another color?
+        let message = format!("!! {} !!",style(message).red());
+        if let Some(bar) = &self.bar {
+            bar.println(message)
+        } else {
+            eprintln!("{}",message)
+        }
+    }
 
 }
 
@@ -191,13 +201,7 @@ impl ProgressObserver for ConsoleProgressBar {
     }
 
     fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback){
-        // FUTURE: Make this in another color?
-        // TODO: Test this to make sure it's working...
-        if let Some(bar) = &self.bar {
-            bar.println(callback())
-        } else {
-            eprintln!("{}",callback().as_ref())
-        }
+        ConsoleProgressBar::warning(&self, callback().as_ref());
     }
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
