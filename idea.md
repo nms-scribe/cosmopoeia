@@ -190,17 +190,7 @@ I'm wondering if generating river flow would be better done with a heightmap ins
 The following commands were used, in this order, to generate the testing maps of Inannak during development. `time` is not the bash command, but a GNU program you might have to install on your machine and call by path.
 
 ```sh
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang testing_output/Inannak.world.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
-
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- create testing_output/Inannak.world.gpkg --overwrite --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-climate testing_output/Inannak.world.gpkg 
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-biome testing_output/Inannak.world.gpkg --overwrite
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-people testing_output/Inannak.world.gpkg --cultures testing_output/afmg_culture_antique.json --overwrite --namers testing_output/afmg_namers.json --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-towns testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-nations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-subnations testing_output/Inannak.world.gpkg --overwrite --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 11418135282022031501
-
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang testing_output/Inannak.world.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
 ```
 
 # Tasks
@@ -290,9 +280,9 @@ To proceed on this, I can break it down into the following steps:
 [X] Replace 'with_insertor' with a callback in the indexing functions.
 [X] Improve reproducibility by iterating layer features in the insertion order.
 [X] Speed up the shore_distance algorithm by using the cost-expand process as with cultures, states, etc.
-[ ] default command -- if no command given, it requires arguments that will run all of the algorithms.
-[ ] Get rid of "namer" defaults. This removes the weird dependency on the compression utility, reduces the binary size, and removes some of the command line options that complicate things. Instead, provide my namerset alongside the application.
-[ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.
+[X] `big-bang` command
+[X] Get rid of "namer" defaults. This removes the weird dependency on the compression utility, reduces the binary size, and removes some of the command line options that complicate things. Instead, provide my namerset alongside the application.
+[ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well?
     [ ] I could just provide a QGIS file called World.qgz with defaults, and as long as the user places this in the same directory and calles their file 'world.gpkg' then it will work. If they want to rename things, they'll have to change the data source.
     [ ] TODO: If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.
 [ ] Hide the sub-commands from help, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command.

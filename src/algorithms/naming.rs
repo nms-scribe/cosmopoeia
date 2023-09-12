@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use std::collections::hash_map::Entry;
 use std::io::BufReader;
 use std::io::BufRead;
-use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::ffi::OsStr;
@@ -13,9 +12,8 @@ use rand::Rng;
 use serde::Serialize;
 use serde::Deserialize;
 use serde_json;
-use libflate::deflate::Encoder;
 
-// NOTE: *** I'M NOT GOING TO LOAD THE NAMER STUFF INTO THE DATABASE. I have some defaults built in. If the user wants more they'll have to get a hold of a list.
+// NOTE: *** I'M NOT GOING TO LOAD THE NAMER OR CULTURE STUFF INTO THE DATABASE. Instead, I hope to provide some default data in the `share` directory.
 
 
 // TODO: Make sure to ask AFMG about accessing the lists there, I'm not sure what their source is or if they're copyrighted.
@@ -26,8 +24,6 @@ use crate::utils::split_string_from_end;
 use crate::utils::RandomIndex;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
-
-mod defaults;
 
 struct NamerLoadObserver<'data,Progress: ProgressObserver> {
     name: &'data str,
@@ -625,23 +621,13 @@ impl NamerSet {
         }
     }
 
-    pub(crate) fn from_files(files: Vec<PathBuf>, include_defaults: bool) -> Result<Self,CommandError> {
-        let mut result = if include_defaults {
-            NamerSet::default()?
-        } else {
-            NamerSet::empty()
-        };
+    pub(crate) fn from_files(files: Vec<PathBuf>) -> Result<Self,CommandError> {
+        let mut result = NamerSet::empty();
 
         for file in files {
             result.extend_from_file(file,false)?;
         }
         Ok(result)
-    }
-
-    fn default() -> Result<Self,CommandError> {
-        let mut this = Self::empty();
-        this.extend_from_json(BufReader::new(defaults::get_inflated_namer_data()))?;
-        Ok(this)
     }
 
     pub(crate) fn check_exists(&self, name: &str) -> Result<(),CommandError> {
@@ -797,17 +783,6 @@ impl NamerSet {
         }
 
 
-
-    }
-
-    pub(crate) fn to_deflated_json<Target: Write>(&self, writer: Target) -> Result<(), CommandError> {
-        // FUTURE: Probably shouldn't use BadNamerSourceFile for all of the errors, but this theoretically
-        // will be done so rarely I don't know if it's worth creating a new error.
-        let json = self.to_json()?;
-        let mut encoder = Encoder::new(writer);
-        encoder.write_all(json.as_bytes()).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
-        encoder.finish().into_result().map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
-        Ok(())
 
     }
 

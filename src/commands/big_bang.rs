@@ -165,13 +165,9 @@ subcommand_def!{
         /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
         cultures: Vec<PathBuf>,
 
-        #[arg(long)]
+        #[arg(long,required(true))]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         namers: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// if specified, the default namers will not be loaded.
-        no_builtin_namers: bool,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
@@ -193,13 +189,9 @@ impl Task for BigBang {
 
         let mut random = crate::utils::random_number_generator(self.seed);
 
-        let mut culture_set = CultureSet::empty();
+        let culture_set = CultureSet::from_files(self.cultures)?;
 
-        for file in self.cultures {
-            culture_set.extend_from_file(file)?;
-        }    
-
-        let namer_set = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
+        let namer_set = NamerSet::from_files(self.namers)?;
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 

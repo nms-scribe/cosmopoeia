@@ -74,13 +74,9 @@ subcommand_def!{
         /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
         cultures: Vec<PathBuf>,
 
-        #[arg(long)]
+        #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         namers: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// if specified, the default namers will not be loaded.
-        no_builtin_namers: bool,
 
         #[arg(long,default_value("10"))]
         /// The number of cultures to generate
@@ -110,12 +106,9 @@ impl Task for CreateCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut cultures = CultureSet::empty();
-        for file in self.cultures {
-            cultures.extend_from_file(file)?;
-        }
+        let cultures = CultureSet::from_files(self.cultures)?;
 
-        let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
+        let namers = NamerSet::from_files(self.namers)?;
 
         let mut random = random_number_generator(self.seed);
 
@@ -294,13 +287,9 @@ struct DefaultArgs {
     /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
     limit_factor: f64,
 
-    #[arg(long)]
+    #[arg(long,required=true)]
     /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
     namers: Vec<PathBuf>,
-
-    #[arg(long)]
-    /// if specified, the default namers will not be loaded.
-    no_builtin_namers: bool,
 
     #[arg(long,default_value("10"))]
     /// The number of cultures to generate
@@ -342,12 +331,9 @@ impl Task for GenPeople {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(default_args) = self.default_args {
-            let mut cultures = CultureSet::empty();
-            for file in default_args.cultures {
-                cultures.extend_from_file(file)?;
-            }
+            let cultures = CultureSet::from_files(default_args.cultures)?;
     
-            let namers = NamerSet::from_files(default_args.namers, !default_args.no_builtin_namers)?;
+            let namers = NamerSet::from_files(default_args.namers)?;
     
             let mut random = random_number_generator(default_args.seed);
     

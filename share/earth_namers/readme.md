@@ -1,8 +1,16 @@
-use libflate::deflate::Decoder;
+The `namers.json` file contains a namers set based on real Earth languages. It is a work in progress.
 
-/*
+# Building
 
-FUTURE: I hope to have namers built in to NFMT for the following languages eventually. The reasons for each language on this list are defined below. I've listed the sources and some notes for the ones I have completed, if you have better sources let me know. I stuck to a few major languages, a few popular ancient languages, and a few indigeonous languages to keep things balanced. The rest are postponed until I can find more time and better resources.
+Cosmopoeia can be used to build this json file from the word lists in this directory. This same technique can be used to build your own namer sets from lists of words. Just use the following command:
+
+`cargo run dev namers share/earth_namers/*.txt --text-is-markov --write-json`
+
+The names of the files become the names of the languages in the set. If you prefer the pick-list method, remove the `--text-is-markov` option. Although in that case, you could use the word lists as is and you won't need the JSON data.
+
+# Plans
+
+I hope to include namers for the following languages eventually. The reasons for each language on this list are defined below. I've listed the sources and some notes for the ones I have completed, if you have better sources let me know. I stuck to a few major languages, a few popular ancient languages, and a few indigeonous languages to keep things balanced. The rest are postponed until I can find more time and better resources.
 
 If you have any suggestions for languages, remember that there are thousands of living languages on Earth, and it would be impossible to support all of them. There must be a reason besides just your own personal reasons. Also, keep in your thoughts that the markov chain name generators are inadequate to generate words correctly for a language. Better would be a tool specific for the language that takes phonemes, phonotactic rules and common words like prepositions, directions and location suffixes and puts them together, then figures out how to spell them. This could then be used to generate nice lists which would be used in a list-picker namer. See my Elbie project for something that starts to get close to that.
 
@@ -12,8 +20,8 @@ If you have any suggestions for languages, remember that there are thousands of 
 [X] Ancient Egyptian
     https://en.wikipedia.org/wiki/List_of_ancient_Egyptian_towns_and_cities
     https://en.wikipedia.org/wiki/Nome_(Egypt) 
-    -- two-word names separated by space were broken into two and duplicates removed
-    -- certain letters were changed into more "Latin" letters, since the two articles used different transcription systems.
+    * two-word names separated by space were broken into two and duplicates removed
+    * certain letters were changed into more "Latin" letters, since the two articles used different transcription systems.
 [ ] Ancient Greek
 [X] Arabic
     https://en.wikipedia.org/wiki/List_of_Arabic_place_names
@@ -24,9 +32,10 @@ If you have any suggestions for languages, remember that there are thousands of 
 [ ] Cherokee
 [X] English
     https://gazetteer.org.uk/purchase
-    -- removed all places outside of England
-    -- only types "Civil Parish", "Settlement", "Historic County" and "Village"
-    -- removed some unusual characters such as apostrophes, as much as they add character, they will get put in weird positions and it won't look English.
+    * removed all places outside of England
+    * only types "Civil Parish", "Settlement", "Historic County" and "Village"
+    * removed some unusual characters such as apostrophes, as much as they add character, they will get put in weird positions and it won't look English.
+    * FUTURE: There is an issue with the English one, and I suspect it might happen in the others but I don't notice it as I'm not a native speaker. The word "Wicken-onter", as an example, is a valid generation because '-' can be followed by the lowercase letter "o" in such names as "Staunton-on-Wye". However, there's no way for the Markov chain to know that this only happens if the word is a preposition, like "on", "upon", "by", etc. This is just one of many issues with Markov chain name generators.
 [X] Finnish
     https://en.m.wikipedia.org/wiki/Regions_of_Finland
     https://en.m.wikipedia.org/wiki/Historical_provinces_of_Finland
@@ -50,8 +59,8 @@ If you have any suggestions for languages, remember that there are thousands of 
     https://en.wikipedia.org/wiki/List_of_villages_in_Enugu_State
     https://en.wikipedia.org/wiki/List_of_villages_in_Imo_State
     https://en.wikipedia.org/wiki/List_of_villages_in_Rivers_State
-    -- attempted to remove every element of English from the words, I can't guarantee I was consistent.
-    -- I also don't know that all of these names are from Igbo or a related language.
+    * attempted to remove every element of English from the words, I can't guarantee I was consistent.
+    * I also don't know that all of these names are from Igbo or a related language.
 [ ] Inuktitut
 [ ] Indonesian
 [X] Japenese
@@ -78,11 +87,11 @@ If you have any suggestions for languages, remember that there are thousands of 
     https://en.wikipedia.org/wiki/List_of_Latin_place_names_in_Asia
     https://en.wikipedia.org/wiki/List_of_Latin_place_names_in_Africa
     https://en.wikipedia.org/wiki/List_of_Latin_place_names_in_Iberia
-    -- I tried to stick to countries which were part of the original Roman Empire (not Byzantine Empire)
+    * I tried to stick to countries which were part of the original Roman Empire (not Byzantine Empire)
 [ ] Maasai
 [X] Mandarin 
     https://en.wikipedia.org/wiki/List_of_cities_in_China
-    -- Note that I have no way of knowing which of these cities are in Mandarin or not, I can only assume that the government's official names for cities are in Mandarin, and that these are official names.
+    * Note that I have no way of knowing which of these cities are in Mandarin or not, I can only assume that the government's official names for cities are in Mandarin, and that these are official names.
 [ ] Maninka
 [ ] Maori
 [ ] Marathi
@@ -125,14 +134,14 @@ If you have any suggestions for languages, remember that there are thousands of 
     https://en.wikipedia.org/wiki/List_of_villages_in_Ekiti_State
     https://en.wikipedia.org/wiki/List_of_villages_in_Ogun_State
     https://en.wikipedia.org/wiki/List_of_villages_in_Ondo_State
-    -- similar problems as Igbo, as the data is formatted the same
+    * similar problems as Igbo, as the data is formatted the same
 [ ] Yucatec
 [ ] Zulu
 [ ] An Australian Indigenous Language
 
 I have reasons for all of the languages in the list. Sources are as of August of 2024.
 
-# Top 20 Native Languages
+## Top 20 Native Languages
 
 The following are the the top 20 languages by native speakers from <https://en.wikipedia.org/wiki/List_of_languages_by_number_of_native_speakers#Top_languages_by_population>
 * Mandarin Chinese
@@ -156,7 +165,7 @@ The following are the the top 20 languages by native speakers from <https://en.w
 * Standard German
 * Urdu
 
-# Top 20 Languages
+## Top 20 Languages
 
 The following are the top 20 languages by total speakers from <https://en.wikipedia.org/wiki/List_of_languages_by_total_number_of_speakers#Ethnologue_(2022,_25th_edition)>
 * (English)
@@ -180,7 +189,7 @@ The following are the top 20 languages by total speakers from <https://en.wikipe
 * (Yue Chinese)
 * (Vietnamese)
 
-# Top 2 In the Top 14 Language Families
+## Top 2 In the Top 14 Language Families
 
 The following are primary language families with more than 20 million speakers from <https://en.wikipedia.org/wiki/List_of_language_families#Language_families_(non-sign)>. I've removed those families which did not have a "glottolog" code in the sidebar, as either poorly attested or controversial. For each of these families, I've picked the top two of those spoken by more than 5 million speakers. If a language family did not have enough such languages, then only one or none were picked. Some of these took research, speaker counts were taken from corresponding Wikipedia articles. 
 
@@ -229,7 +238,7 @@ I have no guarantee whether I was using L1 or L2 counts. Because of that, I chos
   * Hungarian
   * Finnish
 
-# Some Indigenous Languages from Across the Globe
+## Some Indigenous Languages from Across the Globe
 
 This one is harder to define, and harder to come up with concrete reasons to pick. Many are not spoken by more than a thousand or so people, making choosing by popularity a bad idea. They're effect on history and geography seems like the better reason to pick, but I'd have to filter through so much history to choose those. The best I can do is choose from the history I've already learned, which is quite fuzzy outside North America.
 
@@ -267,7 +276,7 @@ The list below is tentative, and may change.
 * Oceania
   * Samoan
 
-# Some Ancient Languages
+## Some Ancient Languages
 
 * Ancient Greek
 * Latin
@@ -278,24 +287,3 @@ The list below is tentative, and may change.
 * Phoenician
 * Old English
 
-FUTURE: There is an issue with the English one, and I suspect it might happen in the others but I don't notice it as I'm not a native speaker. The word "Wicken-onter", as an example, is a valid generation because '-' can be followed by the lowercase letter "o" in such names as "Staunton-on-Wye". However, there's no way for the Markov chain to know that this only happens if the word is a preposition, like "on", "upon", "by", etc. This is just one of many issues with Markov chain name generators.
-
-*/
-
-/*
-The defaults.deflated file was generated with the following command run from the root of the project directory:
-`cargo run -- dev-namers src/algorithms/naming/*.txt --text-is-markov --write-deflated > src/algorithms/naming/defaults.deflated`
-
-The defaults.json file is intended for review of what was created. FUTURE: If I ever need to "edit" the defaults.json I'll have to
-come up with another way to deflate it quickly.
-
-(Here's a double comment end to match the unintentional comment-start in that code) */*/
-
-// NOTE: This adds 0.3 MB to the executable (from 1.1MB to 1.4MB). If I didn't deflate it it would add 0.8 MB (1.1 -> 1.9). 
-// FUTURE: The question is whether including the libflate library just for that is worth it, or if there's a simpler 
-// compression mechanism that would workd.
-pub(crate) const DEFAULT_NAMER_DATA_DEFLATED: &[u8] = include_bytes!("defaults.deflated");
-
-pub(crate) fn get_inflated_namer_data() -> Decoder<&'static [u8]> {
-    Decoder::new(DEFAULT_NAMER_DATA_DEFLATED)
-}

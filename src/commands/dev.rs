@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::io::stdout;
 
 use clap::Args;
 use clap::Subcommand;
@@ -253,11 +252,6 @@ subcommand_def!{
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
         write_json: bool,
 
-        #[arg(long)]
-        /// If true, the command will serialize the namer data into a "deflated" JSON document rather than test the naming.
-        write_deflated: bool
-
-
     }
 }
 
@@ -275,12 +269,9 @@ impl Task for Namers {
         
         }
         
-        let mut namers = NamerSet::from_files(self.namer_data, self.defaults)?;
+        let mut namers = NamerSet::from_files(self.namer_data)?;
 
-        if self.write_deflated {
-            namers.to_deflated_json(stdout())?;
-
-        } else if self.write_json {
+        if self.write_json {
             print!("{}",namers.to_json()?)
 
         } else {
@@ -335,10 +326,7 @@ impl Task for Cultures {
         
         }
         
-        let mut cultures = CultureSet::empty();
-        for file in self.culture_data {
-            cultures.extend_from_file(file)?;
-        }
+        let cultures = CultureSet::from_files(self.culture_data)?;
 
         if self.write_json {
             print!("{}",cultures.to_json()?)

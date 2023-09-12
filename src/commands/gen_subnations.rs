@@ -38,13 +38,9 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
-        #[arg(long)]
+        #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         namers: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// if specified, the built-in namers will not be loaded.
-        no_builtin_namers: bool,
 
         // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
         #[arg(long)]
@@ -77,7 +73,7 @@ impl Task for Create {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
+        let namers = NamerSet::from_files(self.namers)?;
 
         let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer, &mut target, progress)?;
 
@@ -163,13 +159,9 @@ subcommand_def!{
         /// The path to the world map GeoPackage file
         target: PathBuf,
 
-        #[arg(long)]
+        #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         namers: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// if specified, the built-in namers will not be loaded.
-        no_builtin_namers: bool,
 
         // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
         #[arg(long)]
@@ -199,7 +191,7 @@ impl Task for FillEmpty {
 
         let mut target = WorldMap::edit(self.target)?;
         
-        let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
+        let namers = NamerSet::from_files(self.namers)?;
 
         let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer, &mut target, progress)?;
 
@@ -360,13 +352,9 @@ struct DefaultArgs {
     /// The path to the world map GeoPackage file
     target: PathBuf,
 
-    #[arg(long)]
+    #[arg(long,required=true)]
     /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
     namers: Vec<PathBuf>,
-
-    #[arg(long)]
-    /// if specified, the built-in namers will not be loaded.
-    no_builtin_namers: bool,
 
     // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
     #[arg(long)]
@@ -416,7 +404,7 @@ impl Task for GenSubnations {
 
             let mut target = WorldMap::edit(default_args.target)?;
 
-            let namers = NamerSet::from_files(default_args.namers, !default_args.no_builtin_namers)?;
+            let namers = NamerSet::from_files(default_args.namers)?;
 
             let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, default_args.default_namer, &mut target, progress)?;
 

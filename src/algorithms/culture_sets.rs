@@ -1,5 +1,7 @@
+
 use std::io::BufReader;
 use std::path::Path;
+use std::path::PathBuf;
 use std::ffi::OsStr;
 use std::fs::File;
 
@@ -133,11 +135,22 @@ pub(crate) struct CultureSet {
 
 impl CultureSet {
 
-    pub(crate) fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             source: Vec::new()
         }
     }
+
+    pub(crate) fn from_files(files: Vec<PathBuf>) -> Result<Self,CommandError> {
+        let mut result = Self::empty();
+
+        for file in files {
+            result.extend_from_file(file)?;
+        }
+        Ok(result)
+    }
+
+
 
     pub(crate) fn to_json(&self) -> Result<String,CommandError> {
 

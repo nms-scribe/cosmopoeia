@@ -12,7 +12,6 @@ gdal = { version = "0.16.0", features = ["array"] }
 gdal-sys = "0.9.0"
 indexmap = "2.0.0"
 indicatif = "0.17.5"
-libflate = "2.0.0"
 ordered-float = "3.7.0"
 priority-queue = "1.3.2"
 qutee = "0.1.1"
@@ -22,6 +21,7 @@ serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 
 # tips from https://github.com/johnthagen/min-sized-rust -- this reduced the final binary size immensely
+# Speed also appears to be improved, I witnessed repeated running times of about 55% of the debug release (11 sec vs 20 sec), both targets already compiled and built.
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
 opt-level = "z"  # Optimize for size.
