@@ -32,7 +32,7 @@ pub(crate) struct ScoredTileForTowns {
     pub(crate) town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // TODO: Certain culture "types" shouldn't generate towns, or should generate fewer towns. Nomads, for example. 
 
@@ -56,7 +56,7 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
     for town in capitals.into_iter().chain(towns.into_iter()).watch(progress,"Writing towns.","Towns written.") {
         let (ScoredTileForTowns{tile,..},is_capital) = town;
         let culture = tile.culture;
-        let namer = Culture::get_namer(culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?, namers, default_namer)?;
+        let namer = Culture::get_namer(culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?, namers)?;
         let name = namer.make_name(rng);
         let fid = towns_layer.add_town(NewTown {
             geometry: tile.site.create_geometry()?,

@@ -41,7 +41,7 @@ impl Task for Temperature {
 
         target.with_transaction(|target| {
 
-            Self::run(self.equator_temp, self.polar_temp, target, progress)
+            Self::run_with_parameters(self.equator_temp, self.polar_temp, target, progress)
         })?;
 
         target.save(progress)
@@ -51,7 +51,7 @@ impl Task for Temperature {
 }
 
 impl Temperature {
-    fn run<Progress: ProgressObserver>(equator_temp: i8, polar_temp: i8, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(equator_temp: i8, polar_temp: i8, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating temperatures");
 
         generate_temperatures(target, equator_temp,polar_temp,progress)
@@ -113,7 +113,7 @@ impl Task for Winds {
 
         target.with_transaction(|target| {
 
-            Self::run(winds, target, progress)
+            Self::run_with_parameters(winds, target, progress)
 
         })?;
 
@@ -123,7 +123,7 @@ impl Task for Winds {
 }
 
 impl Winds {
-    fn run<Progress: ProgressObserver>(winds: [i32; 6], target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(winds: [i32; 6], target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating winds");
     
         generate_winds(target, winds, progress)
@@ -157,7 +157,7 @@ impl Task for Precipitation {
 
         target.with_transaction(|target| {
 
-            Self::run(self.moisture, target, progress)
+            Self::run_with_parameters(self.moisture, target, progress)
 
         })?;
 
@@ -167,7 +167,7 @@ impl Task for Precipitation {
 }
 
 impl Precipitation {
-    fn run<Progress: ProgressObserver>(moisture: u16, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(moisture: u16, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating precipitation");
 
         generate_precipitation(target, moisture, progress)
@@ -175,6 +175,7 @@ impl Precipitation {
 }
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     ClimateCommand {
         Temperature,
         Winds,
@@ -260,7 +261,7 @@ impl Task for GenClimate {
                 all.south_polar_wind as i32
             ];
     
-            Self::run(all.equator_temp, all.polar_temp, winds, all.moisture_factor, &mut target, progress)
+            Self::run_default(all.equator_temp, all.polar_temp, winds, all.moisture_factor, &mut target, progress)
 
         } else {
             unreachable!("Command should have been called with one of the arguments")
@@ -272,14 +273,14 @@ impl Task for GenClimate {
 }
 
 impl GenClimate {
-    fn run<Progress: ProgressObserver>(equator_temp: i8, polar_temp: i8, winds: [i32; 6], moisture_factor: u16, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Progress: ProgressObserver>(equator_temp: i8, polar_temp: i8, winds: [i32; 6], moisture_factor: u16, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
     
-            Temperature::run(equator_temp, polar_temp, target, progress)?;
+            Temperature::run_with_parameters(equator_temp, polar_temp, target, progress)?;
     
-            Winds::run(winds, target, progress)?;
+            Winds::run_with_parameters(winds, target, progress)?;
     
-            Precipitation::run(moisture_factor, target, progress)
+            Precipitation::run_with_parameters(moisture_factor, target, progress)
     
         })?;
             

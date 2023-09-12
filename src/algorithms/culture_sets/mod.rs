@@ -194,11 +194,12 @@ impl CultureSet {
     #[allow(dead_code)] pub(crate) fn make_random_culture_set<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: NamerSet, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
 
         let namer_keys = namers.list_names();
-        let mut loaded_namers = namers.into_loaded(&namer_keys, progress)?;
+        let default = namer_keys.choose(rng).to_owned();
+        let mut loaded_namers = namers.into_loaded(&namer_keys, default, progress)?;
         let mut result = Self::empty();
         for _ in 0..count {
             let namer_key = namer_keys.choose(rng);
-            let namer = loaded_namers.get_mut(namer_key).unwrap(); // It should be here.
+            let namer = loaded_namers.get_mut(Some(namer_key)).unwrap(); // It should be here.
 
             result.add_culture(CultureSource {
                 name: namer.make_name(rng),

@@ -59,7 +59,7 @@ impl Task for Coastline {
 
         target.with_transaction(|target| {
 
-            Self::run(self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, target, progress)
+            Self::run_with_parameters(self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, target, progress)
         })?;
 
         target.save(progress)
@@ -71,7 +71,7 @@ impl Task for Coastline {
 impl Coastline {
 
 
-    fn run<Progress: ProgressObserver>(bezier_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating coastline");
 
         calculate_coastline(target, bezier_scale, overwrite_coastline, overwrite_ocean, progress)
@@ -97,7 +97,7 @@ impl Task for Flow {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -106,7 +106,7 @@ impl Task for Flow {
 }
 
 impl Flow {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(EntityIndex<TileSchema, TileForWaterFill>, Vec<(u64, f64)>), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(EntityIndex<TileSchema, TileForWaterFill>, Vec<(u64, f64)>), CommandError> {
         progress.announce("Calculating water flow");
         generate_water_flow(target, progress)
     }
@@ -148,7 +148,7 @@ impl Task for Lakes {
         let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
         target.with_transaction(|target| {
-            Self::run(tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, target, progress)
+            Self::run_with_parameters(tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, target, progress)
 
         })?;
 
@@ -157,7 +157,7 @@ impl Task for Lakes {
 }
 
 impl Lakes {
-    fn run<Progress: ProgressObserver>(tile_map: EntityIndex<TileSchema, TileForWaterFill>, tile_queue: Vec<(u64, f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(tile_map: EntityIndex<TileSchema, TileForWaterFill>, tile_queue: Vec<(u64, f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Filling lakes");
         generate_water_fill(target, tile_map, tile_queue, lake_bezier_scale, lake_buffer_scale, overwrite_layer, progress)
     }
@@ -190,7 +190,7 @@ impl Task for Rivers {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(self.bezier_scale, self.overwrite, progress, target)
+            Self::run_with_parameters(self.bezier_scale, self.overwrite, progress, target)
         })?;
 
         target.save(progress)
@@ -199,7 +199,7 @@ impl Task for Rivers {
 }
 
 impl Rivers {
-    fn run<Progress: ProgressObserver>(bezier_scale: f64, overwrite_layer: bool, progress: &mut Progress, target: &mut WorldMapTransaction<'_>) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, overwrite_layer: bool, progress: &mut Progress, target: &mut WorldMapTransaction<'_>) -> Result<(), CommandError> {
 
         progress.announce("Generating rivers");
         generate_water_rivers(target, bezier_scale, overwrite_layer, progress)
@@ -227,7 +227,7 @@ impl Task for ShoreDistance {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -237,7 +237,7 @@ impl Task for ShoreDistance {
 
 impl ShoreDistance {
 
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Calculating distance from shores");
         generate_water_distance(target, progress)
     }
@@ -263,7 +263,7 @@ impl Task for Grouping {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -272,7 +272,7 @@ impl Task for Grouping {
 }
 
 impl Grouping {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Delineating land and water bodies");
         calculate_grouping(target, progress)
     }
@@ -281,6 +281,7 @@ impl Grouping {
 
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     WaterCommand {
         Coastline,
         Flow,
@@ -349,7 +350,7 @@ impl Task for GenWater {
         if let Some(args) = self.default_args {
             let mut target = WorldMap::edit(args.target)?;
 
-            run(args.bezier_scale, 
+            Self::run_default(args.bezier_scale, 
                 args.buffer_scale, 
                 args.overwrite || args.overwrite_coastline, 
                 args.overwrite || args.overwrite_ocean, 
@@ -369,22 +370,24 @@ impl Task for GenWater {
     }
 }
 
-fn run<Progress: ProgressObserver>(bezier_scale: f64, lake_buffer_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, overwrite_lakes: bool, overwrite_rivers: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-    target.with_transaction(|target| {
-    
-        Coastline::run(bezier_scale, overwrite_coastline, overwrite_ocean, target, progress)?;
+impl GenWater {
+    pub(crate) fn run_default<Progress: ProgressObserver>(bezier_scale: f64, lake_buffer_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, overwrite_lakes: bool, overwrite_rivers: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+        target.with_transaction(|target| {
+        
+            Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, target, progress)?;
 
-        let (tile_map,tile_queue) = Flow::run(target, progress)?;
+            let (tile_map,tile_queue) = Flow::run_with_parameters(target, progress)?;
 
-        Lakes::run(tile_map, tile_queue, bezier_scale, lake_buffer_scale, overwrite_lakes, target, progress)?;
+            Lakes::run_with_parameters(tile_map, tile_queue, bezier_scale, lake_buffer_scale, overwrite_lakes, target, progress)?;
 
-        Rivers::run(bezier_scale, overwrite_rivers, progress, target)?;
+            Rivers::run_with_parameters(bezier_scale, overwrite_rivers, progress, target)?;
 
-        ShoreDistance::run(target, progress)?;
+            ShoreDistance::run_with_parameters(target, progress)?;
 
-        Grouping::run(target, progress)
-    
-    })?;
-    
-    target.save(progress)
+            Grouping::run_with_parameters(target, progress)
+        
+        })?;
+        
+        target.save(progress)
+    }
 }

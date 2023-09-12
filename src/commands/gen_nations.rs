@@ -23,6 +23,9 @@ use crate::world_map::WorldMapTransaction;
 use crate::world_map::EntityLookup;
 use crate::world_map::CultureSchema;
 use crate::algorithms::naming::LoadedNamers;
+use crate::world_map::NamedEntity;
+use crate::world_map::CultureWithNamer;
+use crate::world_map::CultureWithType;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -73,11 +76,11 @@ impl Task for Create {
 
         let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
 
-        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer.clone(), &mut target, progress)?;
+        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer, &mut target, progress)?;
 
         target.with_transaction(|target| {
 
-            Self::run(&mut random, culture_lookup, &mut loaded_namers, self.default_namer, self.size_variance, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.size_variance, self.overwrite, target, progress)
         })?;
 
         target.save(progress)
@@ -86,9 +89,9 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, CultureForNations>, loaded_namers: &mut LoadedNamers, default_namer: String, size_variance: f64, overwrite_nations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, size_variance: f64, overwrite_nations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating nations");
-        generate_nations(target, random, &culture_lookup, loaded_namers, &default_namer, size_variance, overwrite_nations, progress)
+        generate_nations(target, random, &culture_lookup, loaded_namers, size_variance, overwrite_nations, progress)
     }
     
 }
@@ -120,7 +123,7 @@ impl Task for Expand {
 
         let mut target = WorldMap::edit(self.target)?;
         target.with_transaction(|target| {
-            Self::run(self.river_threshold, self.limit_factor, target, progress)
+            Self::run_with_parameters(self.river_threshold, self.limit_factor, target, progress)
         })?;
 
         target.save(progress)
@@ -129,7 +132,7 @@ impl Task for Expand {
 }
 
 impl Expand {
-    fn run<Progress: ProgressObserver>(river_threshold: f64, limit_factor: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(river_threshold: f64, limit_factor: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying nations to tiles");
     
         expand_nations(target, river_threshold, limit_factor, progress)
@@ -157,7 +160,7 @@ impl Task for Normalize {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -166,7 +169,7 @@ impl Task for Normalize {
 }
 
 impl Normalize {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Normalizing nation borders");
     
         normalize_nations(target, progress)
@@ -194,7 +197,7 @@ impl Task for Dissolve {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -204,7 +207,7 @@ impl Task for Dissolve {
 
 impl Dissolve {
 
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating nation polygons");
     
         dissolve_tiles_by_theme::<_,NationTheme>(target, progress)
@@ -236,7 +239,7 @@ impl Task for Curvify {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(self.bezier_scale, target, progress)
+            Self::run_with_parameters(self.bezier_scale, target, progress)
         })?;
 
         target.save(progress)
@@ -245,7 +248,7 @@ impl Task for Curvify {
 }
 
 impl Curvify {
-    fn run<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making nation polygons curvy");
     
         curvify_layer_by_theme::<_,NationTheme>(target, bezier_scale, progress)
@@ -256,6 +259,7 @@ impl Curvify {
 
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     NationCommand {
         Create,
         Expand,
@@ -338,9 +342,9 @@ impl Task for GenNations {
     
             let namers = NamerSet::from_files(default_args.namers, !default_args.no_builtin_namers)?;
     
-            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, default_args.default_namer.clone(), &mut target, progress)?;
+            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, default_args.default_namer, &mut target, progress)?;
 
-            Self::run(&mut random, culture_lookup, &mut loaded_namers, default_args.default_namer, default_args.size_variance, default_args.river_threshold, default_args.limit_factor, default_args.bezier_scale, default_args.overwrite, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.size_variance, default_args.river_threshold, default_args.limit_factor, default_args.bezier_scale, default_args.overwrite, &mut target, progress)
 
         } else if let Some(command) = self.command {
 
@@ -355,18 +359,18 @@ impl Task for GenNations {
 
 impl GenNations {
 
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, CultureForNations>, loaded_namers: &mut LoadedNamers, default_namer: String, size_variance: f64, river_threshold: f64, limit_factor: f64, bezier_scale: f64, overwrite_nations: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, size_variance: f64, river_threshold: f64, limit_factor: f64, bezier_scale: f64, overwrite_nations: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
     
-            Create::run(random, culture_lookup, loaded_namers, default_namer, size_variance, overwrite_nations, target, progress)?;
+            Create::run_with_parameters(random, culture_lookup, loaded_namers, size_variance, overwrite_nations, target, progress)?;
     
-            Expand::run(river_threshold, limit_factor, target, progress)?;
+            Expand::run_with_parameters(river_threshold, limit_factor, target, progress)?;
     
-            Normalize::run(target, progress)?;
+            Normalize::run_with_parameters(target, progress)?;
     
-            Dissolve::run(target, progress)?;
+            Dissolve::run_with_parameters(target, progress)?;
     
-            Curvify::run(bezier_scale, target, progress)
+            Curvify::run_with_parameters(bezier_scale, target, progress)
     
         })?;
     

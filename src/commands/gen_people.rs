@@ -45,7 +45,7 @@ impl Task for Population {
 
         target.with_transaction(|target| {
 
-            Self::run(self.estuary_threshold, target, progress)
+            Self::run_with_parameters(self.estuary_threshold, target, progress)
         })?;
 
         target.save(progress)
@@ -54,7 +54,7 @@ impl Task for Population {
 }
 
 impl Population {
-    fn run<Progress: ProgressObserver>(estuary_threshold: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(estuary_threshold: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating population");
         generate_populations(target, estuary_threshold, progress)
     }
@@ -122,7 +122,7 @@ impl Task for CreateCultures {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(&mut random, cultures, namers, self.count, self.size_variance, self.river_threshold, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, cultures, &namers, self.count, self.size_variance, self.river_threshold, self.overwrite, target, progress)
         })?;
 
         target.save(progress)
@@ -131,7 +131,7 @@ impl Task for CreateCultures {
 }
 
 impl CreateCultures {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         let size_variance = size_variance.clamp(0.0, 10.0);
 
         progress.announce("Generating cultures");
@@ -166,7 +166,7 @@ impl Task for ExpandCultures {
 
         let mut target = WorldMap::edit(self.target)?;
         target.with_transaction(|target| {
-            Self::run(self.river_threshold, self.limit_factor, target, progress)
+            Self::run_with_parameters(self.river_threshold, self.limit_factor, target, progress)
         })?;
 
         target.save(progress)
@@ -175,7 +175,7 @@ impl Task for ExpandCultures {
 }
 
 impl ExpandCultures {
-    fn run<Progress: ProgressObserver>(river_threshold: f64, limit_factor: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(river_threshold: f64, limit_factor: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying cultures to tiles");
     
         expand_cultures(target, river_threshold, limit_factor, progress)
@@ -202,7 +202,7 @@ impl Task for DissolveCultures {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -211,7 +211,7 @@ impl Task for DissolveCultures {
 }
 
 impl DissolveCultures {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating culture polygons");
     
         dissolve_tiles_by_theme::<_,CultureTheme>(target, progress)
@@ -245,7 +245,7 @@ impl Task for CurvifyCultures {
         let bezier_scale = self.bezier_scale;
 
         target.with_transaction(|target| {
-            Self::run(bezier_scale, target, progress)
+            Self::run_with_parameters(bezier_scale, target, progress)
         })?;
 
         target.save(progress)
@@ -255,7 +255,7 @@ impl Task for CurvifyCultures {
 
 impl CurvifyCultures {
 
-    fn run<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making culture polygons curvy");
     
         curvify_layer_by_theme::<_,CultureTheme>(target, bezier_scale, progress)
@@ -266,6 +266,7 @@ impl CurvifyCultures {
 
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     PeopleCommand {
         Population,
         CreateCultures,
@@ -352,9 +353,10 @@ impl Task for GenPeople {
     
             let mut target = WorldMap::edit(default_args.target)?;
     
-            Self::run(
+            Self::run_default(
                 default_args.river_threshold, 
-                cultures, namers, 
+                cultures, 
+                &namers, 
                 default_args.culture_count, 
                 default_args.size_variance, 
                 default_args.overwrite, 
@@ -376,17 +378,17 @@ impl Task for GenPeople {
 }
 
 impl GenPeople {
-    fn run<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
-            Population::run(river_threshold, target, progress)?;
+            Population::run_with_parameters(river_threshold, target, progress)?;
     
-            CreateCultures::run(random, cultures, namers, culture_count, size_variance, river_threshold, overwrite_cultures, target, progress)?;
+            CreateCultures::run_with_parameters(random, cultures, namers, culture_count, size_variance, river_threshold, overwrite_cultures, target, progress)?;
     
-            ExpandCultures::run(river_threshold, limit_factor, target, progress)?;
+            ExpandCultures::run_with_parameters(river_threshold, limit_factor, target, progress)?;
     
-            DissolveCultures::run(target, progress)?;
+            DissolveCultures::run_with_parameters(target, progress)?;
     
-            CurvifyCultures::run(bezier_scale, target, progress)
+            CurvifyCultures::run_with_parameters(bezier_scale, target, progress)
     
         })?;
     

@@ -1,20 +1,8 @@
-use std::path::PathBuf;
-use std::fs::File;
-use std::io::BufReader;
-use std::str::FromStr;
-use std::fmt::Display;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::collections::HashSet;
 
-use clap::Args;
-use clap::Subcommand;
-use clap::ValueEnum;
-use serde::Deserialize;
-use serde::Serialize;
-use serde_json;
 use rand::Rng;
-use rand_distr::uniform::SampleUniform;
 
 use crate::errors::CommandError;
 use crate::world_map::EntityIndex;
@@ -25,144 +13,31 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::raster::RasterMap;
 use crate::world_map::Grouping;
-use crate::subcommand_def;
 use crate::world_map::ElevationLimits;
-use crate::utils::RandomNth;
 use crate::utils::point_finder::TileFinder;
 use crate::utils::Point;
 use crate::utils::Extent;
 use crate::progress::WatchableDeque;
 use crate::progress::WatchableQueue;
+use crate::commands::terrain::Multiply;
+use crate::utils::ArgRange;
+use crate::commands::terrain::ClearOcean;
+use crate::commands::terrain::RandomUniform;
+use crate::commands::terrain::AddHill;
+use crate::commands::terrain::AddRange;
+use crate::commands::terrain::AddStrait;
+use crate::commands::terrain::StraitDirection;
+use crate::commands::terrain::Mask;
+use crate::commands::terrain::Invert;
+use crate::commands::terrain::InvertAxes;
+use crate::commands::terrain::Add;
+use crate::commands::terrain::Smooth;
+use crate::commands::terrain::SeedOcean;
+use crate::commands::terrain::FloodOcean;
+use crate::commands::terrain::FillOcean;
 
 
 // TODO: I think that in order to guarantee reproducibility on random numbers, I'm going to have to be able to sort the tiles before generating. And in order to do that consistently, I might need to add a 'gen_order' field to the tiles, incremented when adding tiles. That has to go all the way back to points. This will help with reproducibility on the other stuff as well. I would also need to move into a sorted HashMap of some sort in order to make sure the iterator comes out correctly.
-
-trait TruncOrSelf {
-
-    fn trunc_or_self(self) -> Self;
-}
-
-impl TruncOrSelf for f64 {
-    fn trunc_or_self(self) -> Self {
-        self.trunc()
-    }
-}
-
-impl TruncOrSelf for usize {
-
-    fn trunc_or_self(self) -> Self {
-        self
-    }
-
-}
-
-impl TruncOrSelf for i8 {
-    fn trunc_or_self(self) -> Self {
-        self
-    }
-}
-
-#[derive(Clone)]
-enum ArgRange<NumberType> {
-    // While I could use a real Range<> and RangeInclusive<>, I'd have to copy it every time I want to generate a number from it anyway, and
-    Inclusive(NumberType,NumberType),
-    Exclusive(NumberType,NumberType),
-    Single(NumberType)
-}
-
-impl<NumberType: SampleUniform + PartialOrd + Copy + TruncOrSelf> ArgRange<NumberType> {
-
-    fn choose<Random: Rng>(&self, rng: &mut Random) -> NumberType {
-        match self  {
-            ArgRange::Inclusive(min,max) => rng.gen_range(*min..=*max),
-            ArgRange::Exclusive(min,max) => rng.gen_range(*min..*max),
-            ArgRange::Single(value) => *value,
-        }
-    }
-
-    fn includes(&self, value: &NumberType) -> bool {
-        match self {
-            ArgRange::Inclusive(min, max) => (value >= min) && (value <= max),
-            ArgRange::Exclusive(min, max) => (value >= min) && (value < max),
-            ArgRange::Single(value) => value.trunc_or_self() == value.trunc_or_self(),
-        }
-    }
-}
-
-
-
-impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>> Deserialize<'deserializer> for ArgRange<NumberType> {
-
-    fn deserialize<Deserializer>(deserializer: Deserializer) -> Result<Self, Deserializer::Error>
-    where
-        Deserializer: serde::Deserializer<'deserializer> {
-
-        // https://stackoverflow.com/q/56582722/300213
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum StrOrNum<NumberType> {
-            Str(String),
-            Num(NumberType)
-        }
-
-        let value = StrOrNum::deserialize(deserializer)?;
-        match value {
-            StrOrNum::Str(deserialized) => deserialized.parse().map_err(|e: CommandError| serde::de::Error::custom(e.to_string())),
-            StrOrNum::Num(deserialized) => Ok(ArgRange::Single(deserialized)),
-        }
-        
-    }
-}
-
-impl<NumberType: FromStr + Display> Serialize for ArgRange<NumberType> {
-
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> {
-    type Err = CommandError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((first,mut last)) = s.split_once("..") {
-            let include_last = if last.starts_with('=') {
-                last = last.trim_start_matches('=');
-                true
-            } else {
-                false
-            };
-
-            let first = first.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            let last = last.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            if first > last {
-                Err(CommandError::InvalidRangeArgument(s.to_owned()))?
-            }
-
-            Ok(if include_last {
-                ArgRange::Inclusive(first,last)
-            } else {
-                ArgRange::Exclusive(first,last)
-            })
-        } else {
-            let number = s.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            Ok(ArgRange::Single(number))
-        }
-    }
-}
-
-impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ArgRange::Inclusive(min,max) => write!(f,"{}..={}",min,max),
-            ArgRange::Exclusive(min,max) => write!(f,"{}..{}",min,max),
-            ArgRange::Single(single) => write!(f,"{}",single),
-        }
-    }
-}
 
 enum RelativeHeightTruncation {
     Floor,
@@ -398,121 +273,27 @@ trait ProcessTerrainTilesWithPointIndex {
     }
 }
 
-trait LoadTerrainTask {
+pub(crate) trait LoadTerrainTask {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError>;
 }
 
 
-subcommand_def!{
-
-    /// Processes a series of pre-saved tasks
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Recipe {
-
-        /// Raster file defining new elevations
-        source: PathBuf
-    }
-}
-
-impl LoadTerrainTask for Recipe {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        progress.start_unknown_endpoint(|| "Loading recipe tasks.");
-        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
-        let reader = BufReader::new(recipe_data);
-        let tasks: Vec<TerrainCommand> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
-        progress.finish(|| "Recipe tasks loaded.");
-        let mut result = Vec::new();
-        for task in tasks {
-            result.extend(task.load_terrain_task(random,progress)?)
-        }
-        Ok(result)
-    }
-
-}
-
-subcommand_def!{
-
-    /// Randomly chooses a recipe from a set of named recipes and follows it
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct RecipeSet {
-
-        /// Raster file defining new elevations
-        source: PathBuf,
-
-        #[arg(long)]
-        recipe: Option<String>
-    }
-
-
-}
-
-impl LoadTerrainTask for RecipeSet {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        progress.start_unknown_endpoint(|| "Loading recipe set.");
-        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
-        let reader = BufReader::new(recipe_data);
-        let mut tasks: HashMap<String,Vec<TerrainCommand>> = serde_json::from_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
-        progress.finish(|| "Recipe set loaded.");
-        if tasks.len() > 0 {
-            let chosen_key = if let Some(recipe) = self.recipe {
-                recipe
-            } else {
-                tasks.keys().choose(random).unwrap().to_owned() // there should be at least one here so this should never happen.
-            };
-            if let Some(tasks) = tasks.remove(&chosen_key) {
-                let mut result = Vec::new();
-                for task in tasks {
-                    result.extend(task.load_terrain_task(random,progress)?)
-                }
-                Ok(result)
-            } else {
-                Err(CommandError::RecipeFileRead(format!("Can't find recipe '{}' in set.",chosen_key)))
-            }
-    
-        } else {
-            Err(CommandError::RecipeFileRead("Recipe set is empty.".to_owned()))
-        }
-    }
-
-}
-
-subcommand_def!{
-
-    /// Sets tiles to ocean by sampling data from a heightmap. If value in heightmap is less than specified elevation, it becomes ocean.
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct SampleOceanBelow {
-
-        /// The raster to sample from
-        source: PathBuf,
-
-        /// The elevation to compare to
-        #[arg(allow_negative_numbers=true)]
-        elevation: f64
-    }
-}
 
 pub(crate) struct SampleOceanBelowLoaded {
     raster: RasterMap,
     elevation: f64
 }
 
+impl SampleOceanBelowLoaded {
 
-impl LoadTerrainTask for SampleOceanBelow {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        progress.start_unknown_endpoint(|| "Loading ocean raster.");
-        let raster = RasterMap::open(&self.source)?;
-        progress.finish(|| "Ocean raster loaded.");
-        Ok(vec![TerrainTask::SampleOceanBelow(SampleOceanBelowLoaded {
+    pub(crate) fn new(raster: RasterMap, elevation: f64) -> Self {
+        Self {
             raster,
-            elevation: self.elevation
-        })])
+            elevation,
+        }
     }
 }
-
 
 impl ProcessTerrainTiles for SampleOceanBelowLoaded {
 
@@ -563,34 +344,19 @@ impl ProcessTerrainTiles for SampleOceanBelowLoaded {
     }
 }
 
-subcommand_def!{
-
-    /// Sets tiles to ocean by sampling data from a heightmap. If data in heightmap is not nodata, the tile becomes ocean.
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct SampleOceanMasked {
-
-        /// The raster to read ocean data from
-        source: PathBuf
-    }
-}
-
-
 pub(crate) struct SampleOceanMaskedLoaded {
     raster: RasterMap
 }
 
+impl SampleOceanMaskedLoaded {
 
-impl LoadTerrainTask for SampleOceanMasked {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        progress.start_unknown_endpoint(|| "Loading ocean raster.");
-        let raster = RasterMap::open(&self.source)?;
-        progress.finish(|| "Ocean raster loaded.");
-        Ok(vec![TerrainTask::SampleOceanMasked(SampleOceanMaskedLoaded {
+    pub(crate) fn new(raster: RasterMap) -> Self {
+        Self {
             raster
-        })])
+        }
     }
 }
+
 
 
 impl ProcessTerrainTiles for SampleOceanMaskedLoaded {
@@ -640,10 +406,10 @@ pub(crate) struct SampleElevationLoaded {
 }
 
 impl SampleElevationLoaded {
-    pub(crate) fn new(raster: RasterMap) -> TerrainTask {
-        TerrainTask::SampleElevation(Self {
+    pub(crate) fn new(raster: RasterMap) -> Self {
+        Self {
             raster
-        })
+        }
     }
 }
 
@@ -680,52 +446,6 @@ impl ProcessTerrainTiles for SampleElevationLoaded {
     }
 }
 
-subcommand_def!{
-
-    /// Replaces elevations by sampling from a heightmap
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct SampleElevation {
-
-        /// Raster file defining new elevations
-        source: PathBuf
-    }
-}
-
-impl LoadTerrainTask for SampleElevation {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        progress.start_unknown_endpoint(|| "Loading elevation raster.");
-        let raster = RasterMap::open(&self.source)?;
-        progress.finish(|| "Elevation raster loaded.");
-        Ok(vec![TerrainTask::SampleElevation(SampleElevationLoaded {
-            raster
-        })])
-    }
-}
-
-subcommand_def!{
-
-    /// Adds hills or pits to a certain area of the map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct AddHill {
-
-        count: ArgRange<usize>,
-
-        height_delta: ArgRange<i8>,
-
-        x_filter: ArgRange<f64>,
-
-        y_filter: ArgRange<f64>
-
-    }
-}
-
-impl LoadTerrainTask for AddHill {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::AddHill(self)])
-    }
-}
 
 impl ProcessTerrainTilesWithPointIndex for AddHill {
 
@@ -782,25 +502,6 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
 
         Ok(())
 
-    }
-}
-
-subcommand_def!{
-
-    /// Adds a range of heights or a trough to a certain area of a map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct AddRange {
-        count: ArgRange<usize>,
-        height_delta: ArgRange<i8>,
-        x_filter: ArgRange<f64>,
-        y_filter: ArgRange<f64>
-    }
-}
-
-impl LoadTerrainTask for AddRange {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::AddRange(self)])
     }
 }
 
@@ -954,31 +655,6 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
 }
 
 
-#[derive(Clone,Deserialize,Serialize,ValueEnum)]
-enum Direction {
-    Horizontal,
-    Vertical
-}
-
-subcommand_def!{
-
-    /// Adds a long cut somewhere on the map
-    // TODO: Why isn't there an equivalent "isthmus" of some sort? Should I specify the height change? Why are the directions limited to horizontal and vertical? And shouldn't the direction at least be an axis instead of vert/horiz, would be a z-axis?
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct AddStrait { 
-        width: ArgRange<f64>,
-        direction: Direction
-    }
-
-}
-
-impl LoadTerrainTask for AddStrait {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::AddStrait(self)])
-    }
-
-}
 
 impl ProcessTerrainTilesWithPointIndex for AddStrait {
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1018,14 +694,14 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
         let e_south = parameters.extents.south;
         let e_west = parameters.extents.west;
         let (start_x,start_y,end_x,end_y) = match self.direction {
-            Direction::Vertical => {
+            StraitDirection::Vertical => {
                 let start_x = rng.gen_range(0.0..(e_width * 0.4)) + (e_width * 0.3);
                 let start_y = 5.0;
                 let end_x = e_width - start_x - (e_width * 0.1) + rng.gen_range(0.0..(e_width * 0.2));
                 let end_y = e_height - 5.0;
                 (start_x,start_y,end_x,end_y)
             },
-            Direction::Horizontal => {
+            StraitDirection::Horizontal => {
                 let start_x = 5.0;
                 let start_y = rng.gen_range(0.0..(e_height * 0.4)) + (e_height * 0.3);
                 let end_x = e_width - 5.0;
@@ -1091,25 +767,6 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
     }
 }
 
-subcommand_def!{
-
-    /// Changes the heights based on their distance from the edge of the map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Mask {
-        #[arg(default_value="1")]
-        power: f64
-    }
-}
-
-impl LoadTerrainTask for Mask {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Mask(self)])
-    }
-
-
-}
-
 impl ProcessTerrainTiles for Mask {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
         // I'm not sure what this is actually supposed to do. I would expect a "mask" to mask out based on a heightmap,
@@ -1143,33 +800,6 @@ impl ProcessTerrainTiles for Mask {
     }
 }
 
-#[derive(Clone,Deserialize,Serialize,ValueEnum)]
-enum InvertAxes {
-    X,
-    Y,
-    Both
-}
-
-subcommand_def!{
-
-    /// Inverts the heights across the entire map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Invert {
-        probability: f64, 
-        axes: InvertAxes
-    }
-    
-}
-
-
-impl LoadTerrainTask for Invert {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Invert(self)])
-    }
-
-
-}
 
 impl ProcessTerrainTilesWithPointIndex for Invert {
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1256,27 +886,6 @@ impl ProcessTerrainTilesWithPointIndex for Invert {
 }
 
 
-subcommand_def!{
-
-    /// Inverts the heights across the entier map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Add {
-        height_filter: Option<ArgRange<i8>>, 
-        height_delta: i8
-    }
-    
-}
-
-
-impl LoadTerrainTask for Add {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Add(self)])
-    }
-
-
-}
-
 impl ProcessTerrainTiles for Add {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -1298,27 +907,6 @@ impl ProcessTerrainTiles for Add {
 }
 
 
-subcommand_def!{
-
-    /// Inverts the heights across the entier map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Multiply {
-        height_filter: Option<ArgRange<i8>>, 
-        height_factor: f64 // this doesn't have to be i8 because it's a multiplication, will still work no matter what the scale.
-    }
-    
-}
-
-
-impl LoadTerrainTask for Multiply {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Multiply(self)])
-    }
-
-
-}
-
 impl ProcessTerrainTiles for Multiply {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
         progress.announce(&format!("Multiplying some elevations by {}.",self.height_factor));
@@ -1337,27 +925,6 @@ impl ProcessTerrainTiles for Multiply {
     }
 }
 
-
-subcommand_def!{
-
-    /// Smooths elevations by averaging the value against it's neighbors.
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Smooth {
-        #[arg(default_value="2")]
-        fr: f64 // TODO: I'm not sure what this actually is. It's not quite a weighted average, I don't really understand where AFMG got its algorithm from.
-    }
-    
-}
-
-
-impl LoadTerrainTask for Smooth {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Smooth(self)])
-    }
-
-
-}
 
 impl ProcessTerrainTiles for Smooth {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1392,29 +959,6 @@ impl ProcessTerrainTiles for Smooth {
 }
 
 
-subcommand_def!{
-
-    /// Sets random points in an area to ocean if they are below sea level (Use FloodOcean to complete the process)
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct SeedOcean {
-        count: ArgRange<usize>,
-
-        x_filter: ArgRange<f64>,
-
-        y_filter: ArgRange<f64>
-    }
-    
-}
-
-
-impl LoadTerrainTask for SeedOcean {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::SeedOcean(self)])
-    }
-
-
-}
 
 impl ProcessTerrainTilesWithPointIndex for SeedOcean {
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1485,23 +1029,6 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
 }
 
 
-subcommand_def!{
-
-    /// Finds tiles that are marked as ocean and marks all neighbors that are below sea level as ocean, until no neighbors below sea level can be found.
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct FloodOcean{}
-    
-}
-
-
-impl LoadTerrainTask for FloodOcean {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::FloodOcean(self)])
-    }
-
-
-}
 
 impl ProcessTerrainTiles for FloodOcean {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1544,24 +1071,6 @@ impl ProcessTerrainTiles for FloodOcean {
 }
 
 
-subcommand_def!{
-
-    /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct FillOcean{}
-    
-}
-
-
-impl LoadTerrainTask for FillOcean {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::FillOcean(self)])
-    }
-
-
-}
-
 impl ProcessTerrainTiles for FillOcean {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -1578,23 +1087,6 @@ impl ProcessTerrainTiles for FillOcean {
 }
 
 
-subcommand_def!{
-
-    /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct ClearOcean{}
-    
-}
-
-
-impl LoadTerrainTask for ClearOcean {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::ClearOcean(self)])
-    }
-
-
-}
 
 impl ProcessTerrainTiles for ClearOcean {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1612,48 +1104,7 @@ impl ProcessTerrainTiles for ClearOcean {
 }
 
 
-subcommand_def!{
 
-    /// Clears all elevations to 0 and all groupings to "Continent". This is an alias for Multiplying all height by 0.0.
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct Clear{}
-    
-}
-
-impl LoadTerrainTask for Clear {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Multiply(Multiply { 
-            height_filter: None, 
-            height_factor: 0.0
-        })])
-    }
-
-
-}
-
-
-subcommand_def!{
-
-    /// Adds a uniform amount of random noise to the map
-    #[derive(Deserialize,Serialize)]
-    pub(crate) struct RandomUniform{
-
-        height_filter: Option<ArgRange<i8>>, 
-        height_delta: ArgRange<i8>
-    }
-    
-}
-
-
-impl LoadTerrainTask for RandomUniform {
-
-    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::RandomUniform(self)])
-    }
-
-
-}
 
 impl ProcessTerrainTiles for RandomUniform {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
@@ -1673,63 +1124,6 @@ impl ProcessTerrainTiles for RandomUniform {
         Ok(())
 
     }
-}
-
-#[derive(Deserialize,Serialize,Subcommand)]
-pub(crate) enum TerrainCommand {
-    Recipe(Recipe),
-    RecipeSet(RecipeSet),
-    Clear(Clear),
-    ClearOcean(ClearOcean),
-    RandomUniform(RandomUniform),
-    AddHill(AddHill),
-    AddRange(AddRange),
-    AddStrait(AddStrait),
-    Mask(Mask),
-    Invert(Invert),
-    Add(Add),
-    Multiply(Multiply),
-    Smooth(Smooth),
-    SeedOcean(SeedOcean),
-    FillOcean(FillOcean),
-    FloodOcean(FloodOcean),
-    SampleOceanMasked(SampleOceanMasked),
-    SampleOceanBelow(SampleOceanBelow),
-    SampleElevation(SampleElevation),
-}
-
-impl TerrainCommand {
-
-    pub(crate) fn to_json(&self) -> Result<String,CommandError> {
-        // NOTE: Not technically a recipe read error, but this shouldn't be used very often.
-        Ok(serde_json::to_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{}",e)))?)
-    }
-
-    pub(crate) fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-
-        match self {
-            TerrainCommand::Clear(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::ClearOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::RandomUniform(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Recipe(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::RecipeSet(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::AddHill(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::AddRange(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::AddStrait(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Mask(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Invert(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Add(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Multiply(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Smooth(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SeedOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::FillOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::FloodOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SampleOceanMasked(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SampleOceanBelow(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SampleElevation(params) => params.load_terrain_task(random,progress),
-        }
-    }
-
 }
 
 

@@ -24,6 +24,9 @@ use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::EntityLookup;
 use crate::algorithms::naming::LoadedNamers;
+use crate::world_map::NamedEntity;
+use crate::world_map::CultureWithNamer;
+use crate::world_map::CultureWithType;
 
 
 
@@ -76,11 +79,11 @@ impl Task for Create {
 
         let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
 
-        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer.clone(), &mut target, progress)?;
+        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer, &mut target, progress)?;
 
         target.with_transaction(|target| {
 
-            Self::run(&mut random, &culture_lookup, &mut loaded_namers, self.default_namer, self.subnation_percentage, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.subnation_percentage, self.overwrite, target, progress)
         })?;
 
         target.save(progress)
@@ -89,10 +92,10 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, CultureForNations>, loaded_namers: &mut LoadedNamers, default_namer: String, subnation_percentage: f64, overwrite_subnations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, subnation_percentage: f64, overwrite_subnations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating subnations");
                 
-        generate_subnations(target, random, culture_lookup, loaded_namers, &default_namer, subnation_percentage, overwrite_subnations, progress)
+        generate_subnations(target, random, culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, progress)
     }
     
 }
@@ -132,7 +135,7 @@ impl Task for Expand {
         
 
         target.with_transaction(|target| {
-            Self::run(&mut random, self.subnation_percentage, target, progress)
+            Self::run_with_parameters(&mut random, self.subnation_percentage, target, progress)
         })?;
 
         target.save(progress)
@@ -141,7 +144,7 @@ impl Task for Expand {
 }
 
 impl Expand {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, subnation_percentage: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, subnation_percentage: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying subnations to tiles");
     
         expand_subnations(target, random, subnation_percentage, progress)
@@ -198,10 +201,10 @@ impl Task for FillEmpty {
         
         let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
 
-        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer.clone(), &mut target, progress)?;
+        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer, &mut target, progress)?;
 
         target.with_transaction(|target| {
-            Self::run(&mut random, &culture_lookup, &mut loaded_namers, self.default_namer, self.subnation_percentage, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.subnation_percentage, target, progress)
         })?;
 
         target.save(progress)
@@ -210,10 +213,10 @@ impl Task for FillEmpty {
 }
 
 impl FillEmpty {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, CultureForNations>, loaded_namers: &mut LoadedNamers, default_namer: String, subnation_percentage: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, subnation_percentage: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating new subnations to fill rest of nations");
     
-        fill_empty_subnations(target, random, culture_lookup, loaded_namers, &default_namer, subnation_percentage, progress)
+        fill_empty_subnations(target, random, culture_lookup, loaded_namers, subnation_percentage, progress)
     }
     
 }
@@ -240,7 +243,7 @@ impl Task for Normalize {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -249,7 +252,7 @@ impl Task for Normalize {
 }
 
 impl Normalize {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Normalizing subnation borders");
     
         normalize_subnations(target, progress)
@@ -277,7 +280,7 @@ impl Task for Dissolve {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -286,7 +289,7 @@ impl Task for Dissolve {
 }
 
 impl Dissolve {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating subnation polygons");
 
         dissolve_tiles_by_theme::<_,SubnationTheme>(target, progress)
@@ -318,7 +321,7 @@ impl Task for Curvify {
 
         let bezier_scale = self.bezier_scale;
         target.with_transaction(|target| {
-            Self::run(bezier_scale, target, progress)
+            Self::run_with_parameters(bezier_scale, target, progress)
         })?;
 
         target.save(progress)
@@ -327,7 +330,7 @@ impl Task for Curvify {
 }
 
 impl Curvify {
-    fn run<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making subnation polygons curvy");
     
         // FUTURE: Technically, subnations have to follow the curves of their owning nations as priority over their own. 
@@ -339,6 +342,7 @@ impl Curvify {
 }
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     SubnationCommand {
         Create,
         Expand,
@@ -414,9 +418,9 @@ impl Task for GenSubnations {
 
             let namers = NamerSet::from_files(default_args.namers, !default_args.no_builtin_namers)?;
 
-            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, default_args.default_namer.clone(), &mut target, progress)?;
+            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, default_args.default_namer, &mut target, progress)?;
 
-            Self::run(&mut random, culture_lookup, &mut loaded_namers, default_args.default_namer, default_args.subnation_percentage, default_args.overwrite, default_args.bezier_scale, &mut target, progress)
+            Self::run_default(&mut random, culture_lookup, &mut loaded_namers, default_args.subnation_percentage, default_args.overwrite, default_args.bezier_scale, &mut target, progress)
 
         } else if let Some(command) = self.command {
 
@@ -429,20 +433,20 @@ impl Task for GenSubnations {
 
 
 impl GenSubnations {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, CultureForNations>, loaded_namers: &mut LoadedNamers, default_namer: String, subnation_percentage: f64, overwrite_subnations: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, subnation_percentage: f64, overwrite_subnations: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
-            Create::run(random, &culture_lookup, loaded_namers, default_namer.clone(), subnation_percentage, overwrite_subnations, target, progress)?;
+            Create::run_with_parameters(random, &culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, target, progress)?;
 
-            Expand::run(random, subnation_percentage, target, progress)?;
+            Expand::run_with_parameters(random, subnation_percentage, target, progress)?;
 
-            FillEmpty::run(random, &culture_lookup, loaded_namers, default_namer, subnation_percentage, target, progress)?;
+            FillEmpty::run_with_parameters(random, &culture_lookup, loaded_namers, subnation_percentage, target, progress)?;
 
-            Normalize::run(target, progress)?;
+            Normalize::run_with_parameters(target, progress)?;
 
-            Dissolve::run(target, progress)?;
+            Dissolve::run_with_parameters(target, progress)?;
 
-            Curvify::run(bezier_scale, target, progress)
+            Curvify::run_with_parameters(bezier_scale, target, progress)
 
 
         })?;

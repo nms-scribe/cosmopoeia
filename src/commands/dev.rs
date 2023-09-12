@@ -362,6 +362,7 @@ impl Task for Cultures {
 
 
 command_def!(
+    #[command(disable_help_subcommand(true))]
     DevCommand {
         PointsFromHeightmap,
         PointsFromExtent,

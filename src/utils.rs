@@ -15,6 +15,8 @@ use adaptive_bezier::Vector2;
 use colourado::PaletteType;
 use colourado::ColorPalette;
 use colourado::Color;
+use rand_distr::uniform::SampleUniform;
+
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -737,7 +739,7 @@ pub(crate) fn find_curve_making_point(start_point: &Point, end_point: &Point) ->
     end_point.add(&normalized)
 }
 
-mod title_case {
+pub(crate) mod title_case {
 
     use std::fmt;
 
@@ -769,7 +771,7 @@ mod title_case {
         }
     }    
 
-    pub trait ToTitleCase: ToOwned {
+    pub(crate) trait ToTitleCase: ToOwned {
         /// Convert this type to title case.
         fn to_title_case(&self) -> Self::Owned;
     }
@@ -782,8 +784,6 @@ mod title_case {
 
 
 }
-
-pub(crate) use title_case::ToTitleCase;
 
 pub(crate) mod namers_pretty_print {
 
@@ -1210,3 +1210,59 @@ pub(crate) fn generate_colors(count: usize) -> Vec<String> {
 
     }).collect()
 }
+
+
+#[derive(Clone)]
+pub(crate) enum ArgRange<NumberType> {
+    // While I could use a real Range<> and RangeInclusive<>, I'd have to copy it every time I want to generate a number from it anyway, and
+    Inclusive(NumberType,NumberType),
+    Exclusive(NumberType,NumberType),
+    Single(NumberType)
+}
+
+
+pub(crate) trait TruncOrSelf {
+
+    fn trunc_or_self(self) -> Self;
+}
+
+impl TruncOrSelf for f64 {
+    fn trunc_or_self(self) -> Self {
+        self.trunc()
+    }
+}
+
+impl TruncOrSelf for usize {
+
+    fn trunc_or_self(self) -> Self {
+        self
+    }
+
+}
+
+impl TruncOrSelf for i8 {
+    fn trunc_or_self(self) -> Self {
+        self
+    }
+}
+
+impl<NumberType: SampleUniform + PartialOrd + Copy + TruncOrSelf> ArgRange<NumberType> {
+
+    pub(crate) fn choose<Random: Rng>(&self, rng: &mut Random) -> NumberType {
+        match self  {
+            ArgRange::Inclusive(min,max) => rng.gen_range(*min..=*max),
+            ArgRange::Exclusive(min,max) => rng.gen_range(*min..*max),
+            ArgRange::Single(value) => *value,
+        }
+    }
+
+    pub(crate) fn includes(&self, value: &NumberType) -> bool {
+        match self {
+            ArgRange::Inclusive(min, max) => (value >= min) && (value <= max),
+            ArgRange::Exclusive(min, max) => (value >= min) && (value < max),
+            ArgRange::Single(value) => value.trunc_or_self() == value.trunc_or_self(),
+        }
+    }
+}
+
+

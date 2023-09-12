@@ -17,7 +17,7 @@ use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
 use crate::algorithms::terrain::SampleElevationLoaded;
 use crate::algorithms::terrain::TerrainTask;
-use crate::algorithms::terrain::TerrainCommand;
+use crate::commands::terrain::TerrainCommand;
 use crate::world_map::ElevationLimits;
 use crate::world_map::WorldMapTransaction;
 
@@ -37,7 +37,7 @@ subcommand_def!{
 
 impl CreateCalcNeighbors {
 
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
         progress.announce("Calculate neighbors for tiles");
 
         calculate_tile_neighbors(target, progress)
@@ -52,7 +52,7 @@ impl Task for CreateCalcNeighbors {
 
         target.with_transaction(|target| {
 
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
 
         })?;
 
@@ -62,13 +62,13 @@ impl Task for CreateCalcNeighbors {
     }
 }
 
-struct LoadedSource {
+pub(crate) struct LoadedSource {
     extent: Extent,
     limits: ElevationLimits,
     post_processes: Vec<TerrainTask>
 }
 
-trait LoadCreateSource {
+pub(crate) trait LoadCreateSource {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError>;
 
@@ -114,7 +114,7 @@ impl LoadCreateSource for FromHeightmap {
         progress.finish(|| "Min/max calculated.");
 
         // the post_processes always starts with loading the samples from the source
-        let mut post_processes = vec![SampleElevationLoaded::new(source)];
+        let mut post_processes = vec![TerrainTask::SampleElevation(SampleElevationLoaded::new(source))];
 
         if let Some(process) = self.post_process {
             progress.announce("Loading terrain processes.");
@@ -195,7 +195,10 @@ impl LoadCreateSource for Blank {
 
 
 #[derive(Subcommand)]
-enum CreateSource {
+#[command(subcommand_value_name="SOURCE")]
+#[command(subcommand_help_heading("Sources"))]
+#[command(disable_help_subcommand(true))]
+pub(crate) enum CreateSource {
     FromHeightmap(FromHeightmap),
     Blank(Blank)
 }
@@ -215,6 +218,7 @@ impl LoadCreateSource for CreateSource {
 
 subcommand_def!{
     /// Creates the random tiles and initial elevations for a world.
+    #[command(hide=true)]
     pub(crate) struct CreateTiles {
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -239,7 +243,7 @@ subcommand_def!{
 
 impl CreateTiles {
 
-    fn run<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: ElevationLimits, tiles: usize, overwrite: bool, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: ElevationLimits, tiles: usize, overwrite: bool, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
         let voronois = generate_random_tiles(random, extent, tiles, progress)?;
     
         progress.announce("Create tiles from voronoi polygons");
@@ -262,7 +266,7 @@ impl Task for CreateTiles {
 
         target.with_transaction(|target| {
 
-            Self::run(loaded_source.extent, loaded_source.limits, self.tiles, self.overwrite, &mut random, target, progress)
+            Self::run_with_parameters(loaded_source.extent, loaded_source.limits, self.tiles, self.overwrite, &mut random, target, progress)
 
         })?;
 
@@ -303,21 +307,21 @@ impl Task for Create {
 
         let mut random = random_number_generator(self.seed);
 
-        let loaded_source = self.source.load(&mut random, progress)?; // TODO: for the heightmap, we load the source raster, otherwise I'm not certain.
+        let loaded_source = self.source.load(&mut random, progress)?; 
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
-        Self::run(self.tiles,self.overwrite,loaded_source, &mut target, &mut random, progress)
+        Self::run_default(self.tiles,self.overwrite,loaded_source, &mut target, &mut random, progress)
 
     }
 }
 
 impl Create {
-    fn run<Random: Rng, Progress: ProgressObserver>(tiles: usize, overwrite: bool, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: usize, overwrite_tiles: bool, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
-            CreateTiles::run(loaded_source.extent, loaded_source.limits, tiles, overwrite, random, target, progress)?;
+            CreateTiles::run_with_parameters(loaded_source.extent, loaded_source.limits, tiles, overwrite_tiles, random, target, progress)?;
 
-            CreateCalcNeighbors::run(target, progress)?;
+            CreateCalcNeighbors::run_with_parameters(target, progress)?;
 
             TerrainTask::process_terrain(&loaded_source.post_processes, random, target,progress)?;
 

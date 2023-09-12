@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::path::PathBuf;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
@@ -39,7 +40,7 @@ use crate::utils::LayerGeometryIterator;
 use crate::utils::Point;
 use crate::utils::Extent;
 use crate::utils::create_line;
-use crate::utils::ToTitleCase;
+use crate::utils::title_case::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::naming::Namer;
@@ -685,7 +686,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
         for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
             let entity = Data::try_from(feature)?;
-            let name = entity.name().clone();
+            let name = entity.name().to_owned();
             result.insert(name, entity);
         }
 
@@ -704,7 +705,7 @@ pub(crate) trait Entity<SchemaType: Schema> {
 }
 
 pub(crate) trait NamedEntity<SchemaType: Schema>: Entity<SchemaType> {
-    fn name(&self) -> &String;
+    fn name(&self) -> &str;
 }
 
 
@@ -2176,7 +2177,7 @@ entity!(BiomeForPopulation BiomeSchema BiomeFeature {
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForPopulation {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
@@ -2188,7 +2189,7 @@ entity!(BiomeForCultureGen BiomeSchema BiomeFeature {
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForCultureGen {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
@@ -2199,7 +2200,7 @@ entity!(BiomeForCultureExpand BiomeSchema BiomeFeature {
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForCultureExpand {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
@@ -2210,7 +2211,7 @@ entity!(BiomeForNationExpand BiomeSchema BiomeFeature {
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForNationExpand {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
@@ -2221,7 +2222,7 @@ entity!(BiomeForDissolve BiomeSchema BiomeFeature {
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForDissolve {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
@@ -2256,7 +2257,7 @@ impl BiomeLayer<'_,'_> {
 
         for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
             let (_,entity) = entity?;
-            let name = entity.name().clone();
+            let name = entity.name().to_owned();
             result.insert(name, entity);
         }
 
@@ -2337,12 +2338,12 @@ impl CultureSchema {
 
             for entity in cultures_layer.read_features().into_entities::<CultureEntity>().watch(progress,"Indexing biomes.","Biomes indexed.") {
                 let (_,entity) = entity?;
-                let name = entity.name().clone();
-                load_namers.insert(entity.namer().clone());
+                let name = entity.name().to_owned();
+                load_namers.insert(entity.namer().to_owned());
                 result.insert(name, entity);
             }
 
-            let loaded_namers = namers.into_loaded(load_namers.into_iter().chain([default_namer].into_iter()), progress)?;
+            let loaded_namers = namers.into_loaded(load_namers, default_namer, progress)?;
 
             (EntityLookup::from(result),loaded_namers)
         };
@@ -2353,15 +2354,10 @@ impl CultureSchema {
 
 pub(crate) trait CultureWithNamer {
 
-    fn namer(&self) -> &String;
+    fn namer(&self) -> &str;
 
-    fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut LoadedNamers, default_namer: &str) -> Result<&'namers mut Namer, CommandError> {
-        let namer = if let Some(namer) = culture.map(|culture| culture.namer()) {
-            namer
-        } else {
-            default_namer
-        };
-        let namer = namers.get_mut(namer)?;
+    fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut LoadedNamers) -> Result<&'namers mut Namer, CommandError> {
+        let namer = namers.get_mut(culture.map(|culture| culture.namer()))?;
         Ok(namer)
     }
     
@@ -2396,13 +2392,13 @@ entity!(CultureForTowns CultureSchema CultureFeature {
 });
 
 impl<'impl_life> NamedEntity<CultureSchema> for CultureForTowns {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
 
 impl<'impl_life> CultureWithNamer for CultureForTowns {
-    fn namer(&self) -> &String {
+    fn namer(&self) -> &str {
         &self.namer
     }
 }
@@ -2414,13 +2410,13 @@ entity!(CultureForNations CultureSchema CultureFeature {
 });
 
 impl<'impl_life> NamedEntity<CultureSchema> for CultureForNations {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
 
 impl<'impl_life> CultureWithNamer for CultureForNations {
-    fn namer(&self) -> &String {
+    fn namer(&self) -> &str {
         &self.namer
     }
 }
@@ -2438,7 +2434,7 @@ entity!(CultureForDissolve CultureSchema CultureFeature {
 });
 
 impl<'impl_life> NamedEntity<CultureSchema> for CultureForDissolve {
-    fn name(&self) -> &String {
+    fn name(&self) -> &str {
         &self.name
     }
 }
@@ -2826,6 +2822,7 @@ impl PropertyLayer<'_,'_> {
 
 
 pub(crate) struct WorldMap {
+    path: PathBuf,
     dataset: Dataset
 }
 
@@ -2833,34 +2830,39 @@ impl WorldMap {
 
     const GDAL_DRIVER: &str = "GPKG";
 
-    fn new(dataset: Dataset) -> Self {
+    fn new(dataset: Dataset, path: PathBuf) -> Self {
         Self {
-            dataset
+            dataset,
+            path
         }
     }
 
-    #[allow(dead_code)] pub(crate) fn open<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
-        let dataset = Dataset::open(path)?;
-        Ok(Self::new(dataset))
-    }
-
-
-    pub(crate) fn edit<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
-        Ok(Self::new(Dataset::open_ex(path, DatasetOptions { 
+    fn open_dataset<FilePath: AsRef<Path>>(path: FilePath) -> Result<gdal::Dataset, CommandError> {
+        Ok(Dataset::open_ex(&path, DatasetOptions { 
             open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
             ..Default::default()
-        })?))
+        })?)
     }
 
-    pub(crate) fn create_or_edit<FilePath: AsRef<Path>>(path: FilePath) -> Result<Self,CommandError> {
+    pub(crate) fn edit<FilePath: AsRef<Path> + Into<PathBuf>>(path: FilePath) -> Result<Self,CommandError> {
+        Ok(Self::new(Self::open_dataset(&path)?,path.into()))
+    }
+
+    pub(crate) fn create_or_edit<FilePath: AsRef<Path> + Into<PathBuf>>(path: FilePath) -> Result<Self,CommandError> {
         if path.as_ref().exists() {
             Self::edit(path)
         } else {
             let driver = DriverManager::get_driver_by_name(Self::GDAL_DRIVER)?;
-            let dataset = driver.create_vector_only(path)?;
-            Ok(Self::new(dataset))
+            let dataset = driver.create_vector_only(&path)?;
+            Ok(Self::new(dataset,path.into()))
         }
 
+    }
+
+    pub(crate) fn reedit(self) -> Result<Self,CommandError> {
+        // This function is necessary to work around a bug in big-bang that reminds me of days long before rust and I don't want to investigate further.
+        self.dataset.close()?;
+        Self::edit(self.path)
     }
 
     pub(crate) fn with_transaction<ResultType, Callback: FnOnce(&mut WorldMapTransaction) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
@@ -2906,6 +2908,8 @@ impl WorldMap {
     pub(crate) fn cultures_layer(&self) -> Result<CultureLayer, CommandError> {
         CultureLayer::open_from_dataset(&self.dataset)
     }
+
+
 
  
 

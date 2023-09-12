@@ -85,6 +85,7 @@ impl Task for Drivers {
 }
 
 command_def!(
+    #[command(disable_help_subcommand(true))]
     GdalCommand {
         DatasetInfo,
         Version,

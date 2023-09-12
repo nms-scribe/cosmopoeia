@@ -28,7 +28,7 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
 use crate::utils::generate_colors;
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, default_namer: &str, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
@@ -40,7 +40,7 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
         if town.is_capital {
             let culture = town.culture;
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
-            let namer = Culture::get_namer(culture_data, namers, default_namer)?;
+            let namer = Culture::get_namer(culture_data, namers)?;
             let name = namer.make_state_name(rng);
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
             let center = town.tile_id;

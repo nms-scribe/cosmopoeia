@@ -41,7 +41,7 @@ impl Task for Data {
 
         target.with_transaction(|target| {
 
-            Self::run(self.overwrite, target, progress)
+            Self::run_with_parameters(self.overwrite, target, progress)
 
         })?;
 
@@ -51,7 +51,7 @@ impl Task for Data {
 
 impl Data {
 
-    fn run<Progress: ProgressObserver>(overwrite: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(overwrite: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
 
         progress.announce("Filling biome defaults");
 
@@ -122,7 +122,7 @@ impl Task for Dissolve {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(target, progress)
+            Self::run_with_parameters(target, progress)
         })?;
 
         target.save(progress)
@@ -131,7 +131,7 @@ impl Task for Dissolve {
 }
 
 impl Dissolve {
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating biome polygons");
     
         dissolve_tiles_by_theme::<_,BiomeTheme>(target, progress)
@@ -164,7 +164,7 @@ impl Task for Curvify {
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run(self.bezier_scale, target, progress)
+            Self::run_with_parameters(self.bezier_scale, target, progress)
         })?;
 
         target.save(progress)
@@ -173,7 +173,7 @@ impl Task for Curvify {
 }
 
 impl Curvify {
-    fn run<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making biome polygons curvy");
 
         curvify_layer_by_theme::<_,BiomeTheme>(target, bezier_scale, progress)
@@ -182,6 +182,7 @@ impl Curvify {
 
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     BiomeCommand {
         Data,
         Apply,
@@ -225,7 +226,7 @@ impl Task for GenBiome {
         if let Some(args) = self.default_args {
             let mut target = WorldMap::edit(args.target)?;
 
-            Self::run(args.overwrite, args.bezier_scale, &mut target, progress)
+            Self::run_default(args.overwrite, args.bezier_scale, &mut target, progress)
     
         } else if let Some(command) = self.command {
 
@@ -238,18 +239,18 @@ impl Task for GenBiome {
 }
 
 impl GenBiome {
-    fn run<Progress: ProgressObserver>(overwrite: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {            
-            Data::run(overwrite, target, progress)
+            Data::run_with_parameters(ovewrite_biomes, target, progress)
 
         })?;
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
         target.with_transaction(|target| {            
             Apply::run(target, biomes, progress)?;
 
-            Dissolve::run(target, progress)?;
+            Dissolve::run_with_parameters(target, progress)?;
 
-            Curvify::run(bezier_scale, target, progress)
+            Curvify::run_with_parameters(bezier_scale, target, progress)
 
         })?;
 

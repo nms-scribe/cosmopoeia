@@ -601,12 +601,14 @@ impl Namer {
 }
 
 pub(crate) struct LoadedNamers {
+    default_namer: String,
     map: HashMap<String,Namer>
 }
 
 impl LoadedNamers {
 
-    pub(crate) fn get_mut(&mut self, name: &str) -> Result<&mut Namer,CommandError> {
+    pub(crate) fn get_mut(&mut self, name: Option<&str>) -> Result<&mut Namer,CommandError> {
+        let name = name.unwrap_or_else(|| self.default_namer.as_str());
         self.map.get_mut(name).ok_or_else(|| CommandError::UnknownNamer(name.to_owned()))
     }
 }
@@ -659,15 +661,27 @@ impl NamerSet {
         }
     }
 
-    pub(crate) fn into_loaded<StringType: AsRef<str>, Strings: IntoIterator<Item=StringType>, Progress: ProgressObserver>(mut self, load_namers: Strings, progress: &mut Progress) -> Result<LoadedNamers,CommandError> {
+    pub(crate) fn into_loaded<StringType: AsRef<str>, Strings: IntoIterator<Item=StringType>, Progress: ProgressObserver>(mut self, load_namers: Strings, default_namer: String, progress: &mut Progress) -> Result<LoadedNamers,CommandError> {
         let mut result = HashMap::new();
-        for name in load_namers {
-            if let None = result.get(name.as_ref()) {
-                let namer = (&mut self).load_one(name.as_ref(), progress)?;
-                result.insert(name.as_ref().to_owned(), namer);
-            }
+
+        macro_rules! load_namer {
+            ($name: ident) => {
+                let name = $name.as_ref();
+                if let None = result.get(name) {
+                    let namer = (&mut self).load_one(name, progress)?;
+                    result.insert(name.to_owned(), namer);
+                }
+                    
+            };
         }
+
+
+        for name in load_namers {
+            load_namer!(name);
+        }
+        load_namer!(default_namer);
         Ok(LoadedNamers {
+            default_namer,
             map: result
         })
         

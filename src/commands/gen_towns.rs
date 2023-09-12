@@ -19,6 +19,8 @@ use crate::world_map::WorldMapTransaction;
 use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
 use crate::algorithms::naming::LoadedNamers;
+use crate::world_map::NamedEntity;
+use crate::world_map::CultureWithNamer;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -73,11 +75,11 @@ impl Task for Create {
 
         let namers = NamerSet::from_files(self.namers, !self.no_builtin_namers)?;
 
-        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForTowns,_>(namers, self.default_namer.clone(), &mut target, progress)?;
+        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForTowns,_>(namers, self.default_namer, &mut target, progress)?;
         
         target.with_transaction(|target| {
 
-            Self::run(&mut random, culture_lookup, &mut loaded_namers, self.default_namer, self.capital_count, self.town_count, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.capital_count, self.town_count, self.overwrite, target, progress)
         })?;
 
         target.save(progress)
@@ -86,9 +88,9 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, CultureForTowns>, loaded_namers: &mut LoadedNamers, default_namer: String, capital_count: usize, town_count: Option<usize>, overwrite_towns: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, capital_count: usize, town_count: Option<usize>, overwrite_towns: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating towns");
-        generate_towns(target, random, &culture_lookup, loaded_namers, &default_namer, capital_count, town_count, overwrite_towns, progress)
+        generate_towns(target, random, &culture_lookup, loaded_namers, capital_count, town_count, overwrite_towns, progress)
     }
 }
 
@@ -116,7 +118,7 @@ impl Task for Populate {
 
         target.with_transaction(|target| {
 
-            Self::run(self.river_threshold, target, progress)
+            Self::run_with_parameters(self.river_threshold, target, progress)
         })?;
 
         target.save(progress)
@@ -125,7 +127,7 @@ impl Task for Populate {
 }
 
 impl Populate {
-    fn run<Progress: ProgressObserver>(river_threshold: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(river_threshold: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Populating towns");
         populate_towns(target, river_threshold, progress)
     }
@@ -133,6 +135,7 @@ impl Populate {
 
 
 command_def!{
+    #[command(disable_help_subcommand(true))]
     TownCommand {
         Create,
         Populate
@@ -206,9 +209,9 @@ impl Task for GenTowns {
     
             let namers = NamerSet::from_files(default_args.namers, !default_args.no_builtin_namers)?;
     
-            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForTowns,_>(namers, default_args.default_namer.clone(), &mut target, progress)?;
+            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForTowns,_>(namers, default_args.default_namer, &mut target, progress)?;
     
-            Self::run(&mut random, culture_lookup, &mut loaded_namers, default_args.default_namer, default_args.capital_count, default_args.town_count, default_args.river_threshold, default_args.overwrite, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.capital_count, default_args.town_count, default_args.river_threshold, default_args.overwrite, &mut target, progress)
     
         } else if let Some(command) = self.command {
 
@@ -221,12 +224,12 @@ impl Task for GenTowns {
 }
 
 impl GenTowns {
-    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, CultureForTowns>, loaded_namers: &mut LoadedNamers, default_namer: String, capital_count: usize, town_count: Option<usize>, river_threshold: f64, overwrite_towns: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, capital_count: usize, town_count: Option<usize>, river_threshold: f64, overwrite_towns: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
-            Create::run(random, culture_lookup, loaded_namers, default_namer, capital_count, town_count, overwrite_towns, target, progress)?;
+            Create::run_with_parameters(random, culture_lookup, loaded_namers, capital_count, town_count, overwrite_towns, target, progress)?;
 
-            Populate::run(river_threshold, target, progress)
+            Populate::run_with_parameters(river_threshold, target, progress)
 
         })?;
 

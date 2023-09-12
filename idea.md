@@ -2,6 +2,49 @@ Highly inspired by [Azgaar's Fantasy Map Generator](<https://azgaar.github.io/Fa
 
 This project would be a series of console commands, and possible QGIS extensions, and other tools which make it easier to generate fantasy maps using GIS data.
 
+# Name
+
+I'm going to settle on "cosmopoeia" for now. This word comes from anglicized Greek roots "cosmo-", meaning world, and "-poeia", a making or creation. 
+
+The first part is obvious. Although many might associate the word with space, or even a whole universe, to the Greeks, the world they lived in was their entire universe, so it's the same thing. Plus, there name which is closer in scope, "oikouménē", doesn't scan well in English when combined with the same suffix, and it's descendant "ecumene" is known better as a term used in the organization of churches.
+
+The second part you are probably familiar with in "onomatopoeia", which literally means name creation. However, I like the parallel with the word "mythopoeia", a word Tolkein used to refer to creation of his mythologies.
+
+A quick search for this word, and it's variant "cosmopeia", found it related only to a couple of obscure philosophical texts (as all philosophical texts are obscure), and to misspellings of words like cosmopolitan, cosmology and cassiopeia. Cosmopeia may be a word in Portuguese, but I couldn't find a translation of the pages that word turned up.
+
+This wasn't my first word for this. I originally started programming this under the term "nfmt", for "Neil's Fantasy Map Tools". However, I found the term uninspiring and vague. What if I come up with other mapping tools that have nothing to do with creating worlds?
+
+Other terms I considered:
+
+I decided that the single verbs were not specific enough, and could conflict with some future programs which might also be used create things, such as art or music. I'll leave that for some software giant to use.
+
+*facio* - From latin, "I make, construct..."
+*creō* - From latin, "I create"
+*creatio* - From latin, "Creation"
+*poiéō* - From greek, "I make"
+
+I briefly considered the imperative forms of some of those verbs. Considering its the name of a command you tell the computer. But I decided against these for the same reason as the other verbs.
+
+*fac* - From latin, imperative form of "You make, construct.."
+*creā* - From latin, imperative form of "You create"
+*creāre* - From latin, imperative form, "you be created"
+*poíei* - From greek, imperative form of "You make"
+
+Similarly, this one word noun seems inspecific:
+
+*mundus* - From latin, "world, universe"
+
+The following two words brought in a religious element to the naming which I was uncomfortable with, but I also worried about vagu
+
+*génesis* - From greek, "origin, source", "creation"
+*subcreation* - Term used by Tolkein to refer to his process of world building, as opposed to actual "creation" (out of nothing) in the sacred sense.
+
+I ended up going with Cosmopeia
+*cosmopoeia* - From anglicized greek roots *cosmo-* "world" and *-poeia*, "creation"
+
+
+
+
 # Reasoning
 
 AFMG maps are a rectangle full of voronoi cells around randomly generated points. Each cell has an elevation, plus a number of other attributes, which make all land within that cell fairly uniform. In some ways this resembles hexagonal grid maps of role-playing games, and if you had uniform placement of points, it would look exactly like that. However, the random points and the voronoi give a more organic look to the output. With appropriate line smoothing and styling, the resulting maps look very much like a traditional fantasy map.
@@ -147,6 +190,8 @@ I'm wondering if generating river flow would be better done with a heightmap ins
 The following commands were used, in this order, to generate the testing maps of Inannak during development. `time` is not the bash command, but a GNU program you might have to install on your machine and call by path.
 
 ```sh
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang testing_output/Inannak.world.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --no-builtin-namers --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
+
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- create testing_output/Inannak.world.gpkg --overwrite --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-climate testing_output/Inannak.world.gpkg 
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run -- gen-water testing_output/Inannak.world.gpkg --overwrite
@@ -245,7 +290,8 @@ To proceed on this, I can break it down into the following steps:
 [X] Replace 'with_insertor' with a callback in the indexing functions.
 [X] Improve reproducibility by iterating layer features in the insertion order.
 [X] Speed up the shore_distance algorithm by using the cost-expand process as with cultures, states, etc.
-[ ] `genesis` command
+[ ] default command -- if no command given, it requires arguments that will run all of the algorithms.
+[ ] Get rid of "namer" defaults. This removes the weird dependency on the compression utility, reduces the binary size, and removes some of the command line options that complicate things. Instead, provide my namerset alongside the application.
 [ ] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well? TODO: I may need random colors for things like nations and the like, which I can't just set graduated symbology on.
     [ ] I could just provide a QGIS file called World.qgz with defaults, and as long as the user places this in the same directory and calles their file 'world.gpkg' then it will work. If they want to rename things, they'll have to change the data source.
     [ ] TODO: If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.

@@ -1,5 +1,5 @@
 [package]
-name = "nfmt"
+name = "cosmopoeia"
 version = "0.1.2"
 edition = "2021"
 authors = ["N M Sheldon"]
@@ -8,7 +8,7 @@ authors = ["N M Sheldon"]
 adaptive-bezier = "0.1.0"
 clap = { version = "4.3.11", features = ["derive"] }
 colourado = "0.2.0"
-gdal = { version = "0.15.0", features = ["array"] }
+gdal = { version = "0.16.0", features = ["array"] }
 gdal-sys = "0.9.0"
 indexmap = "2.0.0"
 indicatif = "0.17.5"
