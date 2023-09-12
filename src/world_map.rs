@@ -2324,6 +2324,33 @@ feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
 });
 
+impl CultureSchema {
+
+    pub(crate) fn get_lookup_and_namers<CultureEntity, Progress>(namers: NamerSet, default_namer: String, target: &WorldMap, progress: &mut Progress) -> Result<(EntityLookup<CultureSchema, CultureEntity>, LoadedNamers), CommandError> 
+    where 
+    CultureEntity: NamedEntity<CultureSchema> + for<'feature> TryFrom<CultureFeature<'feature>,Error=CommandError> + CultureWithNamer, Progress: ProgressObserver {
+        progress.announce("Preparing namers");
+        let mut cultures_layer = target.cultures_layer()?;
+        let (culture_lookup,loaded_namers) = {
+            let mut result = HashMap::new();
+            let mut load_namers = HashSet::new();
+
+            for entity in cultures_layer.read_features().into_entities::<CultureEntity>().watch(progress,"Indexing biomes.","Biomes indexed.") {
+                let (_,entity) = entity?;
+                let name = entity.name().clone();
+                load_namers.insert(entity.namer().clone());
+                result.insert(name, entity);
+            }
+
+            let loaded_namers = namers.into_loaded(load_namers.into_iter().chain([default_namer].into_iter()), progress)?;
+
+            (EntityLookup::from(result),loaded_namers)
+        };
+        Ok((culture_lookup, loaded_namers))
+    }
+
+}
+
 pub(crate) trait CultureWithNamer {
 
     fn namer(&self) -> &String;
@@ -2436,22 +2463,6 @@ impl CultureLayer<'_,'_> {
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<CultureSchema,CultureFeature> {
         TypedFeatureIterator::from(self.layer.features())
-    }
-
-    pub(crate) fn get_lookup_and_load_namers<'local, Data: NamedEntity<CultureSchema> + TryFrom<CultureFeature<'local>,Error=CommandError> + CultureWithNamer, Progress: ProgressObserver>(&'local mut self, namer_set: NamerSet, default_namer: String, progress: &mut Progress) -> Result<(EntityLookup<CultureSchema,Data>,LoadedNamers),CommandError> {
-        let mut result = HashMap::new();
-        let mut load_namers = HashSet::new();
-
-        for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
-            let (_,entity) = entity?;
-            let name = entity.name().clone();
-            load_namers.insert(entity.namer().clone());
-            result.insert(name, entity);
-        }
-
-        let loaded_namers = namer_set.into_loaded(load_namers.into_iter().chain([default_namer].into_iter()), progress)?;
-
-        Ok((EntityLookup::from(result),loaded_namers))
     }
 
 

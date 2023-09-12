@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Args;
+use rand::Rng;
 
 use super::Task;
 use crate::world_map::WorldMap;
@@ -41,24 +42,29 @@ impl Task for Terrain {
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
+        if self.serialize {
+            println!("{}",self.command.to_json()?);
+            Ok(())
+        } else {
+            Self::run(&mut random, self.command, &mut target, progress)
+        }
+
+
+    }
+}
+
+impl Terrain {
+    fn run<Random: Rng, Progress: ProgressObserver>(random: &mut Random, terrain_command: TerrainCommand, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
-            if self.serialize {
-                println!("{}",self.command.to_json()?);
-            } else {
-                progress.announce("Loading terrain processes.");
+            progress.announce("Loading terrain processes.");
 
-                let processes = self.command.load_terrain_task(&mut random, progress)?;
+            let processes = terrain_command.load_terrain_task(random, progress)?;
 
-                TerrainTask::process_terrain(&processes,&mut random,target,progress)?;
-            }
-    
-            Ok(())
+            TerrainTask::process_terrain(&processes,random,target,progress)
 
         })?;
 
         target.save(progress)
-
-
-    }
+}
 }

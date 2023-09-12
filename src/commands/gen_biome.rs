@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
 use clap::Args;
+use clap::Subcommand;
 
 use super::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
+use crate::command_def;
 use crate::world_map::WorldMap;
 use crate::algorithms::biomes::fill_biome_defaults;
 use crate::algorithms::biomes::apply_biomes;
@@ -17,7 +19,8 @@ use crate::world_map::BiomeMatrix;
 
 subcommand_def!{
     /// Creates default biome layer
-    pub(crate) struct GenBiomeData {
+    #[command(hide=true)]
+    pub(crate) struct Data {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -29,7 +32,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenBiomeData {
+impl Task for Data {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -46,7 +49,7 @@ impl Task for GenBiomeData {
     }
 }
 
-impl GenBiomeData {
+impl Data {
 
     fn run<Progress: ProgressObserver>(overwrite: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
 
@@ -58,7 +61,8 @@ impl GenBiomeData {
 
 subcommand_def!{
     /// Applies data from biomes layer to the tiles
-    pub(crate) struct GenBiomeApply {
+    #[command(hide=true)]
+    pub(crate) struct Apply {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -66,7 +70,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenBiomeApply {
+impl Task for Apply {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -87,7 +91,7 @@ impl Task for GenBiomeApply {
     }
 }
 
-impl GenBiomeApply {
+impl Apply {
 
     // TODO: Make all of these take the progress observer thingie
     fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
@@ -101,7 +105,8 @@ impl GenBiomeApply {
 
 subcommand_def!{
     /// Generates polygons in cultures layer
-    pub(crate) struct GenBiomeDissolve {
+    #[command(hide=true)]
+    pub(crate) struct Dissolve {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -109,7 +114,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenBiomeDissolve {
+impl Task for Dissolve {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -125,7 +130,7 @@ impl Task for GenBiomeDissolve {
     }
 }
 
-impl GenBiomeDissolve {
+impl Dissolve {
     fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating biome polygons");
     
@@ -138,7 +143,8 @@ impl GenBiomeDissolve {
 
 subcommand_def!{
     /// Generates polygons in cultures layer
-    pub(crate) struct GenBiomeCurvify {
+    #[command(hide=true)]
+    pub(crate) struct Curvify {
 
         /// The path to the world map GeoPackage file
         target: PathBuf,
@@ -150,7 +156,7 @@ subcommand_def!{
     }
 }
 
-impl Task for GenBiomeCurvify {
+impl Task for Curvify {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -166,7 +172,7 @@ impl Task for GenBiomeCurvify {
     }
 }
 
-impl GenBiomeCurvify {
+impl Curvify {
     fn run<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making biome polygons curvy");
 
@@ -175,21 +181,39 @@ impl GenBiomeCurvify {
 }
 
 
+command_def!{
+    BiomeCommand {
+        Data,
+        Apply,
+        Dissolve,
+        Curvify
+    }
+}
+
+#[derive(Args)]
+struct DefaultArgs {
+    /// The path to the world map GeoPackage file
+    target: PathBuf,
+
+    #[arg(long,default_value="100")]
+    /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+    bezier_scale: f64,
+
+    #[arg(long)]
+    /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+    overwrite: bool
+}
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
+    #[command(args_conflicts_with_subcommands = true)]
     pub(crate) struct GenBiome {
 
-        /// The path to the world map GeoPackage file
-        target: PathBuf,
+        #[clap(flatten)]
+        default_args: Option<DefaultArgs>,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        bezier_scale: f64,
-
-        #[arg(long)]
-        /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        #[command(subcommand)]
+        command: Option<BiomeCommand>
 
     }
 }
@@ -198,9 +222,17 @@ impl Task for GenBiome {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::edit(self.target)?;
+        if let Some(args) = self.default_args {
+            let mut target = WorldMap::edit(args.target)?;
 
-        Self::run(self.overwrite, self.bezier_scale, &mut target, progress)
+            Self::run(args.overwrite, args.bezier_scale, &mut target, progress)
+    
+        } else if let Some(command) = self.command {
+
+            command.run(progress)
+        } else {
+            unreachable!("Command should have been called with one of the arguments")
+        }
 
     }
 }
@@ -208,16 +240,16 @@ impl Task for GenBiome {
 impl GenBiome {
     fn run<Progress: ProgressObserver>(overwrite: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {            
-            GenBiomeData::run(overwrite, target, progress)
+            Data::run(overwrite, target, progress)
 
         })?;
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
         target.with_transaction(|target| {            
-            GenBiomeApply::run(target, biomes, progress)?;
+            Apply::run(target, biomes, progress)?;
 
-            GenBiomeDissolve::run(target, progress)?;
+            Dissolve::run(target, progress)?;
 
-            GenBiomeCurvify::run(bezier_scale, target, progress)
+            Curvify::run(bezier_scale, target, progress)
 
         })?;
 

@@ -21,6 +21,7 @@ use crate::algorithms::terrain::TerrainCommand;
 use crate::world_map::ElevationLimits;
 use crate::world_map::WorldMapTransaction;
 
+// I don't form the subcommands for this quite the same, since I already have a subcommand for specifying the source.
 
 subcommand_def!{
     /// Calculates neighbors for tiles
