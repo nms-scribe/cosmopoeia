@@ -106,10 +106,10 @@ subcommand_def!{
 
     /// Processes a series of pre-saved tasks
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Recipe {
+    pub struct Recipe {
 
         /// Raster file defining new elevations
-        source: PathBuf
+        pub source: PathBuf
     }
 }
 
@@ -135,13 +135,13 @@ subcommand_def!{
 
     /// Randomly chooses a recipe from a set of named recipes and follows it
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct RecipeSet {
+    pub struct RecipeSet {
 
         /// Raster file defining new elevations
-        source: PathBuf,
+        pub source: PathBuf,
 
         #[arg(long)]
-        recipe: Option<String>
+        pub recipe: Option<String>
     }
 
 
@@ -183,7 +183,7 @@ subcommand_def!{
 
     /// Clears all elevations to 0 and all groupings to "Continent". This is an alias for Multiplying all height by 0.0.
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Clear{}
+    pub struct Clear{}
     
 }
 
@@ -205,9 +205,9 @@ subcommand_def!{
 
     /// Inverts the heights across the entier map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Multiply {
-        pub(crate) height_filter: Option<ArgRange<i8>>, 
-        pub(crate) height_factor: f64 // this doesn't have to be i8 because it's a multiplication, will still work no matter what the scale.
+    pub struct Multiply {
+        pub height_filter: Option<ArgRange<i8>>, 
+        pub height_factor: f64 // this doesn't have to be i8 because it's a multiplication, will still work no matter what the scale.
     }
     
 }
@@ -227,7 +227,7 @@ subcommand_def!{
 
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct ClearOcean{}
+    pub struct ClearOcean{}
     
 }
 
@@ -246,10 +246,10 @@ subcommand_def!{
 
     /// Adds a uniform amount of random noise to the map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct RandomUniform{
+    pub struct RandomUniform{
 
-        pub(crate) height_filter: Option<ArgRange<i8>>, 
-        pub(crate) height_delta: ArgRange<i8>
+        pub height_filter: Option<ArgRange<i8>>, 
+        pub height_delta: ArgRange<i8>
     }
     
 }
@@ -269,15 +269,15 @@ subcommand_def!{
 
     /// Adds hills or pits to a certain area of the map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct AddHill {
+    pub struct AddHill {
 
-        pub(crate) count: ArgRange<usize>,
+        pub count: ArgRange<usize>,
 
-        pub(crate) height_delta: ArgRange<i8>,
+        pub height_delta: ArgRange<i8>,
 
-        pub(crate) x_filter: ArgRange<f64>,
+        pub x_filter: ArgRange<f64>,
 
-        pub(crate) y_filter: ArgRange<f64>
+        pub y_filter: ArgRange<f64>
 
     }
 }
@@ -294,11 +294,11 @@ subcommand_def!{
 
     /// Adds a range of heights or a trough to a certain area of a map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct AddRange {
-        pub(crate) count: ArgRange<usize>,
-        pub(crate) height_delta: ArgRange<i8>,
-        pub(crate) x_filter: ArgRange<f64>,
-        pub(crate) y_filter: ArgRange<f64>
+    pub struct AddRange {
+        pub count: ArgRange<usize>,
+        pub height_delta: ArgRange<i8>,
+        pub x_filter: ArgRange<f64>,
+        pub y_filter: ArgRange<f64>
     }
 }
 
@@ -311,7 +311,7 @@ impl LoadTerrainTask for AddRange {
 
 
 #[derive(Clone,Deserialize,Serialize,ValueEnum)]
-pub(crate) enum StraitDirection {
+pub enum StraitDirection {
     Horizontal,
     Vertical
 }
@@ -321,9 +321,9 @@ subcommand_def!{
     /// Adds a long cut somewhere on the map
     // TODO: Why isn't there an equivalent "isthmus" of some sort? Should I specify the height change? Why are the directions limited to horizontal and vertical? And shouldn't the direction at least be an axis instead of vert/horiz, would be a z-axis?
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct AddStrait { 
-        pub(crate) width: ArgRange<f64>,
-        pub(crate) direction: StraitDirection
+    pub struct AddStrait { 
+        pub width: ArgRange<f64>,
+        pub direction: StraitDirection
     }
 
 }
@@ -341,9 +341,9 @@ subcommand_def!{
 
     /// Changes the heights based on their distance from the edge of the map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Mask {
+    pub struct Mask {
         #[arg(default_value="1")]
-        pub(crate) power: f64
+        pub power: f64
     }
 }
 
@@ -357,7 +357,7 @@ impl LoadTerrainTask for Mask {
 }
 
 #[derive(Clone,Deserialize,Serialize,ValueEnum)]
-pub(crate) enum InvertAxes {
+pub enum InvertAxes {
     X,
     Y,
     Both
@@ -367,9 +367,9 @@ subcommand_def!{
 
     /// Inverts the heights across the entire map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Invert {
-        pub(crate) probability: f64, 
-        pub(crate) axes: InvertAxes
+    pub struct Invert {
+        pub probability: f64, 
+        pub axes: InvertAxes
     }
     
 }
@@ -389,9 +389,9 @@ subcommand_def!{
 
     /// Inverts the heights across the entier map
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Add {
-        pub(crate) height_filter: Option<ArgRange<i8>>, 
-        pub(crate) height_delta: i8
+    pub struct Add {
+        pub height_filter: Option<ArgRange<i8>>, 
+        pub height_delta: i8
     }
     
 }
@@ -411,9 +411,9 @@ subcommand_def!{
 
     /// Smooths elevations by averaging the value against it's neighbors.
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct Smooth {
+    pub struct Smooth {
         #[arg(default_value="2")]
-        pub(crate) fr: f64 // TODO: I'm not sure what this actually is. It's not quite a weighted average, I don't really understand where AFMG got its algorithm from.
+        pub fr: f64 // TODO: I'm not sure what this actually is. It's not quite a weighted average, I don't really understand where AFMG got its algorithm from.
     }
     
 }
@@ -433,10 +433,10 @@ subcommand_def!{
 
     /// Sets random points in an area to ocean if they are below sea level (Use FloodOcean to complete the process)
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct SeedOcean {
-        pub(crate) count: ArgRange<usize>,
-        pub(crate) x_filter: ArgRange<f64>,
-        pub(crate) y_filter: ArgRange<f64>
+    pub struct SeedOcean {
+        pub count: ArgRange<usize>,
+        pub x_filter: ArgRange<f64>,
+        pub y_filter: ArgRange<f64>
     }
     
 }
@@ -456,7 +456,7 @@ subcommand_def!{
 
     /// Finds tiles that are marked as ocean and marks all neighbors that are below sea level as ocean, until no neighbors below sea level can be found.
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct FloodOcean{}
+    pub struct FloodOcean{}
     
 }
 
@@ -475,7 +475,7 @@ subcommand_def!{
 
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct FillOcean{}
+    pub struct FillOcean{}
     
 }
 
@@ -494,14 +494,14 @@ subcommand_def!{
 
     /// Sets tiles to ocean by sampling data from a heightmap. If value in heightmap is less than specified elevation, it becomes ocean.
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct SampleOceanBelow {
+    pub struct SampleOceanBelow {
 
         /// The raster to sample from
-        source: PathBuf,
+        pub source: PathBuf,
 
         /// The elevation to compare to
         #[arg(allow_negative_numbers=true)]
-        elevation: f64
+        pub elevation: f64
     }
 }
 
@@ -521,10 +521,10 @@ subcommand_def!{
 
     /// Sets tiles to ocean by sampling data from a heightmap. If data in heightmap is not nodata, the tile becomes ocean.
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct SampleOceanMasked {
+    pub struct SampleOceanMasked {
 
         /// The raster to read ocean data from
-        source: PathBuf
+        pub source: PathBuf
     }
 }
 
@@ -545,10 +545,10 @@ subcommand_def!{
 
     /// Replaces elevations by sampling from a heightmap
     #[derive(Deserialize,Serialize)]
-    pub(crate) struct SampleElevation {
+    pub struct SampleElevation {
 
         /// Raster file defining new elevations
-        source: PathBuf
+        pub source: PathBuf
     }
 }
 
@@ -565,7 +565,7 @@ impl LoadTerrainTask for SampleElevation {
 
 #[derive(Deserialize,Serialize,Subcommand)]
 #[command(disable_help_subcommand(true))]
-pub(crate) enum TerrainCommand {
+pub enum TerrainCommand {
     Recipe(Recipe),
     RecipeSet(RecipeSet),
     Clear(Clear),
@@ -624,21 +624,21 @@ impl TerrainCommand {
 
 subcommand_def!{
     /// Calculates neighbors for tiles
-    pub(crate) struct Terrain {
+    pub struct Terrain {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[command(subcommand)]
-        command: TerrainCommand,
+        pub command: TerrainCommand,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// Instead of processing, display the serialized value for inclusion in a recipe file.
-        serialize: bool
+        pub serialize: bool
 
     }
 }

@@ -24,14 +24,14 @@ use crate::world_map::WorldMapTransaction;
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct Population {
+    pub struct Population {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="10")]
         /// A waterflow threshold above which population increases along the coast
-        estuary_threshold: f64
+        pub estuary_threshold: f64
 
     }
 }
@@ -65,38 +65,38 @@ impl Population {
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct CreateCultures {
+    pub struct CreateCultures {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,required(true))] 
         /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
-        cultures: Vec<PathBuf>,
+        pub cultures: Vec<PathBuf>,
 
         #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        namers: Vec<PathBuf>,
+        pub namers: Vec<PathBuf>,
 
         #[arg(long,default_value("10"))]
         /// The number of cultures to generate
-        count: usize,
+        pub count: usize,
 
         #[arg(long,default_value("1"))]
         /// A number, clamped to 0-10, which controls how much cultures can vary in size
-        size_variance: f64,
+        pub size_variance: f64,
 
         #[arg(long,default_value="10")]
         /// A waterflow threshold above which the tile will count as a river
-        river_threshold: f64,
+        pub river_threshold: f64,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the cultures layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        pub overwrite: bool
 
     }
 }
@@ -136,18 +136,18 @@ impl CreateCultures {
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct ExpandCultures {
+    pub struct ExpandCultures {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="10")]
         /// A waterflow threshold above which the tile will count as a river
-        river_threshold: f64,
+        pub river_threshold: f64,
 
         #[arg(long,default_value("1"))]
         /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
-        limit_factor: f64
+        pub limit_factor: f64
 
     }
 }
@@ -179,10 +179,10 @@ impl ExpandCultures {
 subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
-    pub(crate) struct DissolveCultures {
+    pub struct DissolveCultures {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -217,14 +217,14 @@ impl DissolveCultures {
 subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
-    pub(crate) struct CurvifyCultures {
+    pub struct CurvifyCultures {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        bezier_scale: f64,
+        pub bezier_scale: f64,
 
     }
 }
@@ -260,7 +260,7 @@ impl CurvifyCultures {
 
 command_def!{
     #[command(disable_help_subcommand(true))]
-    PeopleCommand {
+    pub PeopleCommand {
         Population,
         CreateCultures,
         ExpandCultures,
@@ -270,58 +270,58 @@ command_def!{
 }
 
 #[derive(Args)]
-struct DefaultArgs {
+pub struct DefaultArgs {
 
     /// The path to the world map GeoPackage file
-    target: PathBuf,
+    pub target: PathBuf,
 
     #[arg(long,required(true))] 
     /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
-    cultures: Vec<PathBuf>,
+    pub cultures: Vec<PathBuf>,
 
     #[arg(long,default_value="10")]
     /// A waterflow threshold above which the tile will count as a river
-    river_threshold: f64,
+    pub river_threshold: f64,
 
     #[arg(long,default_value("1"))]
     /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
-    limit_factor: f64,
+    pub limit_factor: f64,
 
     #[arg(long,required=true)]
     /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-    namers: Vec<PathBuf>,
+    pub namers: Vec<PathBuf>,
 
     #[arg(long,default_value("10"))]
     /// The number of cultures to generate
-    culture_count: usize,
+    pub culture_count: usize,
 
     #[arg(long,default_value("1"))]
     /// A number, clamped to 0-10, which controls how much cultures can vary in size
-    size_variance: f64,
+    pub size_variance: f64,
 
     #[arg(long,default_value="100")]
     /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    bezier_scale: f64,
+    pub bezier_scale: f64,
 
     #[arg(long)]
     /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-    seed: Option<u64>,
+    pub seed: Option<u64>,
 
     #[arg(long)]
     /// If true and the cultures layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite: bool
+    pub overwrite: bool
 }
 
 subcommand_def!{
     /// Generates background population of tiles
     #[command(args_conflicts_with_subcommands = true)]
-    pub(crate) struct GenPeople {
+    pub struct GenPeople {
 
         #[clap(flatten)]
-        default_args: Option<DefaultArgs>,
+        pub default_args: Option<DefaultArgs>,
 
         #[command(subcommand)]
-        command: Option<PeopleCommand>
+        pub command: Option<PeopleCommand>
 
     }
 }

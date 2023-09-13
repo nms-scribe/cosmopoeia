@@ -30,24 +30,24 @@ use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
-    pub(crate) struct PointsFromHeightmap {
+    pub struct PointsFromHeightmap {
         // Path to the source height map to get extents from
-        source: PathBuf,
+        pub source: PathBuf,
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="10000")]
         /// The rough number of pixels to generate for the image
-        points: usize,
+        pub points: usize,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        pub overwrite: bool
     }
 }
 
@@ -74,29 +74,29 @@ impl Task for PointsFromHeightmap {
 
 subcommand_def!{
     /// Creates a random points vector layer given an extent
-    pub(crate) struct PointsFromExtent {
+    pub struct PointsFromExtent {
         #[arg(allow_hyphen_values=true)]
-        west: f64,
+        pub west: f64,
 
         #[arg(allow_hyphen_values=true)]
-        south: f64,
+        pub south: f64,
 
         #[arg(allow_hyphen_values=true)]
-        north: f64,
+        pub north: f64,
 
         #[arg(allow_hyphen_values=true)]
-        east: f64,
+        pub east: f64,
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long)]
         /// The rough number of pixels horizontally separating each point [Default: a value that places about 10k points]
-        spacing: Option<f64>,
+        pub spacing: Option<f64>,
 
         #[arg(long,default_value="10000")]
         /// The rough number of pixels to generate for the image
-        points: usize,
+        pub points: usize,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
@@ -130,14 +130,14 @@ impl Task for PointsFromExtent {
 
 subcommand_def!{
     /// Creates delaunay triangles from a points layer
-    pub(crate) struct TrianglesFromPoints {
+    pub struct TrianglesFromPoints {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        pub overwrite: bool
     }
 }
 
@@ -167,25 +167,25 @@ impl Task for TrianglesFromPoints {
 
 subcommand_def!{
     /// Creates voronoi tiles out of a delaunay triangles layer
-    pub(crate) struct VoronoiFromTriangles {
+    pub struct VoronoiFromTriangles {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long)]
-        extents: PathBuf,
+        pub extents: PathBuf,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
+        pub overwrite: bool,
 
         #[arg(long,allow_negative_numbers=true,default_value="-11000")]
         /// minimum elevation for heightmap
-        min_elevation: f64,
+        pub min_elevation: f64,
 
         #[arg(long,default_value="9000")]
         /// maximum elevation for heightmap
-        max_elevation: f64,
+        pub max_elevation: f64,
 
 
     }
@@ -227,30 +227,30 @@ impl Task for VoronoiFromTriangles {
 
 subcommand_def!{
     /// Tool for testing name generator data
-    pub(crate) struct Namers {
+    pub struct Namers {
 
         /// Files to load namer-data from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        namer_data: Vec<PathBuf>,
+        pub namer_data: Vec<PathBuf>,
 
         #[arg(long)]
         // if true, the namer will load the defaults before any of the passed files.
-        defaults: bool,
+        pub defaults: bool,
 
         #[arg(long)]
         /// If this is set, text files loaded as namer_data will be parsed as markov seed lists. Otherwise, they will be list-picker generators.
-        text_is_markov: bool,
+        pub text_is_markov: bool,
 
         #[arg(long)]
         /// The name of a namer to generate from. If not specified, all namers will be tested.
-        language: Option<String>,
+        pub language: Option<String>,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
-        write_json: bool,
+        pub write_json: bool,
 
     }
 }
@@ -302,14 +302,14 @@ impl Task for Namers {
 
 subcommand_def!{
     /// Tool for testing name generator data
-    pub(crate) struct Cultures {
+    pub struct Cultures {
 
         /// Files to load culture data from, more than one may be specified to load multiple cultures into the set.
-        culture_data: Vec<PathBuf>,
+        pub culture_data: Vec<PathBuf>,
 
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
-        write_json: bool,
+        pub write_json: bool,
 
 
     }
@@ -351,7 +351,7 @@ impl Task for Cultures {
 
 command_def!(
     #[command(disable_help_subcommand(true))]
-    DevCommand {
+    pub DevCommand {
         PointsFromHeightmap,
         PointsFromExtent,
         TrianglesFromPoints,
@@ -365,9 +365,9 @@ command_def!(
 subcommand_def!{
     /// Runs some tasks intended for testing and debugging
     #[command(hide=true)]
-    pub(crate) struct Dev {
+    pub struct Dev {
         #[command(subcommand)]
-        command: DevCommand
+        pub command: DevCommand
 
     }
 }

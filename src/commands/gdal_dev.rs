@@ -17,9 +17,9 @@ use crate::progress::ProgressObserver;
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    pub(crate) struct DatasetInfo {
+    pub struct DatasetInfo {
         /// Name of user to greet.
-        source: PathBuf
+        pub source: PathBuf
     }
 }
 
@@ -50,7 +50,7 @@ impl Task for DatasetInfo {
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    pub(crate) struct Version {
+    pub struct Version {
     }
 }
 
@@ -64,7 +64,7 @@ impl Task for Version {
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    pub(crate) struct Drivers {
+    pub struct Drivers {
     }
 }
 
@@ -86,7 +86,7 @@ impl Task for Drivers {
 
 command_def!(
     #[command(disable_help_subcommand(true))]
-    GdalCommand {
+    pub GdalCommand {
         DatasetInfo,
         Version,
         Drivers 
@@ -97,9 +97,9 @@ command_def!(
 subcommand_def!{
     /// Retrieves information about local gdal library
     #[command(hide=true)]
-    pub(crate) struct Gdal {
+    pub struct Gdal {
         #[command(subcommand)]
-        command: GdalCommand
+        pub command: GdalCommand
 
     }
 }

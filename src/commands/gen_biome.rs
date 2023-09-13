@@ -20,14 +20,14 @@ use crate::world_map::BiomeMatrix;
 subcommand_def!{
     /// Creates default biome layer
     #[command(hide=true)]
-    pub(crate) struct Data {
+    pub struct Data {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long)]
         /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
+        pub overwrite: bool
 
     }
 }
@@ -62,10 +62,10 @@ impl Data {
 subcommand_def!{
     /// Applies data from biomes layer to the tiles
     #[command(hide=true)]
-    pub(crate) struct Apply {
+    pub struct Apply {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -106,10 +106,10 @@ impl Apply {
 subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
-    pub(crate) struct Dissolve {
+    pub struct Dissolve {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -144,14 +144,14 @@ impl Dissolve {
 subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
-    pub(crate) struct Curvify {
+    pub struct Curvify {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        bezier_scale: f64,
+        pub bezier_scale: f64,
 
     }
 }
@@ -183,7 +183,7 @@ impl Curvify {
 
 command_def!{
     #[command(disable_help_subcommand(true))]
-    BiomeCommand {
+    pub BiomeCommand {
         Data,
         Apply,
         Dissolve,
@@ -192,29 +192,29 @@ command_def!{
 }
 
 #[derive(Args)]
-struct DefaultArgs {
+pub struct DefaultArgs {
     /// The path to the world map GeoPackage file
-    target: PathBuf,
+    pub target: PathBuf,
 
     #[arg(long,default_value="100")]
     /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    bezier_scale: f64,
+    pub bezier_scale: f64,
 
     #[arg(long)]
     /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite: bool
+    pub overwrite: bool
 }
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(args_conflicts_with_subcommands = true)]
-    pub(crate) struct GenBiome {
+    pub struct GenBiome {
 
         #[clap(flatten)]
-        default_args: Option<DefaultArgs>,
+        pub default_args: Option<DefaultArgs>,
 
         #[command(subcommand)]
-        command: Option<BiomeCommand>
+        pub command: Option<BiomeCommand>
 
     }
 }

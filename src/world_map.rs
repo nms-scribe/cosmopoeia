@@ -858,6 +858,7 @@ impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> IntoIterator for E
         
 
 #[macro_export]
+/// Used by `entity!` to generate expression for assigning to an entity field.
 macro_rules! entity_field_assign {
     ($feature: ident geometry $type: ty) => {
         $feature.geometry()?.clone()
@@ -874,6 +875,7 @@ macro_rules! entity_field_assign {
 }
 
 #[macro_export]
+/// Used by `entity!` to generate an expression which tries to convert a feature into an entity.
 macro_rules! entity_from_data {
     ($name: ident $feature: ident, $($field: ident: $type: ty $(= $function: expr)?),*) => {{
         Ok($name {
@@ -885,6 +887,7 @@ macro_rules! entity_from_data {
 }
 
 #[macro_export]
+/// Used by `entity!` to generate the type for an entity field
 macro_rules! entity_field_def {
     ($type: ty [$function: expr]) => {
         $type
@@ -895,6 +898,23 @@ macro_rules! entity_field_def {
 }
 
 #[macro_export]
+/** 
+Creates an entity struct that contains the specified fields. (See Entity trait)
+
+* `$struct_attr` is an attribute that will be placed on the entity struct.
+* `$name` is the name of the struct
+* `$schema` is the identifier for the Schema type for the entity
+* `$feature` is the identifier for the TypedFeature type for the entity
+
+The body of the entity is a set of braces with a comma-separated list items describing the fields of the entity.
+
+* `$field` is the identifier of the struct field
+* `$type` is the type of the field generated
+* `$function` is the assignment function, an optional closure used to initialize the value of the field. 
+
+The assignment function closure takes an TypedFeature value and returns a result. The Ok result must be the type of the field being assigned to. The Err result must be a CommandError. If no assignment functions is specified, the macro will attempt to assign the ok result of a function on the feature with the same name as the field.
+
+*/ 
 macro_rules! entity {
     ($(#[$struct_attr: meta])* $name: ident $schema: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
         #[derive(Clone)]

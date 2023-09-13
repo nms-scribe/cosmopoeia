@@ -1213,7 +1213,7 @@ pub(crate) fn generate_colors(count: usize) -> Vec<String> {
 
 
 #[derive(Clone)]
-pub(crate) enum ArgRange<NumberType> {
+pub enum ArgRange<NumberType> {
     // While I could use a real Range<> and RangeInclusive<>, I'd have to copy it every time I want to generate a number from it anyway, and
     Inclusive(NumberType,NumberType),
     Exclusive(NumberType,NumberType),
@@ -1221,30 +1221,47 @@ pub(crate) enum ArgRange<NumberType> {
 }
 
 
-pub(crate) trait TruncOrSelf {
+pub trait TruncOrSelf {
 
     fn trunc_or_self(self) -> Self;
 }
 
-impl TruncOrSelf for f64 {
-    fn trunc_or_self(self) -> Self {
-        self.trunc()
-    }
+macro_rules! impl_trunc_or_self_float {
+    ($float: ty) => {
+        impl TruncOrSelf for $float {
+            fn trunc_or_self(self) -> Self {
+                self.trunc()
+            }
+        }
+                
+    };
 }
 
-impl TruncOrSelf for usize {
-
-    fn trunc_or_self(self) -> Self {
-        self
-    }
-
+macro_rules! impl_trunc_or_self_int {
+    ($int: ty) => {
+        impl TruncOrSelf for $int {
+            fn trunc_or_self(self) -> Self {
+                self
+            }
+        }
+                
+    };
 }
 
-impl TruncOrSelf for i8 {
-    fn trunc_or_self(self) -> Self {
-        self
-    }
-}
+impl_trunc_or_self_float!(f64);
+impl_trunc_or_self_float!(f32);
+impl_trunc_or_self_int!(usize);
+impl_trunc_or_self_int!(i8);
+impl_trunc_or_self_int!(i16);
+impl_trunc_or_self_int!(i32);
+impl_trunc_or_self_int!(i64);
+impl_trunc_or_self_int!(i128);
+impl_trunc_or_self_int!(u8);
+impl_trunc_or_self_int!(u16);
+impl_trunc_or_self_int!(u32);
+impl_trunc_or_self_int!(u64);
+impl_trunc_or_self_int!(u128);
+
 
 impl<NumberType: SampleUniform + PartialOrd + Copy + TruncOrSelf> ArgRange<NumberType> {
 

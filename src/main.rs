@@ -1,7 +1,10 @@
+/*!
+Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage file. For instructions, see the wiki.
+*/
 use clap::Parser;
 
 pub(crate) mod errors;
-pub(crate) mod commands;
+pub mod commands;
 pub(crate) mod raster;
 pub(crate) mod gdal_fixes;
 pub(crate) mod world_map;
@@ -15,8 +18,10 @@ use errors::ProgramError;
 use commands::Cosmopoeia;
 use progress::ConsoleProgressBar;
 
-
-fn run<Arg, Args>(args: &mut Args) -> Result<(),ProgramError> 
+/**
+Runs Cosmopoeia with arbitrary arguments. The first item in the arguments will be ignored. All output will be printed to Stdout or Stderr.
+*/
+pub fn run<Arg, Args>(args: &mut Args) -> Result<(),ProgramError> 
 where 
     Arg: Clone + Into<std::ffi::OsString>, 
     Args: Iterator<Item = Arg> 

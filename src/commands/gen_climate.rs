@@ -17,18 +17,18 @@ use crate::world_map::WorldMapTransaction;
 subcommand_def!{
     /// Generates temperature data
     #[command(hide=true)]
-    pub(crate) struct Temperature {
+    pub struct Temperature {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         /// The rough temperature (in celsius) at the equator
         #[arg(long,default_value="25",allow_hyphen_values=true)]
-        equator_temp: i8,
+        pub equator_temp: i8,
 
         /// The rough temperature (in celsius) at the poles
         #[arg(long,default_value="-15",allow_hyphen_values=true)]
-        polar_temp: i8,
+        pub polar_temp: i8,
 
     }
 }
@@ -63,34 +63,34 @@ impl Temperature {
 subcommand_def!{
     /// Generates wind data
     #[command(hide=true)]
-    pub(crate) struct Winds {
+    pub struct Winds {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="225")]
         /// Wind direction above latitude 60 N
-        north_polar: u16,
+        pub north_polar: u16,
 
         #[arg(long,default_value="45")]
         /// Wind direction from latitude 30 N to 60 N
-        north_middle: u16,
+        pub north_middle: u16,
 
         #[arg(long,default_value="225")]
         /// Wind direction from the equator to latitude 30 N
-        north_tropical: u16,
+        pub north_tropical: u16,
 
         #[arg(long,default_value="315")]
         /// Wind direction from the equator to latitude 30 S
-        south_tropical: u16,
+        pub south_tropical: u16,
 
         #[arg(long,default_value="135")]
         /// Wind direction from latitude 30 S to 60 S
-        south_middle: u16,
+        pub south_middle: u16,
 
         #[arg(long,default_value="315")]
         /// Wind direction below latitude 60 S
-        south_polar: u16,
+        pub south_polar: u16,
 
     }
 }
@@ -135,14 +135,14 @@ impl Winds {
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(hide=true)]
-    pub(crate) struct Precipitation {
+    pub struct Precipitation {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="100")]
         /// Amount of moisture on a scale of 0-500
-        moisture: u16,
+        pub moisture: u16,
 
 
     }
@@ -176,7 +176,7 @@ impl Precipitation {
 
 command_def!{
     #[command(disable_help_subcommand(true))]
-    ClimateCommand {
+    pub ClimateCommand {
         Temperature,
         Winds,
         Precipitation
@@ -184,46 +184,46 @@ command_def!{
 }
 
 #[derive(Args)]
-struct DefaultArgs {
+pub struct DefaultArgs {
 
     /// The path to the world map GeoPackage file
-    target: PathBuf,
+    pub target: PathBuf,
 
     /// The rough temperature (in celsius) at the equator
     #[arg(long,default_value="25",allow_hyphen_values=true)]
-    equator_temp: i8,
+    pub equator_temp: i8,
 
     /// The rough temperature (in celsius) at the poles
     #[arg(long,default_value="-15",allow_hyphen_values=true)]
-    polar_temp: i8,
+    pub polar_temp: i8,
 
     #[arg(long,default_value="225")]
     /// Wind direction above latitude 60 N
-    north_polar_wind: u16,
+    pub north_polar_wind: u16,
 
     #[arg(long,default_value="45")]
     /// Wind direction from latitude 30 N to 60 N
-    north_middle_wind: u16,
+    pub north_middle_wind: u16,
 
     #[arg(long,default_value="225")]
     /// Wind direction from the equator to latitude 30 N
-    north_tropical_wind: u16,
+    pub north_tropical_wind: u16,
 
     #[arg(long,default_value="315")]
     /// Wind direction from the equator to latitude 30 S
-    south_tropical_wind: u16,
+    pub south_tropical_wind: u16,
 
     #[arg(long,default_value="135")]
     /// Wind direction from latitude 30 S to 60 S
-    south_middle_wind: u16,
+    pub south_middle_wind: u16,
 
     #[arg(long,default_value="315")]
     /// Wind direction below latitude 60 S
-    south_polar_wind: u16,
+    pub south_polar_wind: u16,
 
     #[arg(long,default_value="100")]
     /// Amount of moisture on a scale of 0-500
-    moisture_factor: u16,
+    pub moisture_factor: u16,
 
 }
 
@@ -231,13 +231,13 @@ struct DefaultArgs {
 subcommand_def!{
     /// Generates temperature, wind, and precipitation data.
     #[command(args_conflicts_with_subcommands = true)]
-    pub(crate) struct GenClimate {
+    pub struct GenClimate {
 
         #[clap(flatten)]
-        default_args: Option<DefaultArgs>,
+        pub default_args: Option<DefaultArgs>,
 
         #[command(subcommand)]
-        command: Option<ClimateCommand>
+        pub command: Option<ClimateCommand>
 
 
     }

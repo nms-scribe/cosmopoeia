@@ -8,7 +8,7 @@ use ordered_float::FloatIsNan;
 pub(crate) use clap::error::Error as ArgumentError;
 
 #[derive(Debug)]
-pub(crate) enum CommandError {
+pub enum CommandError {
     GdalError(GdalError),
     VoronoiExpectsPolygons,
     VoronoiExpectsTriangles,
@@ -137,7 +137,7 @@ impl From<FloatIsNan> for CommandError {
 }
 
 #[derive(Debug)]
-pub(crate) enum ProgramError {
+pub enum ProgramError {
     ArgumentError(ArgumentError),
     CommandError(CommandError)
 }

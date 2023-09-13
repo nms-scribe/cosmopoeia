@@ -33,33 +33,31 @@ use crate::world_map::CultureWithType;
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct Create {
+    pub struct Create {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        namers: Vec<PathBuf>,
+        pub namers: Vec<PathBuf>,
 
         // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
         #[arg(long)]
         /// The name generator to use for naming towns in tiles without a culture
-        default_namer: String,
+        pub default_namer: String,
 
         #[arg(long,default_value("20"))]
         /// The percent of towns in each nation to use for subnations
-        subnation_percentage: f64,
+        pub subnation_percentage: f64,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool
-
-
+        pub overwrite: bool
 
     }
 }
@@ -101,18 +99,18 @@ impl Create {
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct Expand {
+    pub struct Expand {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value("20"))]
         /// The percent of towns in each nation to use for subnations
-        subnation_percentage: f64,
+        pub subnation_percentage: f64,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
 
 
@@ -154,30 +152,27 @@ impl Expand {
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct FillEmpty {
+    pub struct FillEmpty {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        namers: Vec<PathBuf>,
+        pub namers: Vec<PathBuf>,
 
         // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
         #[arg(long)]
         /// The name generator to use for naming towns in tiles without a culture
-        default_namer: String,
+        pub default_namer: String,
 
         #[arg(long,default_value("20"))]
         /// The percent of towns in each nation to use for subnations
-        subnation_percentage: f64,
+        pub subnation_percentage: f64,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
-
-
-
+        pub seed: Option<u64>,
 
     }
 }
@@ -218,10 +213,10 @@ impl FillEmpty {
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
-    pub(crate) struct Normalize {
+    pub struct Normalize {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
 
     }
@@ -256,10 +251,10 @@ impl Normalize {
 subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
-    pub(crate) struct Dissolve {
+    pub struct Dissolve {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -292,14 +287,14 @@ impl Dissolve {
 subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
-    pub(crate) struct Curvify {
+    pub struct Curvify {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        bezier_scale: f64,
+        pub bezier_scale: f64,
 
     }
 }
@@ -335,7 +330,7 @@ impl Curvify {
 
 command_def!{
     #[command(disable_help_subcommand(true))]
-    SubnationCommand {
+    pub SubnationCommand {
         Create,
         Expand,
         FillEmpty,
@@ -347,47 +342,47 @@ command_def!{
 
 
 #[derive(Args)]
-struct DefaultArgs {
+pub struct DefaultArgs {
 
     /// The path to the world map GeoPackage file
-    target: PathBuf,
+    pub target: PathBuf,
 
     #[arg(long,required=true)]
     /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-    namers: Vec<PathBuf>,
+    pub namers: Vec<PathBuf>,
 
     // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
     #[arg(long)]
     /// The name generator to use for naming towns in tiles without a culture
-    default_namer: String,
+    pub default_namer: String,
 
     #[arg(long,default_value("20"))]
     /// The percent of towns in each nation to use for subnations
-    subnation_percentage: f64,
+    pub subnation_percentage: f64,
 
     #[arg(long,default_value="100")]
     /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    bezier_scale: f64,
+    pub bezier_scale: f64,
 
     #[arg(long)]
     /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-    seed: Option<u64>,
+    pub seed: Option<u64>,
 
     #[arg(long)]
     /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite: bool,
+    pub overwrite: bool,
 }
 
 subcommand_def!{
     /// Generates background population of tiles
     #[command(args_conflicts_with_subcommands = true)]
-    pub(crate) struct GenSubnations {
+    pub struct GenSubnations {
 
         #[clap(flatten)]
-        default_args: Option<DefaultArgs>,
+        pub default_args: Option<DefaultArgs>,
 
         #[command(subcommand)]
-        command: Option<SubnationCommand>
+        pub command: Option<SubnationCommand>
 
     }
 }

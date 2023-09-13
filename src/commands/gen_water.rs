@@ -24,26 +24,26 @@ use crate::world_map::EntityIndex;
 subcommand_def!{
     /// Calculates neighbors for tiles
     #[command(hide=true)]
-    pub(crate) struct Coastline {
+    pub struct Coastline {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy coastlines. The higher the number, the smoother the curves.
-        bezier_scale: f64,
+        pub bezier_scale: f64,
 
         #[arg(long)]
         /// If true and the coastline or oceans layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
+        pub overwrite: bool,
 
         #[arg(long)]
         /// If true and the coastline layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite_coastline: bool,
+        pub overwrite_coastline: bool,
 
         #[arg(long)]
         /// If true and the oceans layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite_ocean: bool,
+        pub overwrite_ocean: bool,
 
 
 
@@ -81,10 +81,10 @@ impl Coastline {
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(hide=true)]
-    pub(crate) struct Flow {
+    pub struct Flow {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -116,22 +116,22 @@ impl Flow {
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(hide=true)]
-    pub(crate) struct Lakes {
+    pub struct Lakes {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long)]
         /// If true and the lakes layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
+        pub overwrite: bool,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to follow lake shoreline curves. The higher the number, the smoother the curves.
-        bezier_scale: f64,
+        pub bezier_scale: f64,
 
         #[arg(long,default_value="2")]
         /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
-        buffer_scale: f64
+        pub buffer_scale: f64
 
 
 
@@ -166,18 +166,18 @@ impl Lakes {
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(hide=true)]
-    pub(crate) struct Rivers {
+    pub struct Rivers {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long)]
         /// If true and the river_segments layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
+        pub overwrite: bool,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to follow river curves. The higher the number, the smoother the curves.
-        bezier_scale: f64
+        pub bezier_scale: f64
 
     }
 }
@@ -211,10 +211,10 @@ impl Rivers {
 subcommand_def!{
     /// Calculates shortest distance to shoreline and some other water information for every tile, in count of tiles
     #[command(hide=true)]
-    pub(crate) struct ShoreDistance {
+    pub struct ShoreDistance {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -247,10 +247,10 @@ impl ShoreDistance {
 subcommand_def!{
     /// Calculate grouping types for land tiles
     #[command(hide=true)]
-    pub(crate) struct Grouping {
+    pub struct Grouping {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
     }
 }
@@ -282,7 +282,7 @@ impl Grouping {
 
 command_def!{
     #[command(disable_help_subcommand(true))]
-    WaterCommand {
+    pub WaterCommand {
         Coastline,
         Flow,
         Lakes,
@@ -294,50 +294,50 @@ command_def!{
 
 
 #[derive(Args)]
-struct DefaultArgs {
+pub struct DefaultArgs {
 
     /// The path to the world map GeoPackage file
-    target: PathBuf,
+    pub target: PathBuf,
 
     #[arg(long,default_value="100")]
     /// This number is used for generating points to follow river curves and make curvy lakes. The higher the number, the smoother the curves.
-    bezier_scale: f64,
+    pub bezier_scale: f64,
 
     #[arg(long,default_value="2")]
     /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
-    buffer_scale: f64,
+    pub buffer_scale: f64,
 
     #[arg(long)]
     /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite: bool,
+    pub overwrite: bool,
 
     #[arg(long)]
     /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite_rivers: bool,
+    pub overwrite_rivers: bool,
 
     #[arg(long)]
     /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite_lakes: bool,
+    pub overwrite_lakes: bool,
 
     #[arg(long)]
     /// If true and the coastline layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite_coastline: bool,
+    pub overwrite_coastline: bool,
 
     #[arg(long)]
     /// If true and the oceans layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    overwrite_ocean: bool,
+    pub overwrite_ocean: bool,
 }
 
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(args_conflicts_with_subcommands = true)]
-    pub(crate) struct GenWater {
+    pub struct GenWater {
 
         #[clap(flatten)]
-        default_args: Option<DefaultArgs>,
+        pub default_args: Option<DefaultArgs>,
 
         #[command(subcommand)]
-        command: Option<WaterCommand>
+        pub command: Option<WaterCommand>
 
 
     }

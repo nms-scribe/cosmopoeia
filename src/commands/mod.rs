@@ -43,12 +43,13 @@ pub(crate) trait Task {
 
 
 #[macro_export]
+/// Defines a runnable command-line command or subcommand enum
 macro_rules! command_def {
-    ($(#[$attr:meta])* $struct_name: ident {$($command_name: ident),*}) => {
+    ($(#[$attr:meta])* $visibility: vis $struct_name: ident {$($command_name: ident),*}) => {
 
         #[derive(Subcommand)]
         $(#[$attr])*
-        pub(crate) enum $struct_name {
+        $visibility enum $struct_name {
             $(
                 $command_name($command_name)
             ),*
@@ -69,7 +70,7 @@ macro_rules! command_def {
 // "Dev" commands are generally hidden, intended for testing during development. While they should be usable by users, they rarely are, and are hidden to keep the UI clean.
 
 command_def!{
-    MainCommand {
+    pub MainCommand {
         Gdal,
         Dev,
         Create,
@@ -90,6 +91,7 @@ command_def!{
 
 
 #[macro_export]
+/// The default command help template for subcommands
 macro_rules! command_help_template {
     () => {
         "{about-section}\n{usage-heading}\n{tab}{usage}\n\n{all-args}\n\nVersion: {version}\nAuthor:  {author}"
@@ -97,13 +99,14 @@ macro_rules! command_help_template {
 }
 
 #[macro_export]
+/// Defines a subcommand struct using standard attributes
 macro_rules! subcommand_def {
-    (#[doc = $about: literal] $(#[$attr:meta])* pub(crate) struct $name: ident $body: tt) => {
+    (#[doc = $about: literal] $(#[$attr:meta])* $visibility: vis struct $name: ident $body: tt) => {
         #[derive(Args)]
         #[command(author,help_template = crate::command_help_template!())] 
         #[doc = $about]
         $(#[$attr])*
-        pub(crate) struct $name $body
+        $visibility struct $name $body
                 
     };
 }
@@ -113,10 +116,10 @@ macro_rules! subcommand_def {
 #[command(author, version, long_about = None, help_template = command_help_template!())]
 #[command(propagate_version = true)]
 /// N M Sheldon's Fantasy Mapping Tools
-pub(crate) struct Cosmopoeia {
+pub struct Cosmopoeia {
 
     #[command(subcommand)]
-    command: MainCommand
+    pub command: MainCommand
 
 }
 

@@ -26,10 +26,10 @@ use crate::world_map::WorldMapTransaction;
 subcommand_def!{
     /// Calculates neighbors for tiles
     #[command(hide=true)]
-    pub(crate) struct CreateCalcNeighbors {
+    pub struct CreateCalcNeighbors {
 
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
 
     }
@@ -87,14 +87,14 @@ trait LoadedCreateSource {
 
 subcommand_def!{
     /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    pub(crate) struct FromHeightmap {
+    pub struct FromHeightmap {
 
         /// The path to the heightmap containing the elevation data
-        source: PathBuf,
+        pub source: PathBuf,
 
         #[command(subcommand)]
         /// A processing command to run after creation and elevation sampling. (see 'terrain' command)
-        post_process: Option<TerrainCommand>,
+        pub post_process: Option<TerrainCommand>,
 
 
     }
@@ -134,33 +134,33 @@ impl LoadCreateSource for FromHeightmap {
 
 subcommand_def!{
     /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
-    pub(crate) struct Blank {
+    pub struct Blank {
 
         /// the height (from north to south) in degrees of the world extents
-        height: f64,
+        pub height: f64,
 
         /// the width in degrees of the world extents
-        width: f64,
+        pub width: f64,
 
         #[arg(allow_negative_numbers=true)]
         /// the latitude of the southern border of the world extents
-        south: f64, 
+        pub south: f64, 
 
         #[arg(allow_negative_numbers=true)]
         /// the longitude of the western border of the world extents
-        west: f64,
+        pub west: f64,
 
         #[arg(long,allow_negative_numbers=true,default_value="-11000")]
         /// minimum elevation for heightmap
-        min_elevation: f64,
+        pub min_elevation: f64,
 
         #[arg(long,default_value="9000")]
         /// maximum elevation for heightmap
-        max_elevation: f64,
+        pub max_elevation: f64,
 
         #[command(subcommand)]
         /// A processing command to run after creation. (see 'terrain' command)
-        post_process: Option<TerrainCommand>,
+        pub post_process: Option<TerrainCommand>,
 
 
     }
@@ -198,7 +198,7 @@ impl LoadCreateSource for Blank {
 #[command(subcommand_value_name="SOURCE")]
 #[command(subcommand_help_heading("Sources"))]
 #[command(disable_help_subcommand(true))]
-pub(crate) enum CreateSource {
+pub enum CreateSource {
     FromHeightmap(FromHeightmap),
     Blank(Blank)
 }
@@ -219,24 +219,24 @@ impl LoadCreateSource for CreateSource {
 subcommand_def!{
     /// Creates the random tiles and initial elevations for a world.
     #[command(hide=true)]
-    pub(crate) struct CreateTiles {
+    pub struct CreateTiles {
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="10000")]
         /// The rough number of tiles to generate for the image
-        tiles: usize,
+        pub tiles: usize,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
+        pub overwrite: bool,
 
         #[command(subcommand)]
-        source: CreateSource,
+        pub source: CreateSource,
 
     }
 }
@@ -278,24 +278,24 @@ impl Task for CreateTiles {
 
 subcommand_def!{
     /// Creates the random tiles and initial elevations for a world.
-    pub(crate) struct Create {
+    pub struct Create {
         /// The path to the world map GeoPackage file
-        target: PathBuf,
+        pub target: PathBuf,
 
         #[arg(long,default_value="10000")]
         /// The rough number of tiles to generate for the image
-        tiles: usize,
+        pub tiles: usize,
 
         #[arg(long)]
         /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        pub seed: Option<u64>,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        overwrite: bool,
+        pub overwrite: bool,
 
         #[command(subcommand)]
-        source: CreateSource,
+        pub source: CreateSource,
 
     }
 }
