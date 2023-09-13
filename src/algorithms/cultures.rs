@@ -280,6 +280,9 @@ fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
 
 pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, limit_factor: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
+    // TODO: Cultures should fill lake tiles even if there is no population.
+    // TODO: So should nations and subnations.
+
     let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
 
     let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForCultureExpand>(progress)?;
