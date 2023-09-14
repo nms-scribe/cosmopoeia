@@ -19,15 +19,15 @@ pub(crate) struct RasterBounds {
 
 impl RasterBounds {
 
-    #[allow(dead_code)] pub(crate) fn pixels_to_coords(&self, x: f64, y: f64) -> (f64,f64) {
+    /* pub(crate) fn pixels_to_coords(&self, x: f64, y: f64) -> (f64,f64) {
         // transform the point into lat/long 
         // https://gis.stackexchange.com/a/299572
         let lon = x * self.transform_x_factor + self.coord_min_x;
         let lat = y * self.transform_y_factor + self.coord_min_y;
         (lon,lat)
-    }
+    } */
 
-    #[allow(dead_code)] pub(crate) fn coords_to_pixels(&self, lon: f64, lat: f64) -> (f64,f64) {
+    pub(crate) fn coords_to_pixels(&self, lon: f64, lat: f64) -> (f64,f64) {
         // this is just the reverse of the other
         let x = (lon - self.coord_min_x)/self.transform_x_factor;
         let y = (lat - self.coord_min_y)/self.transform_y_factor;

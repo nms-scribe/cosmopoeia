@@ -350,9 +350,8 @@ The following additional tasks need to be triaged:
 ## Simple Pre-release Tasks
 They're simple in concept, that doesn't mean they won't lead to hours of refactoring work.
 
-[ ] Remove #[allow(dead_code)] and see what we should get rid of.
-[ ] Consider converting to the nalgebra::Vector2 type for points.
-[ ] Set the CRS for the dataset and each layer on create.
+[X] Remove #[allow(dead_code)] and see what we should get rid of.
+[X] Set the CRS for the dataset and each layer on create.
 [ ] Does TileForSubnations really need fid?
 [ ] Consider adding a new 'u64_string' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups.
 [ ] The special values in WorldMap, in fact anywhere where we implemtn TryFrom<String>, should use serde_json instead. Use a json standard for all of that.
@@ -375,12 +374,14 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 ## Complex Pre-release tasks
 These are things that really should be done before release, but they might take a bit of work to figure out.
 
+[ ] Consider converting to the nalgebra::Vector2 type for points.
 [ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
 [ ] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.
 [ ] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps.
 [ ] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
 [ ] Change all 'as' expressions into 'try_into' and 'try_from' calls. That's the preferred method of doing things.
 [ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
+[ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes. 
 
 ## Post-release tasks and feature requests.
 
@@ -395,6 +396,7 @@ These are things that really should be done before release, but they might take 
 [ ] Convert at least some of the algorithms into objects, with tile_maps and other preparations loaded in the constructor, and then various steps as methods. It would be nice if I could get it to similar patterns as the Terrain Processors, perhaps even implementing a load trait for the command arg structs and a run trait for the returned object.
 [ ] Gdal has a nasty habit of printing out warnings and errors while processing. Is there any way to turn that off and turn them into actual errors?
 [ ] rethink biome values so that they are more customizable. Right now there's a lot of hard-coded functionality, especially related to the TilePreference enum and culture/nation expansion algorithms.
+[ ] Subnation colors should be variations on the nation colors, not all the same.
 [ ] Need a FillEmpty task on Cultures, just like provinces. Once cultures are generated, there should be no populated tiles that aren't part of a culture of some sort, even if I just have a 'wildlands' culture or something like that.
     [ ] If everything has cultures, then there shouldn't be any place which doesn't have one, in which case I will no longer need the default_namer argument on various commands.
 [ ] Is there anyway to create a function that will let me do the cost expansion algorithm with just a few closures for customization?

@@ -112,15 +112,11 @@ impl CultureSource {
         &self.name
     }
 
-    #[allow(dead_code)] pub(crate) fn namer_name(&self) -> &str {
+    pub(crate) fn namer_name(&self) -> &str {
         &self.namer
     }
 
-    #[allow(dead_code)] pub(crate) fn probability(&self) -> f64 {
-        self.probability
-    }
-
-    #[allow(dead_code)] pub(crate) fn preferences(&self) -> &TilePreference {
+    pub(crate) fn preferences(&self) -> &TilePreference {
         &self.preferences
     }
 }
@@ -198,7 +194,7 @@ impl CultureSet {
 
     }
 
-    #[allow(dead_code)] pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.source.len()
     }
 

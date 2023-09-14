@@ -12,6 +12,7 @@ use gdal::Dataset;
 use gdal::DatasetOptions;
 use gdal::GdalOpenFlags;
 use gdal::LayerOptions;
+use gdal::spatial_ref::SpatialRef;
 use gdal::vector::LayerAccess;
 use gdal::vector::OGRwkbGeometryType;
 use gdal::vector::OGRFieldType;
@@ -921,15 +922,24 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
 
     fn create_from_dataset(dataset: &'layer mut Dataset, overwrite: bool) -> Result<Self,CommandError> {
 
+        // 4326 is WGS 84, although this is a fictional world and isn't necessarily shaped like Earth.
+        // That coordinate system just seems "safe" as far as other tools are expecting an Earth-shape.
+        let srs = SpatialRef::from_epsg(4326)?;
         let layer = dataset.create_layer(LayerOptions {
             name: SchemaType::LAYER_NAME,
             ty: SchemaType::GEOMETRY_TYPE,
+            srs: if SchemaType::GEOMETRY_TYPE == OGRwkbGeometryType::wkbNone {
+                // A few layers, such as properties, aren't actually supposed to hold any geography.
+                // Okay, just properties so far...
+                None
+            } else {
+                Some(&srs)
+            },
             options: if overwrite { 
                 Some(&["OVERWRITE=YES"])
             } else {
                 None
-            },
-            ..Default::default()
+            }
         })?;
         layer.create_defn_fields(SchemaType::get_field_defs())?;
         
@@ -1056,7 +1066,7 @@ impl Grouping {
         matches!(self,Grouping::Ocean)
     }
 
-    #[allow(dead_code)] pub(crate) fn is_water(&self) -> bool {
+    pub(crate) fn is_water(&self) -> bool {
         matches!(self,Grouping::Ocean | Grouping::Lake)
     }
 
@@ -1117,38 +1127,38 @@ feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allo
     /// average annual precipitation of tile in imaginary units
     precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation" OGRFieldType::OFTReal;
     /// amount of water flow through tile in imaginary units
-    #[allow(dead_code)] water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
+     water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
-    #[allow(dead_code)] water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
+     water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
     lake_id set_lake_id option_i64 FIELD_LAKE_ID "lake_id" OGRFieldType::OFTInteger64;
     /// id of neighboring tile which water flows to
-    #[allow(dead_code)] flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
+     flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
-    #[allow(dead_code)] shore_distance set_shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance" OGRFieldType::OFTInteger;
+     shore_distance set_shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance" OGRFieldType::OFTInteger;
     /// If this is a land tile neighboring a water body, this is the id of the closest tile
-    #[allow(dead_code)] closest_water set_closest_water option_i64 FIELD_CLOSEST_WATER "closest_water" OGRFieldType::OFTInteger64;
+     closest_water set_closest_water option_i64 FIELD_CLOSEST_WATER "closest_water" OGRFieldType::OFTInteger64;
     /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
-    #[allow(dead_code)] water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count" OGRFieldType::OFTInteger;
+     water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count" OGRFieldType::OFTInteger;
     /// The biome for this tile
-    #[allow(dead_code)] biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
+     biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
     /// the factor used to generate population numbers, along with the area of the tile
-    #[allow(dead_code)] habitability set_habitability f64 FIELD_HABITABILITY "habitability" OGRFieldType::OFTReal;
+     habitability set_habitability f64 FIELD_HABITABILITY "habitability" OGRFieldType::OFTReal;
     /// base population of the cell outside of the towns.
-    #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
+     population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
     /// The name of the culture assigned to this tile, unless wild
-    #[allow(dead_code)] culture set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
+     culture set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
     /// if the tile has a town, this is the id of the town in the towns layer
-    #[allow(dead_code)] town_id set_town_id option_i64 FIELD_TOWN_ID "town_id" OGRFieldType::OFTInteger64;
+     town_id set_town_id option_i64 FIELD_TOWN_ID "town_id" OGRFieldType::OFTInteger64;
     /// if the tile is part of a nation, this is the id of the nation which controls it
-    #[allow(dead_code)] nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
+     nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
     /// if the tile is part of a subnation, this is the id of the nation which controls it
-    #[allow(dead_code)] subnation_id set_subnation_id option_i64 FIELD_SUBNATION_ID "subnation_id" OGRFieldType::OFTInteger64;
+     subnation_id set_subnation_id option_i64 FIELD_SUBNATION_ID "subnation_id" OGRFieldType::OFTInteger64;
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
     /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-    #[allow(dead_code)] outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
+     outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
     neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles" OGRFieldType::OFTString;
 
@@ -1876,9 +1886,9 @@ impl TryFrom<String> for LakeType {
 
 feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
-    #[allow(dead_code)] type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
+    type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
     #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
-    #[allow(dead_code)] size #[allow(dead_code)] set_size i32 FIELD_SIZE "size" OGRFieldType::OFTInteger64;
+    size #[allow(dead_code)] set_size i32 FIELD_SIZE "size" OGRFieldType::OFTInteger64;
     #[allow(dead_code)] temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
     #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
 });
@@ -2713,23 +2723,23 @@ impl OceanLayer<'_,'_> {
 
 /*
 // Uncomment this stuff if you need to add a line layer for playing around with something.
-feature!(LineFeature LineSchema "lines" wkbLineString to_field_names_values: #[allow(dead_code)] {
+feature!(LineFeature LineSchema "lines" wkbLineString {
 });
 
 pub(crate) type LineLayer<'layer,'feature> = MapLayer<'layer,'feature,LineSchema,LineFeature<'feature>>;
 
 impl LineLayer<'_,'_> {
 
-    #[allow(dead_code)] pub(crate) fn add_line(&mut self, line: &Vec<Point>) -> Result<u64,CommandError> {
+     pub(crate) fn add_line(&mut self, line: &Vec<Point>) -> Result<u64,CommandError> {
         let geometry = crate::utils::create_line(line)?;
         self.add_feature(geometry, &[], &[])
     }
 }
 */
 
-feature!(PropertyFeature PropertySchema "properties" wkbNone to_field_names_values: #[allow(dead_code)] {
+feature!(PropertyFeature PropertySchema "properties" wkbNone {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    value #[allow(dead_code)] set_value string FIELD_VALUE "value" OGRFieldType::OFTString;
+    value  set_value string FIELD_VALUE "value" OGRFieldType::OFTString;
 });
 
 pub(crate) type PropertyLayer<'layer,'feature> = MapLayer<'layer,'feature,PropertySchema,PropertyFeature<'feature>>;
@@ -3021,7 +3031,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     }
 
     /* Uncomment this to add a line layer for playing around with ideas.
-    #[allow(dead_code)] pub(crate) fn create_lines_layer(&mut self, overwrite: bool) -> Result<LineLayer,CommandError> {
+     pub(crate) fn create_lines_layer(&mut self, overwrite: bool) -> Result<LineLayer,CommandError> {
         Ok(LineLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
     */

@@ -76,7 +76,7 @@ enum StateNameBehavior {
     TrimSuffixes(Vec<String>), // if any of the specified strings appear at the end, get rid of them.
     TrimSuffixesIfLonger(Vec<String>,usize), // if any of the specified strings appear at the end, get rid of them if the word is longer than a specific size
     ForceVowel(String), // if the word does not end with a vowel, add the specified character
-    #[allow(dead_code)] ForcePrefix(String),
+    ForcePrefix(String),
     ForcePrefixByLetterClass(String, String), // the first is if it's a consonant, the second if it's a vowel
 }
 
