@@ -193,13 +193,11 @@ The following commands were used, in this order, to generate the testing maps of
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang testing_output/Inannak.world.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
 ```
 
-The following was used to generate testing maps of "world":
+The following was used to generate shared World.gpkg:
 
 ```sh
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang testing_output/World.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set testing_output/afmg_recipes.json --recipe pangea
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang share/qgis/World.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set testing_output/afmg_recipes.json --recipe continents
 ```
-
-// TODO: Making biomes curvy...
 
 
 # Tasks
@@ -293,9 +291,11 @@ To proceed on this, I can break it down into the following steps:
 [X] Get rid of "namer" defaults. This removes the weird dependency on the compression utility, reduces the binary size, and removes some of the command line options that complicate things. Instead, provide my namerset alongside the application.
 [X] I need some default QGIS project with some nice styles and appearance which can be saved to the same directory. Any way to specify the filename when we create it (how difficult is it to "template" the project)? Or, do we come up with a standard file name as well?
     [X] I could just provide a QGIS file called World.qgz with defaults, and as long as the user places this in the same directory and calles their file 'world.gpkg' then it will work. If they want to rename things, they'll have to change the data source.
-    [X] TODO: If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.
-[ ] Hide the sub-commands from help, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command.
-[ ] Clean up and triage TODO:s and FUTURE:s into things I must do now, simple things I could do now, and things that can wait until sometime later.
+    [X] If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.
+[-] Hide the sub-commands from help, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command. I've decided these are going in the wiki instead.
+[X] Clean up and triage TODOs and FUTURE:s into things I must do now, simple things I could do now, and things that can wait until sometime later.
+[ ] Work on "Simple Pre-release Tasks" below
+[ ] Work on "Complex Pre-release Tasks" below
 [ ] Documentation
     [ ] Can I set it up so it shows up as a wiki on github?
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
@@ -303,8 +303,31 @@ To proceed on this, I can break it down into the following steps:
     [ ] Make sure it's clear that, although the algorithms were inspired by AFMG, the tool is not guaranteed to, and indeed not designed to, behave exactly the same in regards to output given the same output parameters.
     [ ] Include explanation of all commands
     [ ] Include explanation of the data (layers and fields) in the output file.
+    [ ] Add the following to documentation:
+
+    # On Crates
+
+    I will not release this as a crate, at least for a very long time. You can include it in your cargo file with a github address. For the following reasons:
+    * I do not consider this a professional program, as specified elsewhere, it is not based on scientific principles nor should it be used in scientific projects. So it is not built with the intention of being used by other projects.
+    * I do not intend to maintain the API or the output data backwards compatible. If I see something that isn't working, I will be changing it, hopefully with documentation on how to upgrade your own world files.
+    * I do not intend on writing tests which are necessary to make sure it works, and is safe to use.
+
+    # On Tests
+
+    I have not been good about creating test modules for this code, despite this being a standard of most rust packages. This is one reason I'm not releasing it as a crate. My testing has been done by simply running a few commands and looking at the results. This is more than just laziness, however, there are three reasons why testing this is difficult:
+    * Subjective results: Whether an algorithm produces "good" results is highly subjective. The only thing I can do is look at it, and possibly watch for error messages. While I could develop tests that guarantee that the same results are always output, this is not proof that the algorithm is working correctly.
+    * Nondeterministic results: Much of the program revolves around randomness, which means that it is often difficult to reproduce the same results, even with the same seed for the random number generator. This and the unstabilized api mean that any tests that are created are going to fail with even the smallest change.
+    * Dependency on external files: Most of the algorithms work on external database files, which are difficult to compare the results of. Mocking the database file wouldn't actually be an appropriate test for much of it. While I could write database comparison routines to compare against previous output -- such tests would take a long time, and combined with the other reasons stated above, I don't feel it is worth doing.
+
+    # On Layer FID fields:
+
+    * According to the [Geopackage standard](http://www.geopackage.org/spec131/index.html#feature_user_tables), the identifier field (which is called fid by default in gdal), is created with the following constraint in SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`.
+    * According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
+    * According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
+    * According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, a few other places), and start updating those places when changes are made.
+[ ] Put the Post-Release Tasks into issues on github
 [ ] Improved, Similar-area voronoization algorithm vaguely described above
 [ ] Improved climate generation commands
 [ ] Some additions to `gen-civil`, or perhaps another command:
@@ -315,13 +338,101 @@ To proceed on this, I can break it down into the following steps:
 [ ] Improved people and culture generation commands if I can think of anything...
 [ ] `regen-*` commands
     [ ] Based on what is done in `gen-people` and some other things, but keep things that shouldn't be regenerated. -- Do I want to allow them to "lock" things? This almost has to be the same algorithms that I'm using. In which case, do I really need this? The only way this would be useful is if I could lock, because otherwise you could just continue.
-[ ] `dissolve` commands
-[ ] `genesis` command and `genesis-heightmap` Which does everything.
+[X] `dissolve` commands
+[X] `genesis` command and `genesis-heightmap` Which does everything.
 [ ] Also a `regenesis` command that will let you start at a specific stage in the process and regenerate everything from that, but keep the previous stuff. This is different from just the sub-tasks, as it will finish all tasks after that.
 [ ] Start working on QGIS scripts and tools and a plugin for installing them -- maybe, if there's call for it.
-[ ] `convert-afmg` command -- for now, just convert CSV and GeoJSON exports. Don't worry and probably don't plan to support the ".map" file.
 [ ] `submap` command
 [ ] `convert-image` command if I can't just use convert-heightmap
-[ ] `import-biomes` command
-[ ] FUTURE: I'm not reproducing the same colors for subnations, perhaps even different borders. I'll have to deal with that later. (I wonder if the culture set has to be an IndexMap?)
 
+The following additional tasks need to be triaged:
+
+## Simple Pre-release Tasks
+They're simple in concept, that doesn't mean they won't lead to hours of refactoring work.
+
+[ ] Remove #[allow(dead_code)] and see what we should get rid of.
+[ ] Consider converting to the nalgebra::Vector2 type for points.
+[ ] Set the CRS for the dataset and each layer on create.
+[ ] Does TileForSubnations really need fid?
+[ ] Consider adding a new 'u64_string' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups.
+[ ] The special values in WorldMap, in fact anywhere where we implemtn TryFrom<String>, should use serde_json instead. Use a json standard for all of that.
+[ ] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
+[ ] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
+[ ] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
+[ ] MarkovGenerator::calculate_chain -- should return an error if the array is empty, or if there are no strings in it. Because that will cause an error when we're trying to create strings.
+[ ] Check all 'unwraps' and make sure we don't need to throw an error there instead.
+    [ ] TilePreference::get_value -- there are a bunch of 'unwraps' that should be proper errors, since that's all based on user input.
+    [ ] In calculate_coastline, after the 'difference' function is done on the ocean, it can potentially return null. Make this an error instead. I think it's only there because of the GEOS requirement.
+    [ ] Arithmetic overflow is only a panic on debug builds. See if I can make it part of the release as well, I don't want to accidentally wrap values.
+[ ] Allow the user to use CultureSet::make_random_culture_set and CultureSet::make_random_culture_set_with_same_namer when generating cultures.
+[ ] Get rid of HashMap/HashSet::entry calls, replace with get and get_mut. This means I don't need to clone the key unless I actually add the value. Also, as long as 'None' is done first in the match, I need to do less type specification.
+[ ] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
+[ ] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
+[ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
+    [ ] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
+[ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
+
+## Complex Pre-release tasks
+These are things that really should be done before release, but they might take a bit of work to figure out.
+
+[ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
+[ ] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.
+[ ] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps.
+[ ] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
+[ ] Change all 'as' expressions into 'try_into' and 'try_from' calls. That's the preferred method of doing things.
+[ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
+
+## Post-release tasks and feature requests.
+
+[ ] Add a spheremode option which causes points to be generated at higher spacing at higher latitudes and changes how distance and area are calculated where that's important.
+    [ ] RasterBounds::pixels_to_coords and coords_to_pixels -- make sure these are calculated correctly for spheremode
+    [ ] I may need to bring in my own delaunay algorithm. First, I wouldn't need to collect points into a geometry. But second, when I add sphere_mode, the changes to the distance formula might change. Third, I might be able to remove an array collection step in there, before generating voronoi. Not sure.
+[ ] Consider a change to culture stuff. Right now we have two ways of specifying tile preference for culture and nation expansion: CultureType enum and the TilePreference enum. Play around with making the TilePreference option the standard, and at best create some pre-defined TilePreferences that are easier to serialize. **Or** replace the TilePreference with CultureTypes.
+    [ ] If I do keep CultureType, figure out a better way that allows for more customization.
+    [ ] If I can make the culture and biomes more configurable, then I can get rid of the 'supports_nomadic' and 'supports_hunting' fields on biomes.
+[ ] Consider adding a 'status' property to the properties table, which specifies the last step completed during building. This can then be checked before running an algorithm to add some hope that the database is in the correct state. So, instead of getting a missing field error when running biomes before water, we get an immediate error that a step hasn't been completed.
+    [ ] The status property would also make it easier to automatically finish a processing based on the last step completed. This makes 'regen' type commands easier -- you can just modify the biomes, set the status to biome, and go on from there.
+[ ] Convert at least some of the algorithms into objects, with tile_maps and other preparations loaded in the constructor, and then various steps as methods. It would be nice if I could get it to similar patterns as the Terrain Processors, perhaps even implementing a load trait for the command arg structs and a run trait for the returned object.
+[ ] Gdal has a nasty habit of printing out warnings and errors while processing. Is there any way to turn that off and turn them into actual errors?
+[ ] rethink biome values so that they are more customizable. Right now there's a lot of hard-coded functionality, especially related to the TilePreference enum and culture/nation expansion algorithms.
+[ ] Need a FillEmpty task on Cultures, just like provinces. Once cultures are generated, there should be no populated tiles that aren't part of a culture of some sort, even if I just have a 'wildlands' culture or something like that.
+    [ ] If everything has cultures, then there shouldn't be any place which doesn't have one, in which case I will no longer need the default_namer argument on various commands.
+[ ] Is there anyway to create a function that will let me do the cost expansion algorithm with just a few closures for customization?
+[ ] cultures::get_shore_cost and nations::get_shore_cost -- Lake and Naval have a penalty for going past -2 shore_distance. That doesn't seem right. Meanwhile, every other culture type gets a 0 for that area. 
+[ ] naming::NamerLoadObsever::start_known_endpoint -- either make the count required to produce a progress bar configurable, or find a way of popping it up only if the code is taking longer than half a second or so
+[ ] A lot of stuff where I'm opening a layer for editing, I'm only actually reading it. Unfortunately, the layer still has to be mutable in order to iterate features, but is there any way to open it read only? What if that would fix the problem that I patched with the 'reedit' function?
+[ ] Where I use the word 'normalize' for getting rid of small bits of culture/nation/etc. I feel like that's the wrong word. See if it's the correct usage, and if not, rename to something better.
+[ ] In a lot of places, when I use read_features().into_entities, I have to reassign the variable with a question mark to get rid of the error. Is there a better way of doing that?
+[ ] AddRange::process_terrain_tiles_with_point_index and same in AddStrait -- Instead of processing separate queues in batches, I might be able to pass the next height_delta into the queue when I push the item on the queue. Then I can keep using the same queue, and can more easily add a queue_watcher.
+[ ] Come up with a better algorithm for AddStrait (see note in function)
+    [ ] If I don't rethink AddStrait completely, I feel like the exp in AddStrait creates straits that are too deep. Since I'm not utilizing elevation_scale for these, the values may be off.
+[ ] In tiles::calculate_tile_neighbors, I can also get some additional data, which can be utilized elsewhere:
+     * figure out if a tile is on the edge of a map -- and use this in water_flow and precipitation to prevent just dumping everything on the edge.
+     * find neighbors on the other side of the map, if in sphere_mode.
+     * make all polar tiles neighbors, if in sphere mode.
+     * keep in mind there are two different options: the tile is on the edge of the map, but the map wraps around, or the tile is on the edge and the world continues beyond the map. We still need to know whether it's on the edge or not for some algorithms (such as dissolving/curvifying the coastline and other shapes), even if it's a wrap-around. We would also need to know whether a neighbor lay beyond the edge in some of those cases, because we don't want to dissolve across the edge of the map, or the map could render incorrectly in some projections.
+    [ ] If we have edges calculated in calculate_tile_neighbors, then water_fill should take note of that and take appropriate action so there aren't any weird lakes along the edges.
+    [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
+    [ ] Coastlines, and possibly some other thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge.
+[ ] Consider moving the stuff for the grouping algorithm into calculate_coastline (which is also spreading through the tiles) and fill_lakes (which it would be simple to change grouping to lake, but I'm not sure about island_lake).
+[ ] Certain culture types, such as Nomadic, shouldn't generate towns, or at least generate fewer towns. 
+[ ] Consider allowing the Point, Delaunay and Voronoi generators to have a reference to the progressbar instance to update progress. This comes up because of the one part where the DelauneyGenerator has to pass an empty progress observer to the start method if not started ahead of time.
+[ ] Look at smoothing algorithm and figure out what that fr property is supposed to be doing. If anything, replace with a real smoothing algorithm that just uses a weighted average.
+[ ] apply_biomes: figure out if I'm using appropriate criteria to make a wetland.
+[ ] generate_precipitation: MAX_PASSABLE_ELEVATION doesn't seem right. Instead, the elevation change should drop the precipitation, not the elevation itself. (i.e. if we go from 60 to 85 it will drop more precipitation than 84 to 85)
+[ ] generate_precipitation: why shouldn't there be humidity change across the permafrost. If anything, it should drop a bunch of water on the edges. These might be the start of glaciers.
+[ ] generate_precipitation: shouldn't the evaporation be a multiplier, not an addition? And shouldn't it depend on temperature?
+[ ] grouping::calculate_grouping -- continent/island/isle threshold should depend on the size of the map, not the tile count.
+[ ] TypedGeometry -- similar to how I did TypedFeature, a TypedGeometry is a struct that can be created using TryFrom<Geometry>, and TryFrom<GeometryRef> (or two structs?). Each one is a specific type, not an enum, so you don't have to worry about whether a specific geometry supports many polygons, many points, etc. The type tells you.
+[ ] naming.rs -- there are a bunch of patterns which are removed that should be dependent on the language. Figure out how to make this better.
+[ ] MarkovGenerator::calculate_chain -- should use the chars directly for iterating through the name, instead of collecting into a vec of chars.
+[ ] PointGenerator -- Why does START_Y have to start with 1, but START_X can start with 0?
+[ ] terrain::Invert -- the algorithm is a little slow, but also it's not a true invert, which would involve actually moving the geometry of the tiles (but that's not available in the terrain processing toolkit)
+[ ] After curving, towns which are along the coastline will sometimes be in the ocean. May need to deal with that.
+[ ] Technically, since lakes have an inset, it should be possible to have population on a lake tile, along the coast. But, if a town is set there, it has to be placed outside of the lake.
+[ ] There's a double link that needs to be maintained with towns: the town has a tile_id, and the tiles have a town_id. If towns are randomly regenerated, I'm not sure if the old town_ids in the tiles are then cleared out.
+[ ] Add in road generation algorithms similar to AFMG
+    [ ] towns::populate_towns -- If I ever add in roads, then roads should increase population of towns. However, I could have the road generation algorithm do that itself.
+[ ] Revisit the target.reedit problem in big_bang, see if I can get an MRE that causes the problem and track down the problem.
+[ ] Revisit subnation curvify: the subnations should follow their nation borders when possible. This might be done more easily if we curvify the subnations first, then just dissolve the nations out of their subnations.
+[ ] Review all of the algorithms to see if there are better ways

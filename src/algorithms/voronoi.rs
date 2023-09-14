@@ -45,7 +45,6 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
     }
 
     pub(crate) fn circumcenter(points: (&Point,&Point,&Point)) -> Result<Point,CommandError> {
-        // TODO: Test this stuff...
         // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
 
         let (a,b,c) = points;
@@ -63,7 +62,6 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
     }
 
     pub(crate) fn sort_clockwise(center: &Point, points: &mut Vec<Point>, extent: &Extent, needs_a_trim: &mut bool)  {
-        // TODO: Test this stuff...
         // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
         // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
         // when angle is equal, the point closer to the center will be lesser.
@@ -236,8 +234,6 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         // I'm not certain if some future algorithm might allow us to return an iterator, however.
 
         if let VoronoiGeneratorPhase::Unstarted(source) = &mut self.phase {
-            // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
-            // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
             let len = source.size_hint().1;
             let voronoi = Self::generate_voronoi(source,progress)?; // FUTURE: Should this be configurable?
             self.phase = VoronoiGeneratorPhase::Started(voronoi.into_iter(),len)
@@ -249,7 +245,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
 impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator for VoronoiGenerator<GeometryIterator> {
 
-    type Item = Result<NewTile,CommandError>; // TODO: Should be a voronoi struct defined in world_map.
+    type Item = Result<NewTile,CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.phase {

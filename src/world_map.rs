@@ -58,36 +58,6 @@ use crate::algorithms::naming::LoadedNamers;
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
-// TODO: I need to set CRS for each layer.
-
-/*
-TODO: Add to documentation:
-
-# On Crates
-
-I will not release this as a crate, at least for a very long time. You can include it in your cargo file with a github address. For the following reasons:
-* I do not consider this a professional program, as specified elsewhere, it is not based on scientific principles nor should it be used in scientific projects. So it is not built with the intention of being used by other projects.
-* I do not intend to maintain the API or the output data backwards compatible. If I see something that isn't working, I will be changing it, hopefully with documentation on how to upgrade your own world files.
-* I do not intend on writing tests which are necessary to make sure it works, and is safe to use.
-
-# On Tests
-
-I have not been good about creating test modules for this code, despite this being a standard of most rust packages. This is one reason I'm not releasing it as a crate. My testing has been done by simply running a few commands and looking at the results. This is more than just laziness, however, there are three reasons why testing this is difficult:
-* Subjective results: Whether an algorithm produces "good" results is highly subjective. The only thing I can do is look at it, and possibly watch for error messages. While I could develop tests that guarantee that the same results are always output, this is not proof that the algorithm is working correctly.
-* Nondeterministic results: Much of the program revolves around randomness, which means that it is often difficult to reproduce the same results, even with the same seed for the random number generator. This and the unstabilized api mean that any tests that are created are going to fail with even the smallest change.
-* Dependency on external files: Most of the algorithms work on external database files, which are difficult to compare the results of. Mocking the database file wouldn't actually be an appropriate test for much of it. While I could write database comparison routines to compare against previous output -- such tests would take a long time, and combined with the other reasons stated above, I don't feel it is worth doing.
-
-# On Layer FID fields:
-
-* According to the [Geopackage standard](http://www.geopackage.org/spec131/index.html#feature_user_tables), the identifier field (which is called fid by default in gdal), is created with the following constraint in SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`.
-* According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
-* According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
-* According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
-
-
-
-
-*/
 
 macro_rules! feature_conv {
     (id_list_to_string@ $value: expr) => {
@@ -676,7 +646,6 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
     pub(crate) fn to_entities_index_for_each<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>, Callback: FnMut(&u64,&Data) -> Result<(),CommandError>>(&mut self, mut callback: Callback, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
         let mut result = IndexMap::new();
-        // TODO: If we make everything that calls with_insertor use this function to build the index instead, then I don't need with_insertor anymore.
         for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
             let fid = feature.fid()?;
             let entity = Data::try_from(feature)?;
@@ -1528,7 +1497,7 @@ entity!(TileForNationNormalize TileSchema TileFeature {
 });
 
 entity!(TileForSubnations TileSchema TileFeature {
-    fid: u64, // TODO: Do I really need this?
+    fid: u64,
     town_id: Option<i64>,
     nation_id: Option<i64>,
     culture: Option<String>,
@@ -1547,7 +1516,7 @@ entity!(TileForSubnationExpand TileSchema TileFeature {
 entity!(TileForEmptySubnations TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32,
-    nation_id: Option<i64>, // TODO: What if I changed the features so it could store a u64, but it would be in String instead?
+    nation_id: Option<i64>,
     subnation_id: Option<i64>,
     grouping: Grouping,
     town_id: Option<i64>,
@@ -1757,7 +1726,6 @@ pub(crate) enum RiverSegmentFrom {
 }
 
 impl TryFrom<String> for RiverSegmentFrom {
-    // TODO: Since I had to pull serde into this crate anyway, should I just implement Serialize/Deserialize for all of these types? As well as the neighbor thingie, then just use serde_json to copy things.
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -1906,7 +1874,6 @@ impl TryFrom<String> for LakeType {
     }
 }
 
-// TODO: Do they really need to be multipolygon?
 feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
     #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
     #[allow(dead_code)] type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
@@ -2039,7 +2006,6 @@ feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
     habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
     criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
     movement_cost #[allow(dead_code)] set_movement_cost i32 FIELD_MOVEMENT_COST "movement_cost" OGRFieldType::OFTInteger;
-    // FUTURE: These should be replaced with amore configurable culture-type system, or at least build these into the culture data.
     supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic" OGRFieldType::OFTInteger;
     supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting" OGRFieldType::OFTInteger;
     color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
@@ -2051,8 +2017,6 @@ impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
     }
 }
 
-
-// TODO: Should be BiomeSchema
 impl BiomeFeature<'_> {
 
     pub(crate) const OCEAN: &str = "Ocean";
@@ -2286,7 +2250,6 @@ impl BiomeLayer<'_,'_> {
     
     }
 
-    // TODO: Replace with to_named_entities_index in TypedFeatureIterator
     pub(crate) fn build_lookup<'local, Progress: ProgressObserver, Data: NamedEntity<BiomeSchema> + TryFrom<BiomeFeature<'local>,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<BiomeSchema, Data>,CommandError> {
         let mut result = HashMap::new();
 
@@ -2305,9 +2268,6 @@ impl BiomeLayer<'_,'_> {
 
 #[derive(Clone,Hash,Eq,PartialEq)]
 pub(crate) enum CultureType {
-    // FUTURE: This just seems to stringent to not allow all of this to be customized. Figure out a better way.
-    // TODO: My first thought, but I have to delve deeper into how culture types are used, is to just copy the sorting
-    // preferences from the culture sets, and use those to determine the preferred locations to expand to. 
     Generic,
     Lake,
     Naval,
@@ -2621,7 +2581,7 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationSchema NationFeatu
 
 entity!(NationForSubnations NationSchema NationFeature {
     fid: u64,
-    capital: i64, // TODO: This should be capital_town_id, or capital_id
+    capital: i64,
     color: String
 });
 
@@ -2751,7 +2711,8 @@ impl OceanLayer<'_,'_> {
 
 }
 
-// TODO: Temporary layer for checking lines during curvifying.
+/*
+// Uncomment this stuff if you need to add a line layer for playing around with something.
 feature!(LineFeature LineSchema "lines" wkbLineString to_field_names_values: #[allow(dead_code)] {
 });
 
@@ -2764,8 +2725,8 @@ impl LineLayer<'_,'_> {
         self.add_feature(geometry, &[], &[])
     }
 }
+*/
 
-// TODO: Temporary layer for checking lines during curvifying.
 feature!(PropertyFeature PropertySchema "properties" wkbNone to_field_names_values: #[allow(dead_code)] {
     name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
     value #[allow(dead_code)] set_value string FIELD_VALUE "value" OGRFieldType::OFTString;
@@ -2827,11 +2788,6 @@ impl TryFrom<String> for ElevationLimits {
 }
 
 impl PropertyLayer<'_,'_> {
-
-    // TODO: Another option for the properties layer: A 'status' that tells immediately what "steps" have been processed. This will
-    // make it easier to know whether the climat gen commands have been completed before doing the water. This would have to take
-    // into account "re-gens", and don't change the status if it's later in the process than expected (although do print a warning
-    // in that case.)
 
     fn get_property(&mut self, name: &str) -> Result<String,CommandError> {
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
@@ -2922,7 +2878,6 @@ impl WorldMap {
     pub(crate) fn with_transaction<ResultType, Callback: FnOnce(&mut WorldMapTransaction) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
         let transaction = self.dataset.start_transaction()?;
         let mut transaction = WorldMapTransaction::new(transaction);
-        // TODO: Is there any way to tell gdal *not* to print errors, but to return them as errors so we can report them on the first one.
         match callback(&mut transaction) {
             Ok(result) => {
                 transaction.dataset.commit()?;
@@ -3065,9 +3020,11 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean)?)
     }
 
+    /* Uncomment this to add a line layer for playing around with ideas.
     #[allow(dead_code)] pub(crate) fn create_lines_layer(&mut self, overwrite: bool) -> Result<LineLayer,CommandError> {
         Ok(LineLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
+    */
 
     pub(crate) fn create_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
         Ok(PropertyLayer::create_from_dataset(&mut self.dataset,true)?)

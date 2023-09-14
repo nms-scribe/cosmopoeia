@@ -10,15 +10,6 @@ use priority_queue::PriorityQueue;
 
 pub(crate) trait ProgressObserver {
 
-    // TODO: What if the 'start' methods returned some sort of object that would handle the rest of the information?
-    // - the object would guarantee that the progress observer was already borrowed for mutability, preventing
-    //   updates from multiple items.
-    // - if the start also included the 'finish' message, the object could be passed to the to_vec methods instead
-    //   without requiring the 'Feature::LAYER_NAME' requirement, allowing me to implement the progress watching
-    //   for any iterator.
-    // - in fact, such a progress thingie might have a method which quickly wraps the iterator, calling the
-    //   enumerator function, so it doesn't have to be called automatically in the code.
-
     // the parameters are passed as callbacks in case the progress implementation doesn't care (such as if its Option<ProgressObserver>::None)
     fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback);
 
@@ -253,12 +244,9 @@ pub(crate) trait WatchableIterator: Iterator + Sized {
 
 impl<IteratorType: Iterator> WatchableIterator for IteratorType {
 
-    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
-    // - patterns which deal with popping items off a queue -- see below
+    // This takes care of a large number of patterns. The ones it doesn't handle are:
+    // - patterns which deal with popping items off a queue -- for that I have various WatchableQueues
     // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
-    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
-    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
-    // bar as well as updating the current step.
 
     fn watch<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self> {
         progress.start(|| (start,self.size_hint().1));
@@ -313,13 +301,6 @@ pub(crate) trait WatchableQueue<ItemType: Sized> {
 
 impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
 
-    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
-    // - patterns which deal with popping items off a queue -- see below
-    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
-    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
-    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
-    // bar as well as updating the current step.
-
     fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         QueueWatcher { 
@@ -373,13 +354,6 @@ pub(crate) trait WatchableDeque<ItemType: Sized> {
 
 impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
 
-    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
-    // - patterns which deal with popping items off a queue -- see below
-    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
-    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
-    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
-    // bar as well as updating the current step.
-
     fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         DequeWatcher { 
@@ -431,13 +405,6 @@ pub(crate) trait WatchablePriorityQueue<ItemType: std::hash::Hash + Eq, Priority
 }
 
 impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
-
-    // TODO: This takes care of a large number of patterns. The ones it doesn't handle are:
-    // - patterns which deal with popping items off a queue -- see below
-    // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
-    // As far as the queues go, except for the part where we have multiple queues (calculating shore distance),
-    // I could have something that wraps a queue, or vec, and watches as things are removed and added, changing the step_length of the progress
-    // bar as well as updating the current step.
 
     fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));

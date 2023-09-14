@@ -32,7 +32,6 @@ pub(crate) enum TilePreference {
     // bd(i, *\[([^\]]+)]) -> Biomes([$1],4)
     // bd(i, *\[([^\]]+)], *(\d+))) -> Biomes([$1],$2)
     // FUTURE: Unfortunately, this requires the culture sets to be associated with a specific biome set. I may want to revisit this someday.
-    // TODO: Make sure the biomes specified exist when generating cultures.
     Biomes(Vec<String>, f64), // list of biomes, fee for wrong biome 
     // sf(i) => OceanCoast(4)
     // sf(i, *(\d+)) => OceanCoast($1)
@@ -69,7 +68,7 @@ impl TilePreference {
             TilePreference::Negate(pref) => -pref.get_value(tile, max_habitability),
             TilePreference::Multiply(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); // TODO: Need a real error...
+                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); 
                 for pref in prefs {
                     result *= pref.get_value(tile, max_habitability)
                 }
@@ -77,7 +76,7 @@ impl TilePreference {
             },
             TilePreference::Divide(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); // TODO: Need a real error...
+                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); 
                 for pref in prefs {
                     result /= pref.get_value(tile, max_habitability)
                 }
@@ -85,7 +84,7 @@ impl TilePreference {
             },
             TilePreference::Add(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); // TODO: Need a real error...
+                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); 
                 for pref in prefs {
                     result += pref.get_value(tile, max_habitability)
                 }
@@ -203,7 +202,6 @@ impl CultureSet {
         self.source.len()
     }
 
-    // TODO: Make use of these...
     #[allow(dead_code)] pub(crate) fn make_random_culture_set<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: NamerSet, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
 
         let namer_keys = namers.list_names();
@@ -226,7 +224,6 @@ impl CultureSet {
         
     }
 
-    // TODO: Make use of these...
     #[allow(dead_code)] pub(crate) fn make_random_culture_set_with_same_namer<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, namer_key: &str, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
 
         let mut namer = namers.load_one(namer_key, progress)?;
@@ -288,21 +285,3 @@ impl<'data_life> IntoIterator for &'data_life CultureSet {
         self.source.iter()
     }
 }
-
-
-/*
-
-TODO:
-
-if (culturesSet.value === "random") {
-      return d3.range(count).map(function () {
-        const rnd = rand(nameBases.length - 1);
-        const name = Names.getBaseShort(rnd);
-        return {name, base: rnd, odd: 1, shield: getRandomShield()};
-      });
-    }
-
-
-
-
-*/

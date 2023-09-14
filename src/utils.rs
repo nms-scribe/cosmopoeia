@@ -26,8 +26,6 @@ pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
     let seed = if let Some(seed) = seed {
         seed
     } else {
-        // FUTURE: It would be nice if I could print out the seed that is being used so the user can reproduce a map.
-        // The only option right now is to generate the seed myself, but rand doesn't publicise the stuff it's using (I suspect that actually makes sense).
         let mut seeder = StdRng::from_entropy();
         let seed = seeder.gen::<u64>();
         println!("Using random seed {}",seed);
@@ -642,7 +640,7 @@ impl PolyBezier {
             // this is a polygonal ring, so the points are the same, and the tangents for
             // them are the same. This tangent is parallel to a line from the second point to the penultimate point.
             // ABCDEA => paralell to BE
-            // TODO: This is going to error if we have too few points
+            // No panic, because we checked for vertices < 2 above.
             let end = vec![vertices[1].subtract(&vertices[vertices.len() - 2])];
             (end.clone(),end)
         } else {
@@ -652,7 +650,7 @@ impl PolyBezier {
             // start is the difference between the second and first
             let start = vec![vertices[1].subtract(&vertices[0])];
             // end is the difference between the last and second-to-last
-            // TODO: This is going to error if we have too few points
+            // No panic, because we checked for vertices < 2 above.
             let end = vec![vertices[vertices.len()-1].subtract(&vertices[vertices.len()-2])];
             (start,end)
         };
@@ -665,7 +663,8 @@ impl PolyBezier {
         // Build Bezier curves
         // zip up the points into pairs with their tangents
         let mut vertex_tangents = vertices.iter().zip(tangents.iter());
-        // the first one should always be there? TODO: What if we were given no points as input?
+        // the first one should always be there? 
+        // No panic, because we checked for vertices < 2 above.
         let (mut vertex0, mut tangent0) = vertex_tangents.next().unwrap();
         let mut controls = Vec::new();
         for (vertex, tangent) in vertex_tangents {
@@ -694,8 +693,6 @@ impl PolyBezier {
         // I also found a rust translation of that javascript translation (https://crates.io/crates/adaptive-bezier).
         // I'm not comfortable with it, since it uses it's own vector structure which pulls in a huge library,
         // but it works, so.... 
-        // TODO: However, it might be nice to use this Vector2 structure for points anyway. I'm basically reproducing
-        // a lot of it anyway.
         let mut result = Vec::new();
         let mut vertices = self.vertices.iter();
         let mut controls = self.controls.iter();
@@ -1053,7 +1050,7 @@ macro_rules! impl_to_roman {
 impl_to_roman!(usize);
 
 pub(crate) mod point_finder {
-    // FUTURE: This was an implementation I found on crates.io that allowed inserting and floating point points, and wasn't too difficult to construct. Although that could be done better. It didn't have a lot of downloads, however, so I don't know if it's really something I should be using.
+    // FUTURE: This was an implementation I found on crates.io that allowed inserting and floating point points, and wasn't too difficult to construct. Although that could be done better. It didn't have a lot of downloads, however, so I don't know if it's really something I should be using. The alternatives were lacking features I needed.
     use qutee::QuadTree; 
     use qutee::Boundary;
 

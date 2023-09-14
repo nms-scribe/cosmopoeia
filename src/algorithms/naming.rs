@@ -16,8 +16,6 @@ use serde_json;
 // NOTE: *** I'M NOT GOING TO LOAD THE NAMER OR CULTURE STUFF INTO THE DATABASE. Instead, I hope to provide some default data in the `share` directory.
 
 
-// TODO: Make sure to ask AFMG about accessing the lists there, I'm not sure what their source is or if they're copyrighted.
-
 //use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::split_string_from_end;
@@ -43,7 +41,7 @@ impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
 
     fn start_known_endpoint<Callback: FnOnce() -> usize>(&mut self, callback: Callback) {
         let count = callback();
-        self.visible = count > 10000; // TODO: This should be configurable... any way to only show progress bar if it's taking longer than 1 second? or 0.5 seconds? Check in the progress bar crate for that option.
+        self.visible = count > 10000; 
         if self.visible {
             self.progress.start_known_endpoint(|| (format!("Preparing names for {}",self.name),count))
         }
@@ -318,7 +316,7 @@ impl MarkovGenerator {
         let min_len = min_len.unwrap_or_else(|| self.min_len);
         let cutoff_len = cutoff_len.unwrap_or_else(|| self.cutoff_len);
 
-        let mut choices = self.chain.get(&None).unwrap(); // FUTURE: NMS: Am I always guaranteed that this one will be filled?
+        let mut choices = self.chain.get(&None).unwrap(); // As long as the input wasn't empty, this shouldn't panic
         let mut cur = choices.choose(rng).to_owned();
         let mut word = String::new();
         for _ in 0..20 {
@@ -328,7 +326,7 @@ impl MarkovGenerator {
                 if word.len() < min_len {
                     cur = String::new();
                     word = String::new();
-                    choices = self.chain.get(&None).unwrap(); // FUTURE: NMS: Is this guaranteed?
+                    choices = self.chain.get(&None).unwrap(); // As long as the input wasn't empty, this shouldn't panic.
                 } else {
                     break
                 }
@@ -346,7 +344,7 @@ impl MarkovGenerator {
                     }
                     break;
                 } else {
-                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).unwrap()) // FUTURE: NMS: Is None guaranteed to return a value?
+                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).unwrap()) // As long as the original input wasn't empty, this shouldn't panic
                 };
             }
 
@@ -368,7 +366,7 @@ impl MarkovGenerator {
 
             let last = name.chars().last();
             if (matches!(last,Some('-')) && current_char == &' ') {
-                // remove space after hyphen FUTURE: Should this be absolutely necessary?
+                // remove space after hyphen
                 continue;
             }; 
             // NOTE: AFMG was capitalizing letters after space and hyphen, however if the seed words are curated correctly,
@@ -376,7 +374,7 @@ impl MarkovGenerator {
             // it would have to be customizable by language, and we'd have to be able to specify "short words" not capitalizable.
             // I really feel like this is way beyond the scope.
 
-            // FUTURE: NMS: Why this particular combination? If it happens in the chains, why can't it happen here?
+            // FUTURE: NMS: Why this particular combination? If it happens in the chains, why can't it happen here? Again, should be language specific.
             if current_char == &'a' && matches!(word.get(current_index + 1),Some('e')) {
                 // "ae" => "e"
                 continue;

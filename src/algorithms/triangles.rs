@@ -35,7 +35,7 @@ impl DelaunayGenerator {
             // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
             // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
             progress.start_unknown_endpoint(|| "Generating triangles.");
-            let triangles = source.delaunay_triangulation(None)?; // FUTURE: Should tolerance be configurable?
+            let triangles = source.delaunay_triangulation(None)?;
             progress.finish(|| "Triangles generated.");
             self.phase = DelaunayGeneratorPhase::Started(GeometryGeometryIterator::new(triangles))
         }
@@ -51,7 +51,7 @@ impl Iterator for DelaunayGenerator {
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.phase {
             DelaunayGeneratorPhase::Unstarted(_) => {
-                match self.start(&mut ()) { // TODO: Could I just have the progress on the object?
+                match self.start(&mut ()) { 
                     Ok(_) => self.next(),
                     Err(e) => Some(Err(e)),
                 }

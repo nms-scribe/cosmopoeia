@@ -17,13 +17,13 @@ pub(crate) enum PointGeneratorPhase {
     Done
 }
 
-/// FUTURE: This one would be so much easier to read if I had real Function Generators.
+/// FUTURE: This one would be so much easier to read if I had real Function Generators. However, even in unstable rust, they are only intended for closures.
 pub(crate) struct PointGenerator<Random: Rng> {
     pub(crate) random: Random,
     pub(crate) extent: Extent,
     pub(crate) spacing: f64,
-    pub(crate) jittering: f64,
-    pub(crate) double_jittering: f64,
+    pub(crate) jitter_shift: f64,
+    pub(crate) jitter_spread: f64,
     pub(crate) phase: PointGeneratorPhase,
 
 }
@@ -38,17 +38,16 @@ impl<Random: Rng> PointGenerator<Random> {
         let density = est_point_count as f64/(extent.width*extent.height); // number of points per unit square
         let unit_point_count = density.sqrt(); // number of points along a line of unit length
         let spacing = 1.0/unit_point_count; // if there are x points along a unit, then it divides it into x spaces.
-        let radius = spacing / 2.0; // FUTURE: Why is this called 'radius'?
-        let jittering = radius * 0.9; // FUTURE: Customizable factor?
-        let double_jittering = jittering * 2.0;
-        let phase = PointGeneratorPhase::NortheastInfinity;// Top(Self::INITIAL_INDEX); 
+        let jitter_shift = (spacing / 2.0) * 0.9; // This is subtracted from the randomly generated jitter so the range is -0.9*spacing to 0.9*spacing
+        let jitter_spread = jitter_shift * 2.0; // This + jitter_shift causes the jitter to move by up to 0.9*spacing. If it were 1 times spacing, there might be some points on top of each other (although this would probably be rare)
+        let phase = PointGeneratorPhase::NortheastInfinity;
 
         Self {
             random,
             extent,
             spacing,
-            jittering,
-            double_jittering,
+            jitter_shift,
+            jitter_spread,
             phase
         }
 
@@ -59,7 +58,6 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
-        // TODO: Can we use Point::create_geometry?
         let mut point = Geometry::empty(OGRwkbGeometryType::wkbPoint)?;
         point.add_point_2d((self.extent.west + x,self.extent.south + y));
         Ok(point)
@@ -73,8 +71,6 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
     type Item = Result<Geometry,CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO: The points laying beyond the edge of the heightmap looks weird. Once I get to the voronoi, see if those are absolutely necessary.
-        // TODO: Those boundary points should also be jittered, at least along the line.
 
         // Randomizing algorithms borrowed from AFMG with many modifications
 
@@ -82,11 +78,11 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
         macro_rules! jitter {
             () => {
                 // gen creates random number between >= 0.0, < 1.0
-                self.random.gen::<f64>() * self.double_jittering - self.jittering    
+                self.random.gen::<f64>() * self.jitter_spread - self.jitter_shift
             };
         }
 
-        match &self.phase { // TODO: Do I need a reference here?
+        match &self.phase { 
             PointGeneratorPhase::NortheastInfinity => {
                 self.phase = PointGeneratorPhase::SoutheastInfinity;
                 Some(self.make_point(self.extent.width*2.0, self.extent.height*2.0))

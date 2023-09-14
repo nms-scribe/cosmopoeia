@@ -13,14 +13,14 @@ pub(crate) struct RasterBounds {
     transform_x_factor: f64,
     coord_min_y: f64,
     transform_y_factor: f64,
-    pixel_width: usize, // TODO: Should be usize
-    pixel_height: usize, // TODO: Should be usize
+    pixel_width: usize,
+    pixel_height: usize,
 }
 
 impl RasterBounds {
 
     #[allow(dead_code)] pub(crate) fn pixels_to_coords(&self, x: f64, y: f64) -> (f64,f64) {
-        // transform the point into lat/long TODO: I'm not sure if this is correct for both lat/lon versus metric coordinates
+        // transform the point into lat/long 
         // https://gis.stackexchange.com/a/299572
         let lon = x * self.transform_x_factor + self.coord_min_x;
         let lat = y * self.transform_y_factor + self.coord_min_y;

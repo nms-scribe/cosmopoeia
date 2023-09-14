@@ -13,8 +13,6 @@ use crate::world_map::TileSchema;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: I think I need to play around with this curve, possibly have three curves, representing solaration at solstices and equinoxes (there's only one curve for both). Also, I need to let the user specify a tilt.
-
     let mut layer = target.edit_tile_layer()?;
 
     // Algorithm borrowed from AFMG with some modifications
@@ -24,7 +22,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
     let temp_delta = equator_temp - polar_temp;
     const EXPONENT: f64 = 0.5;
 
-    fn interpolate(t: f64) -> f64 { // TODO: Test this somehow...
+    fn interpolate(t: f64) -> f64 { 
         // From AFMG/d3: `t` is supposed to be a value from 0 to 1. If t <= 0.5 (`(t *= 2) <= 1`) then the function above is `y = ((2x)^(1/2))/2`. If t is greater, then the function is `y = (2 - (2-x)^(1/2))/2`. The two functions both create a sort of parabola. The first one starts curving up steep at 0 (the pole) and then flattens out to almost diagonal at 0.5. The second one continues the diagonal that curves more steeply up towards 1 (the equator). I'm not sure whey this curve was chosen, I would have expected a flatter curve at the equator.
         let t = t * 2.0;
         (if t <= 1.0 {
@@ -94,7 +92,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
     // Algorithm borrowed from AFMG with some modifications, most importantly I don't have a grid, so I follow the paths of the wind to neighbors.
 
-    const MAX_PASSABLE_ELEVATION: i32 = 85; // FUTURE: I've found that this is unnecessary, the elevation change should drop the precipitation and prevent any from passing on. 
+    const MAX_PASSABLE_ELEVATION: i32 = 85; 
 
     // Bands of rain at different latitudes, like the ITCZ
     const LATITUDE_MODIFIERS: [f64; 18] = [4.0, 2.0, 2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0, 1.0, 1.0, 1.0, 0.5];
@@ -147,14 +145,6 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                 break;
             }
 
-            // TODO: I think this will be improved if instead of just sending precipitation to one tile, I send it to all
-            // tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see
-            // now. Split up the precipitation evenly.
-            // -- This would require switching to a queue thing like I did for water flow.
-            // -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will
-            //    infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed 
-            //    along to the queue.
-
             // find neighbor closest to wind direction
             let mut best_neighbor: Option<(_,_)> = None;
             for (fid,direction) in &current.neighbors {
@@ -196,11 +186,11 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
             };
 
             if let Some((next_fid,mut next)) = next {
-                if current.temperature >= -5.0 { // no humidity change across permafrost? FUTURE: I'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
+                if current.temperature >= -5.0 { // no humidity change across permafrost? 'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
                     if current.grouping.is_ocean() {
                         if !next.grouping.is_ocean() {
                             // coastal precipitation
-                            // FUTURE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
+                            // NOTE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
                             // necessary considering it's the only randomness I would use, and nothing else is randomized.
                             next.precipitation += (humidity / 15.0).max(1.0);
                         } else {

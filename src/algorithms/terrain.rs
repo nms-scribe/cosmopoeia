@@ -37,8 +37,6 @@ use crate::commands::terrain::FloodOcean;
 use crate::commands::terrain::FillOcean;
 
 
-// TODO: I think that in order to guarantee reproducibility on random numbers, I'm going to have to be able to sort the tiles before generating. And in order to do that consistently, I might need to add a 'gen_order' field to the tiles, incremented when adding tiles. That has to go all the way back to points. This will help with reproducibility on the other stuff as well. I would also need to move into a sorted HashMap of some sort in order to make sure the iterator comes out correctly.
-
 enum RelativeHeightTruncation {
     Floor,
     Ceil,
@@ -508,8 +506,6 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
 impl ProcessTerrainTilesWithPointIndex for AddRange {
 
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
-        // FUTURE: I'm not getting the same results with the same seeds. It might be different with a genesis command that runs the recipe after creating
-        // the blank.
 
         let count = self.count.choose(rng);
 
@@ -553,10 +549,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             // add height to ridge and neighboring cells
             let mut queue = range.clone();
             let mut spread_count = 0;
-            // TODO: How do we watch this queue for progress
-            // TODO: Instead of processing in batches, pass the next height_delta into the queue. Then, calculate the next height_delta
-            // before queueing in neighbors. This will calculate different height_deltas for each set of neighbors, which might
-            // even create some rougher ranges?
+
             while queue.len() > 0 {
                 let frontier = std::mem::replace(&mut queue, Vec::new());
                 spread_count += 1;
@@ -571,7 +564,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                     }
                 }
                 height_delta = height_delta.powf(parameters.line_power) - 1.0;
-                if height_delta < 2.0 { // TODO: This limit was based on scaled elevation originally. It needs to be higher?
+                if height_delta < 2.0 {
                     break;
                 }
 
@@ -660,7 +653,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        // TODO: I feel like this isn't as nice as the others:
+        // NOTE: I feel like this isn't as nice as the others:
         // 1. You can't specify where it begins and ends
         // 2. You can't specify the height delta, including whether it is a raise or not.
         // 3. The path is too straight, and the widths are too even.
@@ -724,10 +717,8 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
         let progress_width = width.ceil() as usize;
         progress.start_known_endpoint(|| ("Generating strait.",progress_width));
 
-        // TODO: Just like add_range, if I pass the exp along with the item in the queue, then I could do this in a real
-        // queue.
         while width > 0.0 {
-            // TODO: The changes on this aren't right, I feel like they are way too deep, probably because they were created with elevation_scale in mind.
+
             let exp = 0.99 - (step * width);
             for tile_id in &range {
                 let tile = tile_map.try_get(&tile_id)?;

@@ -32,6 +32,7 @@ pub(crate) trait GeometryFix: Sized {
 }
 
 impl GeometryFix for Geometry {
+    // FUTURE: Remove this once it's implemented in gdal itself.
     fn difference(&self, other: &Self) -> Option<Self>  {
         if !self.has_gdal_ptr() {
             return None;
@@ -44,10 +45,10 @@ impl GeometryFix for Geometry {
             if ogr_geom.is_null() {
                 return None;
             }
-            // TODO: Unfortunately, with_c_geometry is private, so I can't use it.
+            // Unfortunately, with_c_geometry is private, so I can't use it.
             let geometry = Self::lazy_feature_geometry();
             geometry.set_c_geometry(ogr_geom);
-            // TODO: DANGER!: I can't set owned = true on the thing, there's no way.
+            // DANGER!: I can't set owned = true on the thing, there's no way.
             // However, I *think* cloning will take care of that. Because the original
             // value won't dereference the API handle, as it's not owned, but clone
             // will set it to owned.

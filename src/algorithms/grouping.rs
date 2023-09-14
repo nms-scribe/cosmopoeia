@@ -27,7 +27,6 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
     // pop the next one off of the table.
     // 'watch_queue' isn't going to work here since it only watches when it picks.
-    // TODO: With the new IndexMap backing, I actually could use pop here.
     while let Some(tile) = table.keys().next().cloned().map(|first| table.try_remove(&first)) {
         let tile = tile?;
         progress.update(|| original_table_len - table.len());
@@ -36,7 +35,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
         // NOTE: I previously considered using the lake_id for the lake grouping_id, and getting rid of that field.
         // However, there is no guarantee that it won't (and almost assured it won't) overlap with the other id
         // numbers. Keeping them separate will simplify some algorithms, as otherwise I'd have to check both the
-        // grouping and grouping_id to make sure things are the same.
+        // grouping and grouping_id to make sure I'm looking in the right place.
         let grouping_id = next_grouping_id.next().unwrap();
         let mut group = vec![tile.fid];
         let mut neighbors = tile.neighbors.clone();
@@ -95,7 +94,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
             } else {
                 if !found_ocean_neighbor {
                     Grouping::LakeIsland // even if it's continent size
-                    // FUTURE: There is a possible error if there are no oceans on the map at all. While we could
+                    // NOTE: There is a possible error if there are no oceans on the map at all. While we could
                     // check oceans.len, that will cause every lake_island to be a continent, even if it actually is 
                     // a lake_island. We could have another flag for having found only lake neighbors, but that's just
                     // going to turn the whole thing into continent.
@@ -103,9 +102,9 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                     // then it's a continent.
                 } else if group_len > (tile_count / 100) { 
                     // NOTE: AFMG had 10 here. That didn't make enough large islands into continents on my map
-                    // FUTURE: The comparsion shouldn't be made against the tile count, but against a potential
+                    // NOTE: The comparsion shouldn't be made against the tile count, but against a potential
                     // tile count if the map extended to the entire world.
-                    // FUTURE: Alternatively, we could have a "Scale" parameter which would be required for calculating this.
+                    // NOTE: Alternatively, we could have a "Scale" parameter which would be required for calculating this.
                     Grouping::Continent
                 } else if group_len > (tile_count / 1000) {
                     Grouping::Island

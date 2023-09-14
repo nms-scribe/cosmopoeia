@@ -319,7 +319,7 @@ pub enum StraitDirection {
 subcommand_def!{
 
     /// Adds a long cut somewhere on the map
-    // TODO: Why isn't there an equivalent "isthmus" of some sort? Should I specify the height change? Why are the directions limited to horizontal and vertical? And shouldn't the direction at least be an axis instead of vert/horiz, would be a z-axis?
+
     #[derive(Deserialize,Serialize)]
     pub struct AddStrait { 
         pub width: ArgRange<f64>,
@@ -413,7 +413,7 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct Smooth {
         #[arg(default_value="2")]
-        pub fr: f64 // TODO: I'm not sure what this actually is. It's not quite a weighted average, I don't really understand where AFMG got its algorithm from.
+        pub fr: f64
     }
     
 }

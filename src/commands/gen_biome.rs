@@ -93,7 +93,6 @@ impl Task for Apply {
 
 impl Apply {
 
-    // TODO: Make all of these take the progress observer thingie
     fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying biomes to tiles");
     

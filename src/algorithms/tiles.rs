@@ -77,7 +77,7 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
-    // TODO: The delaunay process seems to process the points in a random order. However, I need to always insert the tiles from the same
+    // NOTE: The delaunay process seems to process the points in a random order. However, I need to always insert the tiles from the same
     // generated points in the same order. If I could somehow "map" the sites with their original points, I could apply an incrementing
     // id to the points while I'm generating and have it here to sort by. Until that time, I'm sorting by x,y. This sort is a little
     // bit heavy, so there might be a better way.
@@ -99,13 +99,8 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
 
 pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: I should also be able to do some additional things:
-    // 1. Figure out if a tile is on the edge of the map, which may be important later.
-    // 2. Find neighbors on the other side of the world, if a configuration property tells us to wrap east and west.
-    // 3. Make all polar tiles neighbors, if a configuration property tells us that we should do that.
-
     // NOTE: At one point I tried an algorithm which iterated through each polygon, set a spatial index for its bounds, then
-    // found all non-disjoint polygons in that index to mark them as a neighbor. This is hugely faster. The old way took about 
+    // found all non-disjoint polygons in that index to mark them as a neighbor. That was slow. This is hugely faster. The old way took about 
     // 5 seconds for 10,000 tiles, and this one was almost instantaneous for that number. I blame my algorithm for curvifying
     // polygons for coming up with this idea.
 
@@ -227,10 +222,6 @@ pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TilesLayer<'_,'_>)
 
 pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: In theory, I could write an ocean_id or coastline_id onto tiles if I really wanted to. This might take the place of grouping_id. In fact,
-    // I could determine almost every grouping type in this algorithm, except for lake and lake_island. If I could then generate those two in fill 
-    // lakes, then I could get rid of the grouping task.
-
     // FUTURE: There is an issue with coastlines extending over the edge of the borders after curving. I will have to deal with these someday.
     // FUTURE: After curving, towns which are along the coastline will sometimes now be in the ocean. I may need to deal with that as well, someday.
 
@@ -245,7 +236,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
 
     let tile_union = if let Some(tile) = iterator.next() {
-        let first_tile = tile?.geometry()?.clone(); // TODO: Make sure to change 'geometry' to just return an error, then test it with the other stuff after and replace try_geometry with geometry.
+        let first_tile = tile?.geometry()?.clone(); 
 
         // it's much faster to union two geometries rather than union them one at a time.
         let mut next_tiles = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
@@ -253,7 +244,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
             next_tiles.add_geometry(tile?.geometry()?.clone())?;
         }
         progress.start_unknown_endpoint(|| "Uniting tiles.");
-        // TODO: Check it, though, that it's doing the right thing here, and not just adding the first_tile to the multipolygon.
+
         let tile_union = first_tile.union(&next_tiles);
         progress.finish(|| "Tiles united.");
         tile_union
@@ -274,7 +265,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
             for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
                 if let Some(difference) = ocean.difference(&new_polygon) {
                     ocean = difference; 
-                } // TODO: Or what?
+                } 
                 polygons.push(new_polygon);
             }
         }
@@ -518,7 +509,7 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
                 for geometry in geometries {
                     remaining.add_geometry(geometry)?;
                 }
-                let united = first.union(&remaining).unwrap(); // TODO: Or what?
+                let united = first.union(&remaining).unwrap();
                 let united = force_multipolygon(united)?;
                 united
             } else {

@@ -83,7 +83,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
 
                     }
                 }
-                let habitability = suitability / 5.0; // FUTURE: I don't know why 5, but that's what AFMG did.
+                let habitability = suitability / 5.0; // I don't know why 5, but that's what AFMG did.
                 // AFMG Just shows population in thousands, I'm actually going to have more precision, just for looks.
                 let population = (((habitability * tile.area)/area_mean) * 1000.0).floor() as i32;
                 (habitability,population)

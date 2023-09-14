@@ -34,8 +34,6 @@ pub(crate) struct ScoredTileForTowns {
 
 pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: Certain culture "types" shouldn't generate towns, or should generate fewer towns. Nomads, for example. 
-
     // a lot of this is ported from AFMG
 
     let mut tiles_layer = target.edit_tile_layer()?;
@@ -311,8 +309,7 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
 
         // figure out it's population -- habitability is already divided by 5, so this makes it 10% of true suitability for people.
         // FUTURE: The population should be increased by the road traffic, but that could be done in the road generating stuff
-        // TODO: I'm not sure why AFMG added that 8 in there. Check town populations when I'm done and possibly get rid of it.
-        let population = (((tile.habitability / 2.0) / 8.0) * 1000.0).max(100.0); 
+        let population = ((tile.habitability / 2.0) * 1000.0).max(100.0); 
 
         let population = if town.is_capital {
             population * 1.3

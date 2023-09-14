@@ -40,7 +40,7 @@ impl Lake {
         for tile in tiles {
             let tile = layer.try_feature_by_id(&tile)?; 
             let tile = tile.geometry()?; 
-            lake_geometry = tile.union(&lake_geometry).unwrap(); // TODO: Should I return an error instead?
+            lake_geometry = tile.union(&lake_geometry).unwrap(); 
         }
         Ok(lake_geometry)
     }
@@ -49,7 +49,7 @@ impl Lake {
         let lake_temp_sum: f64 = self.tile_temperatures.iter().sum();
         let lake_temp = lake_temp_sum / self.tile_temperatures.len() as f64;
         // This is taken from AFMG, where it says it was based on the Penman formula, except I don't see much relationship to the
-        // equation described at https://en.wikipedia.org/wiki/Penman_equation TODO: Maybe this needs to be fixed?
+        // equation described at https://en.wikipedia.org/wiki/Penman_equation
         let lake_evap = ((700.0 * (lake_temp + 0.006 * self.elevation)) / 50.0 + 75.0) / (80.0 - lake_temp);
         let lake_evap = lake_evap * self.contained_tiles.len() as f64;
         (lake_temp,lake_evap)           
@@ -98,8 +98,6 @@ impl Lake {
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
 pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: I may need to add some modifiers for the lake filling values, so that I end up with more endorheic lakes.
-    // TODO: I predict there will be a problem with lakes on the edges of the maps, which will also be part of the flow algorithm, but I haven't gotten that far yet. I will need a lot more real-world testing to get this figured out.
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
@@ -109,7 +107,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     }
 
     let mut tile_queue = tile_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
-    // TODO: I've had good luck with going directly to the database with population and shore_distance, so maybe I don't need to map it?
+
     let mut tile_map = tile_map;
     let mut next_lake_id = (0..).into_iter();
     let mut lake_map = HashMap::new();
@@ -294,7 +292,6 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                                         }
 
                                     } else {
-                                        // TODO: Is this an error?
                                         continue;
                                     }
                                 } else if check.elevation < new_lake_elevation {
@@ -392,7 +389,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     let tile_area = tiles_layer.estimate_average_tile_area()?;
     let tile_width = tile_area.sqrt();
     let buffer_distance = (tile_width/10.0) * -lake_buffer_scale;
-    // the next isn't customizable, it just seems to work right. FUTURE: Check this with higher and lower resolution tiles.
+    // the next isn't customizable, it just seems to work right. 
     let simplify_tolerance = tile_width/10.0;
     let mut new_lake_map = HashMap::new();
 

@@ -76,9 +76,7 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
 
 pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, limit_factor: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: These nations are really huge. This may be related to cultures. I wonder if the problem is that I'm using a world-scale, while AFMG is using region-scale, even if they support world-scale. Maybe I've got to base the expansion on the size of the world somehow.
 
-    // TODO: A lot of these lookups use 'edit', except I'm not editing them, should I be able to open up a layer without editing in the WorldMapTransaction?
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForPlacement>(progress)?;
 
     let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForNationExpand>(progress)?;
@@ -114,8 +112,6 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     }
 
-    // TODO: I use this algorithm a lot. Maybe I need to put this in some sort of function? But there are so many differences.
-
     let mut queue = queue.watch_queue(progress, "Expanding cultures.", "Cultures expanded.");
 
     while let Some(((tile_id, nation, nation_biome), priority)) = queue.pop() {
@@ -123,7 +119,6 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
         let mut place_nations = Vec::new();
 
     
-        // TODO: I should find a way to avoid repeating this error check.
         let tile = tile_map.try_get(&tile_id)?;
 
         for (neighbor_id,_) in &tile.neighbors {
@@ -219,44 +214,44 @@ pub(crate) fn get_shore_cost(neighbor: &TileForNationExpand, culture_type: &Cult
         CultureType::Lake => match neighbor.shore_distance {
             1 => 0.0,
             2 => 0.0, 
-            ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland // TODO: But also the outer water
+            ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
             -1 => 0.0,
         },
         CultureType::Naval => match neighbor.shore_distance {
             1 => 0.0,
             2 => 30.0, // penalty for mainland 
-            ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland // TODO: But also the outer water
+            ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland 
             -1 => 0.0,
         },
         CultureType::Nomadic => match neighbor.shore_distance {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
         CultureType::Generic  => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
         CultureType::River => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
         CultureType::Hunting => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0,
         },
         CultureType::Highland => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
     }
 
@@ -264,7 +259,6 @@ pub(crate) fn get_shore_cost(neighbor: &TileForNationExpand, culture_type: &Cult
 
 pub(crate) fn get_river_cost(neighbor: &TileForNationExpand, river_threshold: f64, culture_type: &CultureType) -> f64 {
     match culture_type {
-        // TODO: Can I go wi
         CultureType::River => if neighbor.water_flow > river_threshold {
             0.0
         } else {
@@ -286,7 +280,7 @@ pub(crate) fn get_river_cost(neighbor: &TileForNationExpand, river_threshold: f6
 }
 
 pub(crate) fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
-    // TODO: This is similar to the way cultures work, but not exactly.
+    // This is similar to the way cultures work, but not exactly.
     match culture_type {
         CultureType::Lake => if neighbor.lake_id.is_some() {
             // low lake crossing penalty for lake cultures
@@ -354,7 +348,7 @@ pub(crate) fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &Cul
 }
 
 pub(crate) fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForNationExpand, culture_type: &CultureType) -> f64 {
-    // TODO: This is very similar to the one for cultures, but not exactly.
+    // This is very similar to the one for cultures, but not exactly.
 
     // FUTURE: I need a way to make this more configurable...
     const FOREST_BIOMES: [&str; 5] = [BiomeFeature::TROPICAL_SEASONAL_FOREST, BiomeFeature::TEMPERATE_DECIDUOUS_FOREST, BiomeFeature::TROPICAL_RAINFOREST, BiomeFeature::TEMPERATE_RAINFOREST, BiomeFeature::TAIGA];
@@ -383,7 +377,6 @@ pub(crate) fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForNa
 
 }
 
-// TODO: is 'normalize' the right word?
 pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
     let town_index = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForNationNormalize>(progress)?;

@@ -39,7 +39,6 @@ subcommand_def!{
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         pub namers: Vec<PathBuf>,
 
-        // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
         #[arg(long)]
         /// The name generator to use for naming towns in tiles without a culture
         pub default_namer: String,
@@ -274,7 +273,6 @@ pub struct DefaultArgs {
     /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
     pub namers: Vec<PathBuf>,
 
-    // TODO: If I ever fill up the whole thing with cultures, then there shouldn't be any towns without a culture, and I can get rid of this.
     #[arg(long)]
     /// The name generator to use for naming towns in tiles without a culture
     pub default_namer: String,

@@ -111,7 +111,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
     let mut queue = PriorityQueue::new();
 
     for subnation in target.edit_subnations_layer()?.read_features().into_entities::<SubnationForPlacement>().watch(progress,"Reading subnations.","Subnations read.") {
-        let (_,subnation) = subnation?; // TODO: I have to do this so often, is there a shortcut?
+        let (_,subnation) = subnation?;
         let center = subnation.center as u64;
         tile_map.try_get_mut(&center)?.subnation_id = Some(subnation.fid as i64);
         costs.insert(center, OrderedFloat::from(1.0));
@@ -296,7 +296,6 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
                         let neighbor = tile_map.try_get(&neighbor_id)?;
                         if neighbor.subnation_id.is_some() {
-                            // FUTURE: Wouldn't this have been handled by not being available to place?
                             continue;
                         }
 
@@ -306,7 +305,6 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                             continue; // don't pass through deep ocean
                         }
                         if neighbor.nation_id != Some(subnation.nation_id) {
-                            // FUTURE: Wouldn't this have been handled by not being available to place?
                             continue; // don't leave nation
                         }
 
@@ -402,7 +400,6 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
     Ok(())
 }
 
-// TODO: is 'normalize' the right word?
 pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
     let subnations_map = target.edit_subnations_layer()?.read_features().to_entities_index::<_,SubnationForNormalize>(progress)?;

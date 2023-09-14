@@ -85,13 +85,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         culture_count
     };
 
-    // TODO: I'm seeing some cultures which spread a lot further out than I would expect.
-    // -- how can you get an expansionism of 2.2, for a nomadic type?
-    // -- is generic overpowered? 
-    // -- Even at limit-factor of 0.2 it goes really far.
-
     let culture_sources = culture_set.select(rng,culture_count);
-    // TODO: Make sure to add the wildlands culture on and fill up the empties at the end if there are any.
 
     let mut placed_centers = Vec::new();
     let mut cultures = Vec::new();
@@ -99,7 +93,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     let (width,height) = tile_layer.get_layer_size()?;
     let spacing = (width + height) / 2.0 / culture_count as f64;
     let max_tile_choice = populated.len() / 2;
-    const MAX_ATTEMPTS: usize = 100; // FUTURE: Configure?
+    const MAX_ATTEMPTS: usize = 100;
 
     // I need to avoid duplicate names
     let mut culture_names = HashMap::new();
@@ -142,7 +136,6 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         let name = culture_source.name().to_owned();
 
         // define the culture type
-        // TODO: This will be much simpler if it's in a function and early return
         let culture_type = get_culture_type(&center, river_threshold, rng)?;
         
         let expansionism = culture_type.generate_expansionism(rng,size_variance);
@@ -152,8 +145,6 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         namers.check_exists(namer)?;
 
         let index = cultures.len();
-        // TODO: This seems like a more efficient way to do this, instead of entry, since I only clone if the name is inserted
-        // TODO: Change the other usages to use this if I can.
         match culture_names.get_mut(&name) {
             None => {
                 culture_names.insert(name.clone(), vec![index]);
@@ -238,7 +229,7 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
 
 fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_threshold: f64, rng: &mut Random) -> Result<CultureType, CommandError> {
     if center.elevation_scaled < 70 && center.biome.supports_nomadic {
-        return Ok(CultureType::Nomadic) // TODO: These should be an enum eventually.
+        return Ok(CultureType::Nomadic) 
     } else if center.elevation_scaled > 50 {
         return Ok(CultureType::Highland)
     }
@@ -257,7 +248,7 @@ fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_thres
         }
     }
     
-    if center.water_flow > river_threshold { // TODO: Is this the right value? 
+    if center.water_flow > river_threshold { 
         return Ok(CultureType::River)
     } else if center.shore_distance > 2 && center.biome.supports_hunting {
         return Ok(CultureType::Hunting)
@@ -280,9 +271,6 @@ fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
 
 pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, limit_factor: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // TODO: Cultures should fill lake tiles even if there is no population.
-    // TODO: So should nations and subnations.
-
     let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
 
     let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForCultureExpand>(progress)?;
@@ -299,7 +287,6 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     // empty hashmap of tile ids
     let mut costs = HashMap::new();
 
-    // TODO: We should change all of the 'as' in this crate into 'into'
     // This is how far the cultures will be able to spread.
     let max_expansion_cost = OrderedFloat::from(tiles.feature_count() as f64 * 0.6 * limit_factor);
 
@@ -318,8 +305,6 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     }
 
-    // TODO: I use this algorithm a lot. Maybe I need to put this in some sort of function? But there are so many differences.
-
     let mut queue = queue.watch_queue(progress, "Expanding cultures.", "Cultures expanded.");
 
     while let Some(((tile_id, culture, culture_biome), priority)) = queue.pop() {
@@ -327,7 +312,6 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         let mut place_cultures = Vec::new();
 
         
-        // TODO: I should find a way to avoid repeating this error check.
         let tile = tile_map.try_get(&tile_id)?;
 
         for (neighbor_id,_) in &tile.neighbors {
@@ -343,7 +327,8 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
             let biome_cost = get_biome_cost(&culture_biome,neighbor_biome,&culture.type_);
 
-            // FUTURE: AFMG Had a line that looked very much like this one. I don't know if that was what was intended or not.
+            // NOTE: AFMG Had a line that looked very much like this one. I don't know if that was what was intended or not, but
+            // from my view, this will always return 0.
             // let biome_change_cost = if neighbor_biome == biome_map.get(&neighbor.biome) { 0 } else { 20 };
 
             let height_cost = get_height_cost(neighbor, &culture.type_);
@@ -431,44 +416,44 @@ fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -
         CultureType::Lake => match neighbor.shore_distance {
             1 => 0.0,
             2 => 0.0, 
-            ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland // TODO: But also the outer water
+            ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
             -1 => 0.0,
         },
         CultureType::Naval => match neighbor.shore_distance {
             1 => 0.0,
             2 => 30.0, // penalty for mainland 
-            ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland // TODO: But also the outer water
+            ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland 
             -1 => 0.0,
         },
         CultureType::Nomadic => match neighbor.shore_distance {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
         CultureType::Generic  => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
         CultureType::River => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0, 
         },
         CultureType::Hunting => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0,
         },
         CultureType::Highland => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
             2 => 0.0, 
             ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, // TODO: No problem going out on the ocean?
+            -1 => 0.0,
         },
     }
 
@@ -476,7 +461,6 @@ fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -
 
 fn get_river_cost(neighbor: &TileForCultureExpand, river_threshold: f64, culture_type: &CultureType) -> f64 {
     match culture_type {
-        // TODO: Can I go wi
         CultureType::River => if neighbor.water_flow > river_threshold {
             0.0
         } else {

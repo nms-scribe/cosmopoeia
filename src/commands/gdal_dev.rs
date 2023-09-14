@@ -28,8 +28,8 @@ impl Task for DatasetInfo {
     fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
         let ds = Dataset::open(self.source)?;
         println!("projection: {}",ds.projection()); 
-        //println!("spatial reference: {:?}",ds.spatial_ref()?); // TODO: This causes an error in gpkg
-        //println!("geotransform: {:?}",ds.geo_transform()?); // TODO: This causes an error in gpkg
+        //println!("spatial reference: {:?}",ds.spatial_ref()?); // NOTE: This causes an error in gpkg
+        //println!("geotransform: {:?}",ds.geo_transform()?); // NOTE: This causes an error in gpkg
         println!("layer count: {}",ds.layer_count()); // If the file is a vector, this will be > 0
         println!("raster band count: {}",ds.raster_count()); // If the file is a raster, this will be > 0
         println!("raster size: {:?}",ds.raster_size()); // I see this as 512,512 for vector.

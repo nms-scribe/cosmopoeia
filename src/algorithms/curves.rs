@@ -48,7 +48,6 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
         let multipolygon = feature.geometry()?;
         let mut polygons = Vec::new();
 
-        // TODO: The *new* subnations don't have geometries.
         // each feature is a multipolygon, so iterate through polygons
         for polygon_index in 0..multipolygon.geometry_count() {
             let polygon = multipolygon.get_geometry(polygon_index);

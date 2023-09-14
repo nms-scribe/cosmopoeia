@@ -260,7 +260,7 @@ impl Task for CreateTiles {
 
         let mut random = random_number_generator(self.seed);
 
-        let loaded_source = self.source.load(&mut random, progress)?; // TODO: for the heightmap, we load the source raster, otherwise I'm not certain.
+        let loaded_source = self.source.load(&mut random, progress)?;
 
         let mut target = WorldMap::create_or_edit(self.target)?;
 
