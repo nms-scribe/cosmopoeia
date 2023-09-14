@@ -18,7 +18,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
     let mut groupings = Vec::new();
     let mut ocean = HashSet::new();
-    let mut next_grouping_id = 1 as i64..;
+    let mut next_grouping_id = 1 as u64..;
 
     // I can't watch anything here, because this isn't really a queue and I'm only picking the first key off the iterator every time I create a key iterator.
     // I could create a WatchableHashMap, but I don't foresee this process being used a lot.

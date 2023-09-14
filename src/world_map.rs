@@ -76,17 +76,20 @@ macro_rules! feature_get_field_type {
     (i64) => {
         i64
     };
+    (id_ref) => {
+        u64
+    };
     (i32) => {
         i32
     };
     (bool) => {
         bool
     };
-    (option_f64) => {
-        Option<f64> // this is the same because everything's an option, the option tag only means it can accept options
-    };
     (option_i64) => {
         Option<i64> // this is the same because everything's an option, the option tag only means it can accept options
+    };
+    (option_id_ref) => {
+        Option<u64>
     };
     (option_i32) => {
         Option<i32> // this is the same because everything's an option, the option tag only means it can accept options
@@ -127,14 +130,17 @@ macro_rules! feature_set_field_type {
     (f64) => {
         f64
     };
-    (option_f64) => {
-        Option<f64>
-    };
-    (i64) => {
+    (i64) => { // TODO: Remove?
         i64
     };
     (option_i64) => {
         Option<i64>
+    };
+    (id_ref) => {
+        u64
+    };
+    (option_id_ref) => {
+        Option<u64>
     };
     (i32) => {
         i32
@@ -181,15 +187,17 @@ macro_rules! feature_get_field {
     ($self: ident f64 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_double_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
     };
-    ($self: ident option_f64 $feature_name: literal $prop: ident $field: path) => {
-        // see above for getfieldtype option_f64
-        Ok($self.feature.field_as_double_by_name($field)?)
-    };
     ($self: ident i64 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer64_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
     };
+    ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_string_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?.parse().map_err(|_| CommandError::InvalidValueForIdRef(concat!($feature_name,".",stringify!($prop))))?)
+    };
     ($self: ident option_i64 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer64_by_name($field)?)
+    };
+    ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
+        Ok($self.feature.field_as_string_by_name($field)?.map(|a| a.parse().map_err(|_| CommandError::InvalidValueForIdRef(concat!($feature_name,".",stringify!($prop))))).transpose()?)
     };
     ($self: ident i32 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
@@ -305,15 +313,6 @@ macro_rules! feature_set_field {
         // This can help me catch math problems early...
         Ok($self.feature.set_field_double($field, NotNan::try_from($value)?.into_inner())?)
     };
-    ($self: ident $value: ident option_f64 $field: path) => {
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_double($field, NotNan::try_from(value)?.into_inner())?)
-        } else {
-            // There's no unsetfield, but this should have the same effect.
-            // FUTURE: I've put in a feature request to gdal crate.
-            Ok(set_field_null(&$self.feature,$field)?)
-        }
-    };
     ($self: ident $value: ident i32 $field: path) => {
         Ok($self.feature.set_field_integer($field, $value)?)
     };
@@ -326,6 +325,16 @@ macro_rules! feature_set_field {
     };
     ($self: ident $value: ident i64 $field: path) => {
         Ok($self.feature.set_field_integer64($field, $value)?)
+    };
+    ($self: ident $value: ident id_ref $field: path) => {
+        Ok($self.feature.set_field_string($field, &$value.to_string())?)
+    };
+    ($self: ident $value: ident option_id_ref $field: path) => {
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_string($field, &value.to_string())?)
+        } else {
+            Ok($self.feature.set_field_null($field)?)
+        }
     };
     ($self: ident $value: ident option_i64 $field: path) => {
         if let Some(value) = $value {
@@ -385,13 +394,6 @@ macro_rules! feature_to_value {
     ($prop: expr; bool) => {
         Some(FieldValue::IntegerValue($prop.into()))
     };
-    ($prop: expr; option_f64) => {
-        if let Some(value) = $prop {
-            Some(FieldValue::RealValue(value))
-        } else {
-            to_field_null_value()
-        }
-    };
     ($prop: expr; option_i32) => {
         if let Some(value) = $prop {
             Some(FieldValue::IntegerValue(value))
@@ -406,6 +408,13 @@ macro_rules! feature_to_value {
             None
         }
     };
+    ($prop: expr; option_id_ref) => {
+        if let Some(value) = $prop {
+            Some(FieldValue::StringValue(value.to_string()))
+        } else {
+            None
+        }
+    };
     ($prop: expr; id_list) => {
         Some(FieldValue::StringValue(feature_conv!(id_list_to_string@ $prop)))
     };
@@ -414,6 +423,10 @@ macro_rules! feature_to_value {
     };
     ($prop: expr; i64) => {
         Some(FieldValue::Integer64Value($prop))
+    };
+    ($prop: expr; id_ref) => {
+        // store id_ref as a string so I can use u64, as fields only support i64
+        Some(FieldValue::StringValue($prop.to_string()))
     };
     ($prop: expr; river_segment_from) => {{
         Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
@@ -488,14 +501,70 @@ macro_rules! feature_count_fields {
     };
 }
 
+macro_rules! get_field_type_for_prop_type {
+    (f64) => {
+        OGRFieldType::OFTReal
+    };
+    (i32) => {
+        OGRFieldType::OFTInteger
+    };
+    (grouping) => {
+        OGRFieldType::OFTString
+    };
+    (id_ref) => {
+        OGRFieldType::OFTString
+    };
+    (option_id_ref) => {
+        OGRFieldType::OFTString
+    };
+    (id_list) => {
+        OGRFieldType::OFTString
+    };
+    (option_i32) => {
+        OGRFieldType::OFTInteger
+    };
+    (string) => {
+        OGRFieldType::OFTString
+    };
+    (option_string) => {
+        OGRFieldType::OFTString
+    };
+    (option_i64) => {
+        OGRFieldType::OFTInteger64
+    };
+    (neighbor_directions) => {
+        OGRFieldType::OFTString
+    };
+    (i64) => {
+        OGRFieldType::OFTInteger64
+    };
+    (river_segment_from) => {
+        OGRFieldType::OFTString
+    };
+    (river_segment_to) => {
+        OGRFieldType::OFTString
+    };
+    (lake_type) => {
+        OGRFieldType::OFTString
+    };
+    (biome_criteria) => {
+        OGRFieldType::OFTString
+    };
+    (bool) => {
+        OGRFieldType::OFTInteger
+    };
+    (culture_type) => {
+        OGRFieldType::OFTString
+    }
+}
+
 macro_rules! feature {
     ($struct_name:ident $schema_name: ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
         $(#[$get_attr: meta])* $prop: ident 
         $(#[$set_attr: meta])* $set_prop: ident 
         $prop_type: ident 
         $field: ident 
-        $name: literal 
-        $field_type: path;
+        $name: literal;
     )*}) => {
 
         pub(crate) struct $struct_name<'data_life> {
@@ -522,7 +591,7 @@ macro_rules! feature {
 
             // field definitions
             const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
-                $((Self::$field,$field_type)),*
+                $((Self::$field,get_field_type_for_prop_type!($prop_type))),*
             ];
 
 
@@ -1107,60 +1176,61 @@ impl TryFrom<String> for Grouping {
 
 feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     /// longitude of the node point for the tile's voronoi
-    site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x" OGRFieldType::OFTReal;
+    site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x";
     /// latitude of the node point for the tile's voronoi
-    site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y" OGRFieldType::OFTReal;
+    site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y";
     /// elevation in meters of the node point for the tile's voronoi
-    elevation set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
+    elevation set_elevation f64 FIELD_ELEVATION "elevation";
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
     // If I ever get rid of those algorithms, this field can go away.
     /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
-    elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled" OGRFieldType::OFTInteger;
+    elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled";
     /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
-    grouping set_grouping grouping FIELD_GROUPING "grouping" OGRFieldType::OFTString;
+    grouping set_grouping grouping FIELD_GROUPING "grouping";
     /// A unique id for each grouping. These id's do not map to other tables, but will tell when tiles are in the same group. Use lake_id to link to the lake table.
-    grouping_id set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
+    // NOTE: This isn't an id_ref, but let's store it that way anyway
+    grouping_id set_grouping_id id_ref FIELD_GROUPING_ID "grouping_id";
     /// average annual temperature of tile in imaginary units
-    temperature set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
+    temperature set_temperature f64 FIELD_TEMPERATURE "temperature";
     /// roughly estimated average wind direction for tile
-    wind set_wind i32 FIELD_WIND "wind_dir" OGRFieldType::OFTInteger;
+    wind set_wind i32 FIELD_WIND "wind_dir";
     /// average annual precipitation of tile in imaginary units
-    precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation" OGRFieldType::OFTReal;
+    precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation";
     /// amount of water flow through tile in imaginary units
-     water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow" OGRFieldType::OFTReal;
+    water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow";
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
-     water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum" OGRFieldType::OFTReal;
+    water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum";
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
-    lake_id set_lake_id option_i64 FIELD_LAKE_ID "lake_id" OGRFieldType::OFTInteger64;
+    lake_id set_lake_id option_id_ref FIELD_LAKE_ID "lake_id";
     /// id of neighboring tile which water flows to
-     flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to" OGRFieldType::OFTString;
+    flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to";
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
-     shore_distance set_shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance" OGRFieldType::OFTInteger;
+    shore_distance set_shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance";
     /// If this is a land tile neighboring a water body, this is the id of the closest tile
-     closest_water set_closest_water option_i64 FIELD_CLOSEST_WATER "closest_water" OGRFieldType::OFTInteger64;
+    harbor_tile_id set_harbor_tile_id option_id_ref FIELD_HARBOR_TILE_ID "harbor_tile_id";
     /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
-     water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count" OGRFieldType::OFTInteger;
+    water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count";
     /// The biome for this tile
-     biome set_biome string FIELD_BIOME "biome" OGRFieldType::OFTString;
+    biome set_biome string FIELD_BIOME "biome";
     /// the factor used to generate population numbers, along with the area of the tile
-     habitability set_habitability f64 FIELD_HABITABILITY "habitability" OGRFieldType::OFTReal;
+    habitability set_habitability f64 FIELD_HABITABILITY "habitability";
     /// base population of the cell outside of the towns.
-     population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
+    population set_population i32 FIELD_POPULATION "population";
     /// The name of the culture assigned to this tile, unless wild
-     culture set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
+    culture set_culture option_string FIELD_CULTURE "culture";
     /// if the tile has a town, this is the id of the town in the towns layer
-     town_id set_town_id option_i64 FIELD_TOWN_ID "town_id" OGRFieldType::OFTInteger64;
+    town_id set_town_id option_id_ref FIELD_TOWN_ID "town_id"; 
     /// if the tile is part of a nation, this is the id of the nation which controls it
-     nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
+    nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id"; // TODO: id_ref
     /// if the tile is part of a subnation, this is the id of the nation which controls it
-     subnation_id set_subnation_id option_i64 FIELD_SUBNATION_ID "subnation_id" OGRFieldType::OFTInteger64;
+    subnation_id set_subnation_id option_i64 FIELD_SUBNATION_ID "subnation_id"; // TODO: id_ref
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
     /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-     outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from" OGRFieldType::OFTString;
+    outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from";
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
-    neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles" OGRFieldType::OFTString;
+    neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles";
 
 });
 
@@ -1285,7 +1355,7 @@ entity!(TileForWaterFill TileSchema TileFeature {
     flow_to: Vec<u64>,
     temperature: f64,
     outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
-    lake_id: Option<usize> = |_| Ok::<_,CommandError>(None)
+    lake_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
 
 impl From<TileForWaterflow> for TileForWaterFill {
@@ -1332,14 +1402,14 @@ entity!(TileForWaterDistance TileSchema TileFeature {
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
-    closest_water: Option<i64> = |_| Ok::<_,CommandError>(None)
+    closest_water_tile_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
 
 
 entity!(TileForGroupingCalc TileSchema TileFeature {
     fid: u64,
     grouping: Grouping,
-    lake_id: Option<i64>,
+    lake_id: Option<u64>,
     neighbors: Vec<(u64,i32)>
 });
 
@@ -1352,13 +1422,13 @@ entity!(TileForPopulation TileSchema TileFeature {
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
-    closest_water: Option<i64>,
-    lake_id: Option<i64>
+    harbor_tile_id: Option<u64>,
+    lake_id: Option<u64>
 });
 
 entity!(TileForPopulationNeighbor TileSchema TileFeature {
     grouping: Grouping,
-    lake_id: Option<i64>
+    lake_id: Option<u64>
 });
 
 
@@ -1372,7 +1442,7 @@ entity!(TileForCultureGen TileSchema TileFeature {
     elevation_scaled: i32,
     biome: String,
     water_count: Option<i32>,
-    closest_water: Option<i64>,
+    harbor_tile_id: Option<u64>,
     grouping: Grouping,
     water_flow: f64,
     temperature: f64
@@ -1397,7 +1467,7 @@ impl TileForCulturePrefSorting<'_> {
 
     pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TilesLayer, biomes: &'biomes EntityLookup<BiomeSchema,BiomeForCultureGen>, lakes: &EntityIndex<LakeSchema,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
         let biome = biomes.try_get(&tile.biome)?;
-        let neighboring_lake_size = if let Some(closest_water) = tile.closest_water {
+        let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
             let closest_water = closest_water as u64;
             let closest_water = tiles.try_feature_by_id(&closest_water)?;
             if let Some(lake_id) = closest_water.lake_id()? {
@@ -1436,7 +1506,7 @@ entity!(TileForCultureExpand TileSchema TileFeature {
     grouping: Grouping,
     water_flow: f64,
     neighbors: Vec<(u64,i32)>,
-    lake_id: Option<i64>,
+    lake_id: Option<u64>,
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
@@ -1449,7 +1519,7 @@ entity!(TileForTowns TileSchema TileFeature {
     habitability: f64,
     site: Point,
     culture: Option<String>,
-    grouping_id: i64
+    grouping_id: u64
 });
 
 entity!(TileForTownPopulation TileSchema TileFeature {
@@ -1457,11 +1527,11 @@ entity!(TileForTownPopulation TileSchema TileFeature {
     geometry: Geometry,
     habitability: f64,
     site: Point,
-    grouping_id: i64,
-    closest_water: Option<i64>,
+    grouping_id: u64,
+    harbor_tile_id: Option<u64>,
     water_count: Option<i32>,
     temperature: f64,
-    lake_id: Option<i64>,
+    lake_id: Option<u64>,
     water_flow: f64,
     grouping: Grouping
 });
@@ -1494,7 +1564,7 @@ entity!(TileForNationExpand TileSchema TileFeature {
     grouping: Grouping,
     water_flow: f64,
     neighbors: Vec<(u64,i32)>,
-    lake_id: Option<i64>,
+    lake_id: Option<u64>,
     culture: Option<String>,
     nation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
 });
@@ -1502,13 +1572,13 @@ entity!(TileForNationExpand TileSchema TileFeature {
 entity!(TileForNationNormalize TileSchema TileFeature {
     grouping: Grouping,
     neighbors: Vec<(u64,i32)>,
-    town_id: Option<i64>,
+    town_id: Option<u64>,
     nation_id: Option<i64>
 });
 
 entity!(TileForSubnations TileSchema TileFeature {
     fid: u64,
-    town_id: Option<i64>,
+    town_id: Option<u64>,
     nation_id: Option<i64>,
     culture: Option<String>,
     population: i32
@@ -1529,14 +1599,14 @@ entity!(TileForEmptySubnations TileSchema TileFeature {
     nation_id: Option<i64>,
     subnation_id: Option<i64>,
     grouping: Grouping,
-    town_id: Option<i64>,
+    town_id: Option<u64>,
     population: i32,
     culture: Option<String>
 });
 
 entity!(TileForSubnationNormalize TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
-    town_id: Option<i64>,
+    town_id: Option<u64>,
     nation_id: Option<i64>,
     subnation_id: Option<i64>
 });
@@ -1806,12 +1876,12 @@ impl Into<&str> for &RiverSegmentTo {
 
 
 feature!(RiverFeature RiverSchema "rivers" wkbLineString {
-    from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile" OGRFieldType::OFTInteger64;
-    from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type" OGRFieldType::OFTString;
-    from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow" OGRFieldType::OFTReal;
-    to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile" OGRFieldType::OFTInteger64;
-    to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type" OGRFieldType::OFTString;
-    to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow" OGRFieldType::OFTReal;
+    from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile"; // TODO: id_ref
+    from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type";
+    from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow";
+    to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile"; // TODO: id_ref
+    to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type";
+    to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow";
 });
 
 
@@ -1885,12 +1955,12 @@ impl TryFrom<String> for LakeType {
 }
 
 feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
-    #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation" OGRFieldType::OFTReal;
-    type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type" OGRFieldType::OFTString;
-    #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow" OGRFieldType::OFTReal;
-    size #[allow(dead_code)] set_size i32 FIELD_SIZE "size" OGRFieldType::OFTInteger64;
-    #[allow(dead_code)] temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature" OGRFieldType::OFTReal;
-    #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation" OGRFieldType::OFTReal;
+    #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation";
+    type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type";
+    #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow";
+    size #[allow(dead_code)] set_size i32 FIELD_SIZE "size";
+    #[allow(dead_code)] temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature";
+    #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation";
 });
 
 entity!(LakeForBiomes LakeSchema LakeFeature {
@@ -2012,13 +2082,13 @@ pub(crate) struct BiomeMatrix {
 }
 
 feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability" OGRFieldType::OFTInteger;
-    criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria" OGRFieldType::OFTString;
-    movement_cost #[allow(dead_code)] set_movement_cost i32 FIELD_MOVEMENT_COST "movement_cost" OGRFieldType::OFTInteger;
-    supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic" OGRFieldType::OFTInteger;
-    supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting" OGRFieldType::OFTInteger;
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
+    name #[allow(dead_code)] set_name string FIELD_NAME "name";
+    habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability";
+    criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria";
+    movement_cost #[allow(dead_code)] set_movement_cost i32 FIELD_MOVEMENT_COST "movement_cost";
+    supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic";
+    supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting";
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
@@ -2322,12 +2392,12 @@ impl TryFrom<String> for CultureType {
 }
 
 feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer" OGRFieldType::OFTString;
-    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
-    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
-    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
+    name #[allow(dead_code)] set_name string FIELD_NAME "name";
+    namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer";
+    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
+    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism";
+    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center"; // TODO: id_ref
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
@@ -2476,13 +2546,13 @@ impl CultureLayer<'_,'_> {
 }
 
 feature!(TownFeature TownSchema "towns" wkbPoint {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
-    is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital" OGRFieldType::OFTInteger;
-    tile_id #[allow(dead_code)] set_tile_id i64 FIELD_TILE_ID "tile_id" OGRFieldType::OFTInteger64;
-    grouping_id #[allow(dead_code)] set_grouping_id i64 FIELD_GROUPING_ID "grouping_id" OGRFieldType::OFTInteger64;
-    #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population" OGRFieldType::OFTInteger;
-    #[allow(dead_code)] is_port set_is_port bool FIELD_IS_PORT "is_port" OGRFieldType::OFTInteger;
+    name #[allow(dead_code)] set_name string FIELD_NAME "name";
+    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
+    is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital";
+    tile_id #[allow(dead_code)] set_tile_id i64 FIELD_TILE_ID "tile_id"; // TODO: id_ref
+    grouping_id #[allow(dead_code)] set_grouping_id id_ref FIELD_GROUPING_ID "grouping_id"; 
+    #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population";
+    #[allow(dead_code)] is_port set_is_port bool FIELD_IS_PORT "is_port";
 });
 
 impl TownFeature<'_> {
@@ -2499,7 +2569,7 @@ entity!(NewTown TownSchema TownFeature {
     culture: Option<String>,
     is_capital: bool,
     tile_id: i64,
-    grouping_id: i64
+    grouping_id: u64
 });
 
 entity!(TownForPopulation TownSchema TownFeature {
@@ -2554,13 +2624,13 @@ impl TownLayer<'_,'_> {
 
 
 feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
-    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
-    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
-    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism" OGRFieldType::OFTReal;
-    capital #[allow(dead_code)] set_capital i64 FIELD_CAPITAL "capital" OGRFieldType::OFTInteger64;
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
+    name #[allow(dead_code)] set_name string FIELD_NAME "name";
+    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
+    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center"; // TODO: id_ref
+    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
+    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism";
+    capital #[allow(dead_code)] set_capital i64 FIELD_CAPITAL "capital"; // TODO: id_ref
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
@@ -2629,13 +2699,13 @@ impl NationsLayer<'_,'_> {
 }
 
 feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture" OGRFieldType::OFTString;
-    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center" OGRFieldType::OFTInteger64;
-    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type" OGRFieldType::OFTString;
-    seat #[allow(dead_code)] set_seat option_i64 FIELD_SEAT "seat" OGRFieldType::OFTInteger64;
-    nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id" OGRFieldType::OFTInteger64;
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color" OGRFieldType::OFTString;
+    name #[allow(dead_code)] set_name string FIELD_NAME "name";
+    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
+    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center"; // TODO: id_ref
+    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
+    seat #[allow(dead_code)] set_seat option_i64 FIELD_SEAT "seat"; // TODO: id_ref
+    nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id"; // TODO: id_ref
+    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
@@ -2738,8 +2808,8 @@ impl LineLayer<'_,'_> {
 */
 
 feature!(PropertyFeature PropertySchema "properties" wkbNone {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name" OGRFieldType::OFTString;
-    value  set_value string FIELD_VALUE "value" OGRFieldType::OFTString;
+    name #[allow(dead_code)] set_name string FIELD_NAME "name";
+    value  set_value string FIELD_VALUE "value";
 });
 
 pub(crate) type PropertyLayer<'layer,'feature> = MapLayer<'layer,'feature,PropertySchema,PropertyFeature<'feature>>;

@@ -61,7 +61,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                     if tile.water_flow > estuary_threshold {
                         suitability += 15.0 // estuaries are liked
                     }
-                    if let Some(water_cell) = tile.closest_water {
+                    if let Some(water_cell) = tile.harbor_tile_id {
                         let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&(water_cell as u64))?;
                         if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&(id as u64))).transpose()?.map(|l| &l.type_) {
                             match lake_type {

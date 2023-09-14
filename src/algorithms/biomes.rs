@@ -46,7 +46,8 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         temperature: f64,
         elevation_scaled: i32,
         water_flow: f64,
-        lake_id: Option<i64> = |feature: &TileFeature| feature.lake_id(),
+        // TODO: Why am I initializing it like this? That should be the default initialization, no?
+        lake_id: Option<u64> = |feature: &TileFeature| feature.lake_id(),
         grouping: Grouping
     });
 

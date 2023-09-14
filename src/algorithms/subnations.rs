@@ -60,7 +60,7 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
         }
 
         let subnation_count = ((nation_towns.len() as f64 * subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
-        nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital)));
+        nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital as u64)));
     
         for i in 0..subnation_count {
             let center = nation_towns[i].0.fid as i64;
@@ -80,7 +80,7 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
 
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
 
-            let seat = Some(seat);
+            let seat = Some(seat as i64);
 
             subnations.add_subnation(NewSubnation {
                 name,
@@ -342,7 +342,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
                 }
 
-                let seat = seat.map(|(id,_)| id);
+                let seat = seat.map(|(id,_)| id as i64);
 
                 let name = if let (Some(seat),true) = (seat,rng.gen_bool(0.5)) {
                     // name by town

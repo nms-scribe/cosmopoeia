@@ -46,11 +46,11 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                 if let Some(old_water_distance) = water_distance {
                     if neighbor_water_distance < old_water_distance {
                         water_distance = Some(neighbor_water_distance);
-                        closest_water = Some(*neighbor_fid as i64);
+                        closest_water = Some(*neighbor_fid);
                     }
                 } else {
                     water_distance = Some(neighbor_water_distance);
-                    closest_water = Some(*neighbor_fid as i64);
+                    closest_water = Some(*neighbor_fid);
                 }
                 *water_count.get_or_insert_with(|| 0) += 1;
             } else if !is_land && !neighbor.grouping.is_water() {
@@ -61,7 +61,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
         let mut tile = tile_map.try_get_mut(&fid)?;
         tile.water_count = water_count;
-        tile.closest_water = closest_water;
+        tile.closest_water_tile_id = closest_water;
         if on_shore {
             if is_land {
                 shore_distances.insert(fid,1);
@@ -138,7 +138,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut feature = tiles.try_feature_by_id(&fid)?;
         let shore_distance = shore_distances.remove(&fid).unwrap(); // There should be no reason the shore_distance wasn't generated for the tile
         feature.set_shore_distance(shore_distance)?;
-        feature.set_closest_water(tile.closest_water)?;
+        feature.set_harbor_tile_id(tile.closest_water_tile_id)?;
         feature.set_water_count(tile.water_count)?;
         tiles.update_feature(feature)?;
 

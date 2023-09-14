@@ -77,7 +77,7 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
     for fid in tiles {
         let town = placed_towns.get(&fid);
         let mut tile = tiles_layer.try_feature_by_id(&fid)?;
-        tile.set_town_id(town.map(|n| *n as i64))?;
+        tile.set_town_id(town.map(|n| *n))?;
         tiles_layer.update_feature(tile)?;
     }
 
@@ -274,7 +274,7 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
         let tile = tile_map.try_get(&(town.tile_id as u64))?;
 
         // figure out if it's a port
-        let port_location = if let Some(closest_water) = tile.closest_water {
+        let port_location = if let Some(closest_water) = tile.harbor_tile_id {
             let harbor = tile_map.try_get(&(closest_water as u64))?;
 
             // add it to the map of towns by feature for removing port status later.

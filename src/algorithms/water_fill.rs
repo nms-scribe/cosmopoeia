@@ -102,7 +102,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     let mut tiles_layer = target.edit_tile_layer()?;
 
     enum Task {
-        FillLake(usize, f64),
+        FillLake(u64, f64),
         AddToFlow(f64)
     }
 
@@ -426,7 +426,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
     for (id,lake) in new_lake_map.into_iter().watch(progress,"Writing lakes.","Lakes written.") {
         let lake_fid = lakes_layer.add_lake(lake)?;
-        written_lake_map.insert(id, lake_fid as i64);
+        written_lake_map.insert(id, lake_fid);
 
     }
 

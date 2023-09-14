@@ -352,12 +352,11 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 
 [X] Remove #[allow(dead_code)] and see what we should get rid of.
 [X] Set the CRS for the dataset and each layer on create.
-[ ] Does TileForSubnations really need fid?
-[ ] Consider adding a new 'u64_string' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups.
+[ ] Consider adding a new 'u64_string' or 'id_ref' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups. Since I don't do anything in the map project, there shouldn't be anything with changing the types.
+    [ ] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
 [ ] The special values in WorldMap, in fact anywhere where we implemtn TryFrom<String>, should use serde_json instead. Use a json standard for all of that.
 [ ] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
 [ ] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
-[ ] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
 [ ] MarkovGenerator::calculate_chain -- should return an error if the array is empty, or if there are no strings in it. Because that will cause an error when we're trying to create strings.
 [ ] Check all 'unwraps' and make sure we don't need to throw an error there instead.
     [ ] TilePreference::get_value -- there are a bunch of 'unwraps' that should be proper errors, since that's all based on user input.
