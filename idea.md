@@ -352,8 +352,8 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 
 [X] Remove #[allow(dead_code)] and see what we should get rid of.
 [X] Set the CRS for the dataset and each layer on create.
-[ ] Consider adding a new 'u64_string' or 'id_ref' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups. Since I don't do anything in the map project, there shouldn't be anything with changing the types.
-    [ ] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
+[X] Consider adding a new 'u64_string' or 'id_ref' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups. Since I don't do anything in the map project, there shouldn't be anything with changing the types.
+    [X] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
 [ ] The special values in WorldMap, in fact anywhere where we implemtn TryFrom<String>, should use serde_json instead. Use a json standard for all of that.
 [ ] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
 [ ] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
@@ -380,7 +380,8 @@ These are things that really should be done before release, but they might take 
 [ ] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
 [ ] Change all 'as' expressions into 'try_into' and 'try_from' calls. That's the preferred method of doing things.
 [ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
-[ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes. 
+[ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes.
+[ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 
 ## Post-release tasks and feature requests.
 

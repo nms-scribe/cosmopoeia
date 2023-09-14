@@ -1221,9 +1221,9 @@ feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allo
     /// if the tile has a town, this is the id of the town in the towns layer
     town_id set_town_id option_id_ref FIELD_TOWN_ID "town_id"; 
     /// if the tile is part of a nation, this is the id of the nation which controls it
-    nation_id set_nation_id option_i64 FIELD_NATION_ID "nation_id"; // TODO: id_ref
+    nation_id set_nation_id option_id_ref FIELD_NATION_ID "nation_id";
     /// if the tile is part of a subnation, this is the id of the nation which controls it
-    subnation_id set_subnation_id option_i64 FIELD_SUBNATION_ID "subnation_id"; // TODO: id_ref
+    subnation_id set_subnation_id option_id_ref FIELD_SUBNATION_ID "subnation_id";
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
@@ -1566,20 +1566,20 @@ entity!(TileForNationExpand TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     lake_id: Option<u64>,
     culture: Option<String>,
-    nation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
+    nation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
 
 entity!(TileForNationNormalize TileSchema TileFeature {
     grouping: Grouping,
     neighbors: Vec<(u64,i32)>,
     town_id: Option<u64>,
-    nation_id: Option<i64>
+    nation_id: Option<u64>
 });
 
 entity!(TileForSubnations TileSchema TileFeature {
     fid: u64,
     town_id: Option<u64>,
-    nation_id: Option<i64>,
+    nation_id: Option<u64>,
     culture: Option<String>,
     population: i32
 });
@@ -1589,15 +1589,15 @@ entity!(TileForSubnationExpand TileSchema TileFeature {
     grouping: Grouping,
     shore_distance: i32,
     elevation_scaled: i32,
-    nation_id: Option<i64>,
-    subnation_id: Option<i64> = |_| Ok::<_,CommandError>(None)
+    nation_id: Option<u64>,
+    subnation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
 
 entity!(TileForEmptySubnations TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32,
-    nation_id: Option<i64>,
-    subnation_id: Option<i64>,
+    nation_id: Option<u64>,
+    subnation_id: Option<u64>,
     grouping: Grouping,
     town_id: Option<u64>,
     population: i32,
@@ -1607,8 +1607,8 @@ entity!(TileForEmptySubnations TileSchema TileFeature {
 entity!(TileForSubnationNormalize TileSchema TileFeature {
     neighbors: Vec<(u64,i32)>,
     town_id: Option<u64>,
-    nation_id: Option<i64>,
-    subnation_id: Option<i64>
+    nation_id: Option<u64>,
+    subnation_id: Option<u64>
 });
 
 entity!(TileForCultureDissolve TileSchema TileFeature {
@@ -1662,7 +1662,7 @@ impl TileWithNeighbors for TileForBiomeDissolve {
 }
 
 entity!(TileForNationDissolve TileSchema TileFeature {
-    nation_id: Option<i64>,
+    nation_id: Option<u64>,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32
@@ -1687,7 +1687,7 @@ impl TileWithNeighbors for TileForNationDissolve {
 }
 
 entity!(TileForSubnationDissolve TileSchema TileFeature {
-    subnation_id: Option<i64>,
+    subnation_id: Option<u64>,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32
@@ -1876,20 +1876,20 @@ impl Into<&str> for &RiverSegmentTo {
 
 
 feature!(RiverFeature RiverSchema "rivers" wkbLineString {
-    from_tile #[allow(dead_code)] set_from_tile i64 FIELD_FROM_TILE "from_tile"; // TODO: id_ref
+    from_tile_id #[allow(dead_code)] set_from_tile_id id_ref FIELD_FROM_TILE_ID "from_tile_id";
     from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type";
     from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow";
-    to_tile #[allow(dead_code)] set_to_tile i64 FIELD_TO_TILE "to_tile"; // TODO: id_ref
+    to_tile_id #[allow(dead_code)] set_to_tile_id id_ref FIELD_TO_TILE_ID "to_tile_id";
     to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type";
     to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow";
 });
 
 
 entity!(NewRiver RiverSchema RiverFeature {
-    from_tile: i64,
+    from_tile_id: u64,
     from_type: RiverSegmentFrom,
     from_flow: f64,
-    to_tile: i64,
+    to_tile_id: u64,
     to_type: RiverSegmentTo,
     to_flow: f64,
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
@@ -1902,10 +1902,10 @@ impl RiversLayer<'_,'_> {
     pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<u64,CommandError> {
         let geometry = create_line(&segment.line)?;
         let (field_names,field_values) = RiverFeature::to_field_names_values(
-            segment.from_tile, 
+            segment.from_tile_id, 
             &segment.from_type, 
             segment.from_flow, 
-            segment.to_tile, 
+            segment.to_tile_id, 
             &segment.to_type,
             segment.to_flow);
         self.add_feature(geometry, &field_names, &field_values)
@@ -2396,7 +2396,7 @@ feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
     namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer";
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
     expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism";
-    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center"; // TODO: id_ref
+    center_tile_id #[allow(dead_code)] set_center_tile_id id_ref FIELD_CENTER_TILE_ID "center_tile_id";
     color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
@@ -2455,14 +2455,14 @@ entity!(NewCulture CultureSchema CultureFeature {
     namer: String,
     type_: CultureType,
     expansionism: f64,
-    center: i64,
+    center_tile_id: u64,
     color: String
 });
 
 // needs to be hashable in order to fit into a priority queue
 entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement CultureSchema CultureFeature {
     name: String,
-    center: i64,
+    center_tile_id: u64,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &CultureFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
@@ -2532,7 +2532,7 @@ impl CultureLayer<'_,'_> {
     pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = CultureFeature::to_field_names_values(
-            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center,&culture.color);
+            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center_tile_id,&culture.color);
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -2549,7 +2549,7 @@ feature!(TownFeature TownSchema "towns" wkbPoint {
     name #[allow(dead_code)] set_name string FIELD_NAME "name";
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
     is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital";
-    tile_id #[allow(dead_code)] set_tile_id i64 FIELD_TILE_ID "tile_id"; // TODO: id_ref
+    tile_id #[allow(dead_code)] set_tile_id id_ref FIELD_TILE_ID "tile_id";
     grouping_id #[allow(dead_code)] set_grouping_id id_ref FIELD_GROUPING_ID "grouping_id"; 
     #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population";
     #[allow(dead_code)] is_port set_is_port bool FIELD_IS_PORT "is_port";
@@ -2568,21 +2568,21 @@ entity!(NewTown TownSchema TownFeature {
     name: String,
     culture: Option<String>,
     is_capital: bool,
-    tile_id: i64,
+    tile_id: u64,
     grouping_id: u64
 });
 
 entity!(TownForPopulation TownSchema TownFeature {
     fid: u64,
     is_capital: bool,
-    tile_id: i64
+    tile_id: u64
 });
 
 entity!(TownForNations TownSchema TownFeature {
     fid: u64,
     is_capital: bool,
     culture: Option<String>,
-    tile_id: i64
+    tile_id: u64
 });
 
 entity!(TownForNationNormalize TownSchema TownFeature {
@@ -2626,10 +2626,10 @@ impl TownLayer<'_,'_> {
 feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name";
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
-    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center"; // TODO: id_ref
+    center_tile_id #[allow(dead_code)] set_center_tile_id id_ref FIELD_CENTER_TILE_ID "center_tile_id"; 
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
     expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism";
-    capital #[allow(dead_code)] set_capital i64 FIELD_CAPITAL "capital"; // TODO: id_ref
+    capital_town_id #[allow(dead_code)] set_capital_town_id id_ref FIELD_CAPITAL_TOWN_ID "capital_town_id";
     color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
@@ -2643,10 +2643,10 @@ impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
 entity!(NewNation NationSchema NationFeature {
     name: String,
     culture: Option<String>,
-    center: i64,
+    center_tile_id: u64,
     type_: CultureType,
     expansionism: f64,
-    capital: i64,
+    capital_town_id: u64,
     color: String
 });
 
@@ -2654,14 +2654,14 @@ entity!(NewNation NationSchema NationFeature {
 entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationSchema NationFeature {
     fid: u64,
     name: String,
-    center: i64,
+    center_tile_id: u64,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
 entity!(NationForSubnations NationSchema NationFeature {
     fid: u64,
-    capital: i64,
+    capital_town_id: u64,
     color: String
 });
 
@@ -2680,10 +2680,10 @@ impl NationsLayer<'_,'_> {
         let (field_names,field_values) = NationFeature::to_field_names_values(
             &nation.name,
             nation.culture.as_deref(),
-            nation.center,
+            nation.center_tile_id,
             &nation.type_,
             nation.expansionism,
-            nation.capital,
+            nation.capital_town_id,
             &nation.color
         );
         self.add_feature_without_geometry(&field_names, &field_values)
@@ -2701,10 +2701,10 @@ impl NationsLayer<'_,'_> {
 feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
     name #[allow(dead_code)] set_name string FIELD_NAME "name";
     culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
-    center #[allow(dead_code)] set_center i64 FIELD_CENTER "center"; // TODO: id_ref
+    center_tile_id #[allow(dead_code)] set_center_tile_id id_ref FIELD_CENTER_TILE_ID "center_tile_id";
     type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
-    seat #[allow(dead_code)] set_seat option_i64 FIELD_SEAT "seat"; // TODO: id_ref
-    nation_id #[allow(dead_code)] set_nation_id i64 FIELD_NATION_ID "nation_id"; // TODO: id_ref
+    seat_town_id #[allow(dead_code)] set_seat_town_id option_id_ref FIELD_SEAT_TOWN_ID "seat_town_id"; 
+    nation_id #[allow(dead_code)] set_nation_id id_ref FIELD_NATION_ID "nation_id"; 
     color #[allow(dead_code)] set_color string FIELD_COLOR "color";
 });
 
@@ -2718,23 +2718,23 @@ impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feat
 entity!(NewSubnation SubnationSchema SubnationFeature {
     name: String,
     culture: Option<String>,
-    center: i64,
+    center_tile_id: u64,
     type_: CultureType,
-    seat: Option<i64>,
-    nation_id: i64,
+    seat_town_id: Option<u64>,
+    nation_id: u64,
     color: String
 });
 
 
 entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationSchema SubnationFeature {
     fid: u64,
-    center: i64,
-    nation_id: i64
+    center_tile_id: u64,
+    nation_id: u64
 });
 
 entity!(SubnationForNormalize SubnationSchema SubnationFeature {
-    center: i64,
-    seat: Option<i64>
+    center_tile_id: u64,
+    seat_town_id: Option<u64>
 });
 
 
@@ -2746,9 +2746,9 @@ impl SubnationsLayer<'_,'_> {
         let (field_names,field_values) = SubnationFeature::to_field_names_values(
             &subnation.name,
             subnation.culture.as_deref(),
-            subnation.center,
+            subnation.center_tile_id,
             &subnation.type_,
-            subnation.seat,
+            subnation.seat_town_id,
             subnation.nation_id,
             &subnation.color
         );

@@ -43,16 +43,16 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
             let namer = Culture::get_namer(culture_data, namers)?;
             let name = namer.make_state_name(rng);
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
-            let center = town.tile_id;
-            let capital = town.fid as i64;
+            let center_tile_id = town.tile_id;
+            let capital_town_id = town.fid;
             let expansionism = rng.gen_range(0.1..1.0) * size_variance + 1.0;
             nations.push(NewNation {
                 name,
-                center,
+                center_tile_id,
                 culture,
                 type_,
                 expansionism,
-                capital,
+                capital_town_id,
                 color: String::new()
             })
 
@@ -100,15 +100,15 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     for nation in nations {
 
         // place the nation center
-        let tile = tile_map.try_get_mut(&(nation.center as u64))?;
-        tile.nation_id = Some(nation.fid as i64);
+        let tile = tile_map.try_get_mut(&nation.center_tile_id)?;
+        tile.nation_id = Some(nation.fid);
 
-        costs.insert(nation.center as u64, OrderedFloat::from(1.0));
+        costs.insert(nation.center_tile_id, OrderedFloat::from(1.0));
 
-        capitals.insert(nation.center as u64);
+        capitals.insert(nation.center_tile_id);
 
         // add the tile to the queue for work.
-        queue.push((nation.center as u64,nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        queue.push((nation.center_tile_id,nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -189,7 +189,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         for (tile_id,nation_id) in place_nations {
             let tile = tile_map.try_get_mut(&tile_id)?;
-            tile.nation_id = Some(nation_id as i64);
+            tile.nation_id = Some(nation_id);
         }
 
 

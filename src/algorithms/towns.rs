@@ -61,7 +61,7 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
             name,
             culture,
             is_capital,
-            tile_id: tile.fid as i64,
+            tile_id: tile.fid,
             grouping_id: tile.grouping_id
         })?;
         placed_towns.insert(tile.fid,fid); 

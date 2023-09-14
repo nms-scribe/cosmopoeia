@@ -76,10 +76,10 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 // convert that to a polyline.
                 let line = bezier.to_poly_line(bezier_scale)?;
                 segments.push(NewRiver {
-                    from_tile: segment.from as i64,
+                    from_tile_id: segment.from,
                     from_type,
                     from_flow: from_flow,
-                    to_tile: segment.to as i64,
+                    to_tile_id: segment.to,
                     to_type,
                     to_flow: segment.to_flow,
                     line

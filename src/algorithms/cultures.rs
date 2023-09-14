@@ -157,7 +157,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             namer: namer.to_owned(),
             type_: culture_type,
             expansionism,
-            center: center.fid as i64,
+            center_tile_id: center.fid,
             color: colors.next().unwrap()
         });
         
@@ -294,14 +294,14 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     
     for culture in cultures {
 
-        culture_centers.insert(culture.center as u64);
+        culture_centers.insert(culture.center_tile_id);
 
         // place the culture center
-        let tile = tile_map.try_get_mut(&(culture.center as u64))?;
+        let tile = tile_map.try_get_mut(&(culture.center_tile_id))?;
         tile.culture = Some(culture.name.clone());
 
         // add the tile to the queue for work.
-        queue.push((culture.center as u64,culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        queue.push((culture.center_tile_id,culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 

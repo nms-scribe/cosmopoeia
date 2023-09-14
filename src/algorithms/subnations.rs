@@ -54,16 +54,16 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
     let mut subnations = target.create_subnations_layer(overwrite_layer)?;
 
     for nation in nations.into_iter().watch(progress,"Creating subnations.","Subnations created.") {
-        let mut nation_towns = towns_by_nation.remove(&(nation.fid as i64)).unwrap_or_else(|| vec![]);
+        let mut nation_towns = towns_by_nation.remove(&nation.fid).unwrap_or_else(|| vec![]);
         if nation_towns.len() < 2 {
             continue; // at least two towns are required to get a province
         }
 
         let subnation_count = ((nation_towns.len() as f64 * subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
-        nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital as u64)));
+        nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital_town_id)));
     
         for i in 0..subnation_count {
-            let center = nation_towns[i].0.fid as i64;
+            let center_tile_id = nation_towns[i].0.fid;
             let seat = nation_towns[i].1;
             let culture = nation_towns[i].0.culture.clone();
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
@@ -80,15 +80,15 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
 
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
 
-            let seat = Some(seat as i64);
+            let seat_town_id = Some(seat);
 
             subnations.add_subnation(NewSubnation {
                 name,
                 culture,
-                center,
+                center_tile_id,
                 type_,
-                seat,
-                nation_id: nation.fid as i64,
+                seat_town_id,
+                nation_id: nation.fid,
                 color
             })?;
         }
@@ -112,8 +112,8 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
     for subnation in target.edit_subnations_layer()?.read_features().into_entities::<SubnationForPlacement>().watch(progress,"Reading subnations.","Subnations read.") {
         let (_,subnation) = subnation?;
-        let center = subnation.center as u64;
-        tile_map.try_get_mut(&center)?.subnation_id = Some(subnation.fid as i64);
+        let center = subnation.center_tile_id;
+        tile_map.try_get_mut(&center)?.subnation_id = Some(subnation.fid);
         costs.insert(center, OrderedFloat::from(1.0));
         queue.push((center,subnation), Reverse(OrderedFloat::from(0.0)));
     }
@@ -163,7 +163,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
     
         for (tile_id,subnation_id) in place_subnations {
             let tile = tile_map.try_get_mut(&tile_id)?;
-            tile.subnation_id = Some(subnation_id as i64);
+            tile.subnation_id = Some(subnation_id);
         }
 
 
@@ -251,20 +251,20 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                 let tile = tile_map.try_get(&tile_id)?;
                 // we have what we need to start a new subnation, this should be the highest population tile
                 let mut seat = None;
-                let center = tile_id as i64;
+                let center_tile_id = tile_id;
 
                 let culture = tile.culture.as_ref().or_else(|| nation.culture.as_ref()).cloned();
                 let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
 
                 let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
 
-                let nation_id = nation.fid as i64;
+                let nation_id = nation.fid;
                 let color = nation.color.clone();
 
 
                 let subnation = SubnationForPlacement {
                     fid: next_subnation_id.next().unwrap(), // It's an infinite range, it should always unwrap
-                    center,
+                    center_tile_id,
                     nation_id,
                 };
 
@@ -342,11 +342,11 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
                 }
 
-                let seat = seat.map(|(id,_)| id as i64);
+                let seat_town_id = seat.map(|(id,_)| id);
 
-                let name = if let (Some(seat),true) = (seat,rng.gen_bool(0.5)) {
+                let name = if let (Some(seat),true) = (seat_town_id,rng.gen_bool(0.5)) {
                     // name by town
-                    let town = town_map.try_get(&(seat as u64))?;
+                    let town = town_map.try_get(&seat)?;
                     town.name.clone()
                 } else {
                     // new name by culture
@@ -357,9 +357,9 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
                 new_subnations.push((subnation.fid,NewSubnation {
                     name,
                     culture,
-                    center,
+                    center_tile_id,
                     type_,
-                    seat,
+                    seat_town_id,
                     nation_id,
                     color
                 }))
@@ -379,7 +379,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
     for (temp_id,subnation) in new_subnations.into_iter().watch(progress, "Writing new subnations.", "New subnations written.") {
         let real_id = subnations_layer.add_subnation(subnation)?;
-        assigned_ids.insert(temp_id, real_id as i64);
+        assigned_ids.insert(temp_id, real_id);
     }
 
     let tiles_layer = target.edit_tile_layer()?;
@@ -425,8 +425,8 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
             // This prevents very small subnations which were created with "Fill Empty" from being
             // deleted.
             let subnation = subnations_map.try_get(&(subnation_id as u64))?;
-            if subnation.seat.is_none() {
-                if tile_id == subnation.center as u64 {
+            if subnation.seat_town_id.is_none() {
+                if tile_id == subnation.center_tile_id {
                     continue;
                 }
             }
