@@ -1984,7 +1984,7 @@ impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
     }
 }
 
-impl BiomeFeature<'_> {
+impl BiomeSchema {
 
     pub(crate) const OCEAN: &str = "Ocean";
     pub(crate) const HOT_DESERT: &str = "Hot desert";
@@ -2127,6 +2127,10 @@ impl BiomeFeature<'_> {
 
 }
 
+impl BiomeFeature<'_> {
+
+}
+
 entity!(NewBiome BiomeSchema BiomeFeature {
     name: String,
     habitability: i32,
@@ -2213,7 +2217,7 @@ impl BiomeLayer<'_,'_> {
     pub(crate) fn get_matrix<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<BiomeMatrix,CommandError> {
         let result = self.read_features().to_entities_vec(progress)?;
     
-        BiomeFeature::build_matrix_from_biomes(&result)
+        BiomeSchema::build_matrix_from_biomes(&result)
     
     }
 

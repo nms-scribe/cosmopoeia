@@ -8,7 +8,7 @@ use priority_queue::PriorityQueue;
 
 use crate::world_map::TileForNationNormalize;
 use crate::world_map::TownForNationNormalize;
-use crate::world_map::BiomeFeature;
+use crate::world_map::BiomeSchema;
 use crate::world_map::TileForNationExpand;
 use crate::world_map::BiomeForNationExpand;
 use crate::world_map::NationForPlacement;
@@ -351,7 +351,7 @@ pub(crate) fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForNa
     // This is very similar to the one for cultures, but not exactly.
 
     // FUTURE: I need a way to make this more configurable...
-    const FOREST_BIOMES: [&str; 5] = [BiomeFeature::TROPICAL_SEASONAL_FOREST, BiomeFeature::TEMPERATE_DECIDUOUS_FOREST, BiomeFeature::TROPICAL_RAINFOREST, BiomeFeature::TEMPERATE_RAINFOREST, BiomeFeature::TAIGA];
+    const FOREST_BIOMES: [&str; 5] = [BiomeSchema::TROPICAL_SEASONAL_FOREST, BiomeSchema::TEMPERATE_DECIDUOUS_FOREST, BiomeSchema::TROPICAL_RAINFOREST, BiomeSchema::TEMPERATE_RAINFOREST, BiomeSchema::TAIGA];
 
 
     if culture_biome == &neighbor_biome.name {

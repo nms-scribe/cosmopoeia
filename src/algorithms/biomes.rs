@@ -5,7 +5,7 @@ use crate::world_map::Entity;
 use crate::world_map::BiomeMatrix;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::BiomeFeature;
+use crate::world_map::BiomeSchema;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::LakeType;
@@ -17,7 +17,7 @@ pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut World
 
     let mut biomes = target.create_biomes_layer(overwrite_layer)?;
 
-    let default_biomes = BiomeFeature::get_default_biomes();
+    let default_biomes = BiomeSchema::get_default_biomes();
 
     progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
 

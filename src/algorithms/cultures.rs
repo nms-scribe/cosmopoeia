@@ -19,7 +19,6 @@ use crate::world_map::BiomeForCultureExpand;
 use crate::world_map::TileForCultureGen;
 use crate::world_map::TileForCulturePrefSorting;
 use crate::world_map::TileForCultureExpand;
-use crate::world_map::BiomeFeature;
 use crate::utils::RandomIndex;
 use crate::utils::Point;
 use crate::utils::ToRoman;
@@ -553,7 +552,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
 
 fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForCultureExpand, culture_type: &CultureType) -> f64 {
     // FUTURE: I need a way to make this more configurable...
-    const FOREST_BIOMES: [&str; 5] = [BiomeFeature::TROPICAL_SEASONAL_FOREST, BiomeFeature::TEMPERATE_DECIDUOUS_FOREST, BiomeFeature::TROPICAL_RAINFOREST, BiomeFeature::TEMPERATE_RAINFOREST, BiomeFeature::TAIGA];
+    const FOREST_BIOMES: [&str; 5] = [BiomeSchema::TROPICAL_SEASONAL_FOREST, BiomeSchema::TEMPERATE_DECIDUOUS_FOREST, BiomeSchema::TROPICAL_RAINFOREST, BiomeSchema::TEMPERATE_RAINFOREST, BiomeSchema::TAIGA];
 
     
     if culture_biome == &neighbor_biome.name {
