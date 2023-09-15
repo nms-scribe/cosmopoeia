@@ -522,110 +522,132 @@ macro_rules! get_field_type_for_prop_type {
     }
 }
 
-macro_rules! feature {
-    ($struct_name:ident $schema_name: ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
-        $(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])*: $prop_type: ident
+macro_rules! layer {
+    ($(#[to_field_names_values($to_values_attr: meta)])* $name: ident [$layer_name: literal]: $geometry_type: ident {$(
+        $(#[doc = $doc_attr: literal])? $(#[get($get_attr: meta)])* $(#[set($set_attr: meta)])* $prop: ident: $prop_type: ident
     ),*$(,)?}) => {
 
-        pub(crate) struct $struct_name<'data_life> {
+        paste!{
+            pub(crate) struct [<$name Feature>]<'data_life> {
 
-            feature: Feature<'data_life>
-        }
-        
-        impl<'impl_life> From<Feature<'impl_life>> for $struct_name<'impl_life> {
-        
-            fn from(feature: Feature<'impl_life>) -> Self {
-                Self {
-                    feature
-                }
-            }
-        }
-
-        pub(crate) struct $schema_name {
-
-        }
-
-        impl $schema_name {
-            // constant field names
-            paste!{
-                $(pub(crate) const [<FIELD_ $prop:snake:upper>]: &str = stringify!($prop);)*
-            }
-
-            // field definitions
-            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($prop),*)] = [
-                $((paste!{Self::[<FIELD_ $prop:snake:upper>]},get_field_type_for_prop_type!($prop_type))),*
-            ];
-
-
-        }
-
-        impl Schema for $schema_name {
-
-            const GEOMETRY_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::$geometry_type;
-
-            const LAYER_NAME: &'static str = $layer_name;
-
-            fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)] {
-                &Self::FIELD_DEFS
-            }
-
-
-        }
-
-        impl<'impl_life> TypedFeature<'impl_life,$schema_name> for $struct_name<'impl_life> {
-
-            // fid field
-            fn fid(&self) -> Result<u64,CommandError> {
-                self.feature.fid().ok_or_else(|| CommandError::MissingField(concat!($layer_name,".","fid")))
-            }
-
-            fn into_feature(self) -> Feature<'impl_life> {
-                self.feature
-            }
-
-            fn geometry(&self) -> Result<&Geometry,CommandError> { 
-                self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))
+                feature: Feature<'data_life>
             }
     
-            fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError> { 
-                Ok(self.feature.set_geometry(geometry)?)
-            }
         }
         
+        paste!{
+            impl<'impl_life> From<Feature<'impl_life>> for [<$name Feature>]<'impl_life> {
         
-        impl $struct_name<'_> {
-
-            // feature initializer function
-            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($prop),*)],[Option<FieldValue>; feature_count_fields!($($prop),*)]),CommandError> {
-                Ok(([
-                    $(paste!{
-                        $schema_name::[<FIELD_ $prop:snake:upper>]
-                    }),*
-                ],[
-                    $(feature_to_value!($prop; $prop_type)),*
-                ]))
-    
-            }
-        
-            // property functions
-            $(
-                paste!{
-                    $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
-                        feature_get_field!(self $prop_type $layer_name $prop $schema_name::[<FIELD_ $prop:snake:upper>])
+                fn from(feature: Feature<'impl_life>) -> Self {
+                    Self {
+                        feature
                     }
                 }
-        
-                paste!{
-                    $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
-                        feature_set_field!(self value $prop_type $schema_name::[<FIELD_ $prop:snake:upper>])
-                    }            
+            }
     
-                }
-        
-            )*
         }
 
+        paste!{
+            pub(crate) struct [<$name Schema>] {
+
+            }
+        }
+
+        paste!{
+            impl [<$name Schema>] {
+                // constant field names
+                paste!{
+                    $(pub(crate) const [<FIELD_ $prop:snake:upper>]: &str = stringify!($prop);)*
+                }
+
+                // field definitions
+                const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($prop),*)] = [
+                    $((paste!{Self::[<FIELD_ $prop:snake:upper>]},get_field_type_for_prop_type!($prop_type))),*
+                ];
+
+
+            }
+        }
+
+
+        paste!{
+            impl Schema for [<$name Schema>] {
+
+                const GEOMETRY_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::$geometry_type;
+
+                const LAYER_NAME: &'static str = $layer_name;
+
+                fn get_field_defs() -> &'static [(&'static str,OGRFieldType::Type)] {
+                    &Self::FIELD_DEFS
+                }
+
+
+            }
+        }
+
+        paste!{
+
+            impl<'impl_life> TypedFeature<'impl_life,[<$name Schema>]> for [<$name Feature>]<'impl_life> {
+
+                // fid field
+                fn fid(&self) -> Result<u64,CommandError> {
+                    self.feature.fid().ok_or_else(|| CommandError::MissingField(concat!($layer_name,".","fid")))
+                }
+
+                fn into_feature(self) -> Feature<'impl_life> {
+                    self.feature
+                }
+
+                fn geometry(&self) -> Result<&Geometry,CommandError> { 
+                    self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))
+                }
         
+                fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError> { 
+                    Ok(self.feature.set_geometry(geometry)?)
+                }
+            }
+        }
+            
+        paste!{
+            
+            impl [<$name Feature>]<'_> {
+
+                // feature initializer function
+                $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($prop),*)],[Option<FieldValue>; feature_count_fields!($($prop),*)]),CommandError> {
+                    Ok(([
+                        $(paste!{
+                            [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
+                        }),*
+                    ],[
+                        $(feature_to_value!($prop; $prop_type)),*
+                    ]))
+        
+                }
+            
+                // property functions
+                $(
+                    paste!{
+                        $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
+                            feature_get_field!(self $prop_type $layer_name $prop [<$name Schema>]::[<FIELD_ $prop:snake:upper>])
+                        }
+                    }
+            
+                    paste!{
+                        $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
+                            feature_set_field!(self value $prop_type [<$name Schema>]::[<FIELD_ $prop:snake:upper>])
+                        }            
+        
+                    }
+            
+                )*
+            }
+
+        }
+
+        paste!{
+            pub(crate) type [<$name Layer>]<'layer,'feature> = MapLayer<'layer,'feature,[<$name Schema>],[<$name Feature>]<'feature>>;
+
+        }
 
     };
 }
@@ -1056,11 +1078,10 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
 
 }
 
-feature!(PointFeature PointSchema "points" wkbPoint to_field_names_values: #[allow(dead_code)] {});
-type PointsLayer<'layer,'feature> = MapLayer<'layer,'feature,PointSchema,PointFeature<'feature>>;
+layer!(#[to_field_names_values(allow(dead_code))] Point["points"]: wkbPoint {});
 
 
-impl PointsLayer<'_,'_> {
+impl PointLayer<'_,'_> {
 
     pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
@@ -1071,12 +1092,9 @@ impl PointsLayer<'_,'_> {
 
 }
 
-feature!(TriangleFeature TriangleSchema "triangles" wkbPolygon to_field_names_values: #[allow(dead_code)] {});
-type TrianglesLayer<'layer,'feature> = MapLayer<'layer,'feature,TriangleSchema,TriangleFeature<'feature>>;
+layer!(#[to_field_names_values(allow(dead_code))] Triangle["triangles"]: wkbPolygon {});
 
-
-
-impl TrianglesLayer<'_,'_> {
+impl TriangleLayer<'_,'_> {
 
     pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
 
@@ -1128,11 +1146,11 @@ impl TryFrom<String> for Grouping {
     }
 }
 
-feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
+layer!(#[to_field_names_values(allow(dead_code))] Tile["tiles"]: wkbPolygon {
     /// longitude of the node point for the tile's voronoi
-    site_x #[allow(dead_code)]: f64,
+    #[set(allow(dead_code))] site_x: f64,
     /// latitude of the node point for the tile's voronoi
-    site_y #[allow(dead_code)]: f64,
+    #[set(allow(dead_code))] site_y: f64,
     /// elevation in meters of the node point for the tile's voronoi
     elevation: f64,
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
@@ -1419,7 +1437,7 @@ pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity bec
 
 impl TileForCulturePrefSorting<'_> {
 
-    pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TilesLayer, biomes: &'biomes EntityLookup<BiomeSchema,BiomeForCultureGen>, lakes: &EntityIndex<LakeSchema,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
+    pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TileLayer, biomes: &'biomes EntityLookup<BiomeSchema,BiomeForCultureGen>, lakes: &EntityIndex<LakeSchema,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
         let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
             let closest_water = closest_water as u64;
@@ -1666,10 +1684,7 @@ impl TileWithNeighbors for TileForSubnationDissolve {
 }
 
 
-
-pub(crate) type TilesLayer<'layer,'feature> = MapLayer<'layer,'feature,TileSchema,TileFeature<'feature>>;
-
-impl TilesLayer<'_,'_> {
+impl TileLayer<'_,'_> {
 
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -1799,13 +1814,13 @@ impl Into<String> for &RiverSegmentTo {
 }
 
 
-feature!(RiverFeature RiverSchema "rivers" wkbLineString {
-    from_tile_id #[allow(dead_code)]: id_ref,
-    from_type #[allow(dead_code)]: river_segment_from,
-    from_flow #[allow(dead_code)]: f64,
-    to_tile_id #[allow(dead_code)]: id_ref,
-    to_type #[allow(dead_code)]: river_segment_to,
-    to_flow #[allow(dead_code)]: f64,
+layer!(River["rivers"]: wkbLineString {
+    #[set(allow(dead_code))] from_tile_id: id_ref,
+    #[set(allow(dead_code))] from_type: river_segment_from,
+    #[set(allow(dead_code))] from_flow: f64,
+    #[set(allow(dead_code))] to_tile_id: id_ref,
+    #[set(allow(dead_code))] to_type: river_segment_to,
+    #[set(allow(dead_code))] to_flow: f64,
 });
 
 
@@ -1819,9 +1834,7 @@ entity!(NewRiver RiverSchema RiverFeature {
     line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
 });
 
-pub(crate) type RiversLayer<'layer,'feature> = MapLayer<'layer,'feature,RiverSchema,RiverFeature<'feature>>;
-
-impl RiversLayer<'_,'_> {
+impl RiverLayer<'_,'_> {
 
     pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<u64,CommandError> {
         let geometry = create_line(&segment.line)?;
@@ -1863,13 +1876,13 @@ impl TryFrom<String> for LakeType {
     }
 }
 
-feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
-    #[allow(dead_code)] elevation #[allow(dead_code)]: f64,
-    type_ #[allow(dead_code)]: lake_type,
-    #[allow(dead_code)] flow #[allow(dead_code)]: f64,
-    size #[allow(dead_code)]: i32,
-    #[allow(dead_code)] temperature #[allow(dead_code)]: f64,
-    #[allow(dead_code)] evaporation #[allow(dead_code)]: f64,
+layer!(Lake["lakes"]: wkbMultiPolygon {
+    #[get(allow(dead_code))] #[set(allow(dead_code))] elevation: f64,
+    #[set(allow(dead_code))] type_: lake_type,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] flow: f64,
+    #[set(allow(dead_code))] size: i32,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] temperature: f64,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] evaporation: f64,
 });
 
 entity!(LakeForBiomes LakeSchema LakeFeature {
@@ -1901,10 +1914,7 @@ pub(crate) struct NewLake {
     pub(crate) geometry: Geometry,
 }
 
-
-pub(crate) type LakesLayer<'layer,'feature> = MapLayer<'layer,'feature,LakeSchema,LakeFeature<'feature>>;
-
-impl LakesLayer<'_,'_> {
+impl LakeLayer<'_,'_> {
 
     pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<u64,CommandError> {
         let (field_names,field_values) = LakeFeature::to_field_names_values(
@@ -1968,14 +1978,14 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
-    name #[allow(dead_code)]: string,
-    habitability #[allow(dead_code)]: i32,
-    criteria #[allow(dead_code)]: biome_criteria,
-    movement_cost #[allow(dead_code)]: i32,
-    supports_nomadic #[allow(dead_code)]: bool,
-    supports_hunting #[allow(dead_code)]: bool,
-    color #[allow(dead_code)]: string,
+layer!(Biome["biomes"]: wkbMultiPolygon {
+    #[set(allow(dead_code))] name: string,
+    #[set(allow(dead_code))] habitability: i32,
+    #[set(allow(dead_code))] criteria: biome_criteria,
+    #[set(allow(dead_code))] movement_cost: i32,
+    #[set(allow(dead_code))] supports_nomadic: bool,
+    #[set(allow(dead_code))] supports_hunting: bool,
+    #[set(allow(dead_code))] color: string,
 });
 
 impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
@@ -2197,9 +2207,6 @@ impl NamedEntity<BiomeSchema> for BiomeForDissolve {
     }
 }
 
-
-pub(crate) type BiomeLayer<'layer,'feature> = MapLayer<'layer,'feature,BiomeSchema,BiomeFeature<'feature>>;
-
 impl BiomeLayer<'_,'_> {
 
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
@@ -2265,13 +2272,13 @@ impl TryFrom<String> for CultureType {
     }
 }
 
-feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
-    name #[allow(dead_code)]: string,
-    namer #[allow(dead_code)]: string,
-    type_ #[allow(dead_code)]: culture_type,
-    expansionism #[allow(dead_code)]: f64,
-    center_tile_id #[allow(dead_code)]: id_ref,
-    color #[allow(dead_code)]: string,
+layer!(Culture["cultures"]: wkbMultiPolygon {
+    #[set(allow(dead_code))] name: string,
+    #[set(allow(dead_code))] namer: string,
+    #[set(allow(dead_code))] type_: culture_type,
+    #[set(allow(dead_code))] expansionism: f64,
+    #[set(allow(dead_code))] center_tile_id: id_ref,
+    #[set(allow(dead_code))] color: string,
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
@@ -2395,12 +2402,6 @@ impl<'impl_life> NamedEntity<CultureSchema> for CultureForDissolve {
 }
 
 
-
-
-
-pub(crate) type CultureLayer<'layer,'feature> = MapLayer<'layer,'feature,CultureSchema,CultureFeature<'feature>>;
-
-
 impl CultureLayer<'_,'_> {
 
     pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
@@ -2419,14 +2420,14 @@ impl CultureLayer<'_,'_> {
 
 }
 
-feature!(TownFeature TownSchema "towns" wkbPoint {
-    name #[allow(dead_code)]: string,
-    culture #[allow(dead_code)]: option_string,
-    is_capital #[allow(dead_code)]: bool,
-    tile_id #[allow(dead_code)]: id_ref,
-    grouping_id #[allow(dead_code)]: id_ref, 
-    #[allow(dead_code)] population: i32,
-    #[allow(dead_code)] is_port: bool,
+layer!(Town["towns"]: wkbPoint {
+    #[set(allow(dead_code))] name: string,
+    #[set(allow(dead_code))] culture: option_string,
+    #[set(allow(dead_code))] is_capital: bool,
+    #[set(allow(dead_code))] tile_id: id_ref,
+    #[set(allow(dead_code))] grouping_id: id_ref, 
+    #[get(allow(dead_code))] population: i32,
+    #[get(allow(dead_code))] is_port: bool,
 });
 
 impl TownFeature<'_> {
@@ -2471,8 +2472,6 @@ entity!(TownForEmptySubnations TownSchema TownFeature {
     name: String
 });
 
-pub(crate) type TownLayer<'layer,'feature> = MapLayer<'layer,'feature,TownSchema,TownFeature<'feature>>;
-
 impl TownLayer<'_,'_> {
 
     pub(crate) fn add_town(&mut self, town: NewTown) -> Result<u64,CommandError> {
@@ -2497,14 +2496,14 @@ impl TownLayer<'_,'_> {
 }
 
 
-feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
-    name #[allow(dead_code)]: string,
-    culture #[allow(dead_code)]: option_string,
-    center_tile_id #[allow(dead_code)]: id_ref, 
-    type_ #[allow(dead_code)]: culture_type,
-    expansionism #[allow(dead_code)]: f64,
-    capital_town_id #[allow(dead_code)]: id_ref,
-    color #[allow(dead_code)]: string,
+layer!(Nation["nations"]: wkbMultiPolygon {
+    #[set(allow(dead_code))] name: string,
+    #[set(allow(dead_code))] culture: option_string,
+    #[set(allow(dead_code))] center_tile_id: id_ref, 
+    #[set(allow(dead_code))] type_: culture_type,
+    #[set(allow(dead_code))] expansionism: f64,
+    #[set(allow(dead_code))] capital_town_id: id_ref,
+    #[set(allow(dead_code))] color: string,
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
@@ -2545,10 +2544,7 @@ entity!(NationForEmptySubnations NationSchema NationFeature {
     culture: Option<String>
 });
 
-
-pub(crate) type NationsLayer<'layer,'feature> = MapLayer<'layer,'feature,NationSchema,NationFeature<'feature>>;
-
-impl NationsLayer<'_,'_> {
+impl NationLayer<'_,'_> {
 
     pub(crate) fn add_nation(&mut self, nation: NewNation) -> Result<u64,CommandError> {
         let (field_names,field_values) = NationFeature::to_field_names_values(
@@ -2572,14 +2568,14 @@ impl NationsLayer<'_,'_> {
 
 }
 
-feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
-    name #[allow(dead_code)]: string,
-    culture #[allow(dead_code)]: option_string,
-    center_tile_id #[allow(dead_code)]: id_ref,
-    type_ #[allow(dead_code)]: culture_type,
-    seat_town_id #[allow(dead_code)]: option_id_ref, 
-    nation_id #[allow(dead_code)]: id_ref, 
-    color #[allow(dead_code)]: string,
+layer!(Subnation["subnations"]: wkbMultiPolygon {
+    #[set(allow(dead_code))] name: string,
+    #[set(allow(dead_code))] culture: option_string,
+    #[set(allow(dead_code))] center_tile_id: id_ref,
+    #[set(allow(dead_code))] type_: culture_type,
+    #[set(allow(dead_code))] seat_town_id: option_id_ref, 
+    #[set(allow(dead_code))] nation_id: id_ref, 
+    #[set(allow(dead_code))] color: string,
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
@@ -2611,10 +2607,7 @@ entity!(SubnationForNormalize SubnationSchema SubnationFeature {
     seat_town_id: Option<u64>
 });
 
-
-pub(crate) type SubnationsLayer<'layer,'feature> = MapLayer<'layer,'feature,SubnationSchema,SubnationFeature<'feature>>;
-
-impl SubnationsLayer<'_,'_> {
+impl SubnationLayer<'_,'_> {
 
     pub(crate) fn add_subnation(&mut self, subnation: NewSubnation) -> Result<u64,CommandError> {
         let (field_names,field_values) = SubnationFeature::to_field_names_values(
@@ -2637,10 +2630,8 @@ impl SubnationsLayer<'_,'_> {
 
 }
 
-feature!(CoastlineFeature CoastlineSchema "coastlines" wkbPolygon  {
+layer!(Coastline["coastlines"]: wkbPolygon  {
 });
-
-pub(crate) type CoastlineLayer<'layer,'feature> = MapLayer<'layer,'feature,CoastlineSchema,CoastlineFeature<'feature>>;
 
 impl CoastlineLayer<'_,'_> {
 
@@ -2651,10 +2642,8 @@ impl CoastlineLayer<'_,'_> {
 
 }
 
-feature!(OceanFeature OceanSchema "oceans" wkbPolygon {
+layer!(Ocean["oceans"]: wkbPolygon {
 });
-
-pub(crate) type OceanLayer<'layer,'feature> = MapLayer<'layer,'feature,OceanSchema,OceanFeature<'feature>>;
 
 impl OceanLayer<'_,'_> {
 
@@ -2667,7 +2656,7 @@ impl OceanLayer<'_,'_> {
 
 /*
 // Uncomment this stuff if you need to add a line layer for playing around with something.
-feature!(LineFeature LineSchema "lines" wkbLineString {
+feature!(Line["lines"]: wkbLineString {
 });
 
 pub(crate) type LineLayer<'layer,'feature> = MapLayer<'layer,'feature,LineSchema,LineFeature<'feature>>;
@@ -2681,12 +2670,10 @@ impl LineLayer<'_,'_> {
 }
 */
 
-feature!(PropertyFeature PropertySchema "properties" wkbNone {
-    name #[allow(dead_code)]: string,
+layer!(Property["properties"]: wkbNone {
+    #[set(allow(dead_code))] name: string,
     value: string,
 });
-
-pub(crate) type PropertyLayer<'layer,'feature> = MapLayer<'layer,'feature,PropertySchema,PropertyFeature<'feature>>;
 
 impl PropertySchema {
     const PROP_ELEVATION_LIMITS: &str = "elevation-limits";
@@ -2850,16 +2837,16 @@ impl WorldMap {
         Ok(())
     }
 
-    pub(crate) fn points_layer(&self) -> Result<PointsLayer,CommandError> {
-        PointsLayer::open_from_dataset(&self.dataset)
+    pub(crate) fn points_layer(&self) -> Result<PointLayer,CommandError> {
+        PointLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn triangles_layer(&self) -> Result<TrianglesLayer,CommandError> {
-        TrianglesLayer::open_from_dataset(&self.dataset)
+    pub(crate) fn triangles_layer(&self) -> Result<TriangleLayer,CommandError> {
+        TriangleLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn tiles_layer(&self) -> Result<TilesLayer,CommandError> {
-        TilesLayer::open_from_dataset(&self.dataset)
+    pub(crate) fn tiles_layer(&self) -> Result<TileLayer,CommandError> {
+        TileLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
@@ -2888,36 +2875,36 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         }
     }
 
-    pub(crate) fn create_points_layer(&mut self, overwrite: bool) -> Result<PointsLayer,CommandError> {
-        Ok(PointsLayer::create_from_dataset(&mut self.dataset, overwrite)?)       
+    pub(crate) fn create_points_layer(&mut self, overwrite: bool) -> Result<PointLayer,CommandError> {
+        Ok(PointLayer::create_from_dataset(&mut self.dataset, overwrite)?)       
 
     }
 
-    pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TrianglesLayer,CommandError> {
-        Ok(TrianglesLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TriangleLayer,CommandError> {
+        Ok(TriangleLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }
 
-    pub(crate) fn create_tile_layer(&mut self, overwrite: bool) -> Result<TilesLayer,CommandError> {
-        Ok(TilesLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_tile_layer(&mut self, overwrite: bool) -> Result<TileLayer,CommandError> {
+        Ok(TileLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }
 
-    pub(crate) fn create_rivers_layer(&mut self, overwrite: bool) -> Result<RiversLayer,CommandError> {
-        Ok(RiversLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_rivers_layer(&mut self, overwrite: bool) -> Result<RiverLayer,CommandError> {
+        Ok(RiverLayer::create_from_dataset(&mut self.dataset, overwrite)?)
 
     }
 
-    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakesLayer,CommandError> {
-        Ok(LakesLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakeLayer,CommandError> {
+        Ok(LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
     }
 
-    pub (crate) fn edit_lakes_layer(&mut self) -> Result<LakesLayer,CommandError> {
-        Ok(LakesLayer::open_from_dataset(&mut self.dataset)?)
+    pub (crate) fn edit_lakes_layer(&mut self) -> Result<LakeLayer,CommandError> {
+        Ok(LakeLayer::open_from_dataset(&mut self.dataset)?)
     }
 
-    pub(crate) fn edit_tile_layer(&mut self) -> Result<TilesLayer,CommandError> {
-        Ok(TilesLayer::open_from_dataset(&mut self.dataset)?)
+    pub(crate) fn edit_tile_layer(&mut self) -> Result<TileLayer,CommandError> {
+        Ok(TileLayer::open_from_dataset(&mut self.dataset)?)
 
     }
 
@@ -2948,20 +2935,20 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: bool) -> Result<NationsLayer,CommandError> {
-        Ok(NationsLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: bool) -> Result<NationLayer,CommandError> {
+        Ok(NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
     }
 
-    pub(crate) fn edit_nations_layer(&mut self) -> Result<NationsLayer,CommandError> {
-        Ok(NationsLayer::open_from_dataset(&mut self.dataset)?)
+    pub(crate) fn edit_nations_layer(&mut self) -> Result<NationLayer,CommandError> {
+        Ok(NationLayer::open_from_dataset(&mut self.dataset)?)
     }
 
-    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: bool) -> Result<SubnationsLayer,CommandError> {
-        Ok(SubnationsLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: bool) -> Result<SubnationLayer,CommandError> {
+        Ok(SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
     }
 
-    pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationsLayer,CommandError> {
-        Ok(SubnationsLayer::open_from_dataset(&mut self.dataset)?)
+    pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationLayer,CommandError> {
+        Ok(SubnationLayer::open_from_dataset(&mut self.dataset)?)
     }
 
     pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: bool) -> Result<CoastlineLayer,CommandError> {

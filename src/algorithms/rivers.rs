@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::world_map::TileForRiverConnect;
-use crate::world_map::TilesLayer;
+use crate::world_map::TileLayer;
 use crate::world_map::RiverSegmentTo;
 use crate::world_map::RiverSegmentFrom;
 use crate::world_map::NewRiver;
@@ -267,7 +267,7 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
     (tile_from_index, tile_to_index, result_queue)
 }
 
-pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: &mut TilesLayer<'_,'_>, progress: &mut Progress) -> Result<Vec<Rc<RiverSegment>>, CommandError> {
+pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: &mut TileLayer<'_,'_>, progress: &mut Progress) -> Result<Vec<Rc<RiverSegment>>, CommandError> {
     let mut result = Vec::new();
 
     for entity in tiles.read_features().into_entities::<TileForRiverConnect>().watch(progress,"Finding segments.","Segments found.") {

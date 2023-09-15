@@ -13,7 +13,7 @@ use crate::world_map::NewTile;
 use crate::world_map::TileForCalcNeighbors;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileWithNeighborsElevation;
-use crate::world_map::TilesLayer;
+use crate::world_map::TileLayer;
 use crate::utils::Point;
 use crate::utils::bezierify_polygon;
 use crate::utils::multipolygon_to_polygons;
@@ -207,7 +207,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &D
 
 }
 
-pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TilesLayer<'_,'_>) -> Result<Option<Point>, CommandError> {
+pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TileLayer<'_,'_>) -> Result<Option<Point>, CommandError> {
     Ok(if let Some(x) = tile {
         if let Some(x) = tiles.feature_by_id(&x) {
             Some(x.site()?)

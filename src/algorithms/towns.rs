@@ -10,7 +10,7 @@ use crate::world_map::TownForPopulation;
 use crate::world_map::LakeForTownPopulation;
 use crate::world_map::TileForTownPopulation;
 use crate::utils::Point;
-use crate::world_map::TilesLayer;
+use crate::world_map::TileLayer;
 use crate::utils::point_finder::PointFinder;
 use crate::utils::Extent;
 use crate::world_map::NewTown;
@@ -220,7 +220,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
     (capitals, capitals_finder)
 }
 
-pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles_layer: &mut TilesLayer, progress: &mut Progress) -> Result<Vec<ScoredTileForTowns>, CommandError> {
+pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles_layer: &mut TileLayer, progress: &mut Progress) -> Result<Vec<ScoredTileForTowns>, CommandError> {
 
     let town_score_normal = Normal::new(1.0f64,3.0f64).unwrap(); // if this fails then it's a programming error, I'm pretty certain.
 
