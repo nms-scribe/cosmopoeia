@@ -946,7 +946,7 @@ The assignment function closure takes an TypedFeature value and returns a result
 
 */ 
 macro_rules! entity {
-    ($(#[$struct_attr: meta])* $name: ident $schema: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*$(,)?}) => {
+    ($(#[$struct_attr: meta])* $name: ident: $layer: ident {$($field: ident: $type: ty $(= $function: expr)?),*$(,)?}) => {
         #[derive(Clone)]
         $(#[$struct_attr])* 
         pub(crate) struct $name {
@@ -955,17 +955,24 @@ macro_rules! entity {
             ),*
         }
 
-        impl<'impl_life> Entity<$schema> for $name {
+        paste::paste!{
+            impl<'impl_life> Entity<[<$layer Schema>]> for $name {
 
+            }
+    
+    
         }
 
-        impl TryFrom<$feature<'_>> for $name {
+        paste::paste!{
+            impl TryFrom<[<$layer Feature>]<'_>> for $name {
 
-            type Error = CommandError;
-
-            fn try_from(value: $feature) -> Result<Self,Self::Error> {
-                crate::entity_from_data!($name value, $($field: $type $(= $function)?),*)
+                type Error = CommandError;
+    
+                fn try_from(value: [<$layer Feature>]) -> Result<Self,Self::Error> {
+                    crate::entity_from_data!($name value, $($field: $type $(= $function)?),*)
+                }
             }
+    
         }
 
     };
@@ -1244,19 +1251,19 @@ impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T 
 }
 
 
-entity!(NewTile TileSchema TileFeature {
+entity!(NewTile: Tile {
     geometry: Geometry,
     site_x: f64, 
     site_y: f64
 }); 
 
-entity!(TileForCalcNeighbors TileSchema TileFeature {
+entity!(TileForCalcNeighbors: Tile {
     geometry: Geometry,
     site: Point,
     neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
 });
 
-entity!(TileForTerrain TileSchema TileFeature {
+entity!(TileForTerrain: Tile {
     site: Point, 
     elevation: f64,
     grouping: Grouping, 
@@ -1277,19 +1284,19 @@ impl TileForTerrain {
     }
 }
 
-entity!(TileForTemperatures TileSchema TileFeature {
+entity!(TileForTemperatures: Tile {
     fid: u64, 
     site_y: f64, 
     elevation: f64, 
     grouping: Grouping
 });
 
-entity!(TileForWinds TileSchema TileFeature {
+entity!(TileForWinds: Tile {
     fid: u64, 
     site_y: f64
 });
 
-entity!(TileForWaterflow TileSchema TileFeature {
+entity!(TileForWaterflow: Tile {
     elevation: f64, 
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1318,7 +1325,7 @@ impl TileWithElevation for TileForWaterflow {
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
 // just use a different function because it's based on a trait. I could take this one out
 // of the macro and figure something out, but this is easier.
-entity!(TileForWaterFill TileSchema TileFeature {
+entity!(TileForWaterFill: Tile {
     elevation: f64, 
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1363,13 +1370,13 @@ impl TileWithElevation for TileForWaterFill {
 }
 
 
-entity!(TileForRiverConnect TileSchema TileFeature {
+entity!(TileForRiverConnect: Tile {
     water_flow: f64,
     flow_to: Vec<u64>,
     outlet_from: Vec<u64>
 });
 
-entity!(TileForWaterDistance TileSchema TileFeature {
+entity!(TileForWaterDistance: Tile {
     site: Point,
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1378,14 +1385,14 @@ entity!(TileForWaterDistance TileSchema TileFeature {
 });
 
 
-entity!(TileForGroupingCalc TileSchema TileFeature {
+entity!(TileForGroupingCalc: Tile {
     fid: u64,
     grouping: Grouping,
     lake_id: Option<u64>,
     neighbors: Vec<(u64,i32)>
 });
 
-entity!(TileForPopulation TileSchema TileFeature {
+entity!(TileForPopulation: Tile {
     water_flow: f64,
     elevation_scaled: i32,
     biome: String,
@@ -1398,14 +1405,14 @@ entity!(TileForPopulation TileSchema TileFeature {
     lake_id: Option<u64>
 });
 
-entity!(TileForPopulationNeighbor TileSchema TileFeature {
+entity!(TileForPopulationNeighbor: Tile {
     grouping: Grouping,
     lake_id: Option<u64>
 });
 
 
 
-entity!(TileForCultureGen TileSchema TileFeature {
+entity!(TileForCultureGen: Tile {
     fid: u64,
     site: Point,
     population: i32,
@@ -1470,7 +1477,7 @@ impl TileForCulturePrefSorting<'_> {
 }
 
 
-entity!(TileForCultureExpand TileSchema TileFeature {
+entity!(TileForCultureExpand: Tile {
     population: i32,
     shore_distance: i32,
     elevation_scaled: i32,
@@ -1486,7 +1493,7 @@ entity!(TileForCultureExpand TileSchema TileFeature {
 
 });
 
-entity!(TileForTowns TileSchema TileFeature {
+entity!(TileForTowns: Tile {
     fid: u64,
     habitability: f64,
     site: Point,
@@ -1494,7 +1501,7 @@ entity!(TileForTowns TileSchema TileFeature {
     grouping_id: u64
 });
 
-entity!(TileForTownPopulation TileSchema TileFeature {
+entity!(TileForTownPopulation: Tile {
     fid: u64,
     geometry: Geometry,
     habitability: f64,
@@ -1528,7 +1535,7 @@ impl TileForTownPopulation {
     }
 }
 
-entity!(TileForNationExpand TileSchema TileFeature {
+entity!(TileForNationExpand: Tile {
     habitability: f64,
     shore_distance: i32,
     elevation_scaled: i32,
@@ -1541,14 +1548,14 @@ entity!(TileForNationExpand TileSchema TileFeature {
     nation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileForNationNormalize TileSchema TileFeature {
+entity!(TileForNationNormalize: Tile {
     grouping: Grouping,
     neighbors: Vec<(u64,i32)>,
     town_id: Option<u64>,
     nation_id: Option<u64>
 });
 
-entity!(TileForSubnations TileSchema TileFeature {
+entity!(TileForSubnations: Tile {
     fid: u64,
     town_id: Option<u64>,
     nation_id: Option<u64>,
@@ -1556,7 +1563,7 @@ entity!(TileForSubnations TileSchema TileFeature {
     population: i32
 });
 
-entity!(TileForSubnationExpand TileSchema TileFeature {
+entity!(TileForSubnationExpand: Tile {
     neighbors: Vec<(u64,i32)>,
     grouping: Grouping,
     shore_distance: i32,
@@ -1565,7 +1572,7 @@ entity!(TileForSubnationExpand TileSchema TileFeature {
     subnation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
 
-entity!(TileForEmptySubnations TileSchema TileFeature {
+entity!(TileForEmptySubnations: Tile {
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32,
     nation_id: Option<u64>,
@@ -1576,14 +1583,14 @@ entity!(TileForEmptySubnations TileSchema TileFeature {
     culture: Option<String>
 });
 
-entity!(TileForSubnationNormalize TileSchema TileFeature {
+entity!(TileForSubnationNormalize: Tile {
     neighbors: Vec<(u64,i32)>,
     town_id: Option<u64>,
     nation_id: Option<u64>,
     subnation_id: Option<u64>
 });
 
-entity!(TileForCultureDissolve TileSchema TileFeature {
+entity!(TileForCultureDissolve: Tile {
     culture: Option<String>,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
@@ -1608,7 +1615,7 @@ impl TileWithNeighbors for TileForCultureDissolve {
     }
 }
 
-entity!(TileForBiomeDissolve TileSchema TileFeature {
+entity!(TileForBiomeDissolve: Tile {
     biome: String,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
@@ -1633,7 +1640,7 @@ impl TileWithNeighbors for TileForBiomeDissolve {
     }
 }
 
-entity!(TileForNationDissolve TileSchema TileFeature {
+entity!(TileForNationDissolve: Tile {
     nation_id: Option<u64>,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
@@ -1658,7 +1665,7 @@ impl TileWithNeighbors for TileForNationDissolve {
     }
 }
 
-entity!(TileForSubnationDissolve TileSchema TileFeature {
+entity!(TileForSubnationDissolve: Tile {
     subnation_id: Option<u64>,
     geometry: Geometry,
     neighbors: Vec<(u64,i32)>,
@@ -1824,7 +1831,7 @@ layer!(River["rivers"]: wkbLineString {
 });
 
 
-entity!(NewRiver RiverSchema RiverFeature {
+entity!(NewRiver: River {
     from_tile_id: u64,
     from_type: RiverSegmentFrom,
     from_flow: f64,
@@ -1885,19 +1892,19 @@ layer!(Lake["lakes"]: wkbMultiPolygon {
     #[get(allow(dead_code))] #[set(allow(dead_code))] evaporation: f64,
 });
 
-entity!(LakeForBiomes LakeSchema LakeFeature {
+entity!(LakeForBiomes: Lake {
     type_: LakeType
 });
 
-entity!(LakeForPopulation LakeSchema LakeFeature {
+entity!(LakeForPopulation: Lake {
     type_: LakeType
 });
 
-entity!(LakeForCultureGen LakeSchema LakeFeature {
+entity!(LakeForCultureGen: Lake {
     size: i32
 });
 
-entity!(LakeForTownPopulation LakeSchema LakeFeature {
+entity!(LakeForTownPopulation: Lake {
     size: i32
 });
 
@@ -2141,7 +2148,7 @@ impl BiomeFeature<'_> {
 
 }
 
-entity!(NewBiome BiomeSchema BiomeFeature {
+entity!(NewBiome: Biome {
     name: String,
     habitability: i32,
     criteria: BiomeCriteria,
@@ -2151,7 +2158,7 @@ entity!(NewBiome BiomeSchema BiomeFeature {
     color: String
 });
 
-entity!(BiomeForPopulation BiomeSchema BiomeFeature {
+entity!(BiomeForPopulation: Biome {
     name: String,
     habitability: i32
 });
@@ -2162,7 +2169,7 @@ impl NamedEntity<BiomeSchema> for BiomeForPopulation {
     }
 }
 
-entity!(BiomeForCultureGen BiomeSchema BiomeFeature {
+entity!(BiomeForCultureGen: Biome {
     name: String,
     supports_nomadic: bool,
     supports_hunting: bool
@@ -2174,7 +2181,7 @@ impl NamedEntity<BiomeSchema> for BiomeForCultureGen {
     }
 }
 
-entity!(BiomeForCultureExpand BiomeSchema BiomeFeature {
+entity!(BiomeForCultureExpand: Biome {
     name: String,
     movement_cost: i32
 });
@@ -2185,7 +2192,7 @@ impl NamedEntity<BiomeSchema> for BiomeForCultureExpand {
     }
 }
 
-entity!(BiomeForNationExpand BiomeSchema BiomeFeature {
+entity!(BiomeForNationExpand: Biome {
     name: String,
     movement_cost: i32
 });
@@ -2196,7 +2203,7 @@ impl NamedEntity<BiomeSchema> for BiomeForNationExpand {
     }
 }
 
-entity!(BiomeForDissolve BiomeSchema BiomeFeature {
+entity!(BiomeForDissolve: Biome {
     fid: u64,
     name: String
 });
@@ -2331,7 +2338,7 @@ pub(crate) trait CultureWithType {
 }
 
 
-entity!(NewCulture CultureSchema CultureFeature {
+entity!(NewCulture: Culture {
     name: String,
     namer: String,
     type_: CultureType,
@@ -2341,14 +2348,14 @@ entity!(NewCulture CultureSchema CultureFeature {
 });
 
 // needs to be hashable in order to fit into a priority queue
-entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement CultureSchema CultureFeature {
+entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement: Culture {
     name: String,
     center_tile_id: u64,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &CultureFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
-entity!(CultureForTowns CultureSchema CultureFeature {
+entity!(CultureForTowns: Culture {
     name: String,
     namer: String
 });
@@ -2365,7 +2372,7 @@ impl<'impl_life> CultureWithNamer for CultureForTowns {
     }
 }
 
-entity!(CultureForNations CultureSchema CultureFeature {
+entity!(CultureForNations: Culture {
     name: String,
     namer: String,
     type_: CultureType
@@ -2390,7 +2397,7 @@ impl<'impl_life> CultureWithType for CultureForNations {
 }
 
 
-entity!(CultureForDissolve CultureSchema CultureFeature {
+entity!(CultureForDissolve: Culture {
     fid: u64,
     name: String
 });
@@ -2438,7 +2445,7 @@ impl TownFeature<'_> {
 
 }
 
-entity!(NewTown TownSchema TownFeature {
+entity!(NewTown: Town {
     geometry: Geometry,
     name: String,
     culture: Option<String>,
@@ -2447,28 +2454,28 @@ entity!(NewTown TownSchema TownFeature {
     grouping_id: u64
 });
 
-entity!(TownForPopulation TownSchema TownFeature {
+entity!(TownForPopulation: Town {
     fid: u64,
     is_capital: bool,
     tile_id: u64
 });
 
-entity!(TownForNations TownSchema TownFeature {
+entity!(TownForNations: Town {
     fid: u64,
     is_capital: bool,
     culture: Option<String>,
     tile_id: u64
 });
 
-entity!(TownForNationNormalize TownSchema TownFeature {
+entity!(TownForNationNormalize: Town {
     is_capital: bool
 });
 
-entity!(TownForSubnations TownSchema TownFeature {
+entity!(TownForSubnations: Town {
     name: String
 });
 
-entity!(TownForEmptySubnations TownSchema TownFeature {
+entity!(TownForEmptySubnations: Town {
     name: String
 });
 
@@ -2513,7 +2520,7 @@ impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
 }
 
 
-entity!(NewNation NationSchema NationFeature {
+entity!(NewNation: Nation {
     name: String,
     culture: Option<String>,
     center_tile_id: u64,
@@ -2524,7 +2531,7 @@ entity!(NewNation NationSchema NationFeature {
 });
 
 // needs to be hashable in order to fit into a priority queue
-entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationSchema NationFeature {
+entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement: Nation {
     fid: u64,
     name: String,
     center_tile_id: u64,
@@ -2532,13 +2539,13 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement NationSchema NationFeatu
     expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
-entity!(NationForSubnations NationSchema NationFeature {
+entity!(NationForSubnations: Nation {
     fid: u64,
     capital_town_id: u64,
     color: String
 });
 
-entity!(NationForEmptySubnations NationSchema NationFeature {
+entity!(NationForEmptySubnations: Nation {
     fid: u64,
     color: String,
     culture: Option<String>
@@ -2585,7 +2592,7 @@ impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feat
 }
 
 
-entity!(NewSubnation SubnationSchema SubnationFeature {
+entity!(NewSubnation: Subnation {
     name: String,
     culture: Option<String>,
     center_tile_id: u64,
@@ -2596,13 +2603,13 @@ entity!(NewSubnation SubnationSchema SubnationFeature {
 });
 
 
-entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement SubnationSchema SubnationFeature {
+entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement: Subnation {
     fid: u64,
     center_tile_id: u64,
     nation_id: u64
 });
 
-entity!(SubnationForNormalize SubnationSchema SubnationFeature {
+entity!(SubnationForNormalize: Subnation {
     center_tile_id: u64,
     seat_town_id: Option<u64>
 });

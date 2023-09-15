@@ -41,7 +41,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
     // based on AFMG algorithm
 
-    entity!(BiomeSource TileSchema TileFeature {
+    entity!(BiomeSource: Tile {
         fid: u64,
         temperature: f64,
         elevation_scaled: i32,
