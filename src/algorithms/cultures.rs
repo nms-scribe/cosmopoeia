@@ -63,7 +63,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         culture_count
     };
 
-    let biomes = target.edit_biomes_layer()?.build_lookup(progress)?;
+    let biomes = target.edit_biomes_layer()?.read_features().to_named_entities_index(progress)?;
 
     let lake_map = target.edit_lakes_layer()?.read_features().to_entities_index::<_,LakeForCultureGen>(progress)?;
 
@@ -272,7 +272,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForCultureExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForCultureExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 

@@ -2235,20 +2235,6 @@ impl BiomeLayer<'_,'_> {
     
     }
 
-    pub(crate) fn build_lookup<'local, Progress: ProgressObserver, Data: NamedEntity<BiomeSchema> + TryFrom<BiomeFeature<'local>,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<BiomeSchema, Data>,CommandError> {
-        let mut result = HashMap::new();
-
-        for entity in self.read_features().into_entities::<Data>().watch(progress,"Indexing biomes.","Biomes indexed.") {
-            let (_,entity) = entity?;
-            let name = entity.name().to_owned();
-            result.insert(name, entity);
-        }
-
-        Ok(EntityLookup::from(result))
-
-    }
-
-
 }
 
 #[derive(Clone,Hash,Eq,PartialEq,Serialize,Deserialize)]

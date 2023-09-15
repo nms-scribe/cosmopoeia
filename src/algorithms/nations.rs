@@ -79,7 +79,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.build_lookup::<_,BiomeForNationExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForNationExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 

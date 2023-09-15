@@ -356,8 +356,8 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
     [X] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
 [X] The special values in WorldMap, in fact anywhere where we implemtn TryFrom<String>, should use serde_json instead. Use a json standard for all of that.
 [X] Wherever I'm using serde_json, 'use' the functions as to_json_string and from_json_str, because I'm a little scared of using modules without use.
-[ ] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
-[ ] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
+[X] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
+[X] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
 [ ] MarkovGenerator::calculate_chain -- should return an error if the array is empty, or if there are no strings in it. Because that will cause an error when we're trying to create strings.
 [ ] Check all 'unwraps' and make sure we don't need to throw an error there instead.
     [ ] TilePreference::get_value -- there are a bunch of 'unwraps' that should be proper errors, since that's all based on user input.
