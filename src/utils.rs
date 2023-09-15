@@ -308,10 +308,6 @@ impl Point {
         (*self.x,*self.y)
     }
 
-    pub(crate) fn from_f64(x: f64, y: f64) -> Result<Self,FloatIsNan> {
-        Ok(Self::new(NotNan::try_from(x)?,NotNan::try_from(y)?))
-    }
-
     pub(crate) fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
         Self { x, y }
     }
@@ -389,15 +385,13 @@ impl TryFrom<(f64,f64,f64)> for Point {
     }
 }
 
-impl TryFrom<(NotNan<f64>,NotNan<f64>)> for Point {
+impl From<(NotNan<f64>,NotNan<f64>)> for Point {
 
-    type Error = FloatIsNan;
-
-    fn try_from(value: (NotNan<f64>,NotNan<f64>)) -> Result<Self, Self::Error> {
-        Ok(Self {
+    fn from(value: (NotNan<f64>,NotNan<f64>)) -> Self {
+        Self {
             x: value.0,
             y: value.1
-        })
+        }
     }
 }
 
@@ -710,7 +704,7 @@ impl PolyBezier {
                     );
                     // convert back to points.
                     for point in curve.iter().take(curve.len() - 2).skip(1) {
-                        result.push(Point::from_f64(point[0], point[1])?);
+                        result.push((point[0], point[1]).try_into()?);
                     }
                 }
                 result.push(vertex2.clone());

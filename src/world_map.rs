@@ -30,9 +30,11 @@ use indexmap::map::Keys as IndexKeys;
 use indexmap::map::Iter as IndexIter;
 use indexmap::map::IterMut as IndexIterMut;
 use indexmap::map::IntoIter as IndexIntoIter;
-
-
-
+use serde::Serialize;
+use serde::Deserialize;
+use ron::to_string as to_ron_string;
+use ron::from_str as from_ron_str;
+use paste::paste;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -59,14 +61,28 @@ use crate::algorithms::naming::LoadedNamers;
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
+fn id_list_to_string(value: &Vec<u64>) -> String {
+    to_ron_string(value).unwrap() // it's a basic enum, there shouldn't be any reason why this would fail
+}
 
-macro_rules! feature_conv {
-    (id_list_to_string@ $value: expr) => {
-        $value.iter().map(|fid| format!("{}",fid)).collect::<Vec<String>>().join(",")
-    };
-    (neighbor_directions_to_string@ $value: expr) => {
-        $value.iter().map(|(fid,dir)| format!("{}:{}",fid,dir)).collect::<Vec<String>>().join(",")
-    };
+fn string_to_id_list(value: String) -> Result<Vec<u64>,CommandError> {
+    from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdList(value))   
+}
+
+fn neighbor_directions_to_string(value: &Vec<(u64,i32)>) -> String {
+    to_ron_string(value).unwrap() // it's a basic enum, there shouldn't be any reason why this would fail
+}
+
+fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,i32)>,CommandError> {
+    from_ron_str(&value).map_err(|_| CommandError::InvalidValueForNeighborDirections(value))   
+}
+
+fn id_ref_to_string(value: &u64) -> String {
+    to_ron_string(value).unwrap() // it's an f64, what's it going to do?
+}
+
+fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
+    from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
 }
 
 macro_rules! feature_get_field_type {
@@ -183,83 +199,51 @@ macro_rules! feature_set_field_type {
     };
 }
 
+macro_rules! feature_get_required {
+    ($feature_name: literal $prop: ident $value: expr ) => {
+        $value.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
+    };
+}
+
 macro_rules! feature_get_field {
     ($self: ident f64 $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_double_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
+        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?)
     };
     ($self: ident i64 $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_integer64_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
+        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer64_by_name($field)?))
     };
     ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_string_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?.parse().map_err(|_| CommandError::InvalidValueForIdRef(concat!($feature_name,".",stringify!($prop))))?)
+        Ok(string_to_id_ref(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident option_i64 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer64_by_name($field)?)
     };
     ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_string_by_name($field)?.map(|a| a.parse().map_err(|_| CommandError::InvalidValueForIdRef(concat!($feature_name,".",stringify!($prop))))).transpose()?)
+        Ok($self.feature.field_as_string_by_name($field)?.map(|a| string_to_id_ref(a)).transpose()?)
     };
     ($self: ident i32 $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_integer_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
+        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)?)
     };
     ($self: ident option_i32 $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_integer_by_name($field)?)
     };
     ($self: ident bool $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_integer_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))? != 0)
+        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)? != 0)
     };
     ($self: ident neighbor_directions $feature_name: literal $prop: ident $field: path) => {
-        if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
-            Ok(neighbors.split(',').filter_map(|a| {
-                let mut a = a.splitn(2, ':');
-                if let Some(neighbor) = a.next().map(|n| n.parse().ok()).flatten() {
-                    if let Some(direction) = a.next().map(|d| d.parse().ok()).flatten() {
-                        if direction >= 0 {
-                            Some((neighbor,direction))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-                
-            }).collect())
-        } else {
-            Ok(Vec::new())
-        }
-
+        Ok(string_to_neighbor_directions(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident id_list $feature_name: literal $prop: ident $field: path) => {
-        if let Some(neighbors) = $self.feature.field_as_string_by_name($field)? {
-            Ok(neighbors.split(',').filter_map(|a| {
-                a.parse().ok()
-            }).collect())
-        } else {
-            Ok(Vec::new())
-        }
-
+        Ok(string_to_id_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident river_segment_from $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(RiverSegmentFrom::try_from(value)?)
-        } else {
-            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-        }
-
+        Ok(RiverSegmentFrom::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident river_segment_to $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(RiverSegmentTo::try_from(value)?)
-        } else {
-            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-        }
-
+        Ok(RiverSegmentTo::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident string $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_string_by_name($field)?.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))?)
+        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident option_string $feature_name: literal $prop: ident $field: path) => {
         if let Some(value) = $self.feature.field_as_string_by_name($field)? {
@@ -274,36 +258,16 @@ macro_rules! feature_get_field {
         }
     };
     ($self: ident biome_criteria $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(BiomeCriteria::try_from(value)?)
-        } else {
-            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-        }
-
+        Ok(BiomeCriteria::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident lake_type $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(LakeType::try_from(value)?)
-        } else {
-            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-        }
-
+        Ok(LakeType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident grouping $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(Grouping::try_from(value)?)
-        } else {
-            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-        }
-
+        Ok(Grouping::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
     ($self: ident culture_type $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            Ok(CultureType::try_from(value)?)
-        } else {
-            Err(CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-        }
-
+        Ok(CultureType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
     };
 }
 
@@ -327,11 +291,11 @@ macro_rules! feature_set_field {
         Ok($self.feature.set_field_integer64($field, $value)?)
     };
     ($self: ident $value: ident id_ref $field: path) => {
-        Ok($self.feature.set_field_string($field, &$value.to_string())?)
+        Ok($self.feature.set_field_string($field, &id_ref_to_string(&$value))?)
     };
     ($self: ident $value: ident option_id_ref $field: path) => {
         if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &value.to_string())?)
+            Ok($self.feature.set_field_string($field, &id_ref_to_string(&value))?)
         } else {
             Ok($self.feature.set_field_null($field)?)
         }
@@ -347,18 +311,18 @@ macro_rules! feature_set_field {
         Ok($self.feature.set_field_integer($field, $value.into())?)
     };
     ($self: ident $value: ident neighbor_directions $field: path) => {{
-        let neighbors = feature_conv!(neighbor_directions_to_string@ $value);
+        let neighbors = neighbor_directions_to_string($value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
     ($self: ident $value: ident id_list $field: path) => {{
-        let neighbors = feature_conv!(id_list_to_string@ $value);
+        let neighbors = id_list_to_string($value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
     ($self: ident $value: ident river_segment_from $field: path) => {{
-        Ok($self.feature.set_field_string($field, $value.into())?)
+        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
     ($self: ident $value: ident river_segment_to $field: path) => {{
-        Ok($self.feature.set_field_string($field, $value.into())?)
+        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
     ($self: ident $value: ident string $field: path) => {{
         Ok($self.feature.set_field_string($field, $value)?)
@@ -386,7 +350,7 @@ macro_rules! feature_set_field {
 
 macro_rules! feature_to_value {
     ($prop: expr; f64) => {
-        Some(FieldValue::RealValue($prop))
+        Some(FieldValue::RealValue(NotNan::<f64>::try_from($prop)?.into_inner()))
     };
     ($prop: expr; i32) => {
         Some(FieldValue::IntegerValue($prop))
@@ -410,29 +374,29 @@ macro_rules! feature_to_value {
     };
     ($prop: expr; option_id_ref) => {
         if let Some(value) = $prop {
-            Some(FieldValue::StringValue(value.to_string()))
+            Some(FieldValue::StringValue(id_ref_to_string(&value)))
         } else {
             None
         }
     };
     ($prop: expr; id_list) => {
-        Some(FieldValue::StringValue(feature_conv!(id_list_to_string@ $prop)))
+        Some(FieldValue::StringValue(id_list_to_string($prop)))
     };
     ($prop: expr; neighbor_directions) => {
-        Some(FieldValue::StringValue(feature_conv!(neighbor_directions_to_string@ $prop)))
+        Some(FieldValue::StringValue(neighbor_directions_to_string($prop)))
     };
     ($prop: expr; i64) => {
         Some(FieldValue::Integer64Value($prop))
     };
     ($prop: expr; id_ref) => {
         // store id_ref as a string so I can use u64, as fields only support i64
-        Some(FieldValue::StringValue($prop.to_string()))
+        Some(FieldValue::StringValue(id_ref_to_string(&$prop)))
     };
     ($prop: expr; river_segment_from) => {{
-        Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
+        Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
     ($prop: expr; river_segment_to) => {{
-        Some(FieldValue::StringValue(Into::<&str>::into($prop).to_owned()))
+        Some(FieldValue::StringValue(Into::<String>::into($prop)))
     }};
     ($prop: expr; string) => {{
         Some(FieldValue::StringValue($prop.to_owned()))
@@ -560,8 +524,7 @@ macro_rules! get_field_type_for_prop_type {
 
 macro_rules! feature {
     ($struct_name:ident $schema_name: ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
-        $(#[$get_attr: meta])* $prop: ident 
-        $(#[$set_attr: meta])* $set_prop: ident 
+        $(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])*
         $prop_type: ident 
         $field: ident 
         $name: literal;
@@ -587,7 +550,7 @@ macro_rules! feature {
 
         impl $schema_name {
             // constant field names
-            $(pub(crate) const $field: &str = $name;)*
+            $(pub(crate) const $field: &str = stringify!($prop);)*
 
             // field definitions
             const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
@@ -634,12 +597,12 @@ macro_rules! feature {
         impl $struct_name<'_> {
 
             // feature initializer function
-            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> ([&'static str; feature_count_fields!($($field),*)],[Option<FieldValue>; feature_count_fields!($($field),*)]) {
-                ([
+            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($field),*)],[Option<FieldValue>; feature_count_fields!($($field),*)]),CommandError> {
+                Ok(([
                     $($schema_name::$field),*
                 ],[
                     $(feature_to_value!($prop; $prop_type)),*
-                ])
+                ]))
     
             }
         
@@ -649,9 +612,12 @@ macro_rules! feature {
                     feature_get_field!(self $prop_type $layer_name $prop $schema_name::$field)
                 }
         
-                $(#[$set_attr])* pub(crate) fn $set_prop(&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
-                    feature_set_field!(self value $prop_type $schema_name::$field)
-                }            
+                paste!{
+                    $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
+                        feature_set_field!(self value $prop_type $schema_name::$field)
+                    }            
+    
+                }
         
             )*
         }
@@ -1119,7 +1085,7 @@ impl TrianglesLayer<'_,'_> {
 
 }
 
-#[derive(Clone,PartialEq)]
+#[derive(Clone,PartialEq,Serialize,Deserialize)]
 pub(crate) enum Grouping {
     LakeIsland,
     Islet,
@@ -1146,14 +1112,7 @@ impl Grouping {
 impl Into<String> for &Grouping {
 
     fn into(self) -> String {
-        match self {
-            Grouping::Continent => "continent",
-            Grouping::Ocean => "ocean",
-            Grouping::LakeIsland => "lake-island",
-            Grouping::Islet => "islet",
-            Grouping::Island => "island",
-            Grouping::Lake => "lake",
-        }.to_owned()
+        to_ron_string(self).unwrap() // it's a basic enum, there shouldn't be any reason why this would fail
     }
 }
 
@@ -1162,75 +1121,67 @@ impl TryFrom<String> for Grouping {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "continent" => Ok(Self::Continent),
-            "ocean" => Ok(Self::Ocean),
-            "lake-island" => Ok(Self::LakeIsland),
-            "islet" => Ok(Self::Islet),
-            "island" => Ok(Self::Island),
-            "lake" => Ok(Self::Lake),
-            _ => Err(CommandError::InvalidValueForGroupingType(value))
-        }
+        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForGroupingType(value))
     }
 }
 
 feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     /// longitude of the node point for the tile's voronoi
-    site_x #[allow(dead_code)] set_site_x f64 FIELD_SITE_X "site_x";
+    site_x #[allow(dead_code)] f64 FIELD_SITE_X "site_x";
     /// latitude of the node point for the tile's voronoi
-    site_y #[allow(dead_code)] set_site_y f64 FIELD_SITE_Y "site_y";
+    site_y #[allow(dead_code)] f64 FIELD_SITE_Y "site_y";
     /// elevation in meters of the node point for the tile's voronoi
-    elevation set_elevation f64 FIELD_ELEVATION "elevation";
+    elevation f64 FIELD_ELEVATION "elevation";
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
     // If I ever get rid of those algorithms, this field can go away.
     /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
-    elevation_scaled set_elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled";
+    elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled";
     /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
-    grouping set_grouping grouping FIELD_GROUPING "grouping";
+    grouping grouping FIELD_GROUPING "grouping";
     /// A unique id for each grouping. These id's do not map to other tables, but will tell when tiles are in the same group. Use lake_id to link to the lake table.
     // NOTE: This isn't an id_ref, but let's store it that way anyway
-    grouping_id set_grouping_id id_ref FIELD_GROUPING_ID "grouping_id";
+    grouping_id id_ref FIELD_GROUPING_ID "grouping_id";
     /// average annual temperature of tile in imaginary units
-    temperature set_temperature f64 FIELD_TEMPERATURE "temperature";
+    temperature f64 FIELD_TEMPERATURE "temperature";
     /// roughly estimated average wind direction for tile
-    wind set_wind i32 FIELD_WIND "wind_dir";
+    wind i32 FIELD_WIND "wind_dir";
     /// average annual precipitation of tile in imaginary units
-    precipitation set_precipitation f64 FIELD_PRECIPITATION "precipitation";
+    precipitation f64 FIELD_PRECIPITATION "precipitation";
     /// amount of water flow through tile in imaginary units
-    water_flow set_water_flow f64 FIELD_WATER_FLOW "water_flow";
+    water_flow f64 FIELD_WATER_FLOW "water_flow";
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
-    water_accumulation set_water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum";
+    water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum";
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
-    lake_id set_lake_id option_id_ref FIELD_LAKE_ID "lake_id";
+    lake_id option_id_ref FIELD_LAKE_ID "lake_id";
     /// id of neighboring tile which water flows to
-    flow_to set_flow_to id_list FIELD_FLOW_TO "flow_to";
+    flow_to id_list FIELD_FLOW_TO "flow_to";
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
-    shore_distance set_shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance";
+    shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance";
     /// If this is a land tile neighboring a water body, this is the id of the closest tile
-    harbor_tile_id set_harbor_tile_id option_id_ref FIELD_HARBOR_TILE_ID "harbor_tile_id";
+    harbor_tile_id option_id_ref FIELD_HARBOR_TILE_ID "harbor_tile_id";
     /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
-    water_count set_water_count option_i32 FIELD_WATER_COUNT "water_count";
+    water_count option_i32 FIELD_WATER_COUNT "water_count";
     /// The biome for this tile
-    biome set_biome string FIELD_BIOME "biome";
+    biome string FIELD_BIOME "biome";
     /// the factor used to generate population numbers, along with the area of the tile
-    habitability set_habitability f64 FIELD_HABITABILITY "habitability";
+    habitability f64 FIELD_HABITABILITY "habitability";
     /// base population of the cell outside of the towns.
-    population set_population i32 FIELD_POPULATION "population";
+    population i32 FIELD_POPULATION "population";
     /// The name of the culture assigned to this tile, unless wild
-    culture set_culture option_string FIELD_CULTURE "culture";
+    culture option_string FIELD_CULTURE "culture";
     /// if the tile has a town, this is the id of the town in the towns layer
-    town_id set_town_id option_id_ref FIELD_TOWN_ID "town_id"; 
+    town_id option_id_ref FIELD_TOWN_ID "town_id"; 
     /// if the tile is part of a nation, this is the id of the nation which controls it
-    nation_id set_nation_id option_id_ref FIELD_NATION_ID "nation_id";
+    nation_id option_id_ref FIELD_NATION_ID "nation_id";
     /// if the tile is part of a subnation, this is the id of the nation which controls it
-    subnation_id set_subnation_id option_id_ref FIELD_SUBNATION_ID "subnation_id";
+    subnation_id option_id_ref FIELD_SUBNATION_ID "subnation_id";
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
     /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-    outlet_from set_outlet_from id_list FIELD_OUTLET_FROM "outlet_from";
+    outlet_from id_list FIELD_OUTLET_FROM "outlet_from";
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
-    neighbors set_neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles";
+    neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles";
 
 });
 
@@ -1546,8 +1497,8 @@ impl TileForTownPopulation {
         common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
         common_vertices.retain(|p| other_vertices.contains(p));
         if common_vertices.len() == 2 {
-            let point1 = Point::from_f64(common_vertices[0].0,common_vertices[0].1)?;
-            let point2 = Point::from_f64(common_vertices[1].0,common_vertices[1].1)?;
+            let point1: Point = (common_vertices[0].0,common_vertices[0].1).try_into()?;
+            let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
             Ok(point1.middle_point_between(&point2))
         } else {
             Err(CommandError::CantFindMiddlePoint(self.fid,other.fid,common_vertices.len()))
@@ -1794,7 +1745,7 @@ impl TilesLayer<'_,'_> {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum RiverSegmentFrom {
     Source,
     Lake,
@@ -1809,35 +1760,18 @@ impl TryFrom<String> for RiverSegmentFrom {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "source" => Ok(Self::Source),
-            "lake" => Ok(Self::Lake),
-            "branch" => Ok(Self::Branch),
-            "continuing" => Ok(Self::Continuing),
-            "lake-branch" => Ok(Self::BranchingLake),
-            "branch-confluence" => Ok(Self::BranchingConfluence),
-            "confluence" => Ok(Self::Confluence),
-            a => Err(CommandError::InvalidValueForSegmentFrom(a.to_owned()))
-        }
+        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForSegmentFrom(value))
     }
 }
 
-impl Into<&str> for &RiverSegmentFrom {
+impl Into<String> for &RiverSegmentFrom {
 
-    fn into(self) -> &'static str {
-        match self {
-            RiverSegmentFrom::Source => "source",
-            RiverSegmentFrom::Lake => "lake",
-            RiverSegmentFrom::Branch => "branch",
-            RiverSegmentFrom::Continuing => "continuing",
-            RiverSegmentFrom::BranchingLake => "lake-branch",
-            RiverSegmentFrom::BranchingConfluence => "branch-confluence",
-            RiverSegmentFrom::Confluence => "confluence",
-        }
+    fn into(self) -> String {
+        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum RiverSegmentTo {
     Mouth,
     Confluence,
@@ -1850,38 +1784,25 @@ impl TryFrom<String> for RiverSegmentTo {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "mouth" => Ok(Self::Mouth),
-            "confluence" => Ok(Self::Confluence),
-            "continuing" => Ok(Self::Continuing),
-            "branch" => Ok(Self::Branch),
-            "branch-confluence" => Ok(Self::BranchingConfluence),
-            a => Err(CommandError::InvalidValueForSegmentTo(a.to_owned()))
-        }
+        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForSegmentTo(value))
     }
 }
 
-impl Into<&str> for &RiverSegmentTo {
+impl Into<String> for &RiverSegmentTo {
 
-    fn into(self) -> &'static str {
-        match self {
-            RiverSegmentTo::Mouth => "mouth",
-            RiverSegmentTo::Confluence => "confluence",
-            RiverSegmentTo::Continuing => "continuing",
-            RiverSegmentTo::Branch => "branch",
-            RiverSegmentTo::BranchingConfluence => "branch-confluence",
-        }
+    fn into(self) -> String {
+        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
     }
 }
 
 
 feature!(RiverFeature RiverSchema "rivers" wkbLineString {
-    from_tile_id #[allow(dead_code)] set_from_tile_id id_ref FIELD_FROM_TILE_ID "from_tile_id";
-    from_type #[allow(dead_code)] set_from_type river_segment_from FIELD_FROM_TYPE "from_type";
-    from_flow #[allow(dead_code)] set_from_flow f64 FIELD_FROM_FLOW "from_flow";
-    to_tile_id #[allow(dead_code)] set_to_tile_id id_ref FIELD_TO_TILE_ID "to_tile_id";
-    to_type #[allow(dead_code)] set_to_type river_segment_to FIELD_TO_TYPE "to_type";
-    to_flow #[allow(dead_code)] set_to_flow f64 FIELD_TO_FLOW "to_flow";
+    from_tile_id #[allow(dead_code)] id_ref FIELD_FROM_TILE_ID "from_tile_id";
+    from_type #[allow(dead_code)] river_segment_from FIELD_FROM_TYPE "from_type";
+    from_flow #[allow(dead_code)] f64 FIELD_FROM_FLOW "from_flow";
+    to_tile_id #[allow(dead_code)] id_ref FIELD_TO_TILE_ID "to_tile_id";
+    to_type #[allow(dead_code)] river_segment_to FIELD_TO_TYPE "to_type";
+    to_flow #[allow(dead_code)] f64 FIELD_TO_FLOW "to_flow";
 });
 
 
@@ -1907,13 +1828,13 @@ impl RiversLayer<'_,'_> {
             segment.from_flow, 
             segment.to_tile_id, 
             &segment.to_type,
-            segment.to_flow);
+            segment.to_flow)?;
         self.add_feature(geometry, &field_names, &field_values)
     }
 
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum LakeType {
     Fresh,
     Salt,
@@ -1927,14 +1848,7 @@ pub(crate) enum LakeType {
 impl Into<String> for &LakeType {
 
     fn into(self) -> String {
-        match self {
-            LakeType::Fresh => "fresh",
-            LakeType::Salt => "salt",
-            LakeType::Frozen => "frozen",
-            LakeType::Pluvial => "pluvial", 
-            LakeType::Dry => "dry",
-            LakeType::Marsh => "marsh"
-        }.to_owned()
+        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
     }
 }
 
@@ -1942,25 +1856,17 @@ impl TryFrom<String> for LakeType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "fresh" => Ok(Self::Fresh),
-            "salt" => Ok(Self::Salt),
-            "frozen" => Ok(Self::Frozen),
-            "pluvial" => Ok(Self::Pluvial),
-            "dry" => Ok(Self::Dry),
-            "marsh" => Ok(Self::Marsh),
-            _ => Err(CommandError::InvalidValueForLakeType(value))
-        }
+        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForLakeType(value))
     }
 }
 
 feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
-    #[allow(dead_code)] elevation #[allow(dead_code)] set_elevation f64 FIELD_ELEVATION "elevation";
-    type_ #[allow(dead_code)] set_type lake_type FIELD_TYPE "type";
-    #[allow(dead_code)] flow #[allow(dead_code)] set_flow f64 FIELD_FLOW "flow";
-    size #[allow(dead_code)] set_size i32 FIELD_SIZE "size";
-    #[allow(dead_code)] temperature #[allow(dead_code)] set_temperature f64 FIELD_TEMPERATURE "temperature";
-    #[allow(dead_code)] evaporation #[allow(dead_code)] set_evaporation f64 FIELD_EVAPORATION "evaporation";
+    #[allow(dead_code)] elevation #[allow(dead_code)] f64 FIELD_ELEVATION "elevation";
+    type_ #[allow(dead_code)] lake_type FIELD_TYPE "type";
+    #[allow(dead_code)] flow #[allow(dead_code)] f64 FIELD_FLOW "flow";
+    size #[allow(dead_code)] i32 FIELD_SIZE "size";
+    #[allow(dead_code)] temperature #[allow(dead_code)] f64 FIELD_TEMPERATURE "temperature";
+    #[allow(dead_code)] evaporation #[allow(dead_code)] f64 FIELD_EVAPORATION "evaporation";
 });
 
 entity!(LakeForBiomes LakeSchema LakeFeature {
@@ -2005,7 +1911,7 @@ impl LakesLayer<'_,'_> {
             lake.size,
             lake.temperature,
             lake.evaporation
-        );
+        )?;
         self.add_feature(lake.geometry, &field_names, &field_values)
     }
 
@@ -2018,7 +1924,7 @@ impl LakesLayer<'_,'_> {
 
 }
 
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub(crate) enum BiomeCriteria {
     Matrix(Vec<(usize,usize)>), // moisture band, temperature band
     Wetland,
@@ -2030,36 +1936,14 @@ impl TryFrom<String> for BiomeCriteria {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "wetland" => Ok(Self::Wetland),
-            "glacier" => Ok(Self::Glacier),
-            "ocean" => Ok(Self::Ocean),
-            list => {
-                let mut result = Vec::new();
-                for value in list.split(',') {
-                    let value = value.splitn(2,':');
-                    let mut value = value.map(str::parse).map(|a| a.map_err(|_| CommandError::InvalidBiomeMatrixValue(list.to_owned())));
-                    let moisture = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
-                    let temperature = value.next().ok_or_else(|| CommandError::InvalidBiomeMatrixValue(list.to_owned()))??;
-                    result.push((moisture,temperature));
-                }
-                Ok(Self::Matrix(result))
-            }
-        }
+        from_ron_str(&value).map_err(|_| CommandError::InvalidBiomeMatrixValue(value))
     }
 }
 
 impl Into<String> for &BiomeCriteria {
 
     fn into(self) -> String {
-        match self {
-            BiomeCriteria::Wetland => "wetland".to_owned(),
-            BiomeCriteria::Glacier => "glacier".to_owned(),
-            BiomeCriteria::Ocean => "ocean".to_owned(),
-            BiomeCriteria::Matrix(list) => {
-                list.iter().map(|(moisture,temperature)| format!("{}:{}",moisture,temperature)).collect::<Vec<String>>().join(",")
-            }
-        }
+        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
     }
 }
 
@@ -2082,13 +1966,13 @@ pub(crate) struct BiomeMatrix {
 }
 
 feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name";
-    habitability #[allow(dead_code)] set_habitability i32 FIELD_HABITABILITY "habitability";
-    criteria #[allow(dead_code)] set_criteria biome_criteria FIELD_CRITERIA "criteria";
-    movement_cost #[allow(dead_code)] set_movement_cost i32 FIELD_MOVEMENT_COST "movement_cost";
-    supports_nomadic #[allow(dead_code)] set_supports_nomadic bool FIELD_NOMADIC "supp_nomadic";
-    supports_hunting #[allow(dead_code)] set_supports_hunting bool FIELD_HUNTING "supp_hunting";
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
+    name #[allow(dead_code)] string FIELD_NAME "name";
+    habitability #[allow(dead_code)] i32 FIELD_HABITABILITY "habitability";
+    criteria #[allow(dead_code)] biome_criteria FIELD_CRITERIA "criteria";
+    movement_cost #[allow(dead_code)] i32 FIELD_MOVEMENT_COST "movement_cost";
+    supports_nomadic #[allow(dead_code)] bool FIELD_NOMADIC "supp_nomadic";
+    supports_hunting #[allow(dead_code)] bool FIELD_HUNTING "supp_hunting";
+    color #[allow(dead_code)] string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
@@ -2314,7 +2198,7 @@ impl BiomeLayer<'_,'_> {
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = BiomeFeature::to_field_names_values(
-            &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting,&biome.color);
+            &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting,&biome.color)?;
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -2346,7 +2230,7 @@ impl BiomeLayer<'_,'_> {
 
 }
 
-#[derive(Clone,Hash,Eq,PartialEq)]
+#[derive(Clone,Hash,Eq,PartialEq,Serialize,Deserialize)]
 pub(crate) enum CultureType {
     Generic,
     Lake,
@@ -2361,15 +2245,7 @@ pub(crate) enum CultureType {
 impl Into<String> for &CultureType {
 
     fn into(self) -> String {
-        match self {
-            CultureType::Generic => "generic",
-            CultureType::Lake => "lake",
-            CultureType::Naval => "naval",
-            CultureType::River => "river",
-            CultureType::Nomadic => "nomadic",
-            CultureType::Hunting => "hunting",
-            CultureType::Highland => "highland",
-        }.to_owned()
+        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
     }
 }
 
@@ -2378,26 +2254,17 @@ impl TryFrom<String> for CultureType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "generic" => Ok(Self::Generic),
-            "lake" => Ok(Self::Lake),
-            "naval" => Ok(Self::Naval),
-            "river" => Ok(Self::River),
-            "nomadic" => Ok(Self::Nomadic),
-            "hunting" => Ok(Self::Hunting),
-            "highland" => Ok(Self::Highland),
-            _ => Err(CommandError::InvalidValueForCultureType(value))
-        }
+        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForCultureType(value))
     }
 }
 
 feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name";
-    namer #[allow(dead_code)] set_namer string FIELD_NAMER "namer";
-    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
-    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism";
-    center_tile_id #[allow(dead_code)] set_center_tile_id id_ref FIELD_CENTER_TILE_ID "center_tile_id";
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
+    name #[allow(dead_code)] string FIELD_NAME "name";
+    namer #[allow(dead_code)] string FIELD_NAMER "namer";
+    type_ #[allow(dead_code)] culture_type FIELD_TYPE "type";
+    expansionism #[allow(dead_code)] f64 FIELD_EXPANSIONISM "expansionism";
+    center_tile_id #[allow(dead_code)] id_ref FIELD_CENTER_TILE_ID "center_tile_id";
+    color #[allow(dead_code)] string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
@@ -2532,7 +2399,7 @@ impl CultureLayer<'_,'_> {
     pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
 
         let (field_names,field_values) = CultureFeature::to_field_names_values(
-            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center_tile_id,&culture.color);
+            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center_tile_id,&culture.color)?;
         self.add_feature_without_geometry(&field_names, &field_values)
 
     }
@@ -2546,13 +2413,13 @@ impl CultureLayer<'_,'_> {
 }
 
 feature!(TownFeature TownSchema "towns" wkbPoint {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name";
-    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
-    is_capital #[allow(dead_code)] set_is_capital bool FIELD_IS_CAPITAL "is_capital";
-    tile_id #[allow(dead_code)] set_tile_id id_ref FIELD_TILE_ID "tile_id";
-    grouping_id #[allow(dead_code)] set_grouping_id id_ref FIELD_GROUPING_ID "grouping_id"; 
-    #[allow(dead_code)] population set_population i32 FIELD_POPULATION "population";
-    #[allow(dead_code)] is_port set_is_port bool FIELD_IS_PORT "is_port";
+    name #[allow(dead_code)] string FIELD_NAME "name";
+    culture #[allow(dead_code)] option_string FIELD_CULTURE "culture";
+    is_capital #[allow(dead_code)] bool FIELD_IS_CAPITAL "is_capital";
+    tile_id #[allow(dead_code)] id_ref FIELD_TILE_ID "tile_id";
+    grouping_id #[allow(dead_code)] id_ref FIELD_GROUPING_ID "grouping_id"; 
+    #[allow(dead_code)] population i32 FIELD_POPULATION "population";
+    #[allow(dead_code)] is_port bool FIELD_IS_PORT "is_port";
 });
 
 impl TownFeature<'_> {
@@ -2610,7 +2477,7 @@ impl TownLayer<'_,'_> {
             town.grouping_id,
             0,
             false
-        );
+        )?;
         self.add_feature(town.geometry, &field_names, &field_values)
     }
 
@@ -2624,13 +2491,13 @@ impl TownLayer<'_,'_> {
 
 
 feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name";
-    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
-    center_tile_id #[allow(dead_code)] set_center_tile_id id_ref FIELD_CENTER_TILE_ID "center_tile_id"; 
-    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
-    expansionism #[allow(dead_code)] set_expansionism f64 FIELD_EXPANSIONISM "expansionism";
-    capital_town_id #[allow(dead_code)] set_capital_town_id id_ref FIELD_CAPITAL_TOWN_ID "capital_town_id";
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
+    name #[allow(dead_code)] string FIELD_NAME "name";
+    culture #[allow(dead_code)] option_string FIELD_CULTURE "culture";
+    center_tile_id #[allow(dead_code)] id_ref FIELD_CENTER_TILE_ID "center_tile_id"; 
+    type_ #[allow(dead_code)] culture_type FIELD_TYPE "type";
+    expansionism #[allow(dead_code)] f64 FIELD_EXPANSIONISM "expansionism";
+    capital_town_id #[allow(dead_code)] id_ref FIELD_CAPITAL_TOWN_ID "capital_town_id";
+    color #[allow(dead_code)] string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
@@ -2685,7 +2552,7 @@ impl NationsLayer<'_,'_> {
             nation.expansionism,
             nation.capital_town_id,
             &nation.color
-        );
+        )?;
         self.add_feature_without_geometry(&field_names, &field_values)
     }
 
@@ -2699,13 +2566,13 @@ impl NationsLayer<'_,'_> {
 }
 
 feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name";
-    culture #[allow(dead_code)] set_culture option_string FIELD_CULTURE "culture";
-    center_tile_id #[allow(dead_code)] set_center_tile_id id_ref FIELD_CENTER_TILE_ID "center_tile_id";
-    type_ #[allow(dead_code)] set_type culture_type FIELD_TYPE "type";
-    seat_town_id #[allow(dead_code)] set_seat_town_id option_id_ref FIELD_SEAT_TOWN_ID "seat_town_id"; 
-    nation_id #[allow(dead_code)] set_nation_id id_ref FIELD_NATION_ID "nation_id"; 
-    color #[allow(dead_code)] set_color string FIELD_COLOR "color";
+    name #[allow(dead_code)] string FIELD_NAME "name";
+    culture #[allow(dead_code)] option_string FIELD_CULTURE "culture";
+    center_tile_id #[allow(dead_code)] id_ref FIELD_CENTER_TILE_ID "center_tile_id";
+    type_ #[allow(dead_code)] culture_type FIELD_TYPE "type";
+    seat_town_id #[allow(dead_code)] option_id_ref FIELD_SEAT_TOWN_ID "seat_town_id"; 
+    nation_id #[allow(dead_code)] id_ref FIELD_NATION_ID "nation_id"; 
+    color #[allow(dead_code)] string FIELD_COLOR "color";
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
@@ -2751,7 +2618,7 @@ impl SubnationsLayer<'_,'_> {
             subnation.seat_town_id,
             subnation.nation_id,
             &subnation.color
-        );
+        )?;
         self.add_feature_without_geometry(&field_names, &field_values)
     }
 
@@ -2771,7 +2638,7 @@ pub(crate) type CoastlineLayer<'layer,'feature> = MapLayer<'layer,'feature,Coast
 impl CoastlineLayer<'_,'_> {
 
     pub(crate) fn add_land_mass(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
-        let (field_names,field_values) = CoastlineFeature::to_field_names_values();
+        let (field_names,field_values) = CoastlineFeature::to_field_names_values()?;
         self.add_feature(geometry, &field_names, &field_values)
     }
 
@@ -2785,7 +2652,7 @@ pub(crate) type OceanLayer<'layer,'feature> = MapLayer<'layer,'feature,OceanSche
 impl OceanLayer<'_,'_> {
 
     pub(crate) fn add_ocean(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
-        let (field_names,field_values) = OceanFeature::to_field_names_values();
+        let (field_names,field_values) = OceanFeature::to_field_names_values()?;
         self.add_feature(geometry, &field_names, &field_values)
     }
 
@@ -2808,8 +2675,8 @@ impl LineLayer<'_,'_> {
 */
 
 feature!(PropertyFeature PropertySchema "properties" wkbNone {
-    name #[allow(dead_code)] set_name string FIELD_NAME "name";
-    value  set_value string FIELD_VALUE "value";
+    name #[allow(dead_code)] string FIELD_NAME "name";
+    value string FIELD_VALUE "value";
 });
 
 pub(crate) type PropertyLayer<'layer,'feature> = MapLayer<'layer,'feature,PropertySchema,PropertyFeature<'feature>>;
@@ -2846,7 +2713,8 @@ impl ElevationLimits {
 impl Into<String> for &ElevationLimits {
 
     fn into(self) -> String {
-        format!("{},{}",self.min_elevation,self.max_elevation)
+        // store as tuple for simplicity
+        to_ron_string(&(self.min_elevation,self.max_elevation)).unwrap() // there shouldn't be any reason to have an error
     }
 }
 
@@ -2855,14 +2723,11 @@ impl TryFrom<String> for ElevationLimits {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        let mut min_max = value.splitn(2, ',');
-        let min_elevation = min_max.next().ok_or_else(|| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
-        let min_elevation = min_elevation.parse().map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
-        let max_elevation = min_max.next().ok_or_else(|| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
-        let max_elevation = max_elevation.parse().map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        // store as tuple for simplicity
+        let input: (f64,f64) = from_ron_str(&value).map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
         Ok(Self {
-            min_elevation,
-            max_elevation,
+            min_elevation: input.0,
+            max_elevation: input.1,
         })
     }
 }
@@ -2896,7 +2761,7 @@ impl PropertyLayer<'_,'_> {
             feature.set_value(value)?;
             self.update_feature(feature)?;
         } else {
-            let (fields,values) = PropertyFeature::to_field_names_values(name, value);
+            let (fields,values) = PropertyFeature::to_field_names_values(name, value)?;
             self.add_feature_without_geometry(&fields,&values)?;
    
         }

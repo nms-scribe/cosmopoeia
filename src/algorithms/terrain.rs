@@ -463,7 +463,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
             loop {
                 let x = parameters.gen_x(rng, &self.x_filter);
                 let y = parameters.gen_y(rng, &self.y_filter);
-                start = point_index.find_nearest_tile(&Point::from_f64(x,y)?)?;
+                start = point_index.find_nearest_tile(&(x,y).try_into()?)?;
                 let start_tile = tile_map.try_get(&start)?;
 
                 if (limit >= 50) || parameters.is_elevation_within(start_tile.elevation + height_delta.copysign(sign),0.9) {
@@ -523,7 +523,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             // find start and end points
             let start_x = parameters.gen_x(rng, &self.x_filter);
             let start_y = parameters.gen_y(rng, &self.y_filter);
-            let start_point = Point::from_f64(start_x, start_y)?;
+            let start_point: Point = (start_x, start_y).try_into()?;
             let mut end_point;
 
             // find an end point that's far enough away
@@ -531,7 +531,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             loop {
                 let end_x = parameters.gen_end_x(rng);
                 let end_y = parameters.gen_end_y(rng);
-                end_point = Point::from_f64(end_x, end_y)?;
+                end_point = (end_x, end_y).try_into()?;
                 let dist = start_point.distance(&end_point);
                 if (limit >= 50) || (dist >= lower_dist_limit) && (dist <= upper_dist_limit) {
                     break;
@@ -702,8 +702,8 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
                 (start_x,start_y,end_x,end_y)
             },
         };
-        let start_point = Point::from_f64(start_x + e_west, start_y + e_south)?;
-        let end_point = Point::from_f64(end_x + e_west, end_y + e_south)?;
+        let start_point = (start_x + e_west, start_y + e_south).try_into()?;
+        let end_point = (end_x + e_west, end_y + e_south).try_into()?;
 
         let start = point_index.find_nearest_tile(&start_point)?;
         let end = point_index.find_nearest_tile(&end_point)?;
@@ -842,7 +842,7 @@ impl ProcessTerrainTilesWithPointIndex for Invert {
                 InvertAxes::Both => (switch_x!(),switch_y!()),
             };
 
-            let switch_point = Point::from_f64(switch_x, switch_y)?;
+            let switch_point = (switch_x, switch_y).try_into()?;
 
             // cache the calculation
             let switch_tile_id = match switches.get(fid) {
@@ -967,7 +967,7 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
 
             let x = parameters.gen_x(rng, &self.x_filter);
             let y = parameters.gen_y(rng, &self.y_filter);
-            let mut seed_id = point_index.find_nearest_tile(&Point::from_f64(x,y)?)?;
+            let mut seed_id = point_index.find_nearest_tile(&(x,y).try_into()?)?;
 
             progress.start_unknown_endpoint(|| "Tracing seed down hill.");
 

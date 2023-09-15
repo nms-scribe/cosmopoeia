@@ -12,50 +12,49 @@ fn close_gdal_layer() {
 
 #[test]
 fn test_bezier() {
-    use crate::utils::Point;
     use crate::utils::PolyBezier;
 
     let pos = vec![
-        Point::from_f64(0.5, 0.5).unwrap(),
-        Point::from_f64(1.0, -0.5).unwrap(),
-        Point::from_f64(1.5, 1.0).unwrap(),
-        Point::from_f64(2.25, 1.1).unwrap(),
-        Point::from_f64(2.6, -0.5).unwrap(),
-        Point::from_f64(3.0, 0.5).unwrap(),
+        (0.5, 0.5).try_into().unwrap(),
+        (1.0, -0.5).try_into().unwrap(),
+        (1.5, 1.0).try_into().unwrap(),
+        (2.25, 1.1).try_into().unwrap(),
+        (2.6, -0.5).try_into().unwrap(),
+        (3.0, 0.5).try_into().unwrap(),
     ];
 
     let curves = PolyBezier::from_poly_line(&pos);
 
     let expected = vec![
         (
-            Point::from_f64(0.5, 0.5).unwrap(),
-            Point::from_f64(0.6666666666666666, 0.16666666666666669).unwrap(),
-            Point::from_f64(0.6666666666666667, -0.66666666666666666).unwrap(),
-            Point::from_f64(1.0, -0.5).unwrap(),
+            (0.5, 0.5).try_into().unwrap(),
+            (0.6666666666666666, 0.16666666666666669).try_into().unwrap(),
+            (0.6666666666666667, -0.66666666666666666).try_into().unwrap(),
+            (1.0, -0.5).try_into().unwrap(),
         ),
         (
-            Point::from_f64(1.0, -0.5).unwrap(),
-            Point::from_f64(1.4714045207910318, -0.26429773960448416).unwrap(), 
-            Point::from_f64(1.1755270999091973, 0.5846746878837725).unwrap(), 
-            Point::from_f64(1.5, 1.0).unwrap(),
+            (1.0, -0.5).try_into().unwrap(),
+            (1.4714045207910318, -0.26429773960448416).try_into().unwrap(), 
+            (1.1755270999091973, 0.5846746878837725).try_into().unwrap(), 
+            (1.5, 1.0).try_into().unwrap(),
         ),
         (
-            Point::from_f64(1.5, 1.0).unwrap(),
-            Point::from_f64(1.655273081384295, 1.1987495441718978).unwrap(), 
-            Point::from_f64(2.100850731900237, 1.3033853655905858).unwrap(), 
-            Point::from_f64(2.25, 1.1).unwrap(),
+            (1.5, 1.0).try_into().unwrap(),
+            (1.655273081384295, 1.1987495441718978).try_into().unwrap(), 
+            (2.100850731900237, 1.3033853655905858).try_into().unwrap(), 
+            (2.25, 1.1).try_into().unwrap(),
         ),
         (
-            Point::from_f64(2.25, 1.1).unwrap(),
-            Point::from_f64(2.572851825487011, 0.6597475106995304).unwrap(), 
-            Point::from_f64(2.1736888549287925, -0.15895108394303398).unwrap(), 
-            Point::from_f64(2.6, -0.5).unwrap(),
+            (2.25, 1.1).try_into().unwrap(),
+            (2.572851825487011, 0.6597475106995304).try_into().unwrap(), 
+            (2.1736888549287925, -0.15895108394303398).try_into().unwrap(), 
+            (2.6, -0.5).try_into().unwrap(),
         ),
         (
-            Point::from_f64(2.6, -0.5).unwrap(),
-            Point::from_f64(2.8803404821067753, -0.7242723856854201).unwrap(), 
-            Point::from_f64(2.8666666666666667, 0.16666666666666669).unwrap(), 
-            Point::from_f64(3.0, 0.5).unwrap(),
+            (2.6, -0.5).try_into().unwrap(),
+            (2.8803404821067753, -0.7242723856854201).try_into().unwrap(), 
+            (2.8666666666666667, 0.16666666666666669).try_into().unwrap(), 
+            (3.0, 0.5).try_into().unwrap(),
         )
     ];
 

@@ -355,6 +355,7 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] Consider adding a new 'u64_string' or 'id_ref' type for typed features, and storing id foreign keys as string, so that they can be parsed into u64 for entity stuff, instead of using as u64 everywhere on lookups. Since I don't do anything in the map project, there shouldn't be anything with changing the types.
     [X] NationSchema should have 'capital_town_id' instead of 'capital' field. In fact, make sure all schemas use that nomenclature of <purpose>_<layer>_id, or at least <layer>_id if the purpose is obvious.
 [ ] The special values in WorldMap, in fact anywhere where we implemtn TryFrom<String>, should use serde_json instead. Use a json standard for all of that.
+[ ] Wherever I'm using serde_json, 'use' the functions as to_json_string and from_json_str, because I'm a little scared of using modules without use.
 [ ] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
 [ ] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
 [ ] MarkovGenerator::calculate_chain -- should return an error if the array is empty, or if there are no strings in it. Because that will cause an error when we're trying to create strings.
@@ -369,6 +370,7 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
     [ ] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
 [ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
+[ ] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
 
 ## Complex Pre-release tasks
 These are things that really should be done before release, but they might take a bit of work to figure out.
