@@ -621,6 +621,18 @@ impl LoadedNamers {
         let name = name.unwrap_or_else(|| self.default_namer.as_str());
         self.map.get_mut(name).ok_or_else(|| CommandError::UnknownNamer(name.to_owned()))
     }
+
+    pub(crate) fn list_names(&self) -> Vec<String> {
+        self.map.keys().cloned().collect()
+    }
+
+    pub(crate) fn check_exists(&self, namer: &str) -> Result<(),CommandError> {
+        if self.map.contains_key(namer) {
+            Ok(())
+        } else {
+            Err(CommandError::UnknownNamer(namer.to_owned()))
+        }
+    }
 }
 
 pub(crate) struct NamerSet {
@@ -642,15 +654,6 @@ impl NamerSet {
             result.extend_from_file(file,false)?;
         }
         Ok(result)
-    }
-
-    pub(crate) fn check_exists(&self, name: &str) -> Result<(),CommandError> {
-        if self.source.contains_key(name) {
-            Ok(())
-        } else {
-            Err(CommandError::UnknownNamer(name.to_owned()))
-        }
-
     }
 
     pub(crate) fn load_one<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Result<Namer,CommandError> { 
@@ -686,6 +689,13 @@ impl NamerSet {
         })
         
     }
+    
+    pub(crate) fn into_loaded_all<Progress: ProgressObserver>(self, default_namer: String, progress: &mut Progress) -> Result<LoadedNamers, CommandError> {
+        let keys: Vec<String> = self.list_names();
+        self.into_loaded(keys, default_namer, progress)
+    }
+
+
     
     pub(crate) fn list_names(&self) -> Vec<String>  {
         self.source.keys().cloned().collect()

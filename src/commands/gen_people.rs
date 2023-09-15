@@ -15,6 +15,7 @@ use crate::algorithms::cultures::generate_cultures;
 use crate::algorithms::cultures::expand_cultures;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
+use crate::algorithms::naming::LoadedNamers;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::utils::random_number_generator;
 use crate::algorithms::tiles::CultureTheme;
@@ -78,6 +79,10 @@ subcommand_def!{
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         pub namers: Vec<PathBuf>,
 
+        #[arg(long)]
+        /// Namer to use when a culture is not available
+        pub default_namer: String,
+        
         #[arg(long,default_value("10"))]
         /// The number of cultures to generate
         pub count: usize,
@@ -105,17 +110,18 @@ impl Task for CreateCultures {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-
-        let cultures = CultureSet::from_files(self.cultures)?;
-
-        let namers = NamerSet::from_files(self.namers)?;
-
         let mut random = random_number_generator(self.seed);
+
+        let namer_set = NamerSet::from_files(self.namers)?;
+
+        let mut loaded_namers = namer_set.into_loaded_all(self.default_namer, progress)?;
+
+        let cultures = CultureSet::from_files(self.cultures,&mut random,&mut loaded_namers)?;
 
         let mut target = WorldMap::edit(self.target)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, cultures, &namers, self.count, self.size_variance, self.river_threshold, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, cultures, &loaded_namers, self.count, self.size_variance, self.river_threshold, self.overwrite, target, progress)
         })?;
 
         target.save(progress)
@@ -124,7 +130,7 @@ impl Task for CreateCultures {
 }
 
 impl CreateCultures {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &LoadedNamers, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         let size_variance = size_variance.clamp(0.0, 10.0);
 
         progress.announce("Generating cultures");
@@ -269,6 +275,7 @@ command_def!{
     }
 }
 
+
 #[derive(Args)]
 pub struct DefaultArgs {
 
@@ -309,7 +316,13 @@ pub struct DefaultArgs {
 
     #[arg(long)]
     /// If true and the cultures layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool
+    pub overwrite: bool,
+
+    #[arg(long)]
+    /// The name generator to use for naming nations and towns in tiles without a culture
+    pub default_namer: String
+    
+
 }
 
 subcommand_def!{
@@ -331,18 +344,21 @@ impl Task for GenPeople {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(default_args) = self.default_args {
-            let cultures = CultureSet::from_files(default_args.cultures)?;
-    
-            let namers = NamerSet::from_files(default_args.namers)?;
-    
+
             let mut random = random_number_generator(default_args.seed);
+
+            let namer_set = NamerSet::from_files(default_args.namers)?;
     
+            let mut loaded_namers = namer_set.into_loaded_all(default_args.default_namer, progress)?;
+    
+            let cultures = CultureSet::from_files(default_args.cultures,&mut random,&mut loaded_namers)?;
+            
             let mut target = WorldMap::edit(default_args.target)?;
     
             Self::run_default(
                 default_args.river_threshold, 
                 cultures, 
-                &namers, 
+                &loaded_namers, 
                 default_args.culture_count, 
                 default_args.size_variance, 
                 default_args.overwrite, 
@@ -364,7 +380,7 @@ impl Task for GenPeople {
 }
 
 impl GenPeople {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &LoadedNamers, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
             Population::run_with_parameters(river_threshold, target, progress)?;
     

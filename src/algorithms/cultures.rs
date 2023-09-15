@@ -12,7 +12,7 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::WorldMapTransaction;
 use crate::errors::CommandError;
 use crate::algorithms::culture_sets::CultureSet;
-use crate::algorithms::naming::NamerSet;
+use crate::algorithms::naming::LoadedNamers;
 use crate::world_map::LakeForCultureGen;
 use crate::world_map::BiomeForCultureGen;
 use crate::world_map::BiomeForCultureExpand;
@@ -52,7 +52,7 @@ impl CultureType {
 
 
 
-pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: CultureSet, namers: &LoadedNamers, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // Algorithm copied from AFMG
 

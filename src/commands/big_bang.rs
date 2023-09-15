@@ -11,6 +11,7 @@ use crate::errors::CommandError;
 use crate::world_map::WorldMap;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
+use crate::algorithms::naming::LoadedNamers;
 use crate::commands::create::LoadCreateSource;
 use crate::commands::create::LoadedSource;
 use crate::commands::create::Create;
@@ -18,7 +19,6 @@ use crate::commands::gen_climate::GenClimate;
 use crate::commands::gen_water::GenWater;
 use crate::commands::gen_biome::GenBiome;
 use crate::commands::gen_people::GenPeople;
-use crate::world_map::CultureSchema;
 use crate::world_map::CultureForNations;
 use crate::commands::gen_towns::GenTowns;
 use crate::commands::gen_nations::GenNations;
@@ -189,13 +189,15 @@ impl Task for BigBang {
 
         let mut random = crate::utils::random_number_generator(self.seed);
 
-        let culture_set = CultureSet::from_files(self.cultures)?;
-
         let namer_set = NamerSet::from_files(self.namers)?;
+
+        let mut loaded_namers = namer_set.into_loaded_all(self.primitive_args.default_namer.clone(), progress)?;
+
+        let culture_set = CultureSet::from_files(self.cultures,&mut random,&mut loaded_namers)?;
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
-        Self::run_default(&mut random,self.primitive_args,culture_set,namer_set,loaded_source,self.target,progress)
+        Self::run_default(&mut random,self.primitive_args,culture_set,&mut loaded_namers,loaded_source,self.target,progress)
 
     }
 }
@@ -203,7 +205,7 @@ impl Task for BigBang {
 impl BigBang {
 
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: CultureSet, namers: NamerSet, loaded_source: LoadedSource, target_path: PathBuf, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: CultureSet, namers: &mut LoadedNamers, loaded_source: LoadedSource, target_path: PathBuf, progress: &mut Progress) -> Result<(), CommandError> {
 
         let mut target = WorldMap::create_or_edit(&target_path)?;
 
@@ -244,13 +246,13 @@ impl BigBang {
         GenPeople::run_default(primitive_args.river_threshold, cultures, &namers, primitive_args.culture_count, primitive_args.size_variance, primitive_args.overwrite || primitive_args.overwrite_cultures, primitive_args.limit_factor, primitive_args.bezier_scale, &mut target, random, progress)?;
 
         // CultureForNations implements everything that all the algorithms need.
-        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, primitive_args.default_namer, &mut target, progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
     
-        GenTowns::run_default(random, &culture_lookup, &mut loaded_namers, primitive_args.capital_count, primitive_args.town_count, primitive_args.river_threshold, primitive_args.overwrite || primitive_args.overwrite_towns, &mut target, progress)?;
+        GenTowns::run_default(random, &culture_lookup, namers, primitive_args.capital_count, primitive_args.town_count, primitive_args.river_threshold, primitive_args.overwrite || primitive_args.overwrite_towns, &mut target, progress)?;
 
-        GenNations::run_default(random, &culture_lookup, &mut loaded_namers, primitive_args.size_variance, primitive_args.river_threshold, primitive_args.limit_factor, primitive_args.bezier_scale, primitive_args.overwrite || primitive_args.overwrite_nations, &mut target, progress)?;
+        GenNations::run_default(random, &culture_lookup, namers, primitive_args.size_variance, primitive_args.river_threshold, primitive_args.limit_factor, primitive_args.bezier_scale, primitive_args.overwrite || primitive_args.overwrite_nations, &mut target, progress)?;
 
-        GenSubnations::run_default(random, culture_lookup, &mut loaded_namers, primitive_args.subnation_percentage, primitive_args.overwrite || primitive_args.overwrite_subnations, primitive_args.bezier_scale, &mut target, progress)
+        GenSubnations::run_default(random, culture_lookup, namers, primitive_args.subnation_percentage, primitive_args.overwrite || primitive_args.overwrite_subnations, primitive_args.bezier_scale, &mut target, progress)
 
     }
 }

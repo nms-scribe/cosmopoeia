@@ -15,8 +15,7 @@ use ordered_float::OrderedFloat;
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::RandomIndex;
-use crate::algorithms::naming::NamerSet;
-use crate::progress::ProgressObserver;
+use crate::algorithms::naming::LoadedNamers;
 use crate::world_map::TileForCulturePrefSorting;
 
 #[derive(Clone,Serialize,Deserialize)]
@@ -100,15 +99,72 @@ impl TilePreference {
 }
 
 
-#[derive(Serialize,Deserialize,Clone)]
-pub(crate) struct CultureSource {
+// NOTE: The serialization of this and CultureSetItem should be almost the same (except that no fields are optional in CultureSetItem, and count is only on this one)
+#[derive(Deserialize,Clone)]
+pub(crate) struct CultureSetItemSource {
+    name: Option<String>,
+    namer: Option<String>,
+    probability: Option<f64>, // in AFMG this was 'odd'
+    preferences: Option<TilePreference>, // in AFMG this was 'sort'
+    count: Option<usize>
+}
+
+// NOTE: The serialization of this and CultureSetItemSource should be almost the same (except that some fields are optional in CultureSetItemSource and it has an optional count)
+#[derive(Clone,Serialize)]
+pub(crate) struct CultureSetItem {
     name: String,
     namer: String,
     probability: f64, // in AFMG this was 'odd'
     preferences: TilePreference // in AFMG this was 'sort'
 }
 
-impl CultureSource {
+impl CultureSetItem {
+
+    fn from<Random: Rng>(value: CultureSetItemSource, rng: &mut Random, namers: &mut LoadedNamers) -> Vec<Self> {
+        let mut result = Vec::new();
+        let count = match value.count {
+            None => 1,
+            Some(0) => 1,
+            Some(c) => c
+        };
+
+        for _ in 0..count {
+            let namer = match &value.namer {
+                Some(namer) => namer.clone(),
+                None => {
+                    namers.list_names().choose(rng).to_owned().to_owned()
+                },
+            };
+    
+            let name = match &value.name {
+                Some(name) => name.clone(),
+                None => {
+                    let namer = namers.get_mut(Some(&namer)).expect("Why would the key not be here if we just chose this value from amidst its keys?");
+                    namer.make_name(rng)
+                }
+            };
+    
+            let probability = match value.probability {
+                Some(probability) => probability,
+                None => 1.0,
+            };
+    
+            let preferences = match &value.preferences {
+                Some(preferences) => preferences.clone(),
+                None => TilePreference::Habitability
+            };
+    
+            result.push(Self {
+                name,
+                namer,
+                probability,
+                preferences,
+            })
+        }
+        result
+
+
+    }
 
     pub(crate) fn name(&self) -> &str {
         &self.name
@@ -123,11 +179,13 @@ impl CultureSource {
     }
 }
 
+
+
 pub(crate) struct CultureSet {
     // NOTE: This is not a map as with namers, one could have multiple cultures with the same name but possibly different other parameters.
     // Such usage would "weight" a culture to increase the probability it will appear, as well as allow it to coexist
     // with other similar cultures under a different name.
-    source: Vec<CultureSource>
+    source: Vec<CultureSetItem>
 }
 
 impl CultureSet {
@@ -138,11 +196,11 @@ impl CultureSet {
         }
     }
 
-    pub(crate) fn from_files(files: Vec<PathBuf>) -> Result<Self,CommandError> {
+    pub(crate) fn from_files<Random: Rng>(files: Vec<PathBuf>, rng: &mut Random, namers: &mut LoadedNamers) -> Result<Self,CommandError> {
         let mut result = Self::empty();
 
         for file in files {
-            result.extend_from_file(file)?;
+            result.extend_from_file(file,rng,namers)?;
         }
         Ok(result)
     }
@@ -159,14 +217,16 @@ impl CultureSet {
     
     }
 
-    fn add_culture(&mut self, data: CultureSource) {
+    fn add_culture(&mut self, data: CultureSetItem) {
         self.source.push(data);
     }
     
-    pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
-        let data = from_json_reader::<_,Vec<CultureSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
+    pub(crate) fn extend_from_json<Reader: std::io::Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut LoadedNamers) -> Result<(),CommandError> {
+        let data = from_json_reader::<_,Vec<CultureSetItemSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
         for data in data {
-            self.add_culture(data)
+            for item in CultureSetItem::from(data,rng,namers) {
+                self.add_culture(item)
+            }
         }
 
         Ok(())
@@ -174,7 +234,7 @@ impl CultureSet {
         
     }
 
-    pub(crate) fn extend_from_file<AsPath: AsRef<Path>>(&mut self, file: AsPath) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_file<AsPath: AsRef<Path>, Random: Rng>(&mut self, file: AsPath, rng: &mut Random, namers: &mut LoadedNamers) -> Result<(),CommandError> {
 
         enum Format {
             JSON
@@ -189,7 +249,7 @@ impl CultureSet {
         let reader = BufReader::new(culture_source);
 
         match format {
-            Format::JSON => self.extend_from_json(reader),
+            Format::JSON => self.extend_from_json(reader,rng,namers),
         }
 
 
@@ -200,47 +260,7 @@ impl CultureSet {
         self.source.len()
     }
 
-    #[allow(dead_code)] pub(crate) fn make_random_culture_set<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: NamerSet, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
-
-        let namer_keys = namers.list_names();
-        let default = namer_keys.choose(rng).to_owned();
-        let mut loaded_namers = namers.into_loaded(&namer_keys, default, progress)?;
-        let mut result = Self::empty();
-        for _ in 0..count {
-            let namer_key = namer_keys.choose(rng);
-            let namer = loaded_namers.get_mut(Some(namer_key)).expect("Why would the key not be here when the map was built with the same list of keys?"); // It should be here.
-
-            result.add_culture(CultureSource {
-                name: namer.make_name(rng),
-                namer: namer_key.clone(),
-                probability: 1.0,
-                preferences: TilePreference::Habitability,
-            });
-
-        }
-        Ok(result)
-        
-    }
-
-    #[allow(dead_code)] pub(crate) fn make_random_culture_set_with_same_namer<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, namers: &mut NamerSet, namer_key: &str, progress: &mut Progress, count: usize) -> Result<Self,CommandError> {
-
-        let mut namer = namers.load_one(namer_key, progress)?;
-        
-        let mut result = Self::empty();
-        for _ in 0..count {
-            result.add_culture(CultureSource {
-                name: namer.make_name(rng),
-                namer: namer_key.to_owned(),
-                probability: 1.0,
-                preferences: TilePreference::Habitability,
-            });
-
-        }
-        Ok(result)
-        
-    }
-
-    pub(crate) fn select<Random: Rng>(&self, rng: &mut Random, culture_count: usize) -> Vec<CultureSource> {
+    pub(crate) fn select<Random: Rng>(&self, rng: &mut Random, culture_count: usize) -> Vec<CultureSetItem> {
 
         // This algorithm taken from AFMG. 
 
@@ -266,7 +286,7 @@ impl CultureSet {
 
 // allow indexing the culture set by usize.
 impl std::ops::Index<usize> for CultureSet {
-    type Output = CultureSource;
+    type Output = CultureSetItem;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.source[index]
@@ -275,9 +295,9 @@ impl std::ops::Index<usize> for CultureSet {
 
 // allow iterating through the culture set.
 impl<'data_life> IntoIterator for &'data_life CultureSet {
-    type Item = &'data_life CultureSource;
+    type Item = &'data_life CultureSetItem;
 
-    type IntoIter = std::slice::Iter<'data_life, CultureSource>;
+    type IntoIter = std::slice::Iter<'data_life, CultureSetItem>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.source.iter()

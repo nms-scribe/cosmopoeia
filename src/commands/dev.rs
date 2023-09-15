@@ -22,7 +22,7 @@ use crate::algorithms::tiles::load_tile_layer;
 use crate::world_map::NewTile;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
-use crate::algorithms::culture_sets::CultureSource;
+use crate::algorithms::culture_sets::CultureSetItem;
 use crate::world_map::ElevationLimits;
 use crate::command_def;
 use crate::progress::ProgressObserver;
@@ -307,9 +307,21 @@ subcommand_def!{
         /// Files to load culture data from, more than one may be specified to load multiple cultures into the set.
         pub culture_data: Vec<PathBuf>,
 
+        #[arg(long,required(true))]
+        /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
+        pub namers: Vec<PathBuf>,
+
+        #[arg(long)]
+        /// The name generator to use for naming nations and towns in tiles without a culture
+        pub default_namer: String,
+
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
         pub write_json: bool,
+
+        #[arg(long)]
+        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+        pub seed: Option<u64>,
 
 
     }
@@ -319,14 +331,20 @@ subcommand_def!{
 impl Task for Cultures {
 
 
-    fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        fn test_culture(culture: &CultureSource) {
+        fn test_culture(culture: &CultureSetItem) {
             println!("{}",culture.name());
         
         }
-        
-        let cultures = CultureSet::from_files(self.culture_data)?;
+
+        let mut random = crate::utils::random_number_generator(self.seed);
+
+        let namer_set = NamerSet::from_files(self.namers)?;
+
+        let mut loaded_namers = namer_set.into_loaded_all(self.default_namer, progress)?;
+
+        let cultures = CultureSet::from_files(self.culture_data,&mut random,&mut loaded_namers)?;
 
         if self.write_json {
             print!("{}",cultures.to_json()?)
