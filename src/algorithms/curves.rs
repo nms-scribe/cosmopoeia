@@ -26,8 +26,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
             for i in 0..polygon.geometry_count() {
                 let ring = polygon.get_geometry(i);
                 for i in 0..ring.point_count() {
-                    let (x,y,_) = ring.get_point(i as i32);
-                    let vertex = Point::from_f64(x,y)?;
+                    let vertex: Point = ring.get_point(i as i32).try_into()?;
                     match vertex_index.get_mut(&vertex) {
                         Some(entry) => *entry += 1,
                         None => {
@@ -61,8 +60,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
 
                 // convert the vertexes in the ring to points -- not that they have to be points, but they do have to be NotNaN, so this is good enough.
                 let mut vertexes = (0..ring.point_count()).map(|i| {
-                    let (x,y,_) = ring.get_point(i as i32);
-                    Point::from_f64(x,y)
+                    ring.get_point(i as i32).try_into()
                 });
 
                 if let Some(vertex) = vertexes.next() {

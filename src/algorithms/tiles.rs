@@ -115,8 +115,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     let mut tile_map = layer.read_features().to_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
         let ring = tile.geometry.get_geometry(0);
         for i in 0..ring.point_count() as i32 {
-            let (x,y,_) = ring.get_point(i);
-            let point = Point::from_f64(x, y)?;
+            let point: Point = ring.get_point(i).try_into()?;
             match point_tile_index.get_mut(&point) {
                 None => {
                     point_tile_index.insert(point, HashSet::from([*fid]));

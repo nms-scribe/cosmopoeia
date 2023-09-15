@@ -461,8 +461,8 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Vec<G
         let ring = geometry.get_geometry(i);
         let mut points = Vec::new();
         for i in 0..ring.point_count() {
-            let (x,y,_) = ring.get_point(i as i32);
-            points.push(Point::from_f64(x,y)?)
+            let point = ring.get_point(i as i32).try_into()?;
+            points.push(point)
         }
 
         let bezier = PolyBezier::from_poly_line(&points);
