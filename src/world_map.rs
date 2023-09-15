@@ -524,11 +524,8 @@ macro_rules! get_field_type_for_prop_type {
 
 macro_rules! feature {
     ($struct_name:ident $schema_name: ident $layer_name: literal $geometry_type: ident $(to_field_names_values: #[$to_values_attr: meta])? {$(
-        $(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])*
-        $prop_type: ident 
-        $field: ident 
-        $name: literal;
-    )*}) => {
+        $(#[$get_attr: meta])* $prop: ident $(#[$set_attr: meta])*: $prop_type: ident
+    ),*$(,)?}) => {
 
         pub(crate) struct $struct_name<'data_life> {
 
@@ -550,11 +547,13 @@ macro_rules! feature {
 
         impl $schema_name {
             // constant field names
-            $(pub(crate) const $field: &str = stringify!($prop);)*
+            paste!{
+                $(pub(crate) const [<FIELD_ $prop:snake:upper>]: &str = stringify!($prop);)*
+            }
 
             // field definitions
-            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($field),*)] = [
-                $((Self::$field,get_field_type_for_prop_type!($prop_type))),*
+            const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($prop),*)] = [
+                $((paste!{Self::[<FIELD_ $prop:snake:upper>]},get_field_type_for_prop_type!($prop_type))),*
             ];
 
 
@@ -597,9 +596,11 @@ macro_rules! feature {
         impl $struct_name<'_> {
 
             // feature initializer function
-            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($field),*)],[Option<FieldValue>; feature_count_fields!($($field),*)]),CommandError> {
+            $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($prop),*)],[Option<FieldValue>; feature_count_fields!($($prop),*)]),CommandError> {
                 Ok(([
-                    $($schema_name::$field),*
+                    $(paste!{
+                        $schema_name::[<FIELD_ $prop:snake:upper>]
+                    }),*
                 ],[
                     $(feature_to_value!($prop; $prop_type)),*
                 ]))
@@ -608,13 +609,15 @@ macro_rules! feature {
         
             // property functions
             $(
-                $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
-                    feature_get_field!(self $prop_type $layer_name $prop $schema_name::$field)
+                paste!{
+                    $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
+                        feature_get_field!(self $prop_type $layer_name $prop $schema_name::[<FIELD_ $prop:snake:upper>])
+                    }
                 }
         
                 paste!{
                     $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
-                        feature_set_field!(self value $prop_type $schema_name::$field)
+                        feature_set_field!(self value $prop_type $schema_name::[<FIELD_ $prop:snake:upper>])
                     }            
     
                 }
@@ -921,7 +924,7 @@ The assignment function closure takes an TypedFeature value and returns a result
 
 */ 
 macro_rules! entity {
-    ($(#[$struct_attr: meta])* $name: ident $schema: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*}) => {
+    ($(#[$struct_attr: meta])* $name: ident $schema: ident $feature: ident {$($field: ident: $type: ty $(= $function: expr)?),*$(,)?}) => {
         #[derive(Clone)]
         $(#[$struct_attr])* 
         pub(crate) struct $name {
@@ -1127,61 +1130,61 @@ impl TryFrom<String> for Grouping {
 
 feature!(TileFeature TileSchema "tiles" wkbPolygon to_field_names_values: #[allow(dead_code)] {
     /// longitude of the node point for the tile's voronoi
-    site_x #[allow(dead_code)] f64 FIELD_SITE_X "site_x";
+    site_x #[allow(dead_code)]: f64,
     /// latitude of the node point for the tile's voronoi
-    site_y #[allow(dead_code)] f64 FIELD_SITE_Y "site_y";
+    site_y #[allow(dead_code)]: f64,
     /// elevation in meters of the node point for the tile's voronoi
-    elevation f64 FIELD_ELEVATION "elevation";
+    elevation: f64,
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
     // If I ever get rid of those algorithms, this field can go away.
     /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
-    elevation_scaled i32 FIELD_ELEVATION_SCALED "elevation_scaled";
+    elevation_scaled: i32,
     /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
-    grouping grouping FIELD_GROUPING "grouping";
+    grouping: grouping,
     /// A unique id for each grouping. These id's do not map to other tables, but will tell when tiles are in the same group. Use lake_id to link to the lake table.
     // NOTE: This isn't an id_ref, but let's store it that way anyway
-    grouping_id id_ref FIELD_GROUPING_ID "grouping_id";
+    grouping_id: id_ref,
     /// average annual temperature of tile in imaginary units
-    temperature f64 FIELD_TEMPERATURE "temperature";
+    temperature: f64,
     /// roughly estimated average wind direction for tile
-    wind i32 FIELD_WIND "wind_dir";
+    wind: i32,
     /// average annual precipitation of tile in imaginary units
-    precipitation f64 FIELD_PRECIPITATION "precipitation";
+    precipitation: f64,
     /// amount of water flow through tile in imaginary units
-    water_flow f64 FIELD_WATER_FLOW "water_flow";
+    water_flow: f64,
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
-    water_accumulation f64 FIELD_WATER_ACCUMULATION "water_accum";
+    water_accumulation: f64,
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
-    lake_id option_id_ref FIELD_LAKE_ID "lake_id";
+    lake_id: option_id_ref,
     /// id of neighboring tile which water flows to
-    flow_to id_list FIELD_FLOW_TO "flow_to";
+    flow_to: id_list,
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
-    shore_distance i32 FIELD_SHORE_DISTANCE "shore_distance";
+    shore_distance: i32,
     /// If this is a land tile neighboring a water body, this is the id of the closest tile
-    harbor_tile_id option_id_ref FIELD_HARBOR_TILE_ID "harbor_tile_id";
+    harbor_tile_id: option_id_ref,
     /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
-    water_count option_i32 FIELD_WATER_COUNT "water_count";
+    water_count: option_i32,
     /// The biome for this tile
-    biome string FIELD_BIOME "biome";
+    biome: string,
     /// the factor used to generate population numbers, along with the area of the tile
-    habitability f64 FIELD_HABITABILITY "habitability";
+    habitability: f64,
     /// base population of the cell outside of the towns.
-    population i32 FIELD_POPULATION "population";
+    population: i32,
     /// The name of the culture assigned to this tile, unless wild
-    culture option_string FIELD_CULTURE "culture";
+    culture: option_string,
     /// if the tile has a town, this is the id of the town in the towns layer
-    town_id option_id_ref FIELD_TOWN_ID "town_id"; 
+    town_id: option_id_ref, 
     /// if the tile is part of a nation, this is the id of the nation which controls it
-    nation_id option_id_ref FIELD_NATION_ID "nation_id";
+    nation_id: option_id_ref,
     /// if the tile is part of a subnation, this is the id of the nation which controls it
-    subnation_id option_id_ref FIELD_SUBNATION_ID "subnation_id";
+    subnation_id: option_id_ref,
     // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
     // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
     // to store it. In any way, you never know when I might support outlet from multiple points.
     /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-    outlet_from id_list FIELD_OUTLET_FROM "outlet_from";
+    outlet_from: id_list,
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
-    neighbors neighbor_directions FIELD_NEIGHBOR_TILES "neighbor_tiles";
+    neighbors: neighbor_directions,
 
 });
 
@@ -1797,12 +1800,12 @@ impl Into<String> for &RiverSegmentTo {
 
 
 feature!(RiverFeature RiverSchema "rivers" wkbLineString {
-    from_tile_id #[allow(dead_code)] id_ref FIELD_FROM_TILE_ID "from_tile_id";
-    from_type #[allow(dead_code)] river_segment_from FIELD_FROM_TYPE "from_type";
-    from_flow #[allow(dead_code)] f64 FIELD_FROM_FLOW "from_flow";
-    to_tile_id #[allow(dead_code)] id_ref FIELD_TO_TILE_ID "to_tile_id";
-    to_type #[allow(dead_code)] river_segment_to FIELD_TO_TYPE "to_type";
-    to_flow #[allow(dead_code)] f64 FIELD_TO_FLOW "to_flow";
+    from_tile_id #[allow(dead_code)]: id_ref,
+    from_type #[allow(dead_code)]: river_segment_from,
+    from_flow #[allow(dead_code)]: f64,
+    to_tile_id #[allow(dead_code)]: id_ref,
+    to_type #[allow(dead_code)]: river_segment_to,
+    to_flow #[allow(dead_code)]: f64,
 });
 
 
@@ -1861,12 +1864,12 @@ impl TryFrom<String> for LakeType {
 }
 
 feature!(LakeFeature LakeSchema "lakes" wkbMultiPolygon {
-    #[allow(dead_code)] elevation #[allow(dead_code)] f64 FIELD_ELEVATION "elevation";
-    type_ #[allow(dead_code)] lake_type FIELD_TYPE "type";
-    #[allow(dead_code)] flow #[allow(dead_code)] f64 FIELD_FLOW "flow";
-    size #[allow(dead_code)] i32 FIELD_SIZE "size";
-    #[allow(dead_code)] temperature #[allow(dead_code)] f64 FIELD_TEMPERATURE "temperature";
-    #[allow(dead_code)] evaporation #[allow(dead_code)] f64 FIELD_EVAPORATION "evaporation";
+    #[allow(dead_code)] elevation #[allow(dead_code)]: f64,
+    type_ #[allow(dead_code)]: lake_type,
+    #[allow(dead_code)] flow #[allow(dead_code)]: f64,
+    size #[allow(dead_code)]: i32,
+    #[allow(dead_code)] temperature #[allow(dead_code)]: f64,
+    #[allow(dead_code)] evaporation #[allow(dead_code)]: f64,
 });
 
 entity!(LakeForBiomes LakeSchema LakeFeature {
@@ -1966,13 +1969,13 @@ pub(crate) struct BiomeMatrix {
 }
 
 feature!(BiomeFeature BiomeSchema "biomes" wkbMultiPolygon {
-    name #[allow(dead_code)] string FIELD_NAME "name";
-    habitability #[allow(dead_code)] i32 FIELD_HABITABILITY "habitability";
-    criteria #[allow(dead_code)] biome_criteria FIELD_CRITERIA "criteria";
-    movement_cost #[allow(dead_code)] i32 FIELD_MOVEMENT_COST "movement_cost";
-    supports_nomadic #[allow(dead_code)] bool FIELD_NOMADIC "supp_nomadic";
-    supports_hunting #[allow(dead_code)] bool FIELD_HUNTING "supp_hunting";
-    color #[allow(dead_code)] string FIELD_COLOR "color";
+    name #[allow(dead_code)]: string,
+    habitability #[allow(dead_code)]: i32,
+    criteria #[allow(dead_code)]: biome_criteria,
+    movement_cost #[allow(dead_code)]: i32,
+    supports_nomadic #[allow(dead_code)]: bool,
+    supports_hunting #[allow(dead_code)]: bool,
+    color #[allow(dead_code)]: string,
 });
 
 impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
@@ -2259,12 +2262,12 @@ impl TryFrom<String> for CultureType {
 }
 
 feature!(CultureFeature CultureSchema "cultures" wkbMultiPolygon {
-    name #[allow(dead_code)] string FIELD_NAME "name";
-    namer #[allow(dead_code)] string FIELD_NAMER "namer";
-    type_ #[allow(dead_code)] culture_type FIELD_TYPE "type";
-    expansionism #[allow(dead_code)] f64 FIELD_EXPANSIONISM "expansionism";
-    center_tile_id #[allow(dead_code)] id_ref FIELD_CENTER_TILE_ID "center_tile_id";
-    color #[allow(dead_code)] string FIELD_COLOR "color";
+    name #[allow(dead_code)]: string,
+    namer #[allow(dead_code)]: string,
+    type_ #[allow(dead_code)]: culture_type,
+    expansionism #[allow(dead_code)]: f64,
+    center_tile_id #[allow(dead_code)]: id_ref,
+    color #[allow(dead_code)]: string,
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
@@ -2413,13 +2416,13 @@ impl CultureLayer<'_,'_> {
 }
 
 feature!(TownFeature TownSchema "towns" wkbPoint {
-    name #[allow(dead_code)] string FIELD_NAME "name";
-    culture #[allow(dead_code)] option_string FIELD_CULTURE "culture";
-    is_capital #[allow(dead_code)] bool FIELD_IS_CAPITAL "is_capital";
-    tile_id #[allow(dead_code)] id_ref FIELD_TILE_ID "tile_id";
-    grouping_id #[allow(dead_code)] id_ref FIELD_GROUPING_ID "grouping_id"; 
-    #[allow(dead_code)] population i32 FIELD_POPULATION "population";
-    #[allow(dead_code)] is_port bool FIELD_IS_PORT "is_port";
+    name #[allow(dead_code)]: string,
+    culture #[allow(dead_code)]: option_string,
+    is_capital #[allow(dead_code)]: bool,
+    tile_id #[allow(dead_code)]: id_ref,
+    grouping_id #[allow(dead_code)]: id_ref, 
+    #[allow(dead_code)] population: i32,
+    #[allow(dead_code)] is_port: bool,
 });
 
 impl TownFeature<'_> {
@@ -2491,13 +2494,13 @@ impl TownLayer<'_,'_> {
 
 
 feature!(NationFeature NationSchema "nations" wkbMultiPolygon {
-    name #[allow(dead_code)] string FIELD_NAME "name";
-    culture #[allow(dead_code)] option_string FIELD_CULTURE "culture";
-    center_tile_id #[allow(dead_code)] id_ref FIELD_CENTER_TILE_ID "center_tile_id"; 
-    type_ #[allow(dead_code)] culture_type FIELD_TYPE "type";
-    expansionism #[allow(dead_code)] f64 FIELD_EXPANSIONISM "expansionism";
-    capital_town_id #[allow(dead_code)] id_ref FIELD_CAPITAL_TOWN_ID "capital_town_id";
-    color #[allow(dead_code)] string FIELD_COLOR "color";
+    name #[allow(dead_code)]: string,
+    culture #[allow(dead_code)]: option_string,
+    center_tile_id #[allow(dead_code)]: id_ref, 
+    type_ #[allow(dead_code)]: culture_type,
+    expansionism #[allow(dead_code)]: f64,
+    capital_town_id #[allow(dead_code)]: id_ref,
+    color #[allow(dead_code)]: string,
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
@@ -2566,13 +2569,13 @@ impl NationsLayer<'_,'_> {
 }
 
 feature!(SubnationFeature SubnationSchema "subnations" wkbMultiPolygon {
-    name #[allow(dead_code)] string FIELD_NAME "name";
-    culture #[allow(dead_code)] option_string FIELD_CULTURE "culture";
-    center_tile_id #[allow(dead_code)] id_ref FIELD_CENTER_TILE_ID "center_tile_id";
-    type_ #[allow(dead_code)] culture_type FIELD_TYPE "type";
-    seat_town_id #[allow(dead_code)] option_id_ref FIELD_SEAT_TOWN_ID "seat_town_id"; 
-    nation_id #[allow(dead_code)] id_ref FIELD_NATION_ID "nation_id"; 
-    color #[allow(dead_code)] string FIELD_COLOR "color";
+    name #[allow(dead_code)]: string,
+    culture #[allow(dead_code)]: option_string,
+    center_tile_id #[allow(dead_code)]: id_ref,
+    type_ #[allow(dead_code)]: culture_type,
+    seat_town_id #[allow(dead_code)]: option_id_ref, 
+    nation_id #[allow(dead_code)]: id_ref, 
+    color #[allow(dead_code)]: string,
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
@@ -2675,8 +2678,8 @@ impl LineLayer<'_,'_> {
 */
 
 feature!(PropertyFeature PropertySchema "properties" wkbNone {
-    name #[allow(dead_code)] string FIELD_NAME "name";
-    value string FIELD_VALUE "value";
+    name #[allow(dead_code)]: string,
+    value: string,
 });
 
 pub(crate) type PropertyLayer<'layer,'feature> = MapLayer<'layer,'feature,PropertySchema,PropertyFeature<'feature>>;
