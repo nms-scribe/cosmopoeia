@@ -262,9 +262,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let union_polygons = multipolygon_to_polygons(tile_union);
         for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
             for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
-                if let Some(difference) = ocean.difference(&new_polygon) {
-                    ocean = difference; 
-                } 
+                ocean = ocean.difference(&new_polygon).ok_or_else(|| CommandError::GdalDifferenceFailed)?; 
                 polygons.push(new_polygon);
             }
         }
@@ -472,7 +470,7 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
             }
 
             if usable_neighbors.len() > 0 {
-                let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).unwrap().0;
+                let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).expect("Why would there be no max if we know the list isn't empty?").0;
                 Some((*chosen_value,tile.geometry().clone()))
             } else {
                 None
@@ -503,12 +501,12 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
             // it should never be 0 if it's in the map, but since I'm already allowing for empty geographies, might as well check.
             if geometries.len() > 0 {
                 let mut geometries = geometries.into_iter();
-                let first = geometries.next().unwrap(); 
+                let first = geometries.next().expect("Why would next fail if the len > 0?"); 
                 let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
                 for geometry in geometries {
                     remaining.add_geometry(geometry)?;
                 }
-                let united = first.union(&remaining).unwrap();
+                let united = first.union(&remaining).ok_or_else(|| CommandError::GdalUnionFailed)?;
                 let united = force_multipolygon(united)?;
                 united
             } else {

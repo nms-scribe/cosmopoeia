@@ -36,7 +36,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
         // However, there is no guarantee that it won't (and almost assured it won't) overlap with the other id
         // numbers. Keeping them separate will simplify some algorithms, as otherwise I'd have to check both the
         // grouping and grouping_id to make sure I'm looking in the right place.
-        let grouping_id = next_grouping_id.next().unwrap();
+        let grouping_id = next_grouping_id.next().expect("Why would an unlimited range fail?");
         let mut group = vec![tile.fid];
         let mut neighbors = tile.neighbors.clone();
 

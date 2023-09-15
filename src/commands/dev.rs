@@ -262,7 +262,7 @@ impl Task for Namers {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         fn test_namer<Random: Rng, Progress: ProgressObserver>(namers: &mut NamerSet, language: &String, progress: &mut Progress, rng: &mut Random) {
-            let mut namer = namers.load_one(language,progress).unwrap();
+            let mut namer = namers.load_one(language,progress).expect("Someone called this function with a namer set that didn't contain the provided language key.");
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
             println!("   state: {}",namer.make_state_name(rng));

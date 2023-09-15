@@ -48,10 +48,10 @@ pub(crate) enum TilePreference {
 
 impl TilePreference {
     
-    pub(crate) fn get_value(&self, tile: &TileForCulturePrefSorting, max_habitability: f64) -> OrderedFloat<f64> {
+    pub(crate) fn get_value(&self, tile: &TileForCulturePrefSorting, max_habitability: f64) -> Result<OrderedFloat<f64>,CommandError> {
 
         // formulaes borrowed from AFMG
-        match self {
+        Ok(match self {
             TilePreference::Habitability => OrderedFloat::from(tile.habitability),
             TilePreference::ShoreDistance => OrderedFloat::from(tile.shore_distance as f64),
             TilePreference::Elevation => OrderedFloat::from(tile.elevation_scaled as f64),
@@ -67,33 +67,33 @@ impl TilePreference {
             } else {
                 *fee
             }),
-            TilePreference::Negate(pref) => -pref.get_value(tile, max_habitability),
+            TilePreference::Negate(pref) => -pref.get_value(tile, max_habitability)?,
             TilePreference::Multiply(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); 
+                let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceMultiplyMissingData)?.get_value(tile, max_habitability)?; 
                 for pref in prefs {
-                    result *= pref.get_value(tile, max_habitability)
+                    result *= pref.get_value(tile, max_habitability)?
                 }
                 result
             },
             TilePreference::Divide(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); 
+                let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceDivideMissingData)?.get_value(tile, max_habitability)?; 
                 for pref in prefs {
-                    result /= pref.get_value(tile, max_habitability)
+                    result /= pref.get_value(tile, max_habitability)?
                 }
                 result
             },
             TilePreference::Add(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().unwrap().get_value(tile, max_habitability); 
+                let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceAddMissingData)?.get_value(tile, max_habitability)?; 
                 for pref in prefs {
-                    result += pref.get_value(tile, max_habitability)
+                    result += pref.get_value(tile, max_habitability)?
                 }
                 result
             },
-            TilePreference::Pow(pref, pow) => OrderedFloat::from(pref.get_value(tile, max_habitability).powf(*pow)),
-        }
+            TilePreference::Pow(pref, pow) => OrderedFloat::from(pref.get_value(tile, max_habitability)?.powf(*pow)),
+        })
         
     }
 
@@ -208,7 +208,7 @@ impl CultureSet {
         let mut result = Self::empty();
         for _ in 0..count {
             let namer_key = namer_keys.choose(rng);
-            let namer = loaded_namers.get_mut(Some(namer_key)).unwrap(); // It should be here.
+            let namer = loaded_namers.get_mut(Some(namer_key)).expect("Why would the key not be here when the map was built with the same list of keys?"); // It should be here.
 
             result.add_culture(CultureSource {
                 name: namer.make_name(rng),

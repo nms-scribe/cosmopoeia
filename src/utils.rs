@@ -659,7 +659,7 @@ impl PolyBezier {
         let mut vertex_tangents = vertices.iter().zip(tangents.iter());
         // the first one should always be there? 
         // No panic, because we checked for vertices < 2 above.
-        let (mut vertex0, mut tangent0) = vertex_tangents.next().unwrap();
+        let (mut vertex0, mut tangent0) = vertex_tangents.next().expect("This shouldn't happeen because we checked if vertices < 2.");
         let mut controls = Vec::new();
         for (vertex, tangent) in vertex_tangents {
             // original code: s = abs(p - p0) / 3 -- the absolute value for a point is the distance from 0.

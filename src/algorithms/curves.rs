@@ -65,12 +65,12 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
 
                 if let Some(vertex) = vertexes.next() {
                     let mut prev_vertex = vertex?;
-                    let mut prev_share_count = vertex_index.get(&prev_vertex).unwrap();
+                    let mut prev_share_count = vertex_index.get(&prev_vertex).expect("Why wouldn't this key be here if we just inserted it?");
                     let mut current_segment = vec![prev_vertex.clone()];
 
                     while let Some(vertex) = vertexes.next() {
                         let next_vertex = vertex?;
-                        let next_share_count = vertex_index.get(&next_vertex).unwrap();
+                        let next_share_count = vertex_index.get(&next_vertex).expect("Why wouldn't this key be here if we just inserted it?");
 
                         // a segment should break at all intersections:
                         if (next_share_count == &1) && (prev_share_count == &2) {
@@ -99,7 +99,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
                         // reason to split them here.
                         // the last vertex should be the same as the first vertex. We will already have split them appropriately.
                         let first = segments.remove(0);
-                        let last = segments.last_mut().unwrap();
+                        let last = segments.last_mut().expect("Why wouldn't there be a last if the length is greater than 1?");
                         last.truncate(last.len() - 1);
                         last.extend(first.into_iter());
                     }
@@ -110,7 +110,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
                 let mut unique_segment_ids = Vec::new();
                 for segment in segments {
                     let mut matched_id = None;
-                    if let Some(match_segments) = segment_cache.get(segment.last().unwrap()) { // look from last first, because it's the more likely we're matching the reversed order.
+                    if let Some(match_segments) = segment_cache.get(segment.last().expect("Why wouldn't this key be here if we just inserted it?")) { // look from last first, because it's the more likely we're matching the reversed order.
                         matched_id = find_segment_match(match_segments, &segment,true);
                     } 
                     
@@ -173,7 +173,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
                 let mut ring_geometry = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
 
                 for (point,index,reversed) in ring {
-                    let mut line = segment_cache.get(point).unwrap()[*index].clone();
+                    let mut line = segment_cache.get(point).expect("Why wouldn't this key be here if we just inserted it?")[*index].clone();
                     if *reversed {
                         line.reverse();
                     }
@@ -198,7 +198,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
 
 fn find_segment_match(match_segments: &Vec<Vec<Point>>, segment: &Vec<Point>, reverse: bool) -> Option<(Point, usize, bool)> {
     for (i,match_segment) in match_segments.iter().enumerate() {
-        if match_segment.len() == segment.len() {
+        if (match_segment.len() > 0) && match_segment.len() == segment.len() {
             // search by reversed
             let matched = if reverse {
                 match_segment.iter().eq(segment.iter().rev()) 
@@ -206,7 +206,7 @@ fn find_segment_match(match_segments: &Vec<Vec<Point>>, segment: &Vec<Point>, re
                 match_segment.iter().eq(segment.iter())
             };
             if matched {
-                return Some((segment.last().unwrap().clone(),i,true));
+                return Some((segment.last().expect("Why wouldn't last work if we know the len > 0?").clone(),i,true));
             }
         }
     }

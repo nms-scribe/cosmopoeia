@@ -161,7 +161,7 @@ impl LoadTerrainTask for RecipeSet {
             let chosen_key = if let Some(recipe) = self.recipe {
                 recipe
             } else {
-                tasks.keys().choose(random).unwrap().to_owned() // there should be at least one here so this should never happen.
+                tasks.keys().choose(random).expect("Why would this fail if the len > 0?").to_owned() 
             };
             if let Some(tasks) = tasks.remove(&chosen_key) {
                 let mut result = Vec::new();

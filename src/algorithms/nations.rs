@@ -62,7 +62,7 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
     // assign colors now that I know the count:
     let mut colors = generate_colors(nations.len()).into_iter();
     for nation in nations.iter_mut().watch(progress, "Assigning colors.", "Colors assigned.") {
-        nation.color = colors.next().unwrap();
+        nation.color = colors.next().expect("Why would there not be enough colors if we created a list of the same length?");
     }
 
 

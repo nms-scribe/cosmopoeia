@@ -34,13 +34,13 @@ impl Lake {
     pub(crate) fn dissolve_tiles(&self, layer: &mut TileLayer<'_,'_>) -> Result<Geometry,CommandError> {
 
         let mut tiles = self.contained_tiles.iter();
-        let tile = layer.try_feature_by_id(tiles.next().unwrap())?; // there should be at least one.
+        let tile = layer.try_feature_by_id(tiles.next().expect("Someone called dissolve_tiles on a Lake that didn't have any tiles."))?;
         let mut lake_geometry = tile.geometry()?.clone();
         
         for tile in tiles {
             let tile = layer.try_feature_by_id(&tile)?; 
             let tile = tile.geometry()?; 
-            lake_geometry = tile.union(&lake_geometry).unwrap(); 
+            lake_geometry = tile.union(&lake_geometry).ok_or_else(|| CommandError::GdalUnionFailed)?; 
         }
         Ok(lake_geometry)
     }
@@ -152,7 +152,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 // assuming that succeeded, we can create a new lake now.
                 if let Some(lowest_elevation) = lowest_elevation {
                     // we need to be in a lake, so create a new one.
-                    let lake_id = next_lake_id.next().unwrap(); // it should be an infinite iterator, so it should always return Some.
+                    let lake_id = next_lake_id.next().expect("Why would an unlimited range fail to return a next value?"); // it should be an infinite iterator, so it should always return Some.
 
                     let new_lake = Lake {
                         elevation: tile.elevation,

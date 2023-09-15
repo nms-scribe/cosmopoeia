@@ -51,6 +51,12 @@ pub enum CommandError {
     PropertyNotSet(String),
     InvalidRangeArgument(String),
     CantFindTileNearPoint,
+    EmptyNamerInput(String),
+    TilePreferenceMultiplyMissingData,
+    TilePreferenceDivideMissingData,
+    TilePreferenceAddMissingData,
+    GdalUnionFailed,
+    GdalDifferenceFailed,
 }
 
 impl Error for CommandError {
@@ -123,6 +129,12 @@ impl Display for CommandError {
             Self::PropertyNotSet(a) => write!(f,"Property {} has not been set.",a),
             Self::InvalidRangeArgument(a) => write!(f,"Invalid range expression '{}' in terrain processing parameters.",a),
             Self::CantFindTileNearPoint => write!(f,"No tile was found close to a supplied point, even at max expansion."),
+            Self::EmptyNamerInput(a) => write!(f,"Namer '{}' data did not contain any words.",a),
+            Self::TilePreferenceMultiplyMissingData => write!(f,"Tile preference multiplication in culture set needs at least one term"),
+            Self::TilePreferenceDivideMissingData => write!(f,"Tile preference division in culture set needs at least one term"),
+            Self::TilePreferenceAddMissingData => write!(f,"Tile preference addition in culture set needs at least one term"),
+            Self::GdalUnionFailed => write!(f,"Gdal union operation returned null"),
+            Self::GdalDifferenceFailed => write!(f,"Gdal difference operation returned null"),
         }
     }
 }

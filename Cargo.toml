@@ -24,11 +24,11 @@ serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 
 # tips from https://github.com/johnthagen/min-sized-rust -- this reduced the final binary size immensely
-# Speed also appears to be improved, I witnessed repeated running times of about 55% of the debug release (11 sec vs 20 sec), both targets already compiled and built.
+# Speed also appears to be improved, I witnessed repeated running times of about 55% of the debug release (11 sec vs 29 sec), both targets already compiled and built.
 [profile.release]
 strip = true  # Automatically strip symbols from the binary.
 opt-level = "z"  # Optimize for size.
 lto = true #  instructs the linker to optimize at the link stage. This can, for example, remove dead code and often times reduces binary size.
 codegen-units = 1 #By default, Cargo specifies 16 parallel codegen units for release builds. This improves compile times, but prevents some optimizations.
 panic = "abort" # By default, when Rust code encounters a situation when it must call panic!(), it unwinds the stack and produces a helpful backtrace. The unwinding code, however, does require extra binary size. rustc can be instructed to abort immediately rather than unwind, which removes the need for this extra unwinding code.
-
+overflow-checks = true # NMS: As this program depends on a lot of math and numeric input, I think it's important to check for overflows to avoid invalid data. This does not appear to effect the improved speed of the binary release.

@@ -477,7 +477,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
 
             while let Some(tile_id) = queue.pop_front() {
                 let tile = tile_map.try_get(&tile_id)?;
-                let last_change = *change_map.get(&tile_id).unwrap(); // shouldn't be any reason why this is not found.
+                let last_change = *change_map.get(&tile_id).expect("How could there be something in the queue if it wasn't added to this map?"); 
                 for (neighbor_id,_) in &tile.neighbors {
                     if change_map.contains_key(&neighbor_id) {
                         continue;

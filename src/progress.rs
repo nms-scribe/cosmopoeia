@@ -82,7 +82,7 @@ impl ConsoleProgressBar {
     fn style_as_spinner(bar: &mut ProgressBar) {
         bar.enable_steady_tick(Duration::new(0,500));
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) {msg} {spinner}")
-            .unwrap()
+            .expect("progress bar template could not be parsed.")
             //.tick_strings(SPINNER_STRINGS)
             //.tick_chars(SPINNER_CHARS)
         );
@@ -92,7 +92,7 @@ impl ConsoleProgressBar {
     fn style_as_progress(bar: &mut ProgressBar) {
         bar.disable_steady_tick();
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) [{bar:40}] [ETA: {eta_precise}] {msg} {spinner}")
-            .unwrap()
+            .expect("progress bar template could not be parsed.")
             //.tick_strings(SPINNER_STRINGS)
             //.tick_chars(SPINNER_CHARS)
             .progress_chars("=> ")
@@ -102,7 +102,7 @@ impl ConsoleProgressBar {
 
     fn style_as_finished(bar: &mut ProgressBar) {
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) {msg}")
-            .unwrap());
+            .expect("progress bar template could not be parsed."));
 
     }
 

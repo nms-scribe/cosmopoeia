@@ -136,7 +136,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     for (fid,tile) in tile_map.into_iter().watch(progress, "Writing data.", "Data written.") {
 
         let mut feature = tiles.try_feature_by_id(&fid)?;
-        let shore_distance = shore_distances.remove(&fid).unwrap(); // There should be no reason the shore_distance wasn't generated for the tile
+        let shore_distance = shore_distances.remove(&fid).expect("Why wouldn't this value have been generated for the tile?");
         feature.set_shore_distance(shore_distance)?;
         feature.set_harbor_tile_id(tile.closest_water_tile_id)?;
         feature.set_water_count(tile.water_count)?;

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_map::Entry;
 use std::io::BufReader;
 use std::io::BufRead;
 use std::path::Path;
@@ -212,104 +211,116 @@ struct MarkovGenerator {
 impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
-    fn calculate_chain<Progress: ProgressObserver>(array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> HashMap<Option<char>, Vec<std::string::String>> {
-        let mut chain = HashMap::new();
+    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<HashMap<Option<char>, Vec<std::string::String>>,CommandError> {
+        if array.len() > 0 {
+            let mut chain = HashMap::new();
 
-        progress.start_known_endpoint(|| array.len());
-
-        for (j,n) in array.iter().enumerate() {
-            let name: Vec<char> = n.trim().chars().collect();
-            let basic = name.iter().all(|c| match c {
-                '\u{0000}'..='\u{007f}' => true,
-                _ => false
-            }); // basic chars and English rules can be applied
-
-            // split word into pseudo-syllables
-            let mut syllable = String::new();
-            let mut i = 0; 
-            while i < name.len() {
-                let prev_char = if i == 0 { None } else { name.get(i-1).map(|c| *c) }; // pre-onset letter
-                let mut vowel_found = false; 
-
-                for c in i..name.len() {
-                    let current_char = name[c];
-                    let next_char = name.get(c + 1); // next char
-                    syllable.push(current_char);
-                    if (syllable == " ") || (syllable == "-") { 
-                        // syllable starts with space or hyphen
-                        break 
-                    }; 
-                    let next_char = match next_char {
-                        Some(' ') | Some('-') | None => break, // definitely the end of a syllable, no need to check.
-                        Some(next_char) => *next_char
-                    };
-
-                    if is_vowel(current_char) {
-                        vowel_found = true
-                    }; // check if letter is vowel
-
-                    // do not split some digraphs // FUTURE: NMS: These rules should depend on the language, which should provide a list of diphthongs
-                    let is_digraph = if current_char == 'y' && next_char == 'e' {
-                        // 'ye' 
-                        true
-                    } else if basic {
-                        // English-like 
-                        if (current_char == 'o' && next_char == 'o') || // 'oo'
-                           (current_char == 'e' && next_char == 'e') || // 'ee'
-                           (current_char == 'a' && next_char == 'e') || // 'ae'
-                           (current_char == 'c' && next_char == 'h') { // 'ch'
+            progress.start_known_endpoint(|| array.len());
+    
+            for (j,n) in array.iter().enumerate() {
+                let name: Vec<char> = n.trim().chars().collect();
+                let basic = name.iter().all(|c| match c {
+                    '\u{0000}'..='\u{007f}' => true,
+                    _ => false
+                }); // basic chars and English rules can be applied
+    
+                // split word into pseudo-syllables
+                let mut syllable = String::new();
+                let mut i = 0; 
+                while i < name.len() {
+                    let prev_char = if i == 0 { None } else { name.get(i-1).map(|c| *c) }; // pre-onset letter
+                    let mut vowel_found = false; 
+    
+                    for c in i..name.len() {
+                        let current_char = name[c];
+                        let next_char = name.get(c + 1); // next char
+                        syllable.push(current_char);
+                        if (syllable == " ") || (syllable == "-") { 
+                            // syllable starts with space or hyphen
+                            break 
+                        }; 
+                        let next_char = match next_char {
+                            Some(' ') | Some('-') | None => break, // definitely the end of a syllable, no need to check.
+                            Some(next_char) => *next_char
+                        };
+    
+                        if is_vowel(current_char) {
+                            vowel_found = true
+                        }; // check if letter is vowel
+    
+                        // do not split some digraphs // FUTURE: NMS: These rules should depend on the language, which should provide a list of diphthongs
+                        let is_digraph = if current_char == 'y' && next_char == 'e' {
+                            // 'ye' 
                             true
+                        } else if basic {
+                            // English-like 
+                            if (current_char == 'o' && next_char == 'o') || // 'oo'
+                               (current_char == 'e' && next_char == 'e') || // 'ee'
+                               (current_char == 'a' && next_char == 'e') || // 'ae'
+                               (current_char == 'c' && next_char == 'h') { // 'ch'
+                                true
+                            } else {
+                                false
+                            }
                         } else {
                             false
+                        };
+                        
+                        if !is_digraph {
+                            if is_vowel(current_char) && next_char == current_char {
+                                // two same vowels in a row
+                                break
+                            }; 
+                            if vowel_found && name.get(c + 2).map(is_ref_vowel).unwrap_or_else(|| false) {
+                                // syllable has vowel and additional vowel is expected soon
+                                break
+                            }; 
                         }
-                    } else {
-                        false
-                    };
+    
+                        if syllable.len() >= 5 {
+                            // syllable is long enough
+                            break;
+                        }
+                    }
+    
+                    i += syllable.len().min(1); 
+                    match chain.get_mut(&prev_char) {
+                        None => {
+                            chain.insert(prev_char,vec![syllable]);
+                        },
+                        Some(entry) => entry.push(syllable),
+                    }
                     
-                    if !is_digraph {
-                        if is_vowel(current_char) && next_char == current_char {
-                            // two same vowels in a row
-                            break
-                        }; 
-                        if vowel_found && name.get(c + 2).map(is_ref_vowel).unwrap_or_else(|| false) {
-                            // syllable has vowel and additional vowel is expected soon
-                            break
-                        }; 
-                    }
-
-                    if syllable.len() >= 5 {
-                        // syllable is long enough
-                        break;
-                    }
+                    syllable = String::new();
                 }
-
-                i += syllable.len().min(1); 
-                match chain.entry(prev_char) {
-                    Entry::Vacant(entry) => {entry.insert(vec![syllable]);},
-                    Entry::Occupied(mut entry) => entry.get_mut().push(syllable),
-                }
-                
-                syllable = String::new();
+                progress.update(|| j);
             }
-            progress.update(|| j);
+    
+            progress.finish();
+
+            if chain.len() > 0 {
+                Ok(chain)
+            } else {
+                Err(CommandError::EmptyNamerInput(name.to_owned()))
+            }
+    
+        } else {
+            Err(CommandError::EmptyNamerInput(name.to_owned()))
         }
 
-        progress.finish();
-
-        return chain;
     }
 
 
-    fn new<Progress: ProgressObserver>(base: MarkovSource, progress: &mut NamerLoadObserver<Progress>) -> Self {
-        let chain = Self::calculate_chain(&base.seed_words,progress);
+    fn new<Progress: ProgressObserver>(name: &str, base: MarkovSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
+        let chain = Self::calculate_chain(name,&base.seed_words,progress)?;
 
-        Self {
+        Ok(Self {
             chain,
             min_len: base.min_len,
             cutoff_len: base.cutoff_len,
             duplicatable_letters: base.duplicatable_letters,
             seed_words: base.seed_words
-        }
+        })
     }
 
     pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random, min_len: Option<usize>, cutoff_len: Option<usize>) -> String {
@@ -317,7 +328,7 @@ impl MarkovGenerator {
         let min_len = min_len.unwrap_or_else(|| self.min_len);
         let cutoff_len = cutoff_len.unwrap_or_else(|| self.cutoff_len);
 
-        let mut choices = self.chain.get(&None).unwrap(); // As long as the input wasn't empty, this shouldn't panic
+        let mut choices = self.chain.get(&None).expect("How would we get an empty chain?"); // As long as the input wasn't empty, this shouldn't panic
         let mut cur = choices.choose(rng).to_owned();
         let mut word = String::new();
         for _ in 0..20 {
@@ -327,7 +338,7 @@ impl MarkovGenerator {
                 if word.len() < min_len {
                     cur = String::new();
                     word = String::new();
-                    choices = self.chain.get(&None).unwrap(); // As long as the input wasn't empty, this shouldn't panic.
+                    choices = self.chain.get(&None).expect("How would we get an empty chain?"); // As long as the input wasn't empty, this shouldn't panic.
                 } else {
                     break
                 }
@@ -345,7 +356,7 @@ impl MarkovGenerator {
                     }
                     break;
                 } else {
-                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).unwrap()) // As long as the original input wasn't empty, this shouldn't panic
+                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).expect("How would we get an empty chain?")) // As long as the original input wasn't empty, this shouldn't panic
                 };
             }
 
@@ -413,10 +424,14 @@ struct ListPicker {
 
 impl ListPicker {
 
-    fn new(list: Vec<String>) -> Self {
-        Self {
-            available: list,
-            picked: Vec::new()
+    fn new(name: &str, list: Vec<String>) -> Result<Self,CommandError> {
+        if list.len() > 0 {
+            Ok(Self {
+                available: list,
+                picked: Vec::new()
+            })    
+        } else {
+            Err(CommandError::EmptyNamerInput(name.to_owned()))
         }
     }
 
@@ -445,11 +460,11 @@ impl NamerMethod {
         }
     }
 
-    fn new<Progress: ProgressObserver>(method: NamerMethodSource, progress: &mut NamerLoadObserver<Progress>) -> Self {
-        match method {
-            NamerMethodSource::Markov(markov) => Self::Markov(MarkovGenerator::new(markov,progress)),
-            NamerMethodSource::ListPicker(list) => Self::ListPicker(ListPicker::new(list))
-        }
+    fn new<Progress: ProgressObserver>(name: &str, method: NamerMethodSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
+        Ok(match method {
+            NamerMethodSource::Markov(markov) => Self::Markov(MarkovGenerator::new(name,markov,progress)?),
+            NamerMethodSource::ListPicker(list) => Self::ListPicker(ListPicker::new(name,list)?)
+        })
     }
 
 }
@@ -473,16 +488,16 @@ impl Namer {
      
     }
 
-    fn new<Progress: ProgressObserver>(base: NamerSource, progress: &mut NamerLoadObserver<Progress>) -> Self {
+    fn new<Progress: ProgressObserver>(base: NamerSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
         let mut state_name = Self::default_state_name_behavior();
         state_name.extend(base.state_name.iter().cloned());
-        let method = NamerMethod::new(base.method,progress);
+        let method = NamerMethod::new(&base.name,base.method,progress)?;
 
-        Self {
+        Ok(Self {
             method,
             state_name,
             state_suffix: base.state_suffix
-        }
+        })
     }
 
     pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
@@ -565,7 +580,7 @@ impl Namer {
             // no suffix if name already ends with it
             return name
         }; 
-        let s1 = suffix.chars().nth(0).unwrap(); // first letter of suffix
+        let s1 = suffix.chars().nth(0).expect("Whoever called this function shouldn't have passed a blank suffix."); // first letter of suffix
 
         if name.ends_with(s1) {
             // remove name last letter if it's same as suffix first letter
@@ -640,7 +655,7 @@ impl NamerSet {
 
     pub(crate) fn load_one<Progress: ProgressObserver>(&mut self, name: &str, progress: &mut Progress) -> Result<Namer,CommandError> { 
         if let Some(name_base) = self.source.remove(name)  { 
-            Ok(Namer::new(name_base,&mut NamerLoadObserver::new(name,progress)))
+            Ok(Namer::new(name_base,&mut NamerLoadObserver::new(name,progress))?)
         } else {
             Err(CommandError::UnknownNamer(name.to_owned()))
         }

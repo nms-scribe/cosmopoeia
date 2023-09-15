@@ -106,7 +106,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     };
 
     let mut spacing = (extent.width + extent.height) / 150.0 / ((town_count as f64).powf(0.7)/66.0);
-    let town_spacing_normal = Normal::new(1.0f64,0.3f64).unwrap();
+    let town_spacing_normal = Normal::new(1.0f64,0.3f64).expect("Why would these constants fail if they never did before?");
     // if this fails then it's a programming error, I'm pretty certain.
 
     macro_rules! reset_town_search {
@@ -222,7 +222,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
 
 pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles_layer: &mut TileLayer, progress: &mut Progress) -> Result<Vec<ScoredTileForTowns>, CommandError> {
 
-    let town_score_normal = Normal::new(1.0f64,3.0f64).unwrap(); // if this fails then it's a programming error, I'm pretty certain.
+    let town_score_normal = Normal::new(1.0f64,3.0f64).expect("Why would these constants fail if they never did before?");
 
     let mut tiles = vec![];
 
@@ -345,7 +345,7 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
     // remove port status if there's only one on the feature, but still get the benefits
     for list in coastal_towns.values().watch(progress,"Validating ports.","Ports validated.") {
         if list.len() == 1 {
-            town_details.get_mut(&list[0]).unwrap().is_port = false
+            town_details.get_mut(&list[0]).expect("Why would this get fail if the list was built from the same thing generating the keys?").is_port = false
         }
     }
 

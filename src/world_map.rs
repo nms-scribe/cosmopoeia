@@ -1,8 +1,6 @@
 use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry::Occupied;
-use std::collections::hash_map::Entry::Vacant;
 use std::hash::Hash;
 use std::collections::HashSet;
 use std::collections::hash_map::IntoIter;
@@ -62,7 +60,7 @@ use crate::algorithms::naming::LoadedNamers;
 // the gdal crate, maybe it would be better.
 
 fn id_list_to_string(value: &Vec<u64>) -> String {
-    to_ron_string(value).unwrap() // it's a basic enum, there shouldn't be any reason why this would fail
+    to_ron_string(value).expect("Why would serialization fail on a list of numbers?") 
 }
 
 fn string_to_id_list(value: String) -> Result<Vec<u64>,CommandError> {
@@ -70,7 +68,7 @@ fn string_to_id_list(value: String) -> Result<Vec<u64>,CommandError> {
 }
 
 fn neighbor_directions_to_string(value: &Vec<(u64,i32)>) -> String {
-    to_ron_string(value).unwrap() // it's a basic enum, there shouldn't be any reason why this would fail
+    to_ron_string(value).expect("Why would serialization fail on a list of number pairs?")
 }
 
 fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,i32)>,CommandError> {
@@ -78,7 +76,7 @@ fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,i32)>,Command
 }
 
 fn id_ref_to_string(value: &u64) -> String {
-    to_ron_string(value).unwrap() // it's an f64, what's it going to do?
+    to_ron_string(value).expect("Why would serialization fail on a f64?") 
 }
 
 fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
@@ -1062,7 +1060,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             }
         }
         feature.create(&self.layer)?;
-        Ok(feature.fid().unwrap())
+        Ok(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?)
     }
 
 
@@ -1079,7 +1077,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             }
         }
         feature.create(&self.layer)?;
-        Ok(feature.fid().unwrap())
+        Ok(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?)
 
     }
 
@@ -1140,7 +1138,7 @@ impl Grouping {
 impl Into<String> for &Grouping {
 
     fn into(self) -> String {
-        to_ron_string(self).unwrap() // it's a basic enum, there shouldn't be any reason why this would fail
+        to_ron_string(self).expect("Why would serialization fail on a basic enum?")
     }
 }
 
@@ -1792,7 +1790,7 @@ impl TryFrom<String> for RiverSegmentFrom {
 impl Into<String> for &RiverSegmentFrom {
 
     fn into(self) -> String {
-        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
+        to_ron_string(self).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1816,7 +1814,7 @@ impl TryFrom<String> for RiverSegmentTo {
 impl Into<String> for &RiverSegmentTo {
 
     fn into(self) -> String {
-        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
+        to_ron_string(self).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1871,7 +1869,7 @@ pub(crate) enum LakeType {
 impl Into<String> for &LakeType {
 
     fn into(self) -> String {
-        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
+        to_ron_string(self).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1963,7 +1961,7 @@ impl TryFrom<String> for BiomeCriteria {
 impl Into<String> for &BiomeCriteria {
 
     fn into(self) -> String {
-        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
+        to_ron_string(self).expect("Why would serialization fail on an enum with no weird structs?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -2056,21 +2054,23 @@ impl BiomeSchema {
 
     pub(crate) fn get_default_biomes() -> Vec<NewBiome> {
         let mut matrix_criteria = HashMap::new();
+        // map the matrix numbers to biome names
         for (moisture,row) in Self::DEFAULT_MATRIX.iter().enumerate() {
             for (temperature,id) in row.iter().enumerate() {
-                match matrix_criteria.entry(id) {
-                    Vacant(entry) => {
-                        entry.insert(vec![(moisture,temperature)]);
+                match matrix_criteria.get_mut(id) {
+                    None => {
+                        matrix_criteria.insert(id,vec![(moisture,temperature)]);
                     },
-                    Occupied(mut entry) => entry.get_mut().push((moisture,temperature)),
+                    Some(entry) => entry.push((moisture,temperature)),
                 }
             }
 
         }
 
+        // now insert the matrix numbers into the output biomes criteria fields and return the biome entities.
         Self::DEFAULT_BIOMES.iter().map(|default| {
             let criteria = if let BiomeCriteria::Matrix(_) = default.criteria {
-                BiomeCriteria::Matrix(matrix_criteria.get(&default.name).unwrap().clone())
+                BiomeCriteria::Matrix(matrix_criteria.get(&default.name).expect("Someone messed up the default biome constants.").clone())
             } else {
                 default.criteria.clone()
             };
@@ -2252,7 +2252,7 @@ pub(crate) enum CultureType {
 impl Into<String> for &CultureType {
 
     fn into(self) -> String {
-        to_ron_string(self).unwrap() // there shouldn't be any reason to have an error
+        to_ron_string(self).expect("Why would serialization fail on a basic enum?")
     }
 }
 
@@ -2701,7 +2701,7 @@ impl Into<String> for &ElevationLimits {
 
     fn into(self) -> String {
         // store as tuple for simplicity
-        to_ron_string(&(self.min_elevation,self.max_elevation)).unwrap() // there shouldn't be any reason to have an error
+        to_ron_string(&(self.min_elevation,self.max_elevation)).expect("Why would serialization fail on a tuple of numbers?")
     }
 }
 

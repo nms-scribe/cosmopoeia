@@ -106,7 +106,23 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         let preferences = culture_source.preferences();
         
         // sort so the most preferred tiles go to the top.
-        populated.sort_by_cached_key(|a| preferences.get_value(a,max_habitability));
+        // FUTURE: It would be nice if there were a try_sort_by_cached_key, but I don't expect
+        // them to implement. Some sort of alternative standard solution for this sort of pattern
+        // would be nice, though. A panic and catch_unwind would allow me to short-circuit the sort
+        // algorithm, at least.
+        let mut error = None;
+        populated.sort_by_cached_key(|a| 
+            match preferences.get_value(a,max_habitability) {
+                Ok(value) => value,
+                Err(err) => {
+                    error = Some(err);
+                    OrderedFloat::from(0.0)
+                },
+            });
+        if let Some(err) = error {
+            Err(err)?
+        }
+
         let mut spacing = spacing;
         let mut i = 0;
         let center = loop {
@@ -157,7 +173,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             type_: culture_type,
             expansionism,
             center_tile_id: center.fid,
-            color: colors.next().unwrap()
+            color: colors.next().expect("Why would there not be enough colors if we generated the same number of colors and cultures?")
         });
         
     }

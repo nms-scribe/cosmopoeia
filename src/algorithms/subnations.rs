@@ -49,7 +49,7 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
     
     }
 
-    let town_sort_normal = Normal::new(1.0f64,0.2f64).unwrap();
+    let town_sort_normal = Normal::new(1.0f64,0.2f64).expect("Why would these constants fail when they never have before?");
 
     let mut subnations = target.create_subnations_layer(overwrite_layer)?;
 
@@ -187,7 +187,7 @@ pub(crate) fn subnation_max_cost<Random: Rng>(rng: &mut Random, subnation_percen
     if subnation_percentage == 100.0 {
         1000.0
     } else {
-        Normal::new(20.0f64,5.0f64).unwrap().sample(rng).clamp(5.0,100.0) * subnation_percentage.powf(0.5)
+        Normal::new(20.0f64,5.0f64).expect("Why would these constants fail if they naver have before?").sample(rng).clamp(5.0,100.0) * subnation_percentage.powf(0.5)
     }
 }
 
@@ -263,7 +263,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
 
                 let subnation = SubnationForPlacement {
-                    fid: next_subnation_id.next().unwrap(), // It's an infinite range, it should always unwrap
+                    fid: next_subnation_id.next().expect("Why would an unlimited range stop returning values?"),
                     center_tile_id,
                     nation_id,
                 };
@@ -388,7 +388,7 @@ pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObs
 
         let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
 
-        let real_id = assigned_ids.get(&temp_subnation_id).unwrap();
+        let real_id = assigned_ids.get(&temp_subnation_id).expect("How would we use an id that we didn't add to the map?");
 
         tile.set_subnation_id(Some(*real_id))?;
 

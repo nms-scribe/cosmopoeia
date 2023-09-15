@@ -1,4 +1,3 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::cmp::Ordering;
 
@@ -66,7 +65,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
         // when angle is equal, the point closer to the center will be lesser.
 
-        let zero: NotNan<f64> = 0.0.try_into().unwrap(); // there shouldn't be any error here.
+        let zero: NotNan<f64> = 0.0.try_into().expect("Why wouldn't I be able to turn 0 into a NotNaN?"); // there shouldn't be any error here.
 
         points.sort_by(|a: &Point, b: &Point| -> Ordering
         {
@@ -207,16 +206,13 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             // collect a list of neighboring circumcenters for each site.
             for point in points {
 
-                match sites.entry(point) {
-                    Entry::Occupied(mut entry) => {
-                        let entry = entry.get_mut();
-                        entry.vertices.push(circumcenter.clone());
+                match sites.get_mut(&point) {
+                    None => {
+                        sites.insert(point, VoronoiInfo {
+                                                vertices: vec![circumcenter.clone()]
+                                            });
                     },
-                    Entry::Vacant(entry) => {
-                        entry.insert(VoronoiInfo {
-                            vertices: vec![circumcenter.clone()]
-                        });
-                    },
+                    Some(entry) => entry.vertices.push(circumcenter.clone()),
                 }
 
             }

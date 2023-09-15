@@ -1,4 +1,3 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -39,7 +38,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
             chosen_segment = Some(segment)
         }
     };
-    (chosen_segment.unwrap().clone(),total_flow)
+    (chosen_segment.expect("Whoever called this function passed an empty list.").clone(),total_flow)
 }
 
 pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
@@ -227,7 +226,7 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
         if let Some(next) = segment_clean_queue.last() {
             if (segment.from == next.from) && (segment.to == next.to) {
                 // we found a duplicate, pop it off and merge it.
-                let next = segment_clean_queue.pop().unwrap();
+                let next = segment_clean_queue.pop().expect("Why would pop fail if we just found a value with last?");
                 let merged = Rc::from(RiverSegment {
                     from: segment.from,
                     to: segment.to,
@@ -242,23 +241,17 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
         }
 
         // otherwise, we don't have a duplicate, let's map it and add it to the queue.
-        match tile_from_index.entry(segment.from) {
-            Entry::Vacant(entry) => {
-                entry.insert(vec![segment.clone()]);
+        match tile_from_index.get_mut(&segment.from) {
+            None => {
+                tile_from_index.insert(segment.from,vec![segment.clone()]);
             },
-            Entry::Occupied(mut entry) => {
-                let list = entry.get_mut();
-                list.push(segment.clone());
-            },
+            Some(entry) => entry.push(segment.clone()),
         };
-        match tile_to_index.entry(segment.to) {
-            Entry::Vacant(entry) => {
-                entry.insert(vec![segment.clone()]);
+        match tile_to_index.get_mut(&segment.to) {
+            None => {
+                tile_to_index.insert(segment.to,vec![segment.clone()]);
             },
-            Entry::Occupied(mut entry) => {
-                let list = entry.get_mut();
-                list.push(segment.clone());
-            },
+            Some(entry) => entry.push(segment.clone()),
         };
         result_queue.push(segment);
 

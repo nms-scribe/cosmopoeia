@@ -358,13 +358,13 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] Wherever I'm using serde_json, 'use' the functions as to_json_string and from_json_str, because I'm a little scared of using modules without use.
 [X] Move the BiomeFeature consts and associated types into an impl of BiomeSchema
 [X] Replace the BiomeLayer::build_lookup with TypedFeatureIterator::to_named_entities_index
-[ ] MarkovGenerator::calculate_chain -- should return an error if the array is empty, or if there are no strings in it. Because that will cause an error when we're trying to create strings.
-[ ] Check all 'unwraps' and make sure we don't need to throw an error there instead.
-    [ ] TilePreference::get_value -- there are a bunch of 'unwraps' that should be proper errors, since that's all based on user input.
-    [ ] In calculate_coastline, after the 'difference' function is done on the ocean, it can potentially return null. Make this an error instead. I think it's only there because of the GEOS requirement.
-    [ ] Arithmetic overflow is only a panic on debug builds. See if I can make it part of the release as well, I don't want to accidentally wrap values.
+[X] MarkovGenerator::calculate_chain -- should return an error if the array is empty, or if there are no strings in it. Because that will cause an error when we're trying to create strings.
+[X] Check all 'unwraps' and make sure we don't need to throw an error there instead.
+    [X] TilePreference::get_value -- there are a bunch of 'unwraps' that should be proper errors, since that's all based on user input.
+    [X] In calculate_coastline, after the 'difference' function is done on the ocean, it can potentially return null. Make this an error instead. I think it's only there because of the GEOS requirement.
+    [X] Arithmetic overflow is only a panic on debug builds. See if I can make it part of the release as well, I don't want to accidentally wrap values.
+[X] Get rid of HashMap/HashSet::entry calls, replace with get and get_mut. This means I don't need to clone the key unless I actually add the value. Also, as long as 'None' is done first in the match, I need to do less type specification.
 [ ] Allow the user to use CultureSet::make_random_culture_set and CultureSet::make_random_culture_set_with_same_namer when generating cultures.
-[ ] Get rid of HashMap/HashSet::entry calls, replace with get and get_mut. This means I don't need to clone the key unless I actually add the value. Also, as long as 'None' is done first in the match, I need to do less type specification.
 [ ] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
 [ ] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
