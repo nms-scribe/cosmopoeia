@@ -780,6 +780,7 @@ pub(crate) mod namers_pretty_print {
 
 
     use std::io;
+    use serde_json::ser::Formatter;
 
     // Mostly copy-paste from serde_json, but designed to output arrays inline at any nesting above one, for serializing namers in an array.
 
@@ -826,7 +827,7 @@ pub(crate) mod namers_pretty_print {
         }
     }
 
-    impl<'a> serde_json::ser::Formatter for PrettyFormatter<'a> {
+    impl<'a> Formatter for PrettyFormatter<'a> {
         #[inline]
         fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
         where

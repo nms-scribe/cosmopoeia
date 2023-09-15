@@ -7,6 +7,8 @@ use std::fs::File;
 
 use serde::Serialize;
 use serde::Deserialize;
+use serde_json::Serializer as JSONSerializer;
+use serde_json::from_reader as from_json_reader;
 use rand::Rng;
 use ordered_float::OrderedFloat;
 
@@ -151,7 +153,7 @@ impl CultureSet {
 
         let mut buf = Vec::new();
         let formatter = PrettyFormatter::with_indent(b"    ");
-        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+        let mut ser = JSONSerializer::with_formatter(&mut buf, formatter);
         self.source.serialize(&mut ser).map_err(|e| CommandError::CultureSourceWrite(format!("{}",e)))?;
         Ok(String::from_utf8(buf).map_err(|e| CommandError::CultureSourceWrite(format!("{}",e)))?)
     
@@ -162,7 +164,7 @@ impl CultureSet {
     }
     
     pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
-        let data = serde_json::from_reader::<_,Vec<CultureSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
+        let data = from_json_reader::<_,Vec<CultureSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
         for data in data {
             self.add_culture(data)
         }

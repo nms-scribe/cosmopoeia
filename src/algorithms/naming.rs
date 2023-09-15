@@ -11,7 +11,8 @@ use std::fs::File;
 use rand::Rng;
 use serde::Serialize;
 use serde::Deserialize;
-use serde_json;
+use serde_json::Serializer as JSONSerializer;
+use serde_json::from_reader as from_json_reader;
 
 // NOTE: *** I'M NOT GOING TO LOAD THE NAMER OR CULTURE STUFF INTO THE DATABASE. Instead, I hope to provide some default data in the `share` directory.
 
@@ -679,7 +680,7 @@ impl NamerSet {
 
         let mut buf = Vec::new();
         let formatter = PrettyFormatter::with_indent(b"    ");
-        let mut ser = serde_json::Serializer::with_formatter(&mut buf, formatter);
+        let mut ser = JSONSerializer::with_formatter(&mut buf, formatter);
         // I don't want to serialize a map, I want to serialize it as an array.
         let data = self.source.values().collect::<Vec<_>>();
         data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
@@ -695,7 +696,7 @@ impl NamerSet {
     }
     
     pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
-        let data = serde_json::from_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?;
+        let data = from_json_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?;
         for data in data {
             self.add_namer(data)
         }
