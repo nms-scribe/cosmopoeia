@@ -1,8 +1,8 @@
 use rand::Rng;
-use gdal::vector::OGRwkbGeometryType;
 use gdal::vector::Geometry;
 
 use crate::utils::Extent;
+use crate::utils::Point;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -58,9 +58,7 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
-        let mut point = Geometry::empty(OGRwkbGeometryType::wkbPoint)?;
-        point.add_point_2d((self.extent.west + x,self.extent.south + y));
-        Ok(point)
+        Point::try_from((self.extent.west + x,self.extent.south + y))?.create_geometry()
     }
 
 

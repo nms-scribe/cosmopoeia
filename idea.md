@@ -371,7 +371,7 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] Default namer should be an option in all cases. If it's None, then a random namer will be chosen.
 [X] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
     [X] Also, can this then become a queue_watcher?
-[ ] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
+[X] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
     [ ] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
 [ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
