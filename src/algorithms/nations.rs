@@ -16,7 +16,7 @@ use crate::world_map::NewNation;
 use crate::world_map::CultureType;
 use crate::world_map::TownForNations;
 use crate::errors::CommandError;
-use crate::algorithms::naming::LoadedNamers;
+use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::CultureWithType;
 use crate::world_map::CultureWithNamer;
@@ -28,7 +28,7 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
 use crate::utils::generate_colors;
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 

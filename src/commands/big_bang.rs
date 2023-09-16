@@ -10,8 +10,8 @@ use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
 use crate::world_map::WorldMap;
 use crate::algorithms::culture_sets::CultureSet;
+use crate::algorithms::naming::NamerSetSource;
 use crate::algorithms::naming::NamerSet;
-use crate::algorithms::naming::LoadedNamers;
 use crate::commands::create::LoadCreateSource;
 use crate::commands::create::LoadedSource;
 use crate::commands::create::Create;
@@ -148,8 +148,8 @@ pub struct PrimitiveArgs {
     pub overwrite: bool,
 
     #[arg(long)]
-    /// The name generator to use for naming nations and towns in tiles without a culture
-    pub default_namer: String
+    /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
+    pub default_namer: Option<String>
     
 }
 
@@ -189,9 +189,9 @@ impl Task for BigBang {
 
         let mut random = crate::utils::random_number_generator(self.seed);
 
-        let namer_set = NamerSet::from_files(self.namers)?;
+        let namer_set = NamerSetSource::from_files(self.namers)?;
 
-        let mut loaded_namers = namer_set.into_loaded_all(self.primitive_args.default_namer.clone(), progress)?;
+        let mut loaded_namers = NamerSet::load_from(namer_set, self.primitive_args.default_namer.clone(), &mut random, progress)?;
 
         let culture_set = CultureSet::from_files(self.cultures,&mut random,&mut loaded_namers)?;
 
@@ -205,7 +205,7 @@ impl Task for BigBang {
 impl BigBang {
 
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: CultureSet, namers: &mut LoadedNamers, loaded_source: LoadedSource, target_path: PathBuf, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: CultureSet, namers: &mut NamerSet, loaded_source: LoadedSource, target_path: PathBuf, progress: &mut Progress) -> Result<(), CommandError> {
 
         let mut target = WorldMap::create_or_edit(&target_path)?;
 

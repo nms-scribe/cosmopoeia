@@ -20,6 +20,7 @@ use crate::algorithms::random_points::load_points_layer;
 use crate::algorithms::triangles::load_triangles_layer;
 use crate::algorithms::tiles::load_tile_layer;
 use crate::world_map::NewTile;
+use crate::algorithms::naming::NamerSetSource;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::culture_sets::CultureSetItem;
@@ -233,6 +234,10 @@ subcommand_def!{
         pub namer_data: Vec<PathBuf>,
 
         #[arg(long)]
+        /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
+        pub default_namer: Option<String>,
+
+        #[arg(long)]
         // if true, the namer will load the defaults before any of the passed files.
         pub defaults: bool,
 
@@ -261,29 +266,30 @@ impl Task for Namers {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        fn test_namer<Random: Rng, Progress: ProgressObserver>(namers: &mut NamerSet, language: &String, progress: &mut Progress, rng: &mut Random) {
-            let mut namer = namers.load_one(language,progress).expect("Someone called this function with a namer set that didn't contain the provided language key.");
+        fn test_namer<Random: Rng>(namers: &mut NamerSet, language: &String, rng: &mut Random) {
+            let namer = namers.get_mut(Some(language)).expect("Someone called this function with a namer set that didn't contain the provided language key.");
             println!("language: {language}");
             println!("    name: {}",namer.make_name(rng));
             println!("   state: {}",namer.make_state_name(rng));
         
         }
         
-        let mut namers = NamerSet::from_files(self.namer_data)?;
+        let namers = NamerSetSource::from_files(self.namer_data)?;
 
         if self.write_json {
             print!("{}",namers.to_json()?)
 
         } else {
             let mut random = random_number_generator(self.seed);
+            let mut namers = NamerSet::load_from(namers, self.default_namer, &mut random, progress)?;
 
             if let Some(key) = self.language {
-                test_namer(&mut namers, &key, progress, &mut random)
+                test_namer(&mut namers, &key, &mut random)
             } else {
                 let mut languages = namers.list_names();
                 languages.sort(); // so the tests are reproducible.
                 for language in languages {
-                    test_namer(&mut namers, &language, progress, &mut random)
+                    test_namer(&mut namers, &language, &mut random)
                 }
     
             }
@@ -312,8 +318,8 @@ subcommand_def!{
         pub namers: Vec<PathBuf>,
 
         #[arg(long)]
-        /// The name generator to use for naming nations and towns in tiles without a culture
-        pub default_namer: String,
+        /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
+        pub default_namer: Option<String>,
 
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
@@ -340,9 +346,9 @@ impl Task for Cultures {
 
         let mut random = crate::utils::random_number_generator(self.seed);
 
-        let namer_set = NamerSet::from_files(self.namers)?;
+        let namer_set = NamerSetSource::from_files(self.namers)?;
 
-        let mut loaded_namers = namer_set.into_loaded_all(self.default_namer, progress)?;
+        let mut loaded_namers = NamerSet::load_from(namer_set, self.default_namer, &mut random, progress)?;
 
         let cultures = CultureSet::from_files(self.culture_data,&mut random,&mut loaded_namers)?;
 

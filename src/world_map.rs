@@ -43,9 +43,8 @@ use crate::utils::Extent;
 use crate::utils::create_line;
 use crate::utils::title_case::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
-use crate::algorithms::naming::NamerSet;
 use crate::algorithms::naming::Namer;
-use crate::algorithms::naming::LoadedNamers;
+use crate::algorithms::naming::NamerSet;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -2282,36 +2281,13 @@ impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature>
 
 impl CultureSchema {
 
-    pub(crate) fn get_lookup_and_namers<CultureEntity, Progress>(namers: NamerSet, default_namer: String, target: &WorldMap, progress: &mut Progress) -> Result<(EntityLookup<CultureSchema, CultureEntity>, LoadedNamers), CommandError> 
-    where 
-    CultureEntity: NamedEntity<CultureSchema> + for<'feature> TryFrom<CultureFeature<'feature>,Error=CommandError> + CultureWithNamer, Progress: ProgressObserver {
-        progress.announce("Preparing namers");
-        let mut cultures_layer = target.cultures_layer()?;
-        let (culture_lookup,loaded_namers) = {
-            let mut result = HashMap::new();
-            let mut load_namers = HashSet::new();
-
-            for entity in cultures_layer.read_features().into_entities::<CultureEntity>().watch(progress,"Indexing biomes.","Biomes indexed.") {
-                let (_,entity) = entity?;
-                let name = entity.name().to_owned();
-                load_namers.insert(entity.namer().to_owned());
-                result.insert(name, entity);
-            }
-
-            let loaded_namers = namers.into_loaded(load_namers, default_namer, progress)?;
-
-            (EntityLookup::from(result),loaded_namers)
-        };
-        Ok((culture_lookup, loaded_namers))
-    }
-
 }
 
 pub(crate) trait CultureWithNamer {
 
     fn namer(&self) -> &str;
 
-    fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut LoadedNamers) -> Result<&'namers mut Namer, CommandError> {
+    fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut NamerSet) -> Result<&'namers mut Namer, CommandError> {
         let namer = namers.get_mut(culture.map(|culture| culture.namer()))?;
         Ok(namer)
     }

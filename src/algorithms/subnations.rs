@@ -19,7 +19,7 @@ use crate::world_map::TileForSubnations;
 use crate::world_map::NationForSubnations;
 use crate::world_map::TownForSubnations;
 use crate::errors::CommandError;
-use crate::algorithms::naming::LoadedNamers;
+use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::CultureWithType;
 use crate::world_map::CultureWithNamer;
@@ -32,7 +32,7 @@ use crate::world_map::EntityLookup;
 use crate::world_map::SubnationForNormalize;
 
 
-pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForSubnations>(progress)?;
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForSubnations>(progress)?; 
@@ -211,7 +211,7 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
     Some(total_cost)
 }
 
-pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
 
     let max = subnation_max_cost(rng, subnation_percentage);
 

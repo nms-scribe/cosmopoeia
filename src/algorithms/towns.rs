@@ -15,7 +15,7 @@ use crate::utils::point_finder::PointFinder;
 use crate::utils::Extent;
 use crate::world_map::NewTown;
 use crate::errors::CommandError;
-use crate::algorithms::naming::LoadedNamers;
+use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::WatchableIterator;
 use crate::world_map::CultureWithNamer;
@@ -32,7 +32,7 @@ pub(crate) struct ScoredTileForTowns {
     pub(crate) town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut LoadedNamers, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
 
     // a lot of this is ported from AFMG
 

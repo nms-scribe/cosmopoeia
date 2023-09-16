@@ -15,7 +15,7 @@ use ordered_float::OrderedFloat;
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::RandomIndex;
-use crate::algorithms::naming::LoadedNamers;
+use crate::algorithms::naming::NamerSet;
 use crate::world_map::TileForCulturePrefSorting;
 
 #[derive(Clone,Serialize,Deserialize)]
@@ -120,7 +120,7 @@ pub(crate) struct CultureSetItem {
 
 impl CultureSetItem {
 
-    fn from<Random: Rng>(value: CultureSetItemSource, rng: &mut Random, namers: &mut LoadedNamers) -> Vec<Self> {
+    fn from<Random: Rng>(value: CultureSetItemSource, rng: &mut Random, namers: &mut NamerSet) -> Vec<Self> {
         let mut result = Vec::new();
         let count = match value.count {
             None => 1,
@@ -196,7 +196,7 @@ impl CultureSet {
         }
     }
 
-    pub(crate) fn from_files<Random: Rng>(files: Vec<PathBuf>, rng: &mut Random, namers: &mut LoadedNamers) -> Result<Self,CommandError> {
+    pub(crate) fn from_files<Random: Rng>(files: Vec<PathBuf>, rng: &mut Random, namers: &mut NamerSet) -> Result<Self,CommandError> {
         let mut result = Self::empty();
 
         for file in files {
@@ -221,7 +221,7 @@ impl CultureSet {
         self.source.push(data);
     }
     
-    pub(crate) fn extend_from_json<Reader: std::io::Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut LoadedNamers) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_json<Reader: std::io::Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
         let data = from_json_reader::<_,Vec<CultureSetItemSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
         for data in data {
             for item in CultureSetItem::from(data,rng,namers) {
@@ -234,7 +234,7 @@ impl CultureSet {
         
     }
 
-    pub(crate) fn extend_from_file<AsPath: AsRef<Path>, Random: Rng>(&mut self, file: AsPath, rng: &mut Random, namers: &mut LoadedNamers) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_file<AsPath: AsRef<Path>, Random: Rng>(&mut self, file: AsPath, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
 
         enum Format {
             JSON

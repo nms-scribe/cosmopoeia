@@ -41,6 +41,15 @@ impl Lake {
             let tile = layer.try_feature_by_id(&tile)?; 
             let tile = tile.geometry()?; 
             lake_geometry = tile.union(&lake_geometry).ok_or_else(|| CommandError::GdalUnionFailed)?; 
+            if !lake_geometry.is_valid() {
+                // I'm writing to stdout here because the is_valid also writes to stdout
+                // FUTURE: I can't use progress.warning here because it is borrowed for mutable, is there another way?
+                eprintln!("fixing invalid union");
+                let mut validate_options = gdal::cpl::CslStringList::new();
+                validate_options.add_string("METHOD=STRUCTURE")?;
+                lake_geometry = lake_geometry.make_valid(&validate_options)?
+            }
+    
         }
         Ok(lake_geometry)
     }

@@ -14,8 +14,8 @@ use crate::algorithms::population::generate_populations;
 use crate::algorithms::cultures::generate_cultures;
 use crate::algorithms::cultures::expand_cultures;
 use crate::algorithms::culture_sets::CultureSet;
+use crate::algorithms::naming::NamerSetSource;
 use crate::algorithms::naming::NamerSet;
-use crate::algorithms::naming::LoadedNamers;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::utils::random_number_generator;
 use crate::algorithms::tiles::CultureTheme;
@@ -80,8 +80,8 @@ subcommand_def!{
         pub namers: Vec<PathBuf>,
 
         #[arg(long)]
-        /// Namer to use when a culture is not available
-        pub default_namer: String,
+        /// Namer to use when a culture is not available, or one will be randomly chosen
+        pub default_namer: Option<String>,
         
         #[arg(long,default_value("10"))]
         /// The number of cultures to generate
@@ -112,9 +112,9 @@ impl Task for CreateCultures {
 
         let mut random = random_number_generator(self.seed);
 
-        let namer_set = NamerSet::from_files(self.namers)?;
+        let namer_set = NamerSetSource::from_files(self.namers)?;
 
-        let mut loaded_namers = namer_set.into_loaded_all(self.default_namer, progress)?;
+        let mut loaded_namers = NamerSet::load_from(namer_set,self.default_namer, &mut random, progress)?;
 
         let cultures = CultureSet::from_files(self.cultures,&mut random,&mut loaded_namers)?;
 
@@ -130,7 +130,7 @@ impl Task for CreateCultures {
 }
 
 impl CreateCultures {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &LoadedNamers, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         let size_variance = size_variance.clamp(0.0, 10.0);
 
         progress.announce("Generating cultures");
@@ -319,8 +319,8 @@ pub struct DefaultArgs {
     pub overwrite: bool,
 
     #[arg(long)]
-    /// The name generator to use for naming nations and towns in tiles without a culture
-    pub default_namer: String
+    /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
+    pub default_namer: Option<String>
     
 
 }
@@ -347,9 +347,9 @@ impl Task for GenPeople {
 
             let mut random = random_number_generator(default_args.seed);
 
-            let namer_set = NamerSet::from_files(default_args.namers)?;
+            let namer_set = NamerSetSource::from_files(default_args.namers)?;
     
-            let mut loaded_namers = namer_set.into_loaded_all(default_args.default_namer, progress)?;
+            let mut loaded_namers = NamerSet::load_from(namer_set, default_args.default_namer, &mut random, progress)?;
     
             let cultures = CultureSet::from_files(default_args.cultures,&mut random,&mut loaded_namers)?;
             
@@ -380,7 +380,7 @@ impl Task for GenPeople {
 }
 
 impl GenPeople {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &LoadedNamers, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
             Population::run_with_parameters(river_threshold, target, progress)?;
     

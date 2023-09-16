@@ -9,7 +9,7 @@ use crate::algorithms::nations::normalize_nations;
 use crate::algorithms::nations::expand_nations;
 use crate::algorithms::nations::generate_nations;
 use crate::world_map::CultureForNations;
-use crate::algorithms::naming::NamerSet;
+use crate::algorithms::naming::NamerSetSource;
 use crate::world_map::WorldMap;
 use crate::utils::random_number_generator;
 use crate::errors::CommandError;
@@ -22,7 +22,7 @@ use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::EntityLookup;
 use crate::world_map::CultureSchema;
-use crate::algorithms::naming::LoadedNamers;
+use crate::algorithms::naming::NamerSet;
 use crate::world_map::NamedEntity;
 use crate::world_map::CultureWithNamer;
 use crate::world_map::CultureWithType;
@@ -40,8 +40,8 @@ subcommand_def!{
         pub namers: Vec<PathBuf>,
 
         #[arg(long)]
-        /// The name generator to use for naming towns in tiles without a culture
-        pub default_namer: String,
+        /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
+        pub default_namer: Option<String>,
 
         #[arg(long,default_value("1"))]
         /// A number, clamped to 0-10, which controls how much cultures can vary in size
@@ -67,9 +67,10 @@ impl Task for Create {
 
         let mut target = WorldMap::edit(self.target)?;
 
-        let namers = NamerSet::from_files(self.namers)?;
+        let namers = NamerSetSource::from_files(self.namers)?;
+        let mut loaded_namers = NamerSet::load_from(namers, self.default_namer, &mut random, progress)?;
 
-        let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, self.default_namer, &mut target, progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
 
         target.with_transaction(|target| {
 
@@ -82,7 +83,7 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, size_variance: f64, overwrite_nations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: f64, overwrite_nations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating nations");
         generate_nations(target, random, &culture_lookup, loaded_namers, size_variance, overwrite_nations, progress)
     }
@@ -274,8 +275,8 @@ pub struct DefaultArgs {
     pub namers: Vec<PathBuf>,
 
     #[arg(long)]
-    /// The name generator to use for naming towns in tiles without a culture
-    pub default_namer: String,
+    /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
+    pub default_namer: Option<String>,
 
     #[arg(long,default_value("1"))]
     /// A number, clamped to 0-10, which controls how much cultures can vary in size
@@ -328,10 +329,12 @@ impl Task for GenNations {
 
             let mut target = WorldMap::edit(default_args.target)?;
     
-            let namers = NamerSet::from_files(default_args.namers)?;
+            let namers = NamerSetSource::from_files(default_args.namers)?;
     
-            let (culture_lookup,mut loaded_namers) = CultureSchema::get_lookup_and_namers::<CultureForNations,_>(namers, default_args.default_namer, &mut target, progress)?;
+            let mut loaded_namers = NamerSet::load_from(namers, default_args.default_namer, &mut random, progress)?;
 
+            let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+    
             Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.size_variance, default_args.river_threshold, default_args.limit_factor, default_args.bezier_scale, default_args.overwrite, &mut target, progress)
 
         } else if let Some(command) = self.command {
@@ -347,7 +350,7 @@ impl Task for GenNations {
 
 impl GenNations {
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut LoadedNamers, size_variance: f64, river_threshold: f64, limit_factor: f64, bezier_scale: f64, overwrite_nations: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: f64, river_threshold: f64, limit_factor: f64, bezier_scale: f64, overwrite_nations: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
     
             Create::run_with_parameters(random, culture_lookup, loaded_namers, size_variance, overwrite_nations, target, progress)?;

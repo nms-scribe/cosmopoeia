@@ -244,9 +244,18 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         }
         progress.start_unknown_endpoint(|| "Uniting tiles.");
 
-        let tile_union = first_tile.union(&next_tiles);
+        let tile_union = first_tile.union(&next_tiles).ok_or_else(|| CommandError::GdalUnionFailed)?;
+        let tile_union = if !tile_union.is_valid() {
+            // I'm writing to stdout here because the is_valid also writes to stdout
+            progress.warning(||"fixing invalid union");
+            let mut validate_options = gdal::cpl::CslStringList::new();
+            validate_options.add_string("METHOD=STRUCTURE")?;
+            tile_union.make_valid(&validate_options)?
+        } else {
+            tile_union
+        };
         progress.finish(|| "Tiles united.");
-        tile_union
+        Some(tile_union)
     } else {
         None
     };
@@ -263,6 +272,15 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
             for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
                 ocean = ocean.difference(&new_polygon).ok_or_else(|| CommandError::GdalDifferenceFailed)?; 
+                if !ocean.is_valid() {
+                    // I'm writing to stdout here because the is_valid also writes to stdout
+                    // FUTURE: I can't use progress.warning because I've got progress borrowed as mutable. Is there another way?
+                    eprintln!("fixing invalid difference");
+                    let mut validate_options = gdal::cpl::CslStringList::new();
+                    validate_options.add_string("METHOD=STRUCTURE")?;
+                    ocean = ocean.make_valid(&validate_options)?
+                };
+        
                 polygons.push(new_polygon);
             }
         }
@@ -508,7 +526,16 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
                 }
                 let united = first.union(&remaining).ok_or_else(|| CommandError::GdalUnionFailed)?;
                 let united = force_multipolygon(united)?;
-                united
+                if !united.is_valid() {
+                    // I'm writing to stdout here because the is_valid also writes to stdout
+                    // FUTURE: I can't use the progress.warning because it is borrowed for mutable, is there another way?
+                    eprintln!("fixing invalid feature {}",fid);
+                    let mut validate_options = gdal::cpl::CslStringList::new();
+                    validate_options.add_string("METHOD=STRUCTURE")?;
+                    united.make_valid(&validate_options)?
+                } else {
+                    united
+                }
             } else {
                 empty_features.push((fid,feature.name()?));
                 Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?            

@@ -367,11 +367,8 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] Allow the user to use CultureSet::make_random_culture_set and CultureSet::make_random_culture_set_with_same_namer when generating cultures.
     [X] Do this by adding a way of specifying random values for cultures.
 [X] Can I make the Cultureset serialization allow a number instead of a CultureSet or CultureSource, to simpley generate that many random cultures with random names?
-[ ] Before loading the namers, I should check with the culture source to see if anyone actually needs that, and possibly collect the list of names to load.
-    [ ] Alternatively, since random cultures now require me to load all namers anyway, maybe I should just do that all the time whenever I need namers? If the user wants to avoid that, they can just provide a smaller namer set.
-    [ ] Another alternative: just check which ones have no name and figure out what namers are needed for that. Of course, if there are any with no name and no namer, we have to load all of them anyway.
-    [ ] And if we don't load all of them, but it turns out we need them in a later step, we'll have to be able to "reload". Maybe we can figure out which ones to load by reading through the culture set first? Except, we already need the namers to load the cultures.
-[ ] Default namer should be an option in all cases. If it's None, then a random namer will be chosen.
+[X] Since we need to load all of the namers to generate the cultures anyway, and the primary usage is intended to be the BigBang command, just load the namers automatically when namer sets are read from the file, everywhere. It doesn't take *that much time* to load them, and they will still only be loaded in steps that need them.
+[X] Default namer should be an option in all cases. If it's None, then a random namer will be chosen.
 [ ] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
 [ ] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
@@ -447,3 +444,4 @@ These are things that really should be done before release, but they might take 
 [ ] Revisit the target.reedit problem in big_bang, see if I can get an MRE that causes the problem and track down the problem.
 [ ] Revisit subnation curvify: the subnations should follow their nation borders when possible. This might be done more easily if we curvify the subnations first, then just dissolve the nations out of their subnations.
 [ ] Review all of the algorithms to see if there are better ways
+[ ] Any way to save the state of the random number generator so we can reload it later? This will be helpful in reproducing stuff while running separate steps.

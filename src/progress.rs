@@ -142,8 +142,15 @@ impl ConsoleProgressBar {
         }
     }
 
+    pub(crate) fn message(&self, message: &str) {
+        if let Some(bar) = &self.bar {
+            bar.println(message)
+        } else {
+            eprintln!("{}",message)
+        }
+    }
+
     pub(crate) fn warning(&self, message: &str) {
-        // FUTURE: Make this in another color?
         let message = format!("!! {} !!",style(message).red());
         if let Some(bar) = &self.bar {
             bar.println(message)
@@ -186,9 +193,7 @@ impl ProgressObserver for ConsoleProgressBar {
 
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
-        if let Some(bar) = &self.bar {
-            bar.set_message(callback().as_ref().to_owned())
-        }
+        ConsoleProgressBar::message(&self, callback().as_ref())
     }
 
     fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback){
