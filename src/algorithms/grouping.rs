@@ -14,22 +14,15 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
     let tile_count = tiles.feature_count();
 
     // we just want land tiles
-    let mut table = tiles.read_features().to_entities_index::<_,TileForGroupingCalc>(progress)?;
+    let table = tiles.read_features().to_entities_index::<_,TileForGroupingCalc>(progress)?;
 
     let mut groupings = Vec::new();
     let mut ocean = HashSet::new();
     let mut next_grouping_id = 1 as u64..;
 
-    // I can't watch anything here, because this isn't really a queue and I'm only picking the first key off the iterator every time I create a key iterator.
-    // I could create a WatchableHashMap, but I don't foresee this process being used a lot.
-    let original_table_len = table.len();
-    progress.start_known_endpoint(|| ("Calculating group types.",original_table_len));
-
+    let mut table = table.watch_queue(progress,"Calculating group types.","Group types calculated.");
     // pop the next one off of the table.
-    // 'watch_queue' isn't going to work here since it only watches when it picks.
-    while let Some(tile) = table.keys().next().cloned().map(|first| table.try_remove(&first)) {
-        let tile = tile?;
-        progress.update(|| original_table_len - table.len());
+    while let Some((fid,tile)) = table.pop() {
 
 
         // NOTE: I previously considered using the lake_id for the lake grouping_id, and getting rid of that field.
@@ -37,12 +30,12 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
         // numbers. Keeping them separate will simplify some algorithms, as otherwise I'd have to check both the
         // grouping and grouping_id to make sure I'm looking in the right place.
         let grouping_id = next_grouping_id.next().expect("Why would an unlimited range fail?");
-        let mut group = vec![tile.fid];
+        let mut group = vec![fid];
         let mut neighbors = tile.neighbors.clone();
 
         let grouping_type = if tile.grouping.is_ocean() {
             // track this as an ocean, so we can tell if land borders an ocean later.
-            ocean.insert(tile.fid);
+            ocean.insert(fid);
 
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
             while let Some((neighbor_fid,_)) = neighbors.pop() {
@@ -52,7 +45,6 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                         ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
                         neighbors.extend(neighbor.neighbors.iter());
                         table.try_remove(&neighbor_fid)?;
-                        progress.update(|| original_table_len - table.len());
                         group.push(neighbor_fid);
                     }
     
@@ -76,7 +68,6 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                         // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
                         neighbors.extend(neighbor.neighbors.iter());
                         table.try_remove(&neighbor_fid)?;
-                        progress.update(|| original_table_len - table.len());
                         group.push(neighbor_fid);
                     }
     

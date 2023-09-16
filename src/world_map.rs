@@ -832,6 +832,23 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         self.inner.get(key)
     }
 
+    pub(crate) fn pop(&mut self) -> Option<(u64, EntityType)> {
+        self.inner.pop()
+    }
+
+    pub(crate) fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<FinishMessage, Progress, SchemaType, EntityType> {
+        progress.start(|| (start,Some(self.len())));
+        EntityIndexQueueWatcher { 
+            finish: finish, 
+            progress: progress, 
+            inner: self,
+            popped: 0
+        }
+
+    }
+
+
+
 }
 
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> IntoIterator for EntityIndex<SchemaType,EntityType> {
@@ -851,6 +868,45 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> FromIterator<(u64,Entit
     }
 }
         
+
+pub(crate) struct EntityIndexQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> {
+    finish: Message,
+    progress: &'progress mut Progress,
+    inner: EntityIndex<SchemaType,EntityType>,
+    popped: usize,
+}
+
+impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexQueueWatcher<'progress,Message,Progress,SchemaType,EntityType> {
+
+    pub(crate) fn pop(&mut self) -> Option<(u64,EntityType)> {
+        let result = self.inner.pop();
+        self.popped += 1;
+        let len = self.inner.len();
+        if len == 0 {
+            self.progress.finish(|| &self.finish)
+        } else {
+            self.progress.update(|| self.popped);
+        }
+        result
+    }
+
+    pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
+        self.inner.maybe_get(key)
+    }
+
+    pub(crate) fn try_remove(&mut self, key: &u64) -> Result<EntityType,CommandError> {
+        let result = self.inner.try_remove(key)?;
+        self.popped += 1;
+        let len = self.inner.len();
+        if len == 0 {
+            self.progress.finish(|| &self.finish)
+        } else {
+            self.progress.update(|| self.popped);
+        }
+        Ok(result)
+    }
+
+} 
 
 
 pub(crate) struct EntityLookup<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> {
@@ -1383,7 +1439,6 @@ entity!(TileForWaterDistance: Tile {
 
 
 entity!(TileForGroupingCalc: Tile {
-    fid: u64,
     grouping: Grouping,
     lake_id: Option<u64>,
     neighbors: Vec<(u64,i32)>

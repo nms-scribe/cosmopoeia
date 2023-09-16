@@ -369,7 +369,8 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] Can I make the Cultureset serialization allow a number instead of a CultureSet or CultureSource, to simpley generate that many random cultures with random names?
 [X] Since we need to load all of the namers to generate the cultures anyway, and the primary usage is intended to be the BigBang command, just load the namers automatically when namer sets are read from the file, everywhere. It doesn't take *that much time* to load them, and they will still only be loaded in steps that need them.
 [X] Default namer should be an option in all cases. If it's None, then a random namer will be chosen.
-[ ] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
+[X] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
+    [X] Also, can this then become a queue_watcher?
 [ ] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
     [ ] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
