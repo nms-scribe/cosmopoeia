@@ -6,6 +6,7 @@ use rand::Rng;
 use crate::subcommand_def;
 use crate::commands::create::CreateSource;
 use crate::commands::Task;
+use crate::commands::TargetArg;
 use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
 use crate::world_map::WorldMap;
@@ -24,12 +25,13 @@ use crate::commands::gen_towns::GenTowns;
 use crate::commands::gen_nations::GenNations;
 use crate::commands::gen_subnations::GenSubnations;
 
+
 #[derive(Args)]
 pub struct PrimitiveArgs {
+
     #[arg(long,default_value="10000")]
     /// The rough number of tiles to generate for the image
     pub tiles: usize,
-
 
     /// The rough temperature (in celsius) at the equator
     #[arg(long,default_value="25",allow_hyphen_values=true)]
@@ -153,13 +155,12 @@ pub struct PrimitiveArgs {
     
 }
 
-
 subcommand_def!{
     /// Generates a world with all of the steps.
     pub struct BigBang {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        target_arg: TargetArg,
 
         #[arg(long,required(true))] 
         /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
@@ -197,7 +198,7 @@ impl Task for BigBang {
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
-        Self::run_default(&mut random,self.primitive_args,culture_set,&mut loaded_namers,loaded_source,self.target,progress)
+        Self::run_default(&mut random,self.primitive_args,culture_set,&mut loaded_namers,loaded_source,self.target_arg,progress)
 
     }
 }
@@ -205,9 +206,9 @@ impl Task for BigBang {
 impl BigBang {
 
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: CultureSet, namers: &mut NamerSet, loaded_source: LoadedSource, target_path: PathBuf, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: CultureSet, namers: &mut NamerSet, loaded_source: LoadedSource, target_arg: TargetArg, progress: &mut Progress) -> Result<(), CommandError> {
 
-        let mut target = WorldMap::create_or_edit(&target_path)?;
+        let mut target = WorldMap::create_or_edit(&target_arg.target)?;
 
         Create::run_default(primitive_args.tiles, primitive_args.overwrite || primitive_args.overwrite_tiles, loaded_source, &mut target, random, progress)?;
 

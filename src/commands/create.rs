@@ -20,6 +20,7 @@ use crate::algorithms::terrain::TerrainTask;
 use crate::commands::terrain::TerrainCommand;
 use crate::world_map::ElevationLimits;
 use crate::world_map::WorldMapTransaction;
+use crate::commands::TargetArg;
 
 // I don't form the subcommands for this quite the same, since I already have a subcommand for specifying the source.
 
@@ -28,8 +29,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct CreateCalcNeighbors {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg
 
 
     }
@@ -48,7 +49,7 @@ impl Task for CreateCalcNeighbors {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -86,7 +87,7 @@ trait LoadedCreateSource {
 
 
 subcommand_def!{
-    /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
+    /// Creates voronoi tiles in the same extent as a heightmap with zero elevation
     pub struct FromHeightmap {
 
         /// The path to the heightmap containing the elevation data
@@ -133,7 +134,7 @@ impl LoadCreateSource for FromHeightmap {
 }
 
 subcommand_def!{
-    /// Converts a heightmap into voronoi tiles for use in nfmt, but doesn't fill in any data.
+    /// Creates voronoi tiles in the given extent with zero elevation
     pub struct Blank {
 
         /// the height (from north to south) in degrees of the world extents
@@ -220,8 +221,9 @@ subcommand_def!{
     /// Creates the random tiles and initial elevations for a world.
     #[command(hide=true)]
     pub struct CreateTiles {
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="10000")]
         /// The rough number of tiles to generate for the image
@@ -262,7 +264,7 @@ impl Task for CreateTiles {
 
         let loaded_source = self.source.load(&mut random, progress)?;
 
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -279,8 +281,9 @@ impl Task for CreateTiles {
 subcommand_def!{
     /// Creates the random tiles and initial elevations for a world.
     pub struct Create {
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="10000")]
         /// The rough number of tiles to generate for the image
@@ -309,7 +312,7 @@ impl Task for Create {
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
 
         Self::run_default(self.tiles,self.overwrite,loaded_source, &mut target, &mut random, progress)
 

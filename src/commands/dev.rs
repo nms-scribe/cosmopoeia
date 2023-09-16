@@ -5,6 +5,7 @@ use clap::Subcommand;
 use rand::Rng;
 
 use super::Task;
+use crate::commands::TargetArg;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::utils::random_number_generator;
@@ -35,8 +36,8 @@ subcommand_def!{
         // Path to the source height map to get extents from
         pub source: PathBuf,
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="10000")]
         /// The rough number of pixels to generate for the image
@@ -57,7 +58,7 @@ impl Task for PointsFromHeightmap {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let source = RasterMap::open(self.source)?;
         let extent = source.bounds()?.extent();
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
         let random = random_number_generator(self.seed);
         let generator = PointGenerator::new(random, extent, self.points);
 
@@ -76,6 +77,9 @@ impl Task for PointsFromHeightmap {
 subcommand_def!{
     /// Creates a random points vector layer given an extent
     pub struct PointsFromExtent {
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
+
         #[arg(allow_hyphen_values=true)]
         pub west: f64,
 
@@ -87,9 +91,6 @@ subcommand_def!{
 
         #[arg(allow_hyphen_values=true)]
         pub east: f64,
-
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
 
         #[arg(long)]
         /// The rough number of pixels horizontally separating each point [Default: a value that places about 10k points]
@@ -113,7 +114,7 @@ impl Task for PointsFromExtent {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
         let random = random_number_generator(self.seed);
         let generator = PointGenerator::new(random, extent, self.points);
         
@@ -133,8 +134,8 @@ subcommand_def!{
     /// Creates delaunay triangles from a points layer
     pub struct TrianglesFromPoints {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -146,7 +147,7 @@ impl Task for TrianglesFromPoints {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let mut points = target.points_layer()?;
     
@@ -170,8 +171,8 @@ subcommand_def!{
     /// Creates voronoi tiles out of a delaunay triangles layer
     pub struct VoronoiFromTriangles {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long)]
         pub extents: PathBuf,
@@ -203,7 +204,7 @@ impl Task for VoronoiFromTriangles {
 
         let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let mut triangles = target.triangles_layer()?;
     

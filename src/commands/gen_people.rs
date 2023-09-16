@@ -21,14 +21,15 @@ use crate::utils::random_number_generator;
 use crate::algorithms::tiles::CultureTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::world_map::WorldMapTransaction;
+use crate::commands::TargetArg;
 
 subcommand_def!{
     /// Generates background population of tiles
     #[command(hide=true)]
     pub struct Population {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="10")]
         /// A waterflow threshold above which population increases along the coast
@@ -42,7 +43,7 @@ impl Task for Population {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -68,8 +69,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct CreateCultures {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,required(true))] 
         /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
@@ -118,7 +119,7 @@ impl Task for CreateCultures {
 
         let cultures = CultureSet::from_files(self.cultures,&mut random,&mut loaded_namers)?;
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(&mut random, cultures, &loaded_namers, self.count, self.size_variance, self.river_threshold, self.overwrite, target, progress)
@@ -144,8 +145,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct ExpandCultures {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="10")]
         /// A waterflow threshold above which the tile will count as a river
@@ -163,7 +164,7 @@ impl Task for ExpandCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
         target.with_transaction(|target| {
             Self::run_with_parameters(self.river_threshold, self.limit_factor, target, progress)
         })?;
@@ -187,8 +188,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct DissolveCultures {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -198,7 +199,7 @@ impl Task for DissolveCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -225,8 +226,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct CurvifyCultures {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
@@ -240,7 +241,7 @@ impl Task for CurvifyCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
         let bezier_scale = self.bezier_scale;
 
         target.with_transaction(|target| {
@@ -279,8 +280,8 @@ command_def!{
 #[derive(Args)]
 pub struct DefaultArgs {
 
-    /// The path to the world map GeoPackage file
-    pub target: PathBuf,
+    #[clap(flatten)]
+    pub target_arg: TargetArg,
 
     #[arg(long,required(true))] 
     /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
@@ -353,7 +354,7 @@ impl Task for GenPeople {
     
             let cultures = CultureSet::from_files(default_args.cultures,&mut random,&mut loaded_namers)?;
             
-            let mut target = WorldMap::edit(default_args.target)?;
+            let mut target = WorldMap::edit(default_args.target_arg.target)?;
     
             Self::run_default(
                 default_args.river_threshold, 

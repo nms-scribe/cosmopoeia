@@ -1,9 +1,8 @@
-use std::path::PathBuf;
-
 use clap::Args;
 use clap::Subcommand;
 
 use super::Task;
+use crate::commands::TargetArg;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;
@@ -22,8 +21,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Data {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long)]
         /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -37,7 +36,7 @@ impl Task for Data {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -64,8 +63,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Apply {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -75,7 +74,7 @@ impl Task for Apply {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
 
@@ -107,8 +106,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Dissolve {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -118,7 +117,7 @@ impl Task for Dissolve {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -145,8 +144,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Curvify {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
@@ -160,7 +159,7 @@ impl Task for Curvify {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(self.bezier_scale, target, progress)
@@ -192,8 +191,9 @@ command_def!{
 
 #[derive(Args)]
 pub struct DefaultArgs {
-    /// The path to the world map GeoPackage file
-    pub target: PathBuf,
+
+    #[clap(flatten)]
+    pub target_arg: TargetArg,
 
     #[arg(long,default_value="100")]
     /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
@@ -223,7 +223,7 @@ impl Task for GenBiome {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(args) = self.default_args {
-            let mut target = WorldMap::edit(args.target)?;
+            let mut target = WorldMap::edit(args.target_arg.target)?;
 
             Self::run_default(args.overwrite, args.bezier_scale, &mut target, progress)
     

@@ -27,6 +27,7 @@ use crate::algorithms::naming::NamerSet;
 use crate::world_map::NamedEntity;
 use crate::world_map::CultureWithNamer;
 use crate::world_map::CultureWithType;
+use crate::commands::TargetArg;
 
 
 
@@ -35,8 +36,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Create {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
@@ -68,7 +69,7 @@ impl Task for Create {
 
         let mut random = random_number_generator(self.seed);
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let namers = NamerSetSource::from_files(self.namers)?;
 
@@ -103,8 +104,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Expand {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value("20"))]
         /// The percent of towns in each nation to use for subnations
@@ -127,7 +128,7 @@ impl Task for Expand {
 
         let mut random = random_number_generator(self.seed);
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
         
 
         target.with_transaction(|target| {
@@ -156,8 +157,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct FillEmpty {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,required=true)]
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
@@ -185,7 +186,7 @@ impl Task for FillEmpty {
 
         let mut random = random_number_generator(self.seed);
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
         
         let namers = NamerSetSource::from_files(self.namers)?;
 
@@ -218,8 +219,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Normalize {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
 
     }
@@ -230,7 +231,7 @@ impl Task for Normalize {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -256,8 +257,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Dissolve {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -267,7 +268,7 @@ impl Task for Dissolve {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -292,8 +293,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Curvify {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
@@ -307,7 +308,7 @@ impl Task for Curvify {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let bezier_scale = self.bezier_scale;
         target.with_transaction(|target| {
@@ -347,8 +348,8 @@ command_def!{
 #[derive(Args)]
 pub struct DefaultArgs {
 
-    /// The path to the world map GeoPackage file
-    pub target: PathBuf,
+    #[clap(flatten)]
+    pub target_arg: TargetArg,
 
     #[arg(long,required=true)]
     /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
@@ -399,7 +400,7 @@ impl Task for GenSubnations {
 
             let mut random = random_number_generator(default_args.seed);
 
-            let mut target = WorldMap::edit(default_args.target)?;
+            let mut target = WorldMap::edit(default_args.target_arg.target)?;
 
             let namers = NamerSetSource::from_files(default_args.namers)?;
 

@@ -28,6 +28,7 @@ use crate::raster::RasterMap;
 use crate::algorithms::terrain::SampleOceanBelowLoaded;
 use crate::algorithms::terrain::SampleOceanMaskedLoaded;
 use crate::algorithms::terrain::SampleElevationLoaded;
+use super::TargetArg;
 
 
 impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>> Deserialize<'deserializer> for ArgRange<NumberType> {
@@ -628,8 +629,8 @@ subcommand_def!{
     /// Calculates neighbors for tiles
     pub struct Terrain {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[command(subcommand)]
         pub command: TerrainCommand,
@@ -651,7 +652,7 @@ impl Task for Terrain {
 
         let mut random = random_number_generator(self.seed);
 
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         if self.serialize {
             println!("{}",self.command.to_json()?);

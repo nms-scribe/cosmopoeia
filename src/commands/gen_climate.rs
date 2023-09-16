@@ -1,9 +1,8 @@
-use std::path::PathBuf;
-
 use clap::Args;
 use clap::Subcommand;
 
 use super::Task;
+use crate::commands::TargetArg;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;
@@ -19,8 +18,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Temperature {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         /// The rough temperature (in celsius) at the equator
         #[arg(long,default_value="25",allow_hyphen_values=true)]
@@ -37,7 +36,7 @@ impl Task for Temperature {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -65,8 +64,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Winds {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="225")]
         /// Wind direction above latitude 60 N
@@ -100,7 +99,7 @@ impl Task for Winds {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let winds = [
             self.north_polar as i32,
@@ -137,8 +136,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Precipitation {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="100")]
         /// Amount of moisture on a scale of 0-500
@@ -153,7 +152,7 @@ impl Task for Precipitation {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -186,8 +185,8 @@ command_def!{
 #[derive(Args)]
 pub struct DefaultArgs {
 
-    /// The path to the world map GeoPackage file
-    pub target: PathBuf,
+    #[clap(flatten)]
+    pub target_arg: TargetArg,
 
     /// The rough temperature (in celsius) at the equator
     #[arg(long,default_value="25",allow_hyphen_values=true)]
@@ -250,7 +249,7 @@ impl Task for GenClimate {
         if let Some(command) = self.command {
             command.run(progress)
         } else if let Some(all) = self.default_args {
-            let mut target = WorldMap::edit(all.target)?;
+            let mut target = WorldMap::edit(all.target_arg.target)?;
 
             let winds = [
                 all.north_polar_wind as i32,

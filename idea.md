@@ -373,7 +373,8 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
     [X] Also, can this then become a queue_watcher?
 [X] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
-    [ ] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
+    [-] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
+    [ ] Probably the easiest way I can think of to do this (macros are potentially possible but basically require me to parse a whole struct) is to make use of the #[clap(flatten)] attribute and just group the attributes into sets of standard attributes. This means additional member chaining, but it will work from a UI point of view. Go through each command and look for "shared" arguments. Some of them contain multiple arguments (wind directions, extents)
 [ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
 [ ] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
 

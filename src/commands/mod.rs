@@ -1,6 +1,8 @@
+use std::path::PathBuf;
 
 use clap::Subcommand;
 use clap::Parser;
+use clap::Args;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -110,6 +112,15 @@ macro_rules! subcommand_def {
                 
     };
 }
+
+#[derive(Args)]
+pub struct TargetArg {
+    /// The path to the world map GeoPackage file
+    pub target: PathBuf
+
+}
+
+
 
 
 #[derive(Parser)]

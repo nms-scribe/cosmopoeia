@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use clap::Args;
 use clap::Subcommand;
 
@@ -19,6 +17,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::world_map::TileForWaterFill;
 use crate::world_map::TileSchema;
 use crate::world_map::EntityIndex;
+use super::TargetArg;
 
 
 subcommand_def!{
@@ -26,8 +25,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Coastline {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long,default_value="100")]
         /// This number is used for generating points to make curvy coastlines. The higher the number, the smoother the curves.
@@ -55,7 +54,7 @@ impl Task for Coastline {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::create_or_edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
 
@@ -83,8 +82,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Flow {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -94,7 +93,7 @@ impl Task for Flow {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -118,8 +117,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Lakes {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long)]
         /// If true and the lakes layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -143,7 +142,7 @@ impl Task for Lakes {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
@@ -168,8 +167,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Rivers {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
         #[arg(long)]
         /// If true and the river_segments layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -187,7 +186,7 @@ impl Task for Rivers {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(self.bezier_scale, self.overwrite, progress, target)
@@ -213,8 +212,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct ShoreDistance {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -224,7 +223,7 @@ impl Task for ShoreDistance {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -249,8 +248,8 @@ subcommand_def!{
     #[command(hide=true)]
     pub struct Grouping {
 
-        /// The path to the world map GeoPackage file
-        pub target: PathBuf,
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
 
     }
 }
@@ -260,7 +259,7 @@ impl Task for Grouping {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target)?;
+        let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
@@ -296,8 +295,8 @@ command_def!{
 #[derive(Args)]
 pub struct DefaultArgs {
 
-    /// The path to the world map GeoPackage file
-    pub target: PathBuf,
+    #[clap(flatten)]
+    pub target_arg: TargetArg,
 
     #[arg(long,default_value="100")]
     /// This number is used for generating points to follow river curves and make curvy lakes. The higher the number, the smoother the curves.
@@ -348,7 +347,7 @@ impl Task for GenWater {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(args) = self.default_args {
-            let mut target = WorldMap::edit(args.target)?;
+            let mut target = WorldMap::edit(args.target_arg.target)?;
 
             Self::run_default(args.bezier_scale, 
                 args.buffer_scale, 
