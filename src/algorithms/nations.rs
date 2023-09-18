@@ -27,8 +27,9 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
 use crate::utils::generate_colors;
+use crate::commands::OverwriteNationsArg;
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: f64, overwrite_layer: OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 

@@ -45,6 +45,16 @@ use crate::utils::title_case::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::Namer;
 use crate::algorithms::naming::NamerSet;
+use crate::commands::OverwriteTilesArg;
+use crate::commands::OverwriteCoastlineArg;
+use crate::commands::OverwriteOceanArg;
+use crate::commands::OverwriteRiversArg;
+use crate::commands::OverwriteLakesArg;
+use crate::commands::OverwriteBiomesArg;
+use crate::commands::OverwriteCulturesArg;
+use crate::commands::OverwriteTownsArg;
+use crate::commands::OverwriteSubnationsArg;
+use crate::commands::OverwriteNationsArg;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -2909,18 +2919,18 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_tile_layer(&mut self, overwrite: bool) -> Result<TileLayer,CommandError> {
-        Ok(TileLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_tile_layer(&mut self, overwrite: OverwriteTilesArg) -> Result<TileLayer,CommandError> {
+        Ok(TileLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_tiles)?)
 
     }
 
-    pub(crate) fn create_rivers_layer(&mut self, overwrite: bool) -> Result<RiverLayer,CommandError> {
-        Ok(RiverLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_rivers_layer(&mut self, overwrite: OverwriteRiversArg) -> Result<RiverLayer,CommandError> {
+        Ok(RiverLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_rivers)?)
 
     }
 
-    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: bool) -> Result<LakeLayer,CommandError> {
-        Ok(LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: OverwriteLakesArg) -> Result<LakeLayer,CommandError> {
+        Ok(LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_lakes)?)
     }
 
     pub (crate) fn edit_lakes_layer(&mut self) -> Result<LakeLayer,CommandError> {
@@ -2932,8 +2942,8 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_biomes_layer(&mut self, overwrite: bool) -> Result<BiomeLayer,CommandError> {
-        Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_biomes_layer(&mut self, overwrite: OverwriteBiomesArg) -> Result<BiomeLayer,CommandError> {
+        Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_biomes)?)
     }
 
     pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
@@ -2941,8 +2951,8 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_cultures_layer(&mut self, overwrite: bool) -> Result<CultureLayer,CommandError> {
-        Ok(CultureLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+    pub(crate) fn create_cultures_layer(&mut self, overwrite: OverwriteCulturesArg) -> Result<CultureLayer,CommandError> {
+        Ok(CultureLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_cultures)?)
     }
 
     pub(crate) fn edit_cultures_layer(&mut self) -> Result<CultureLayer,CommandError> {
@@ -2950,8 +2960,8 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: bool) -> Result<TownLayer,CommandError> {
-        Ok(TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: OverwriteTownsArg) -> Result<TownLayer,CommandError> {
+        Ok(TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_towns)?)
     }
 
     pub(crate) fn edit_towns_layer(&mut self) -> Result<TownLayer,CommandError> {
@@ -2959,28 +2969,28 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: bool) -> Result<NationLayer,CommandError> {
-        Ok(NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: OverwriteNationsArg) -> Result<NationLayer,CommandError> {
+        Ok(NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_nations)?)
     }
 
     pub(crate) fn edit_nations_layer(&mut self) -> Result<NationLayer,CommandError> {
         Ok(NationLayer::open_from_dataset(&mut self.dataset)?)
     }
 
-    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: bool) -> Result<SubnationLayer,CommandError> {
-        Ok(SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer)?)
+    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: OverwriteSubnationsArg) -> Result<SubnationLayer,CommandError> {
+        Ok(SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_subnations)?)
     }
 
     pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationLayer,CommandError> {
         Ok(SubnationLayer::open_from_dataset(&mut self.dataset)?)
     }
 
-    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: bool) -> Result<CoastlineLayer,CommandError> {
-        Ok(CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline)?)
+    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: OverwriteCoastlineArg) -> Result<CoastlineLayer,CommandError> {
+        Ok(CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline.overwrite_coastline)?)
     }
 
-    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: bool) -> Result<OceanLayer,CommandError> {
-        Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean)?)
+    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: OverwriteOceanArg) -> Result<OceanLayer,CommandError> {
+        Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean.overwrite_ocean)?)
     }
 
     /* Uncomment this to add a line layer for playing around with ideas.

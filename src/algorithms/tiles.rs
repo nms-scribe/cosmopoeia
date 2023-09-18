@@ -51,6 +51,10 @@ use crate::algorithms::triangles::DelaunayGenerator;
 use crate::algorithms::random_points::PointGenerator;
 use crate::utils::ToGeometryCollection;
 use crate::world_map::NamedFeature;
+use crate::commands::OverwriteTilesArg;
+use crate::commands::OverwriteCoastlineArg;
+use crate::commands::OverwriteOceanArg;
+use crate::commands::BezierScaleArg;
 
 
 pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -73,7 +77,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
 
 
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
@@ -219,7 +223,7 @@ pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TileLayer<'_,'_>) 
     })
 }
 
-pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_coastline: OverwriteCoastlineArg, overwrite_ocean: OverwriteOceanArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // FUTURE: There is an issue with coastlines extending over the edge of the borders after curving. I will have to deal with these someday.
     // FUTURE: After curving, towns which are along the coastline will sometimes now be in the ocean. I may need to deal with that as well, someday.
@@ -270,7 +274,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let mut polygons = Vec::new();
         let union_polygons = multipolygon_to_polygons(tile_union);
         for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
-            for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
+            for new_polygon in bezierify_polygon(&polygon,&bezier_scale)? {
                 ocean = ocean.difference(&new_polygon).ok_or_else(|| CommandError::GdalDifferenceFailed)?; 
                 if !ocean.is_valid() {
                     // I'm writing to stdout here because the is_valid also writes to stdout

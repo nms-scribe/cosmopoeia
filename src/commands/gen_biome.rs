@@ -15,6 +15,8 @@ use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::BiomeMatrix;
+use super::OverwriteBiomesArg;
+use super::BezierScaleArg;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -24,9 +26,9 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long)]
-        /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool
+
+        #[clap(flatten)]
+        pub overwrite_biomes_arg: OverwriteBiomesArg,
 
     }
 }
@@ -40,7 +42,7 @@ impl Task for Data {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(self.overwrite, target, progress)
+            Self::run_with_parameters(self.overwrite_biomes_arg, target, progress)
 
         })?;
 
@@ -50,7 +52,7 @@ impl Task for Data {
 
 impl Data {
 
-    fn run_with_parameters<Progress: ProgressObserver>(overwrite: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(overwrite: OverwriteBiomesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
 
         progress.announce("Filling biome defaults");
 
@@ -147,9 +149,8 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        pub bezier_scale: f64,
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
 
     }
 }
@@ -162,7 +163,7 @@ impl Task for Curvify {
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(self.bezier_scale, target, progress)
+            Self::run_with_parameters(&self.bezier_scale_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -171,7 +172,7 @@ impl Task for Curvify {
 }
 
 impl Curvify {
-    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making biome polygons curvy");
 
         curvify_layer_by_theme::<_,BiomeTheme>(target, bezier_scale, progress)
@@ -195,13 +196,11 @@ pub struct DefaultArgs {
     #[clap(flatten)]
     pub target_arg: TargetArg,
 
-    #[arg(long,default_value="100")]
-    /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    pub bezier_scale: f64,
+    #[clap(flatten)]
+    pub bezier_scale_arg: BezierScaleArg,
 
-    #[arg(long)]
-    /// If true and the biome layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool
+    #[clap(flatten)]
+    pub overwrite_biomes_arg: OverwriteBiomesArg,
 }
 
 subcommand_def!{
@@ -225,7 +224,7 @@ impl Task for GenBiome {
         if let Some(args) = self.default_args {
             let mut target = WorldMap::edit(args.target_arg.target)?;
 
-            Self::run_default(args.overwrite, args.bezier_scale, &mut target, progress)
+            Self::run_default(args.overwrite_biomes_arg, &args.bezier_scale_arg, &mut target, progress)
     
         } else if let Some(command) = self.command {
 
@@ -238,7 +237,7 @@ impl Task for GenBiome {
 }
 
 impl GenBiome {
-    pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {            
             Data::run_with_parameters(ovewrite_biomes, target, progress)
 

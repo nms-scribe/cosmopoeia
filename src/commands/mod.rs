@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use clap::Subcommand;
 use clap::Parser;
 use clap::Args;
+use serde::Serialize;
+use serde::Deserialize;
+use paste::paste;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -120,7 +123,272 @@ pub struct TargetArg {
 
 }
 
+#[derive(Args,Serialize,Deserialize)]
+pub struct ElevationSourceArg {
+    /// The path to the heightmap containing the elevation data
+    pub source: PathBuf,
 
+}
+
+#[derive(Args,Serialize,Deserialize)]
+pub struct OceanSourceArg {
+    /// The path to the heightmap containing the ocean data
+    pub source: PathBuf,
+
+}
+
+#[derive(Args)]
+pub struct ElevationLimitsArg {
+    #[arg(long,allow_negative_numbers=true,default_value="-11000")]
+    /// minimum elevation for heightmap
+    pub min_elevation: f64,
+
+    #[arg(long,default_value="9000")]
+    /// maximum elevation for heightmap
+    pub max_elevation: f64,
+
+
+}
+
+#[derive(Args)]
+pub struct TileCountArg {
+    #[arg(long,default_value="10000")]
+    /// The rough number of tiles to generate for the image
+    pub tile_count: usize,
+
+}
+
+
+#[derive(Args)]
+pub struct RandomSeedArg {
+    #[arg(long)]
+    /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
+    pub seed: Option<u64>,
+}
+
+#[derive(Args)]
+pub struct BezierScaleArg {
+    #[arg(long,default_value="100")]
+    /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
+    pub bezier_scale: f64,
+
+}
+
+macro_rules! overwrite_arg {
+    ($layer: ident) => {
+        paste!{
+            // TODO: Check documentation for this
+            #[derive(Args)]
+            pub struct [<Overwrite $layer:camel Arg>] {
+                #[arg(long)]
+                /// If true and the [<$layer>] layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
+                pub [<overwrite_ $layer:lower>]: bool,
+            }
+    
+        }
+                
+    };
+}
+
+
+overwrite_arg!(tiles);
+overwrite_arg!(coastline);
+overwrite_arg!(ocean);
+overwrite_arg!(lakes);
+overwrite_arg!(rivers);
+overwrite_arg!(biomes);
+overwrite_arg!(cultures);
+overwrite_arg!(towns);
+overwrite_arg!(nations);
+overwrite_arg!(subnations);
+
+
+#[derive(Args)]
+pub struct OverwriteAllArg {
+
+    #[clap(flatten)]
+    pub overwrite_tiles_arg: OverwriteTilesArg,
+
+    #[clap(flatten)]
+    pub overwrite_coastline_arg: OverwriteCoastlineArg,
+
+    #[clap(flatten)]
+    pub overwrite_ocean_arg: OverwriteOceanArg,
+
+    #[clap(flatten)]
+    pub overwrite_lakes_arg: OverwriteLakesArg,
+
+    #[clap(flatten)]
+    pub overwrite_rivers_arg: OverwriteRiversArg,
+
+    #[clap(flatten)]
+    pub overwrite_biomes_arg: OverwriteBiomesArg,
+
+    #[clap(flatten)]
+    pub overwrite_cultures_arg: OverwriteCulturesArg,
+
+    #[clap(flatten)]
+    pub overwrite_towns_arg: OverwriteTownsArg,
+
+    #[clap(flatten)]
+    pub overwrite_nations_arg: OverwriteNationsArg,
+
+    #[clap(flatten)]
+    pub overwrite_subnations_arg: OverwriteSubnationsArg,
+
+    #[arg(long)]
+    /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
+    pub overwrite_all: bool,
+    
+}
+
+impl OverwriteAllArg {
+
+    fn overwrite_tiles(&self) -> OverwriteTilesArg {
+        OverwriteTilesArg {
+            overwrite_tiles: self.overwrite_tiles_arg.overwrite_tiles || self.overwrite_all
+        }
+    }
+
+    fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
+        OverwriteCoastlineArg {
+            overwrite_coastline: self.overwrite_coastline_arg.overwrite_coastline || self.overwrite_all
+        }
+    }
+
+    fn overwrite_ocean(&self) -> OverwriteOceanArg {
+        OverwriteOceanArg {
+            overwrite_ocean: self.overwrite_ocean_arg.overwrite_ocean || self.overwrite_all
+        }
+    }
+
+    fn overwrite_lakes(&self) -> OverwriteLakesArg {
+        OverwriteLakesArg {
+            overwrite_lakes: self.overwrite_lakes_arg.overwrite_lakes || self.overwrite_all
+        }
+    }
+
+    fn overwrite_rivers(&self) -> OverwriteRiversArg {
+        OverwriteRiversArg {
+            overwrite_rivers: self.overwrite_rivers_arg.overwrite_rivers || self.overwrite_all
+        }
+    }
+
+    fn overwrite_biomes(&self) -> OverwriteBiomesArg {
+        OverwriteBiomesArg {
+            overwrite_biomes: self.overwrite_biomes_arg.overwrite_biomes || self.overwrite_all
+        }
+    }
+
+    fn overwrite_cultures(&self) -> OverwriteCulturesArg {
+        OverwriteCulturesArg {
+            overwrite_cultures: self.overwrite_cultures_arg.overwrite_cultures || self.overwrite_all
+        }
+    }
+
+    fn overwrite_towns(&self) -> OverwriteTownsArg {
+        OverwriteTownsArg {
+            overwrite_towns: self.overwrite_towns_arg.overwrite_towns || self.overwrite_all
+        }
+    }
+
+    fn overwrite_nations(&self) -> OverwriteNationsArg {
+        OverwriteNationsArg {
+            overwrite_nations: self.overwrite_nations_arg.overwrite_nations || self.overwrite_all
+        }
+    }
+
+    fn overwrite_subnations(&self) -> OverwriteSubnationsArg {
+        OverwriteSubnationsArg {
+            overwrite_subnations: self.overwrite_subnations_arg.overwrite_subnations || self.overwrite_all
+        }
+    }
+
+}
+
+
+#[derive(Args)]
+pub struct OverwriteAllWaterArg {
+
+    #[clap(flatten)]
+    pub overwrite_coastline_arg: OverwriteCoastlineArg,
+
+    #[clap(flatten)]
+    pub overwrite_ocean_arg: OverwriteOceanArg,
+
+    #[clap(flatten)]
+    pub overwrite_lakes_arg: OverwriteLakesArg,
+
+    #[clap(flatten)]
+    pub overwrite_rivers_arg: OverwriteRiversArg,
+
+    #[arg(long)]
+    /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
+    pub overwrite_all: bool,
+    
+}
+
+impl OverwriteAllWaterArg {
+
+    fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
+        OverwriteCoastlineArg {
+            overwrite_coastline: self.overwrite_coastline_arg.overwrite_coastline || self.overwrite_all
+        }
+    }
+
+    fn overwrite_ocean(&self) -> OverwriteOceanArg {
+        OverwriteOceanArg {
+            overwrite_ocean: self.overwrite_ocean_arg.overwrite_ocean || self.overwrite_all
+        }
+    }
+
+    fn overwrite_lakes(&self) -> OverwriteLakesArg {
+        OverwriteLakesArg {
+            overwrite_lakes: self.overwrite_lakes_arg.overwrite_lakes || self.overwrite_all
+        }
+    }
+
+    fn overwrite_rivers(&self) -> OverwriteRiversArg {
+        OverwriteRiversArg {
+            overwrite_rivers: self.overwrite_rivers_arg.overwrite_rivers || self.overwrite_all
+        }
+    }
+
+
+}
+
+
+#[derive(Args)]
+pub struct OverwriteAllOceanArg {
+
+    #[clap(flatten)]
+    pub overwrite_coastline_arg: OverwriteCoastlineArg,
+
+    #[clap(flatten)]
+    pub overwrite_ocean_arg: OverwriteOceanArg,
+
+    #[arg(long)]
+    /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
+    pub overwrite_all: bool,
+    
+}
+
+impl OverwriteAllOceanArg {
+
+
+    fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
+        OverwriteCoastlineArg {
+            overwrite_coastline: self.overwrite_coastline_arg.overwrite_coastline || self.overwrite_all
+        }
+    }
+
+    fn overwrite_ocean(&self) -> OverwriteOceanArg {
+        OverwriteOceanArg {
+            overwrite_ocean: self.overwrite_ocean_arg.overwrite_ocean || self.overwrite_all
+        }
+    }
+
+}
 
 
 #[derive(Parser)]

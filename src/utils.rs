@@ -21,9 +21,11 @@ use rand_distr::uniform::SampleUniform;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
+use crate::commands::RandomSeedArg;
+use crate::commands::BezierScaleArg;
 
-pub(crate) fn random_number_generator(seed: Option<u64>) -> StdRng {
-    let seed = if let Some(seed) = seed {
+pub(crate) fn random_number_generator(arg: RandomSeedArg) -> StdRng {
+    let seed = if let Some(seed) = arg.seed {
         seed
     } else {
         let mut seeder = StdRng::from_entropy();
@@ -449,7 +451,7 @@ pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandEr
 // NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
 // made valid, which turns them into a multi-polygon, which I then split back into multiple polygons, 
 // hence this returns a vec.
-pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Vec<Geometry>,CommandError> {
+pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: &BezierScaleArg) -> Result<Vec<Geometry>,CommandError> {
     let mut output = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
     for i in 0..geometry.geometry_count() {
         let ring = geometry.get_geometry(i);
@@ -461,7 +463,7 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: f64) -> Result<Vec<G
 
         let bezier = PolyBezier::from_poly_line(&points);
         let mut new_ring = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
-        for point in bezier.to_poly_line(scale)? {
+        for point in bezier.to_poly_line(&scale)? {
             new_ring.add_point_2d(point.to_tuple())
         }
         output.add_geometry(new_ring)?;
@@ -680,7 +682,7 @@ impl PolyBezier {
         }
     }
 
-    pub(crate) fn to_poly_line(&self, scale: f64) -> Result<Vec<Point>,CommandError> {
+    pub(crate) fn to_poly_line(&self, scale: &BezierScaleArg) -> Result<Vec<Point>,CommandError> {
         // I don't just want to put equally spaced points, I want what appears to be called an adaptive bezier:
         // https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html 
         // I found a Javascript translation of that here: https://github.com/mattdesl/adaptive-bezier-curve, 
@@ -700,7 +702,7 @@ impl PolyBezier {
                         Vector2::new(*c1.x,*c1.y),
                         Vector2::new(*c2.x,*c2.y),
                         Vector2::new(*vertex2.x,*vertex2.y),
-                        scale
+                        scale.bezier_scale
                     );
                     // convert back to points.
                     for point in curve.iter().take(curve.len() - 2).skip(1) {

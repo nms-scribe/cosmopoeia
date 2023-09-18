@@ -28,6 +28,9 @@ use crate::world_map::NamedEntity;
 use crate::world_map::CultureWithNamer;
 use crate::world_map::CultureWithType;
 use crate::commands::TargetArg;
+use super::RandomSeedArg;
+use super::OverwriteSubnationsArg;
+use super::BezierScaleArg;
 
 
 
@@ -51,14 +54,13 @@ subcommand_def!{
         /// The percent of towns in each nation to use for subnations
         pub subnation_percentage: f64,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
-        #[arg(long)]
-        /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool
-
+        #[clap(flatten)]
+        pub overwrite_subnations_arg: OverwriteSubnationsArg,
+    
+    
     }
 }
 
@@ -67,7 +69,7 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -80,7 +82,7 @@ impl Task for Create {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.subnation_percentage, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.subnation_percentage, self.overwrite_subnations_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -89,7 +91,7 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, overwrite_subnations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, overwrite_subnations: OverwriteSubnationsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating subnations");
                 
         generate_subnations(target, random, culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, progress)
@@ -111,11 +113,8 @@ subcommand_def!{
         /// The percent of towns in each nation to use for subnations
         pub subnation_percentage: f64,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
-
-
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
 
     }
@@ -126,7 +125,7 @@ impl Task for Expand {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
         
@@ -172,9 +171,8 @@ subcommand_def!{
         /// The percent of towns in each nation to use for subnations
         pub subnation_percentage: f64,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
     }
 }
@@ -184,7 +182,7 @@ impl Task for FillEmpty {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
         
@@ -296,9 +294,8 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        pub bezier_scale: f64,
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
 
     }
 }
@@ -310,9 +307,9 @@ impl Task for Curvify {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        let bezier_scale = self.bezier_scale;
+        let bezier_scale = self.bezier_scale_arg;
         target.with_transaction(|target| {
-            Self::run_with_parameters(bezier_scale, target, progress)
+            Self::run_with_parameters(&bezier_scale, target, progress)
         })?;
 
         target.save(progress)
@@ -321,13 +318,13 @@ impl Task for Curvify {
 }
 
 impl Curvify {
-    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making subnation polygons curvy");
     
         // FUTURE: Technically, subnations have to follow the curves of their owning nations as priority over their own. 
         // Right now, it doesn't seem to make a big difference if you have the nation borders thick enough. But it
         // may become important later.
-        curvify_layer_by_theme::<_,SubnationTheme>(target, bezier_scale, progress)
+        curvify_layer_by_theme::<_,SubnationTheme>(target, &bezier_scale, progress)
     }
     
 }
@@ -363,17 +360,15 @@ pub struct DefaultArgs {
     /// The percent of towns in each nation to use for subnations
     pub subnation_percentage: f64,
 
-    #[arg(long,default_value="100")]
-    /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    pub bezier_scale: f64,
+    #[clap(flatten)]
+    pub bezier_scale_arg: BezierScaleArg,
 
-    #[arg(long)]
-    /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-    pub seed: Option<u64>,
+    #[clap(flatten)]
+    pub random_seed_arg: RandomSeedArg,
 
-    #[arg(long)]
-    /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool,
+    #[clap(flatten)]
+    pub overwrite_subnations_arg: OverwriteSubnationsArg,
+
 }
 
 subcommand_def!{
@@ -398,7 +393,7 @@ impl Task for GenSubnations {
 
         if let Some(default_args) = self.default_args {
 
-            let mut random = random_number_generator(default_args.seed);
+            let mut random = random_number_generator(default_args.random_seed_arg);
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
 
@@ -408,7 +403,7 @@ impl Task for GenSubnations {
 
             let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
     
-            Self::run_default(&mut random, culture_lookup, &mut loaded_namers, default_args.subnation_percentage, default_args.overwrite, default_args.bezier_scale, &mut target, progress)
+            Self::run_default(&mut random, culture_lookup, &mut loaded_namers, default_args.subnation_percentage, default_args.overwrite_subnations_arg, &default_args.bezier_scale_arg, &mut target, progress)
 
         } else if let Some(command) = self.command {
 
@@ -421,7 +416,7 @@ impl Task for GenSubnations {
 
 
 impl GenSubnations {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, overwrite_subnations: bool, bezier_scale: f64, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, overwrite_subnations: OverwriteSubnationsArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
             Create::run_with_parameters(random, &culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, target, progress)?;

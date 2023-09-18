@@ -28,13 +28,18 @@ use crate::algorithms::culture_sets::CultureSetItem;
 use crate::world_map::ElevationLimits;
 use crate::command_def;
 use crate::progress::ProgressObserver;
+use crate::commands::ElevationSourceArg;
+use super::ElevationLimitsArg;
+use super::RandomSeedArg;
+use super::OverwriteTilesArg;
 
 
 subcommand_def!{
     /// Creates a random points vector layer from a raster heightmap
     pub struct PointsFromHeightmap {
-        // Path to the source height map to get extents from
-        pub source: PathBuf,
+
+        #[clap(flatten)]
+        pub heightmap_arg: ElevationSourceArg,
 
         #[clap(flatten)]
         pub target_arg: TargetArg,
@@ -43,9 +48,8 @@ subcommand_def!{
         /// The rough number of pixels to generate for the image
         pub points: usize,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -56,10 +60,10 @@ subcommand_def!{
 impl Task for PointsFromHeightmap {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
-        let source = RasterMap::open(self.source)?;
+        let source = RasterMap::open(self.heightmap_arg.source)?;
         let extent = source.bounds()?.extent();
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
-        let random = random_number_generator(self.seed);
+        let random = random_number_generator(self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.points);
 
         target.with_transaction(|target| {
@@ -100,9 +104,8 @@ subcommand_def!{
         /// The rough number of pixels to generate for the image
         pub points: usize,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
@@ -115,7 +118,7 @@ impl Task for PointsFromExtent {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
-        let random = random_number_generator(self.seed);
+        let random = random_number_generator(self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.points);
         
         target.with_transaction(|target| {
@@ -174,21 +177,14 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long)]
-        pub extents: PathBuf,
+        #[clap(flatten)]
+        pub heightmap_arg: ElevationSourceArg,
 
-        #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool,
+        #[clap(flatten)]
+        pub elevation_limits_arg: ElevationLimitsArg,
 
-        #[arg(long,allow_negative_numbers=true,default_value="-11000")]
-        /// minimum elevation for heightmap
-        pub min_elevation: f64,
-
-        #[arg(long,default_value="9000")]
-        /// maximum elevation for heightmap
-        pub max_elevation: f64,
-
+        #[clap(flatten)]
+        pub overwrite_tiles_arg: OverwriteTilesArg,
 
     }
 }
@@ -198,11 +194,11 @@ impl Task for VoronoiFromTriangles {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let extent = {
-            let source = RasterMap::open(self.extents)?;
+            let source = RasterMap::open(self.heightmap_arg.source)?;
             source.bounds()?.extent()
         };
 
-        let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
+        let limits = ElevationLimits::new(self.elevation_limits_arg.min_elevation,self.elevation_limits_arg.max_elevation)?;
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -217,7 +213,7 @@ impl Task for VoronoiFromTriangles {
         let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
 
         target.with_transaction(|target| {
-            load_tile_layer(target,self.overwrite,voronoi.into_iter(),&limits,progress)
+            load_tile_layer(target,self.overwrite_tiles_arg,voronoi.into_iter(),&limits,progress)
         })?;
 
         target.save(progress)
@@ -250,9 +246,8 @@ subcommand_def!{
         /// The name of a namer to generate from. If not specified, all namers will be tested.
         pub language: Option<String>,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
@@ -281,7 +276,7 @@ impl Task for Namers {
             print!("{}",namers.to_json()?)
 
         } else {
-            let mut random = random_number_generator(self.seed);
+            let mut random = random_number_generator(self.random_seed_arg);
             let mut namers = NamerSet::load_from(namers, self.default_namer, &mut random, progress)?;
 
             if let Some(key) = self.language {
@@ -326,9 +321,9 @@ subcommand_def!{
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
         pub write_json: bool,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
+
 
 
     }
@@ -345,7 +340,7 @@ impl Task for Cultures {
         
         }
 
-        let mut random = crate::utils::random_number_generator(self.seed);
+        let mut random = crate::utils::random_number_generator(self.random_seed_arg);
 
         let namer_set = NamerSetSource::from_files(self.namers)?;
 

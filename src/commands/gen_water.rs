@@ -18,6 +18,13 @@ use crate::world_map::TileForWaterFill;
 use crate::world_map::TileSchema;
 use crate::world_map::EntityIndex;
 use super::TargetArg;
+use super::OverwriteCoastlineArg;
+use super::OverwriteOceanArg;
+use super::OverwriteLakesArg;
+use super::OverwriteRiversArg;
+use super::OverwriteAllOceanArg;
+use super::OverwriteAllWaterArg;
+use super::BezierScaleArg;
 
 
 subcommand_def!{
@@ -28,23 +35,11 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to make curvy coastlines. The higher the number, the smoother the curves.
-        pub bezier_scale: f64,
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
 
-        #[arg(long)]
-        /// If true and the coastline or oceans layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool,
-
-        #[arg(long)]
-        /// If true and the coastline layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite_coastline: bool,
-
-        #[arg(long)]
-        /// If true and the oceans layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite_ocean: bool,
-
-
+        #[clap(flatten)]
+        pub overwrite_all_ocean_arg: OverwriteAllOceanArg,
 
     }
 }
@@ -58,7 +53,7 @@ impl Task for Coastline {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(self.bezier_scale, self.overwrite || self.overwrite_coastline, self.overwrite || self.overwrite_ocean, target, progress)
+            Self::run_with_parameters(&self.bezier_scale_arg, self.overwrite_all_ocean_arg.overwrite_coastline(), self.overwrite_all_ocean_arg.overwrite_ocean(), target, progress)
         })?;
 
         target.save(progress)
@@ -70,7 +65,7 @@ impl Task for Coastline {
 impl Coastline {
 
 
-    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, overwrite_coastline: OverwriteCoastlineArg, overwrite_ocean: OverwriteOceanArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating coastline");
 
         calculate_coastline(target, bezier_scale, overwrite_coastline, overwrite_ocean, progress)
@@ -120,13 +115,11 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long)]
-        /// If true and the lakes layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool,
+        #[clap(flatten)]
+        pub overwrite_lakes_arg: OverwriteLakesArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to follow lake shoreline curves. The higher the number, the smoother the curves.
-        pub bezier_scale: f64,
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
 
         #[arg(long,default_value="2")]
         /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
@@ -147,7 +140,7 @@ impl Task for Lakes {
         let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(tile_map, tile_queue, self.bezier_scale, self.buffer_scale, self.overwrite, target, progress)
+            Self::run_with_parameters(tile_map, tile_queue, &self.bezier_scale_arg, self.buffer_scale, self.overwrite_lakes_arg, target, progress)
 
         })?;
 
@@ -156,7 +149,7 @@ impl Task for Lakes {
 }
 
 impl Lakes {
-    fn run_with_parameters<Progress: ProgressObserver>(tile_map: EntityIndex<TileSchema, TileForWaterFill>, tile_queue: Vec<(u64, f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(tile_map: EntityIndex<TileSchema, TileForWaterFill>, tile_queue: Vec<(u64, f64)>, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: f64, overwrite_layer: OverwriteLakesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Filling lakes");
         generate_water_fill(target, tile_map, tile_queue, lake_bezier_scale, lake_buffer_scale, overwrite_layer, progress)
     }
@@ -170,13 +163,11 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long)]
-        /// If true and the river_segments layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool,
+        #[clap(flatten)]
+        pub overwrite_rivers_arg: OverwriteRiversArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to follow river curves. The higher the number, the smoother the curves.
-        pub bezier_scale: f64
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
 
     }
 }
@@ -189,7 +180,7 @@ impl Task for Rivers {
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(self.bezier_scale, self.overwrite, progress, target)
+            Self::run_with_parameters(&self.bezier_scale_arg, self.overwrite_rivers_arg, progress, target)
         })?;
 
         target.save(progress)
@@ -198,7 +189,7 @@ impl Task for Rivers {
 }
 
 impl Rivers {
-    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, overwrite_layer: bool, progress: &mut Progress, target: &mut WorldMapTransaction<'_>) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, overwrite_layer: OverwriteRiversArg, progress: &mut Progress, target: &mut WorldMapTransaction<'_>) -> Result<(), CommandError> {
 
         progress.announce("Generating rivers");
         generate_water_rivers(target, bezier_scale, overwrite_layer, progress)
@@ -298,33 +289,16 @@ pub struct DefaultArgs {
     #[clap(flatten)]
     pub target_arg: TargetArg,
 
-    #[arg(long,default_value="100")]
-    /// This number is used for generating points to follow river curves and make curvy lakes. The higher the number, the smoother the curves.
-    pub bezier_scale: f64,
+    #[clap(flatten)]
+    pub bezier_scale_arg: BezierScaleArg,
 
     #[arg(long,default_value="2")]
     /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
     pub buffer_scale: f64,
 
-    #[arg(long)]
-    /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool,
+    #[clap(flatten)]
+    pub overwrite_all_water_arg: OverwriteAllWaterArg,
 
-    #[arg(long)]
-    /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_rivers: bool,
-
-    #[arg(long)]
-    /// If true and the rivers or lakes layers already exist in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_lakes: bool,
-
-    #[arg(long)]
-    /// If true and the coastline layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_coastline: bool,
-
-    #[arg(long)]
-    /// If true and the oceans layer already exists in the file, they will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_ocean: bool,
 }
 
 subcommand_def!{
@@ -349,12 +323,12 @@ impl Task for GenWater {
         if let Some(args) = self.default_args {
             let mut target = WorldMap::edit(args.target_arg.target)?;
 
-            Self::run_default(args.bezier_scale, 
+            Self::run_default(&args.bezier_scale_arg, 
                 args.buffer_scale, 
-                args.overwrite || args.overwrite_coastline, 
-                args.overwrite || args.overwrite_ocean, 
-                args.overwrite_lakes || args.overwrite, 
-                args.overwrite_rivers || args.overwrite, 
+                args.overwrite_all_water_arg.overwrite_coastline(), 
+                args.overwrite_all_water_arg.overwrite_ocean(), 
+                args.overwrite_all_water_arg.overwrite_lakes(), 
+                args.overwrite_all_water_arg.overwrite_rivers(), 
                 &mut target, 
                 progress)
     
@@ -370,7 +344,7 @@ impl Task for GenWater {
 }
 
 impl GenWater {
-    pub(crate) fn run_default<Progress: ProgressObserver>(bezier_scale: f64, lake_buffer_scale: f64, overwrite_coastline: bool, overwrite_ocean: bool, overwrite_lakes: bool, overwrite_rivers: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, lake_buffer_scale: f64, overwrite_coastline: OverwriteCoastlineArg, overwrite_ocean: OverwriteOceanArg, overwrite_lakes: OverwriteLakesArg, overwrite_rivers: OverwriteRiversArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
         
             Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, target, progress)?;

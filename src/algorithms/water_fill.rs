@@ -17,6 +17,8 @@ use crate::world_map::LakeType;
 use crate::world_map::TypedFeature;
 use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
+use crate::commands::OverwriteLakesArg;
+use crate::commands::BezierScaleArg;
 
 struct Lake {
     elevation: f64,
@@ -105,7 +107,7 @@ impl Lake {
 }
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: f64, lake_buffer_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: f64, overwrite_layer: OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
 
     let mut tiles_layer = target.edit_tile_layer()?;
@@ -408,7 +410,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
             let lake_geometry = lake.dissolve_tiles(&mut tiles_layer)?;
             let (lake_temp,lake_evap,lake_type) = lake.get_temp_evap_and_type();
 
-            let geometry = make_curvy_lakes(lake_geometry, lake_bezier_scale, buffer_distance, simplify_tolerance)?;
+            let geometry = make_curvy_lakes(lake_geometry, &lake_bezier_scale, buffer_distance, simplify_tolerance)?;
             let lake = NewLake {
                 elevation: lake.elevation,
                 type_: lake_type.clone(),
@@ -469,19 +471,19 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 }
 
-pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: f64, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
+pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: &BezierScaleArg, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
     let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
     // occasionally, the simplification turns the lakes into a multipolygon, which is why the lakes layer has to be multipolygon
     let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
     if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
         for i in 0..lake_geometry.geometry_count() {
-            for geometry in bezierify_polygon(&lake_geometry.get_geometry(i),bezier_scale)? {
+            for geometry in bezierify_polygon(&lake_geometry.get_geometry(i),&bezier_scale)? {
                 new_geometry.add_geometry(geometry)?;
             }
         }
 
     } else {
-        for geometry in bezierify_polygon(&lake_geometry,bezier_scale)? {
+        for geometry in bezierify_polygon(&lake_geometry,&bezier_scale)? {
             new_geometry.add_geometry(geometry)?;
         }
 

@@ -32,6 +32,7 @@ use crate::world_map::LakeSchema;
 use crate::world_map::EntityLookup;
 use crate::world_map::BiomeSchema;
 use crate::utils::generate_colors;
+use crate::commands::OverwriteCulturesArg;
 
 impl CultureType {
 
@@ -52,7 +53,7 @@ impl CultureType {
 
 
 
-pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_layer: OverwriteCulturesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // Algorithm copied from AFMG
 

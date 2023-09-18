@@ -11,8 +11,9 @@ use crate::progress::WatchableIterator;
 use crate::utils::Point;
 use crate::world_map::TypedFeature;
 use crate::utils::PolyBezier;
+use crate::commands::BezierScaleArg;
 
-pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, bezier_scale: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut vertex_index = HashMap::new();
 
@@ -158,7 +159,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
         for line in value {
             // if this is a polygon, the polybezier stuff should automatically be curving based off the end points.
             let bezier = PolyBezier::from_poly_line(line);
-            *line = bezier.to_poly_line(bezier_scale)?;
+            *line = bezier.to_poly_line(&bezier_scale)?;
         }
     }
 

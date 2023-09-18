@@ -22,6 +22,9 @@ use crate::algorithms::tiles::CultureTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::world_map::WorldMapTransaction;
 use crate::commands::TargetArg;
+use super::RandomSeedArg;
+use super::OverwriteCulturesArg;
+use super::BezierScaleArg;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -96,14 +99,13 @@ subcommand_def!{
         /// A waterflow threshold above which the tile will count as a river
         pub river_threshold: f64,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
-        #[arg(long)]
-        /// If true and the cultures layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool
-
+        #[clap(flatten)]
+        pub overwrite_cultures_arg: OverwriteCulturesArg,
+    
+    
     }
 }
 
@@ -111,7 +113,7 @@ impl Task for CreateCultures {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let namer_set = NamerSetSource::from_files(self.namers)?;
 
@@ -122,7 +124,7 @@ impl Task for CreateCultures {
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, cultures, &loaded_namers, self.count, self.size_variance, self.river_threshold, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, cultures, &loaded_namers, self.count, self.size_variance, self.river_threshold, self.overwrite_cultures_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -131,7 +133,7 @@ impl Task for CreateCultures {
 }
 
 impl CreateCultures {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: OverwriteCulturesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         let size_variance = size_variance.clamp(0.0, 10.0);
 
         progress.announce("Generating cultures");
@@ -229,9 +231,8 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        pub bezier_scale: f64,
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
 
     }
 }
@@ -242,10 +243,10 @@ impl Task for CurvifyCultures {
 
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
-        let bezier_scale = self.bezier_scale;
+        let bezier_scale = self.bezier_scale_arg;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(bezier_scale, target, progress)
+            Self::run_with_parameters(&bezier_scale, target, progress)
         })?;
 
         target.save(progress)
@@ -255,10 +256,10 @@ impl Task for CurvifyCultures {
 
 impl CurvifyCultures {
 
-    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making culture polygons curvy");
     
-        curvify_layer_by_theme::<_,CultureTheme>(target, bezier_scale, progress)
+        curvify_layer_by_theme::<_,CultureTheme>(target, &bezier_scale, progress)
     }
     
 }
@@ -307,17 +308,14 @@ pub struct DefaultArgs {
     /// A number, clamped to 0-10, which controls how much cultures can vary in size
     pub size_variance: f64,
 
-    #[arg(long,default_value="100")]
-    /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    pub bezier_scale: f64,
+    #[clap(flatten)]
+    pub bezier_scale_arg: BezierScaleArg,
 
-    #[arg(long)]
-    /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-    pub seed: Option<u64>,
+    #[clap(flatten)]
+    pub random_seed_arg: RandomSeedArg,
 
-    #[arg(long)]
-    /// If true and the cultures layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool,
+    #[clap(flatten)]
+    pub overwrite_cultures_arg: OverwriteCulturesArg,
 
     #[arg(long)]
     /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
@@ -346,7 +344,7 @@ impl Task for GenPeople {
 
         if let Some(default_args) = self.default_args {
 
-            let mut random = random_number_generator(default_args.seed);
+            let mut random = random_number_generator(default_args.random_seed_arg);
 
             let namer_set = NamerSetSource::from_files(default_args.namers)?;
     
@@ -362,9 +360,9 @@ impl Task for GenPeople {
                 &loaded_namers, 
                 default_args.culture_count, 
                 default_args.size_variance, 
-                default_args.overwrite, 
+                default_args.overwrite_cultures_arg, 
                 default_args.limit_factor, 
-                default_args.bezier_scale, 
+                &default_args.bezier_scale_arg, 
                 &mut target, 
                 &mut random, 
                 progress
@@ -381,7 +379,7 @@ impl Task for GenPeople {
 }
 
 impl GenPeople {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: bool, limit_factor: f64, bezier_scale: f64, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: OverwriteCulturesArg, limit_factor: f64, bezier_scale: &BezierScaleArg, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
             Population::run_with_parameters(river_threshold, target, progress)?;
     

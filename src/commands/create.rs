@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 
 use clap::Args;
 use clap::Subcommand;
@@ -17,10 +16,15 @@ use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
 use crate::algorithms::terrain::SampleElevationLoaded;
 use crate::algorithms::terrain::TerrainTask;
-use crate::commands::terrain::TerrainCommand;
 use crate::world_map::ElevationLimits;
 use crate::world_map::WorldMapTransaction;
 use crate::commands::TargetArg;
+use crate::commands::ElevationSourceArg;
+use crate::commands::terrain::TerrainCommand;
+use crate::commands::ElevationLimitsArg;
+use super::TileCountArg;
+use super::RandomSeedArg;
+use super::OverwriteTilesArg;
 
 // I don't form the subcommands for this quite the same, since I already have a subcommand for specifying the source.
 
@@ -84,19 +88,26 @@ trait LoadedCreateSource {
     fn into_post_processes(self) -> Option<Vec<TerrainTask>>;
 }
 
+#[derive(Args)]
+pub struct PostProcessArg {
+
+    #[command(subcommand)]
+    /// A processing command to run after creation and elevation sampling.
+    pub post_process: Option<TerrainCommand>,
+
+
+}
 
 
 subcommand_def!{
     /// Creates voronoi tiles in the same extent as a heightmap with zero elevation
     pub struct FromHeightmap {
 
-        /// The path to the heightmap containing the elevation data
-        pub source: PathBuf,
+        #[clap(flatten)]
+        pub heightmap_arg: ElevationSourceArg,
 
-        #[command(subcommand)]
-        /// A processing command to run after creation and elevation sampling. (see 'terrain' command)
-        pub post_process: Option<TerrainCommand>,
-
+        #[clap(flatten)]
+        pub post_process_arg: PostProcessArg
 
     }
 }
@@ -104,9 +115,9 @@ subcommand_def!{
 impl LoadCreateSource for FromHeightmap {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
-        progress.announce(&format!("Loading {}",self.source.to_string_lossy()));
+        progress.announce(&format!("Loading {}",self.heightmap_arg.source.to_string_lossy()));
 
-        let source = RasterMap::open(self.source)?;
+        let source = RasterMap::open(self.heightmap_arg.source)?;
 
         let extent = source.bounds()?.extent();
 
@@ -117,7 +128,7 @@ impl LoadCreateSource for FromHeightmap {
         // the post_processes always starts with loading the samples from the source
         let mut post_processes = vec![TerrainTask::SampleElevation(SampleElevationLoaded::new(source))];
 
-        if let Some(process) = self.post_process {
+        if let Some(process) = self.post_process_arg.post_process {
             progress.announce("Loading terrain processes.");
 
             post_processes.extend(process.load_terrain_task(random, progress)?);
@@ -133,35 +144,37 @@ impl LoadCreateSource for FromHeightmap {
 
 }
 
+#[derive(Args)]
+pub struct ExtentsArg {
+
+    /// the height (from north to south) in degrees of the world extents
+    pub height: f64,
+
+    /// the width in degrees of the world extents
+    pub width: f64,
+
+    #[arg(allow_negative_numbers=true)]
+    /// the latitude of the southern border of the world extents
+    pub south: f64, 
+
+    #[arg(allow_negative_numbers=true)]
+    /// the longitude of the western border of the world extents
+    pub west: f64,
+
+}
+
 subcommand_def!{
     /// Creates voronoi tiles in the given extent with zero elevation
     pub struct Blank {
 
-        /// the height (from north to south) in degrees of the world extents
-        pub height: f64,
+        #[clap(flatten)]
+        pub extent_arg: ExtentsArg,
 
-        /// the width in degrees of the world extents
-        pub width: f64,
+        #[clap(flatten)]
+        pub elevation_limits_arg: ElevationLimitsArg,
 
-        #[arg(allow_negative_numbers=true)]
-        /// the latitude of the southern border of the world extents
-        pub south: f64, 
-
-        #[arg(allow_negative_numbers=true)]
-        /// the longitude of the western border of the world extents
-        pub west: f64,
-
-        #[arg(long,allow_negative_numbers=true,default_value="-11000")]
-        /// minimum elevation for heightmap
-        pub min_elevation: f64,
-
-        #[arg(long,default_value="9000")]
-        /// maximum elevation for heightmap
-        pub max_elevation: f64,
-
-        #[command(subcommand)]
-        /// A processing command to run after creation. (see 'terrain' command)
-        pub post_process: Option<TerrainCommand>,
+        #[clap(flatten)]
+        pub post_process_arg: PostProcessArg
 
 
     }
@@ -171,11 +184,11 @@ impl LoadCreateSource for Blank {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
 
-        let extent = Extent::new_with_dimensions(self.west, self.south, self.width, self.height);
+        let extent = Extent::new_with_dimensions(self.extent_arg.west, self.extent_arg.south, self.extent_arg.width, self.extent_arg.height);
 
-        let limits = ElevationLimits::new(self.min_elevation,self.max_elevation)?;
+        let limits = ElevationLimits::new(self.elevation_limits_arg.min_elevation,self.elevation_limits_arg.max_elevation)?;
         // load these earlier so we can fail quickly on loading error.
-        let post_processes = if let Some(process) = self.post_process {
+        let post_processes = if let Some(process) = self.post_process_arg.post_process {
             progress.announce("Loading terrain processes.");
 
             process.load_terrain_task(random, progress)?
@@ -215,8 +228,6 @@ impl LoadCreateSource for CreateSource {
 
 }
 
-
-
 subcommand_def!{
     /// Creates the random tiles and initial elevations for a world.
     #[command(hide=true)]
@@ -225,17 +236,14 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="10000")]
-        /// The rough number of tiles to generate for the image
-        pub tiles: usize,
+        #[clap(flatten)]
+        pub tile_count_arg: TileCountArg,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
-        #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool,
+        #[clap(flatten)]
+        pub overwrite_tiles_arg: OverwriteTilesArg,
 
         #[command(subcommand)]
         pub source: CreateSource,
@@ -245,8 +253,8 @@ subcommand_def!{
 
 impl CreateTiles {
 
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: ElevationLimits, tiles: usize, overwrite: bool, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
-        let voronois = generate_random_tiles(random, extent, tiles, progress)?;
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: ElevationLimits, tiles: TileCountArg, overwrite: OverwriteTilesArg, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+        let voronois = generate_random_tiles(random, extent, tiles.tile_count, progress)?;
     
         progress.announce("Create tiles from voronoi polygons");
 
@@ -260,7 +268,7 @@ impl Task for CreateTiles {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let loaded_source = self.source.load(&mut random, progress)?;
 
@@ -268,7 +276,7 @@ impl Task for CreateTiles {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(loaded_source.extent, loaded_source.limits, self.tiles, self.overwrite, &mut random, target, progress)
+            Self::run_with_parameters(loaded_source.extent, loaded_source.limits, self.tile_count_arg, self.overwrite_tiles_arg, &mut random, target, progress)
 
         })?;
 
@@ -285,17 +293,14 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="10000")]
-        /// The rough number of tiles to generate for the image
-        pub tiles: usize,
+        #[clap(flatten)]
+        pub tile_count_arg: TileCountArg,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
-        #[arg(long)]
-        /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool,
+        #[clap(flatten)]
+        pub overwrite_tiles_arg: OverwriteTilesArg,
 
         #[command(subcommand)]
         pub source: CreateSource,
@@ -308,19 +313,19 @@ impl Task for Create {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
 
-        Self::run_default(self.tiles,self.overwrite,loaded_source, &mut target, &mut random, progress)
+        Self::run_default(self.tile_count_arg,self.overwrite_tiles_arg,loaded_source, &mut target, &mut random, progress)
 
     }
 }
 
 impl Create {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: usize, overwrite_tiles: bool, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: TileCountArg, overwrite_tiles: OverwriteTilesArg, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
             CreateTiles::run_with_parameters(loaded_source.extent, loaded_source.limits, tiles, overwrite_tiles, random, target, progress)?;
 

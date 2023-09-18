@@ -22,6 +22,8 @@ use crate::algorithms::naming::NamerSet;
 use crate::world_map::NamedEntity;
 use crate::world_map::CultureWithNamer;
 use crate::commands::TargetArg;
+use super::RandomSeedArg;
+use super::OverwriteTownsArg;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -47,16 +49,12 @@ subcommand_def!{
         /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
         pub default_namer: Option<String>,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
-        #[arg(long)]
-        /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool
-
-
-
+        #[clap(flatten)]
+        pub overwrite_towns_arg: OverwriteTownsArg,
+    
     }
 }
 
@@ -65,7 +63,7 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -78,7 +76,7 @@ impl Task for Create {
         
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.capital_count, self.town_count, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.capital_count, self.town_count, self.overwrite_towns_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -87,7 +85,7 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, overwrite_towns: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, overwrite_towns: OverwriteTownsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating towns");
         generate_towns(target, random, &culture_lookup, loaded_namers, capital_count, town_count, overwrite_towns, progress)
     }
@@ -164,23 +162,18 @@ pub struct DefaultArgs {
     /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
     pub default_namer: Option<String>,
 
-    #[arg(long)]
-    /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-    pub seed: Option<u64>,
+    #[clap(flatten)]
+    pub random_seed_arg: RandomSeedArg,
 
     #[arg(long,default_value="10")]
     /// A waterflow threshold above which the tile will count as a river
     pub river_threshold: f64,
 
-    #[arg(long)]
-    /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool
+    #[clap(flatten)]
+    pub overwrite_towns_arg: OverwriteTownsArg,
+
 
 }
-
-// 9.875345176616486	-32.1156633307933	
-// 9.875345176616486	-32.1156633307933	
-
 
 
 subcommand_def!{
@@ -203,7 +196,7 @@ impl Task for GenTowns {
 
         if let Some(default_args) = self.default_args {
         
-            let mut random = random_number_generator(default_args.seed);
+            let mut random = random_number_generator(default_args.random_seed_arg);
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
     
@@ -214,7 +207,7 @@ impl Task for GenTowns {
             let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForTowns>(progress)?;
     
     
-            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.capital_count, default_args.town_count, default_args.river_threshold, default_args.overwrite, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.capital_count, default_args.town_count, default_args.river_threshold, default_args.overwrite_towns_arg, &mut target, progress)
     
         } else if let Some(command) = self.command {
 
@@ -227,7 +220,7 @@ impl Task for GenTowns {
 }
 
 impl GenTowns {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, river_threshold: f64, overwrite_towns: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, river_threshold: f64, overwrite_towns: OverwriteTownsArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
             Create::run_with_parameters(random, culture_lookup, loaded_namers, capital_count, town_count, overwrite_towns, target, progress)?;

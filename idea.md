@@ -319,6 +319,8 @@ To proceed on this, I can break it down into the following steps:
     * Nondeterministic results: Much of the program revolves around randomness, which means that it is often difficult to reproduce the same results, even with the same seed for the random number generator. This and the unstabilized api mean that any tests that are created are going to fail with even the smallest change.
     * Dependency on external files: Most of the algorithms work on external database files, which are difficult to compare the results of. Mocking the database file wouldn't actually be an appropriate test for much of it. While I could write database comparison routines to compare against previous output -- such tests would take a long time, and combined with the other reasons stated above, I don't feel it is worth doing.
 
+    Many bugs have been discovered only when I accidentally changed some minor thing, and even then only because it happened to cause some radical appearance change. Example: After changing code which would lead to generating one more random number in a task, a whole new world was created which had a nation that was not dissolved-- it was a collection of the original tiles. It was caused by a geographic validity error caused by intersecting feature, except that the point where it intersected looked like it shouldn't be intersecting, the vertices were exactly the same values. I assume there was a difference at some precision I couldn't see in the output, and it was caused by some difference in obtaining that result. The error was in the gdal data, which I have no control over, it didn't cause any error messages, and could have been invisible for a long time -- I had run about thirty different worlds which hadn't had a noticeable problem before discovering this one. In any case, the only thing I could do was add a validity check and take action to make the shape valid.  
+
     # On Layer FID fields:
 
     * According to the [Geopackage standard](http://www.geopackage.org/spec131/index.html#feature_user_tables), the identifier field (which is called fid by default in gdal), is created with the following constraint in SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`.
@@ -341,8 +343,6 @@ To proceed on this, I can break it down into the following steps:
 [X] `dissolve` commands
 [X] `genesis` command and `genesis-heightmap` Which does everything.
 [ ] Also a `regenesis` command that will let you start at a specific stage in the process and regenerate everything from that, but keep the previous stuff. This is different from just the sub-tasks, as it will finish all tasks after that.
-[ ] Start working on QGIS scripts and tools and a plugin for installing them -- maybe, if there's call for it.
-[ ] `submap` command
 [ ] `convert-image` command if I can't just use convert-heightmap
 
 The following additional tasks need to be triaged:
@@ -375,6 +375,7 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
     [-] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
     [ ] Probably the easiest way I can think of to do this (macros are potentially possible but basically require me to parse a whole struct) is to make use of the #[clap(flatten)] attribute and just group the attributes into sets of standard attributes. This means additional member chaining, but it will work from a UI point of view. Go through each command and look for "shared" arguments. Some of them contain multiple arguments (wind directions, extents)
+    [ ] Keep in mind that the terrain commands, also have to be #[serde(flatten)]
 [ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
 [ ] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
 
@@ -447,3 +448,7 @@ These are things that really should be done before release, but they might take 
 [ ] Revisit subnation curvify: the subnations should follow their nation borders when possible. This might be done more easily if we curvify the subnations first, then just dissolve the nations out of their subnations.
 [ ] Review all of the algorithms to see if there are better ways
 [ ] Any way to save the state of the random number generator so we can reload it later? This will be helpful in reproducing stuff while running separate steps.
+[ ] `enhance!` command: This will take a map and *add* random points and tiles to it. Perhaps it will base the new points off of the intersections of the tile boundaries. Heights will be randomly generated for the new points, although within a certain range so that I can try to keep a similar slope, and try to keep the water flow going between the same two tiles. Water will probably not be recalculated, but rivers do need to be rerouted, and lakeshores reshaped. Towns and nations will stay the same, but the new tiles will be assigned by "spreading" the cultures, and nations out based on their neighbors and what they were before. "enhance" comes from the TV show trope where they "enhance" a blurry image and somehow get details out of it that the camera could never have picked up.
+    [ ] Combine this with a `clip` command to extract a smaller extent from the map, and you have the submap command.
+[ ] Curvy shapes could have a way of adding noise to the edges, depending on elevations and random knowledge: coastlines get bumpier curves around higher slopes, while rivers get more meanders on lower slopes.
+

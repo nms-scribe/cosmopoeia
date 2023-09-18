@@ -29,6 +29,10 @@ use crate::algorithms::terrain::SampleOceanBelowLoaded;
 use crate::algorithms::terrain::SampleOceanMaskedLoaded;
 use crate::algorithms::terrain::SampleElevationLoaded;
 use super::TargetArg;
+use crate::commands::ElevationSourceArg;
+use crate::commands::OceanSourceArg;
+use super::RandomSeedArg;
+
 
 
 impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>> Deserialize<'deserializer> for ArgRange<NumberType> {
@@ -111,7 +115,7 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct Recipe {
 
-        /// Raster file defining new elevations
+        /// JSON File describing the tasks to complete
         pub source: PathBuf
     }
 }
@@ -140,7 +144,7 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct RecipeSet {
 
-        /// Raster file defining new elevations
+        /// JSON file containing a map of potential recipes to follow
         pub source: PathBuf,
 
         #[arg(long)]
@@ -499,8 +503,9 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct SampleOceanBelow {
 
-        /// The raster to sample from
-        pub source: PathBuf,
+        #[clap(flatten)]
+        #[serde(flatten)]
+        pub ocean_arg: OceanSourceArg,
 
         /// The elevation to compare to
         #[arg(allow_negative_numbers=true)]
@@ -513,7 +518,7 @@ impl LoadTerrainTask for SampleOceanBelow {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading ocean raster.");
-        let raster = RasterMap::open(&self.source)?;
+        let raster = RasterMap::open(&self.ocean_arg.source)?;
         progress.finish(|| "Ocean raster loaded.");
         Ok(vec![TerrainTask::SampleOceanBelow(SampleOceanBelowLoaded::new(raster,self.elevation))])
     }
@@ -526,8 +531,9 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct SampleOceanMasked {
 
-        /// The raster to read ocean data from
-        pub source: PathBuf
+        #[clap(flatten)]
+        #[serde(flatten)]
+        pub ocean_arg: OceanSourceArg,
     }
 }
 
@@ -537,7 +543,7 @@ impl LoadTerrainTask for SampleOceanMasked {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading ocean raster.");
-        let raster = RasterMap::open(&self.source)?;
+        let raster = RasterMap::open(&self.ocean_arg.source)?;
         progress.finish(|| "Ocean raster loaded.");
         Ok(vec![TerrainTask::SampleOceanMasked(SampleOceanMaskedLoaded::new(raster))])
     }
@@ -550,8 +556,9 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct SampleElevation {
 
-        /// Raster file defining new elevations
-        pub source: PathBuf
+        #[clap(flatten)]
+        #[serde(flatten)]
+        pub heightmap_arg: ElevationSourceArg,
     }
 }
 
@@ -559,7 +566,7 @@ impl LoadTerrainTask for SampleElevation {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading elevation raster.");
-        let raster = RasterMap::open(&self.source)?;
+        let raster = RasterMap::open(&self.heightmap_arg.source)?;
         progress.finish(|| "Elevation raster loaded.");
         Ok(vec![TerrainTask::SampleElevation(SampleElevationLoaded::new(raster))])
     }
@@ -635,9 +642,8 @@ subcommand_def!{
         #[command(subcommand)]
         pub command: TerrainCommand,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
         #[arg(long)]
         /// Instead of processing, display the serialized value for inclusion in a recipe file.
@@ -650,7 +656,7 @@ impl Task for Terrain {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 

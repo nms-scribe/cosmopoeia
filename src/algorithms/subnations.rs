@@ -30,9 +30,10 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
 use crate::world_map::SubnationForNormalize;
+use crate::commands::OverwriteSubnationsArg;
 
 
-pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: f64, overwrite_layer: OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForSubnations>(progress)?;
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForSubnations>(progress)?; 

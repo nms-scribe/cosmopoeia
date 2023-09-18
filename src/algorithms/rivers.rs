@@ -14,6 +14,8 @@ use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
+use crate::commands::OverwriteRiversArg;
+use crate::commands::BezierScaleArg;
 
 pub(crate) struct RiverSegment {
     pub(crate) from: u64,
@@ -41,7 +43,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
     (chosen_segment.expect("Whoever called this function passed an empty list.").clone(),total_flow)
 }
 
-pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: f64, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_layer: OverwriteRiversArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.edit_tile_layer()?;
 
@@ -73,7 +75,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 // create the bezier
                 let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point.as_ref(),&[start_point,end_point],next_point.as_ref());
                 // convert that to a polyline.
-                let line = bezier.to_poly_line(bezier_scale)?;
+                let line = bezier.to_poly_line(&bezier_scale)?;
                 segments.push(NewRiver {
                     from_tile_id: segment.from,
                     from_type,

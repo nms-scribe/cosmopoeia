@@ -27,6 +27,9 @@ use crate::world_map::NamedEntity;
 use crate::world_map::CultureWithNamer;
 use crate::world_map::CultureWithType;
 use crate::commands::TargetArg;
+use super::RandomSeedArg;
+use super::OverwriteNationsArg;
+use super::BezierScaleArg;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -48,14 +51,12 @@ subcommand_def!{
         /// A number, clamped to 0-10, which controls how much cultures can vary in size
         pub size_variance: f64,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
-        #[arg(long)]
-        /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-        pub overwrite: bool
-
+        #[clap(flatten)]
+        pub overwrite_nations_arg: OverwriteNationsArg,
+        
     }
 }
 
@@ -64,7 +65,7 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.seed);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -75,7 +76,7 @@ impl Task for Create {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.size_variance, self.overwrite, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.size_variance, self.overwrite_nations_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -84,7 +85,7 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: f64, overwrite_nations: bool, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: f64, overwrite_nations: OverwriteNationsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating nations");
         generate_nations(target, random, &culture_lookup, loaded_namers, size_variance, overwrite_nations, progress)
     }
@@ -219,9 +220,8 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="100")]
-        /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-        pub bezier_scale: f64,
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg
 
     }
 }
@@ -234,7 +234,7 @@ impl Task for Curvify {
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(self.bezier_scale, target, progress)
+            Self::run_with_parameters(&self.bezier_scale_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -243,10 +243,10 @@ impl Task for Curvify {
 }
 
 impl Curvify {
-    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making nation polygons curvy");
     
-        curvify_layer_by_theme::<_,NationTheme>(target, bezier_scale, progress)
+        curvify_layer_by_theme::<_,NationTheme>(target, &bezier_scale, progress)
     }
     
 }
@@ -283,9 +283,8 @@ pub struct DefaultArgs {
     /// A number, clamped to 0-10, which controls how much cultures can vary in size
     pub size_variance: f64,
 
-    #[arg(long)]
-    /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-    pub seed: Option<u64>,
+    #[clap(flatten)]
+    pub random_seed_arg: RandomSeedArg,
 
     #[arg(long,default_value="10")]
     /// A waterflow threshold above which the tile will count as a river
@@ -295,13 +294,11 @@ pub struct DefaultArgs {
     /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
     pub limit_factor: f64,
 
-    #[arg(long,default_value="100")]
-    /// This number is used for generating points to make curvy lines. The higher the number, the smoother the curves.
-    pub bezier_scale: f64,
+    #[clap(flatten)]
+    pub bezier_scale_arg: BezierScaleArg,
 
-    #[arg(long)]
-    /// If true and the towns layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite: bool
+    #[clap(flatten)]
+    pub overwrite_nations_arg: OverwriteNationsArg,
 
 
 }
@@ -326,7 +323,7 @@ impl Task for GenNations {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(default_args) = self.default_args {
-            let mut random = random_number_generator(default_args.seed);
+            let mut random = random_number_generator(default_args.random_seed_arg);
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
     
@@ -336,7 +333,7 @@ impl Task for GenNations {
 
             let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
     
-            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.size_variance, default_args.river_threshold, default_args.limit_factor, default_args.bezier_scale, default_args.overwrite, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, default_args.size_variance, default_args.river_threshold, default_args.limit_factor, &default_args.bezier_scale_arg, default_args.overwrite_nations_arg, &mut target, progress)
 
         } else if let Some(command) = self.command {
 
@@ -351,7 +348,7 @@ impl Task for GenNations {
 
 impl GenNations {
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: f64, river_threshold: f64, limit_factor: f64, bezier_scale: f64, overwrite_nations: bool, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: f64, river_threshold: f64, limit_factor: f64, bezier_scale: &BezierScaleArg, overwrite_nations: OverwriteNationsArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
     
             Create::run_with_parameters(random, culture_lookup, loaded_namers, size_variance, overwrite_nations, target, progress)?;

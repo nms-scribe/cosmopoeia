@@ -24,14 +24,17 @@ use crate::world_map::CultureForNations;
 use crate::commands::gen_towns::GenTowns;
 use crate::commands::gen_nations::GenNations;
 use crate::commands::gen_subnations::GenSubnations;
+use super::TileCountArg;
+use super::RandomSeedArg;
+use super::OverwriteAllArg;
+use super::BezierScaleArg;
 
 
 #[derive(Args)]
 pub struct PrimitiveArgs {
 
-    #[arg(long,default_value="10000")]
-    /// The rough number of tiles to generate for the image
-    pub tiles: usize,
+    #[clap(flatten)]
+    pub tile_count_arg: TileCountArg,
 
     /// The rough temperature (in celsius) at the equator
     #[arg(long,default_value="25",allow_hyphen_values=true)]
@@ -69,9 +72,8 @@ pub struct PrimitiveArgs {
     /// Amount of moisture on a scale of 0-500
     pub moisture_factor: u16,
 
-    #[arg(long,default_value="100")]
-    /// This number is used for generating points to make curvy lines and shapes. The higher the number, the smoother the curves.
-    pub bezier_scale: f64,
+    #[clap(flatten)]
+    pub bezier_scale_arg: BezierScaleArg,
 
     #[arg(long,default_value="2")]
     /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
@@ -105,49 +107,8 @@ pub struct PrimitiveArgs {
     /// The percent of towns in each nation to use for subnations
     pub subnation_percentage: f64,
 
-    #[arg(long)]
-    /// If true and the 'tiles' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_tiles: bool, 
-
-    #[arg(long)]
-    /// If true and the 'coastline' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_coastline: bool, 
-
-    #[arg(long)]
-    /// If true and the 'ocean' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_ocean: bool, 
-
-    #[arg(long)]
-    /// If true and the 'lakes' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_lakes: bool, 
-
-    #[arg(long)]
-    /// If true and the 'rivers' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_rivers: bool, 
-
-    #[arg(long)]
-    /// If true and the 'biomes' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_biomes: bool, 
-
-    #[arg(long)]
-    /// If true and the 'cultures' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_cultures: bool, 
-
-    #[arg(long)]
-    /// If true and the 'towns' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_towns: bool, 
-
-    #[arg(long)]
-    /// If true and the 'nations' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_nations: bool, 
-
-    #[arg(long)]
-    /// If true and the 'subnations' layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
-    pub overwrite_subnations: bool,
-
-    #[arg(long)]
-    /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
-    pub overwrite: bool,
+    #[clap(flatten)]
+    pub overwrite_all_arg: OverwriteAllArg,
 
     #[arg(long)]
     /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
@@ -170,9 +131,8 @@ subcommand_def!{
         /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
         pub namers: Vec<PathBuf>,
 
-        #[arg(long)]
-        /// Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt.
-        pub seed: Option<u64>,
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
 
         #[clap(flatten)]
         pub primitive_args: PrimitiveArgs,
@@ -188,7 +148,7 @@ impl Task for BigBang {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = crate::utils::random_number_generator(self.seed);
+        let mut random = crate::utils::random_number_generator(self.random_seed_arg);
 
         let namer_set = NamerSetSource::from_files(self.namers)?;
 
@@ -210,7 +170,7 @@ impl BigBang {
 
         let mut target = WorldMap::create_or_edit(&target_arg.target)?;
 
-        Create::run_default(primitive_args.tiles, primitive_args.overwrite || primitive_args.overwrite_tiles, loaded_source, &mut target, random, progress)?;
+        Create::run_default(primitive_args.tile_count_arg, primitive_args.overwrite_all_arg.overwrite_tiles(), loaded_source, &mut target, random, progress)?;
 
         let winds = [
             primitive_args.north_polar_wind as i32,
@@ -239,21 +199,21 @@ impl BigBang {
          */
         let mut target = target.reedit()?;
 
-        GenWater::run_default(primitive_args.bezier_scale, primitive_args.lake_buffer_scale, primitive_args.overwrite || primitive_args.overwrite_coastline, primitive_args.overwrite || primitive_args.overwrite_ocean, primitive_args.overwrite || primitive_args.overwrite_lakes, primitive_args.overwrite || primitive_args.overwrite_rivers, &mut target, progress)?;
+        GenWater::run_default(&primitive_args.bezier_scale_arg, primitive_args.lake_buffer_scale, primitive_args.overwrite_all_arg.overwrite_coastline(), primitive_args.overwrite_all_arg.overwrite_ocean(), primitive_args.overwrite_all_arg.overwrite_lakes(), primitive_args.overwrite_all_arg.overwrite_rivers(), &mut target, progress)?;
 
-        GenBiome::run_default(primitive_args.overwrite || primitive_args.overwrite_biomes, primitive_args.bezier_scale, &mut target, progress)?;
+        GenBiome::run_default(primitive_args.overwrite_all_arg.overwrite_biomes(), &primitive_args.bezier_scale_arg, &mut target, progress)?;
 
         // The 'namer_set' here is not loaded, it's only used to verify that a namer exists for a culture while creating. Just to be clear, I'm not loading the namers twice, they are only loaded in `get_lookup_and_namers` below.
-        GenPeople::run_default(primitive_args.river_threshold, cultures, &namers, primitive_args.culture_count, primitive_args.size_variance, primitive_args.overwrite || primitive_args.overwrite_cultures, primitive_args.limit_factor, primitive_args.bezier_scale, &mut target, random, progress)?;
+        GenPeople::run_default(primitive_args.river_threshold, cultures, &namers, primitive_args.culture_count, primitive_args.size_variance, primitive_args.overwrite_all_arg.overwrite_cultures(), primitive_args.limit_factor, &primitive_args.bezier_scale_arg, &mut target, random, progress)?;
 
         // CultureForNations implements everything that all the algorithms need.
         let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
     
-        GenTowns::run_default(random, &culture_lookup, namers, primitive_args.capital_count, primitive_args.town_count, primitive_args.river_threshold, primitive_args.overwrite || primitive_args.overwrite_towns, &mut target, progress)?;
+        GenTowns::run_default(random, &culture_lookup, namers, primitive_args.capital_count, primitive_args.town_count, primitive_args.river_threshold, primitive_args.overwrite_all_arg.overwrite_towns(), &mut target, progress)?;
 
-        GenNations::run_default(random, &culture_lookup, namers, primitive_args.size_variance, primitive_args.river_threshold, primitive_args.limit_factor, primitive_args.bezier_scale, primitive_args.overwrite || primitive_args.overwrite_nations, &mut target, progress)?;
+        GenNations::run_default(random, &culture_lookup, namers, primitive_args.size_variance, primitive_args.river_threshold, primitive_args.limit_factor, &primitive_args.bezier_scale_arg, primitive_args.overwrite_all_arg.overwrite_nations(), &mut target, progress)?;
 
-        GenSubnations::run_default(random, culture_lookup, namers, primitive_args.subnation_percentage, primitive_args.overwrite || primitive_args.overwrite_subnations, primitive_args.bezier_scale, &mut target, progress)
+        GenSubnations::run_default(random, culture_lookup, namers, primitive_args.subnation_percentage, primitive_args.overwrite_all_arg.overwrite_subnations(), &primitive_args.bezier_scale_arg, &mut target, progress)
 
     }
 }

@@ -25,6 +25,7 @@ use crate::progress::ProgressObserver;
 use crate::world_map::TileForTowns;
 use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
+use crate::commands::OverwriteTownsArg;
 
 pub(crate) struct ScoredTileForTowns {
     pub(crate) tile: TileForTowns,
@@ -32,7 +33,7 @@ pub(crate) struct ScoredTileForTowns {
     pub(crate) town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, overwrite_layer: bool, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, overwrite_layer: OverwriteTownsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // a lot of this is ported from AFMG
 
