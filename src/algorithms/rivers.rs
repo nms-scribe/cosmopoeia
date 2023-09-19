@@ -96,7 +96,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
 
     
     for segment in segments.iter().watch(progress,"Writing rivers.","Rivers written.") {
-        segments_layer.add_segment(segment)?;
+        _ = segments_layer.add_segment(segment)?;
     }
 
     Ok(())
@@ -245,13 +245,13 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
         // otherwise, we don't have a duplicate, let's map it and add it to the queue.
         match tile_from_index.get_mut(&segment.from) {
             None => {
-                tile_from_index.insert(segment.from,vec![segment.clone()]);
+                _ = tile_from_index.insert(segment.from,vec![segment.clone()]);
             },
             Some(entry) => entry.push(segment.clone()),
         };
         match tile_to_index.get_mut(&segment.to) {
             None => {
-                tile_to_index.insert(segment.to,vec![segment.clone()]);
+                _ = tile_to_index.insert(segment.to,vec![segment.clone()]);
             },
             Some(entry) => entry.push(segment.clone()),
         };

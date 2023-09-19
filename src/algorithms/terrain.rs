@@ -472,7 +472,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
                 limit += 1;
             }
 
-            change_map.insert(start,height_delta);
+            _ = change_map.insert(start,height_delta);
             let mut queue = VecDeque::from([start]).watch_queue(progress,format!("Generating hill #{}.",i+1),format!("Hill #{} generated.",i+1));
 
             while let Some(tile_id) = queue.pop_front() {
@@ -484,7 +484,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
                     }
 
                     let neighbor_height_delta = last_change.powf(parameters.blob_power) * (rng.gen_range(0.0..0.2) + 0.9);
-                    change_map.insert(*neighbor_id, neighbor_height_delta);
+                    _ = change_map.insert(*neighbor_id, neighbor_height_delta);
                     if neighbor_height_delta > 1.0 { 
                         queue.push_back(*neighbor_id)
                     }
@@ -558,7 +558,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                     for (neighbor_id,_) in &tile_map.try_get(&tile_id)?.neighbors {
                         if !used.contains(neighbor_id) {
                             queue.push(*neighbor_id);
-                            used.insert(*neighbor_id);
+                            _ = used.insert(*neighbor_id);
                         }
 
                     }
@@ -614,7 +614,7 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
     let mut cur_id = start;
     let end_tile = tile_map.try_get(&end)?;
     let mut range = vec![cur_id];
-    used.insert(cur_id);
+    _ = used.insert(cur_id);
     while cur_id != end {
         let mut min = f64::INFINITY;
         let cur_tile = tile_map.try_get(&cur_id)?;
@@ -641,7 +641,7 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
             break;
         }
         range.push(cur_id);
-        used.insert(cur_id);
+        _ = used.insert(cur_id);
     }
     Ok(range)
 
@@ -741,7 +741,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
                     if used.contains(&neighbor_id) {
                         continue;
                     }
-                    used.insert(*neighbor_id);
+                    _ = used.insert(*neighbor_id);
                     next_queue.push(*neighbor_id);
                 }
 
@@ -850,7 +850,7 @@ impl ProcessTerrainTilesWithPointIndex for Invert {
                     // NOTE: This is where the most time is spent. Removing this and setting switch_tile_id to a constant value 
                     // sped up things about 90%. Of course, it also broke the algorithm.
                     let switch_tile_id = point_index.find_nearest_tile(&switch_point)?;
-                    switches.insert(switch_tile_id, *fid);     
+                    _ = switches.insert(switch_tile_id, *fid);     
                     switch_tile_id               
                 },
                 Some(id) => *id,

@@ -178,7 +178,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                         outlet_tiles: Vec::new()
                     };
 
-                    lake_map.insert(lake_id, new_lake);
+                    _ = lake_map.insert(lake_id, new_lake);
                     Task::FillLake(lake_id,accumulation) // I just inserted it, it should exist here.
 
                 } else {
@@ -270,7 +270,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                                 if checked_tiles.contains(&check_fid) {
                                     continue;
                                 }
-                                checked_tiles.insert(check_fid);
+                                _ = checked_tiles.insert(check_fid);
 
 
                                 let check = tile_map.try_get(&check_fid)?; 
@@ -386,9 +386,9 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
                 // replace it in the map.
                 for lake in delete_lakes {
-                    lake_map.remove(&lake);
+                    _ = lake_map.remove(&lake);
                 }
-                lake_map.insert(lake_id, new_lake);
+                _ = lake_map.insert(lake_id, new_lake);
             },
         
         }
@@ -423,7 +423,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 geometry: geometry
             };
             lakes.push(lake.clone());
-            new_lake_map.insert(id, lake);
+            _ = new_lake_map.insert(id, lake);
 
         }
 
@@ -439,7 +439,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
     for (id,lake) in new_lake_map.into_iter().watch(progress,"Writing lakes.","Lakes written.") {
         let lake_fid = lakes_layer.add_lake(lake)?;
-        written_lake_map.insert(id, lake_fid);
+        _ = written_lake_map.insert(id, lake_fid);
 
     }
 

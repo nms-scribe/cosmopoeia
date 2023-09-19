@@ -166,7 +166,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         let index = cultures.len();
         match culture_names.get_mut(&name) {
             None => {
-                culture_names.insert(name.clone(), vec![index]);
+                _ = culture_names.insert(name.clone(), vec![index]);
             },
             Some(indexes) => indexes.push(index),
         }
@@ -210,7 +210,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
     for culture in cultures.iter().watch(progress,"Writing cultures.","Cultures written.") {
 
-        cultures_layer.add_culture(culture)?;
+        _ = cultures_layer.add_culture(culture)?;
 
     }
 
@@ -313,14 +313,14 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     
     for culture in cultures {
 
-        culture_centers.insert(culture.center_tile_id);
+        _ = culture_centers.insert(culture.center_tile_id);
 
         // place the culture center
         let tile = tile_map.try_get_mut(&(culture.center_tile_id))?;
         tile.culture = Some(culture.name.clone());
 
         // add the tile to the queue for work.
-        queue.push((culture.center_tile_id,culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        _ = queue.push((culture.center_tile_id,culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -381,7 +381,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                         place_cultures.push((*neighbor_id,culture.name.clone()));
                         // even if we don't place the culture, because people can't live here, it will still spread.
                     }
-                    costs.insert(*neighbor_id, total_cost);
+                    _ = costs.insert(*neighbor_id, total_cost);
 
                     queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), Reverse(total_cost));
 

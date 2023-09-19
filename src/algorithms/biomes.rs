@@ -23,7 +23,7 @@ pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut World
     progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
 
     for data in &default_biomes {
-        biomes.add_biome(data)?;
+        _ = biomes.add_biome(data)?;
     }
 
     progress.finish(|| "Biomes written.");
@@ -68,7 +68,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
                    (((water_flow_scaled > 40.0) && (tile.elevation_scaled < 25)) ||
                     ((water_flow_scaled > 24.0) && (tile.elevation_scaled > 24) && (tile.elevation_scaled < 60))) {
                     biomes.wetland.clone()
-                } else if let Some(LakeType::Marsh) = tile.lake_id.and_then(|id| Some(lake_map.try_get(&(id as u64)).map(|l| &l.type_))).transpose()? {
+                } else if let Some(LakeType::Marsh) = tile.lake_id.and_then(|id| Some(lake_map.try_get(&(id)).map(|l| &l.type_))).transpose()? {
                     biomes.wetland.clone()
                 } else {
                     let moisture_band = ((water_flow_scaled/5.0).floor() as usize).min(4); // 0-4

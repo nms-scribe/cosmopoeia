@@ -378,9 +378,11 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
     [-] Keep in mind that the terrain commands, also have to be #[serde(flatten)]
 [-] Consider if it makes sense to turn the TemperatureArg into an ArgRange
 [X] Consider turning the WindsArg into a map of directions by latitude range
-    [ ] Test this if possible
-[ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
-[ ] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
+    [X] Test this if possible
+[-] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
+[X] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
+[X] Look at other lints I might want to do
+[ ] See if I can configure clippy with VS code and run that.
 
 ## Complex Pre-release tasks
 These are things that really should be done before release, but they might take a bit of work to figure out.

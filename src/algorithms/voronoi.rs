@@ -208,7 +208,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
                 match sites.get_mut(&point) {
                     None => {
-                        sites.insert(point, VoronoiInfo {
+                        _ = sites.insert(point, VoronoiInfo {
                                                 vertices: vec![circumcenter.clone()]
                                             });
                     },

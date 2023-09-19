@@ -328,7 +328,7 @@ impl Task for Cultures {
         
         }
 
-        let mut random = crate::utils::random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(self.random_seed_arg);
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 

@@ -262,7 +262,7 @@ impl<'lifetime> LayerGeometryIterator<'lifetime> {
 
 }
 
-impl<'lifetime> Iterator for LayerGeometryIterator<'lifetime> {
+impl Iterator for LayerGeometryIterator<'_> {
 
     type Item = Result<Geometry,CommandError>;
 
@@ -740,7 +740,7 @@ pub(crate) mod title_case {
 
     use std::fmt;
 
-    pub struct AsTitleCase<StringType: AsRef<str>>(StringType);
+    pub(crate) struct AsTitleCase<StringType: AsRef<str>>(StringType);
 
     impl<T: AsRef<str>> fmt::Display for AsTitleCase<T> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -803,7 +803,7 @@ pub(crate) mod namers_pretty_print {
 
     /// This structure pretty prints a JSON value to make it human readable.
     #[derive(Clone, Debug)]
-    pub struct PrettyFormatter<'a> {
+    pub(crate) struct PrettyFormatter<'a> {
         current_indent: usize,
         has_value: bool,
         array_nesting: usize,
@@ -812,12 +812,12 @@ pub(crate) mod namers_pretty_print {
 
     impl<'a> PrettyFormatter<'a> {
         /// Construct a pretty printer formatter that defaults to using two spaces for indentation.
-        pub fn new() -> Self {
+        pub(crate) fn new() -> Self {
             PrettyFormatter::with_indent(b"  ")
         }
 
         /// Construct a pretty printer formatter that uses the `indent` string for indentation.
-        pub fn with_indent(indent: &'a [u8]) -> Self {
+        pub(crate) fn with_indent(indent: &'a [u8]) -> Self {
             PrettyFormatter {
                 current_indent: 0,
                 has_value: false,
@@ -827,13 +827,13 @@ pub(crate) mod namers_pretty_print {
         }
     }
 
-    impl<'a> Default for PrettyFormatter<'a> {
+    impl Default for PrettyFormatter<'_> {
         fn default() -> Self {
             PrettyFormatter::new()
         }
     }
 
-    impl<'a> Formatter for PrettyFormatter<'a> {
+    impl Formatter for PrettyFormatter<'_> {
         #[inline]
         fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
         where

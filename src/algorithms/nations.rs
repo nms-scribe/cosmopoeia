@@ -32,7 +32,7 @@ use crate::commands::SizeVarianceArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::ExpansionFactorArg;
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_layer: &OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_layer: &OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
@@ -72,7 +72,7 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
 
     let mut nations_layer = target.create_nations_layer(overwrite_layer)?;
     for nation in nations.into_iter().watch(progress,"Writing nations.","Nations written.") {
-        nations_layer.add_nation(nation)?;
+        _ = nations_layer.add_nation(nation)?;
     }
 
     Ok(())
@@ -107,12 +107,12 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
         let tile = tile_map.try_get_mut(&nation.center_tile_id)?;
         tile.nation_id = Some(nation.fid);
 
-        costs.insert(nation.center_tile_id, OrderedFloat::from(1.0));
+        _ = costs.insert(nation.center_tile_id, OrderedFloat::from(1.0));
 
-        capitals.insert(nation.center_tile_id);
+        _ = capitals.insert(nation.center_tile_id);
 
         // add the tile to the queue for work.
-        queue.push((nation.center_tile_id,nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        _ = queue.push((nation.center_tile_id,nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -178,7 +178,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                         place_nations.push((*neighbor_id,nation.fid.clone()));
                         // even if we don't place the culture, because people can't live here, it will still spread.
                     }
-                    costs.insert(*neighbor_id, total_cost);
+                    _ = costs.insert(*neighbor_id, total_cost);
 
                     queue.push((*neighbor_id, nation.clone(), nation_biome.clone()), Reverse(total_cost));
 
@@ -409,7 +409,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
             let neighbor = tile_map.try_get(&neighbor_id)?;
 
             if let Some(town_id) = neighbor.town_id {
-                let town = town_index.try_get(&(town_id as u64))?;
+                let town = town_index.try_get(&(town_id))?;
                 if town.is_capital {
                     dont_overwrite = true; // don't overwrite near capital
                     break;
@@ -419,9 +419,9 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
             if !neighbor.grouping.is_water() {
                 if neighbor.nation_id != tile.nation_id {
                     if let Some(count) = adversaries.get(&neighbor.nation_id) {
-                        adversaries.insert(neighbor.nation_id, count + 1)
+                        _ = adversaries.insert(neighbor.nation_id, count + 1);
                     } else {
-                        adversaries.insert(neighbor.nation_id, 1)
+                        _ = adversaries.insert(neighbor.nation_id, 1);
                     };
                     adversary_count += 1;
                 } else {

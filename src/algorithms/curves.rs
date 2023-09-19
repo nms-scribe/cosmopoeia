@@ -13,7 +13,7 @@ use crate::world_map::TypedFeature;
 use crate::utils::PolyBezier;
 use crate::commands::BezierScaleArg;
 
-pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut vertex_index = HashMap::new();
 
@@ -31,7 +31,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
                     match vertex_index.get_mut(&vertex) {
                         Some(entry) => *entry += 1,
                         None => {
-                            vertex_index.insert(vertex, 1);
+                            _ = vertex_index.insert(vertex, 1);
                         },
                     }
                 }
@@ -129,7 +129,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
                         let point = segment[0].clone();
                         let index = match segment_cache.get_mut(&segment[0]) {
                             None => {
-                                segment_cache.insert(segment[0].clone(), vec![segment]);
+                                _ = segment_cache.insert(segment[0].clone(), vec![segment]);
                                 0
                             },
                             Some(cache) => {
@@ -152,7 +152,7 @@ pub(crate) fn curvify_layer_by_theme<'target,Progress: ProgressObserver, ThemeTy
             polygons.push(rings);
         }
 
-        polygon_segments.insert(fid, polygons);
+        _ = polygon_segments.insert(fid, polygons);
     }
 
     for value in segment_cache.values_mut().watch(progress, "Curvifying line segments.", "Line segments curvified.") {

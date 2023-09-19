@@ -1,6 +1,24 @@
 /*!
 Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage file. For instructions, see the wiki.
 */
+
+//#![warn(non_exhaustive_omitted_patterns)] // FUTURE: unstable, but it looks useful
+//#![warn(private_bounds)] // FUTURE: unstable, but it looks useful
+//#![warn(private_interfaces)] // FUTURE: unstable, but it looks useful
+//#![warn(unnameable_types)] // FUTURE: unstable, but it looks useful
+#![warn(noop_method_call)] // This hasn't caught anything yet, but it is something I've worried about.
+#![warn(single_use_lifetimes)] // This caught a few places where I didn't need to specify lifetimes but did.
+#![warn(unused_lifetimes)] // As did this
+#![warn(trivial_numeric_casts)] // This caught some 'as' statements which were leftover from a previous refactor
+#![warn(unreachable_pub)] // This caught some 'pub' declarations that weren't necessary
+#![warn(unused_crate_dependencies)] // This hasn't caught anything yet, but I do want to be told if I need to get rid of a crate.
+#![warn(meta_variable_misuse)] // This caught a macro kleene-operator difference between definition and implementation, it might catch some other things
+#![warn(unused_macro_rules)] // This caught some macro branches that weren't followed after a refactor
+#![warn(unused_qualifications)] // This caught a few bits of code that looked bad
+#![warn(unused_results)] // This one will be controversial, but I think it's useful. Most of the warnings should occur with map inserts, and a few of the removes. If it's something else, then I should think about it. It's easy to get around by adding a `_ = ` before the code (not a variable assignment, but a pattern assignment)
+#![warn(unused_tuple_struct_fields)]
+#![warn(variant_size_differences)]
+
 use clap::Parser;
 
 pub(crate) mod errors;

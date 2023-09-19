@@ -91,7 +91,7 @@ impl Task for Flow {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        _ = target.with_transaction(|target| {
             Self::run_with_parameters(target, progress)
         })?;
 

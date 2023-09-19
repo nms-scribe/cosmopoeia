@@ -18,7 +18,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
     let mut groupings = Vec::new();
     let mut ocean = HashSet::new();
-    let mut next_grouping_id = 1 as u64..;
+    let mut next_grouping_id = 1..;
 
     let mut table = table.watch_queue(progress,"Calculating group types.","Group types calculated.");
     // pop the next one off of the table.
@@ -35,16 +35,16 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
         let grouping_type = if tile.grouping.is_ocean() {
             // track this as an ocean, so we can tell if land borders an ocean later.
-            ocean.insert(fid);
+            _ = ocean.insert(fid);
 
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
             while let Some((neighbor_fid,_)) = neighbors.pop() {
                 if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
                     if neighbor.grouping.is_ocean() {
                         // it's part of the same group
-                        ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
+                        _ = ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
                         neighbors.extend(neighbor.neighbors.iter());
-                        table.try_remove(&neighbor_fid)?;
+                        _ = table.try_remove(&neighbor_fid)?;
                         group.push(neighbor_fid);
                     }
     
@@ -67,7 +67,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                     } else if is_lake == neighbor.lake_id {
                         // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
                         neighbors.extend(neighbor.neighbors.iter());
-                        table.try_remove(&neighbor_fid)?;
+                        _ = table.try_remove(&neighbor_fid)?;
                         group.push(neighbor_fid);
                     }
     

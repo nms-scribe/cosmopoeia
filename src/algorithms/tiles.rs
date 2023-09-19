@@ -122,10 +122,10 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
             let point: Point = ring.get_point(i).try_into()?;
             match point_tile_index.get_mut(&point) {
                 None => {
-                    point_tile_index.insert(point, HashSet::from([*fid]));
+                    _ = point_tile_index.insert(point, HashSet::from([*fid]));
                 },
                 Some(set) => {
-                    set.insert(*fid);
+                    _ = set.insert(*fid);
                 }
             }
         }
@@ -299,13 +299,13 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     let mut coastline_layer = target.create_coastline_layer(overwrite_coastline)?;
     if let Some(land_polygons) = land_polygons {
         for polygon in land_polygons.into_iter().watch(progress, "Writing land masses.", "Land masses written.") {
-            coastline_layer.add_land_mass(polygon)?;
+            _ = coastline_layer.add_land_mass(polygon)?;
         }
     }
 
     let mut ocean_layer = target.create_ocean_layer(overwrite_ocean)?;
     for polygon in ocean_polygons.into_iter().watch(progress, "Writing oceans.", "Oceans written.") {
-        ocean_layer.add_ocean(polygon)?;
+        _ = ocean_layer.add_ocean(polygon)?;
     }
 
     Ok(())
@@ -319,7 +319,7 @@ pub(crate) trait Theme: Sized {
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError>;
 
-    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<std::option::Option<u64>, CommandError>;
+    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<Option<u64>, CommandError>;
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
 
@@ -345,7 +345,7 @@ impl Theme for CultureTheme {
         })
     }
 
-    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<std::option::Option<u64>, CommandError> {
+    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<Option<u64>, CommandError> {
         if let Some(culture) = &tile.culture {
             Ok::<_,CommandError>(Some(self.culture_id_map.try_get(culture)?.fid))
         } else {
@@ -381,7 +381,7 @@ impl Theme for BiomeTheme {
         })
     }
 
-    fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<std::option::Option<u64>, CommandError> {
+    fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<Option<u64>, CommandError> {
         let biome = &tile.biome; 
         Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid))
     }
@@ -411,8 +411,8 @@ impl Theme for NationTheme {
         Ok(Self())
     }
 
-    fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<std::option::Option<u64>, CommandError> {
-        Ok(tile.nation_id.map(|n| n as u64))
+    fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<Option<u64>, CommandError> {
+        Ok(tile.nation_id)
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -441,8 +441,8 @@ impl Theme for SubnationTheme {
         Ok(Self())
     }
 
-    fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<std::option::Option<u64>, CommandError> {
-        Ok(tile.subnation_id.map(|n| n as u64))
+    fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<Option<u64>, CommandError> {
+        Ok(tile.subnation_id)
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -458,7 +458,7 @@ impl Theme for SubnationTheme {
 }
 
 
-pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeType: Theme>(target: &'target mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
+pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
 {
 
     let mut new_polygon_map: HashMap<u64, _> = HashMap::new();
@@ -482,7 +482,7 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
                 if let Some(id) = theme.get_theme_id(neighbor)? {
                     match usable_neighbors.get_mut(&id) {
                         None => {
-                            usable_neighbors.insert(id, 1);
+                            _ = usable_neighbors.insert(id, 1);
                         },
                         Some(entry) => {
                             *entry += 1
@@ -504,7 +504,7 @@ pub(crate) fn dissolve_tiles_by_theme<'target,Progress: ProgressObserver, ThemeT
         if let Some((key,geometry)) = mapping {
             match new_polygon_map.get_mut(&key) {
                 None => {
-                    new_polygon_map.insert(key, vec![geometry]);
+                    _ = new_polygon_map.insert(key, vec![geometry]);
                 },
                 Some(entry) => entry.push(geometry),
             }

@@ -96,9 +96,6 @@ macro_rules! feature_get_field_type {
     (f64) => {
         f64
     };
-    (i64) => {
-        i64
-    };
     (id_ref) => {
         u64
     };
@@ -107,9 +104,6 @@ macro_rules! feature_get_field_type {
     };
     (bool) => {
         bool
-    };
-    (option_i64) => {
-        Option<i64> // this is the same because everything's an option, the option tag only means it can accept options
     };
     (option_id_ref) => {
         Option<u64>
@@ -152,12 +146,6 @@ macro_rules! feature_get_field_type {
 macro_rules! feature_set_field_type {
     (f64) => {
         f64
-    };
-    (i64) => { // TODO: Remove?
-        i64
-    };
-    (option_i64) => {
-        Option<i64>
     };
     (id_ref) => {
         u64
@@ -216,14 +204,8 @@ macro_rules! feature_get_field {
     ($self: ident f64 $feature_name: literal $prop: ident $field: path) => {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?)
     };
-    ($self: ident i64 $feature_name: literal $prop: ident $field: path) => {
-        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer64_by_name($field)?))
-    };
     ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
         Ok(string_to_id_ref(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
-    };
-    ($self: ident option_i64 $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_integer64_by_name($field)?)
     };
     ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
         Ok($self.feature.field_as_string_by_name($field)?.map(|a| string_to_id_ref(a)).transpose()?)
@@ -294,22 +276,12 @@ macro_rules! feature_set_field {
             Ok($self.feature.set_field_null($field)?)
         }
     };
-    ($self: ident $value: ident i64 $field: path) => {
-        Ok($self.feature.set_field_integer64($field, $value)?)
-    };
     ($self: ident $value: ident id_ref $field: path) => {
         Ok($self.feature.set_field_string($field, &id_ref_to_string(&$value))?)
     };
     ($self: ident $value: ident option_id_ref $field: path) => {
         if let Some(value) = $value {
             Ok($self.feature.set_field_string($field, &id_ref_to_string(&value))?)
-        } else {
-            Ok($self.feature.set_field_null($field)?)
-        }
-    };
-    ($self: ident $value: ident option_i64 $field: path) => {
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_integer64($field, value)?)
         } else {
             Ok($self.feature.set_field_null($field)?)
         }
@@ -372,13 +344,6 @@ macro_rules! feature_to_value {
             None
         }
     };
-    ($prop: expr; option_i64) => {
-        if let Some(value) = $prop {
-            Some(FieldValue::Integer64Value(value))
-        } else {
-            None
-        }
-    };
     ($prop: expr; option_id_ref) => {
         if let Some(value) = $prop {
             Some(FieldValue::StringValue(id_ref_to_string(&value)))
@@ -391,9 +356,6 @@ macro_rules! feature_to_value {
     };
     ($prop: expr; neighbor_directions) => {
         Some(FieldValue::StringValue(neighbor_directions_to_string($prop)))
-    };
-    ($prop: expr; i64) => {
-        Some(FieldValue::Integer64Value($prop))
     };
     ($prop: expr; id_ref) => {
         // store id_ref as a string so I can use u64, as fields only support i64
@@ -500,14 +462,8 @@ macro_rules! get_field_type_for_prop_type {
     (option_string) => {
         OGRFieldType::OFTString
     };
-    (option_i64) => {
-        OGRFieldType::OFTInteger64
-    };
     (neighbor_directions) => {
         OGRFieldType::OFTString
-    };
-    (i64) => {
-        OGRFieldType::OFTInteger64
     };
     (river_segment_from) => {
         OGRFieldType::OFTString
@@ -620,7 +576,7 @@ macro_rules! layer {
             impl [<$name Feature>]<'_> {
 
                 // feature initializer function
-                $(#[$to_values_attr])? pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($prop),*)],[Option<FieldValue>; feature_count_fields!($($prop),*)]),CommandError> {
+                $(#[$to_values_attr])* pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($prop),*)],[Option<FieldValue>; feature_count_fields!($($prop),*)]),CommandError> {
                     Ok(([
                         $(paste!{
                             [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
@@ -692,7 +648,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
 impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> TypedFeatureIterator<'impl_life, SchemaType, Feature> {
 
-    pub(crate) fn to_entities_vec<'local, Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+    pub(crate) fn to_entities_vec<Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
         let mut result = Vec::new();
         for entity in self.watch(progress,format!("Reading {}.",SchemaType::LAYER_NAME),format!("{} read.",SchemaType::LAYER_NAME.to_title_case())) {
             result.push(Data::try_from(entity)?);
@@ -720,19 +676,19 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
             callback(&fid,&entity)?;
     
-            result.insert(fid,entity);
+            _ = result.insert(fid,entity);
         }
 
         Ok(EntityIndex::from(result))
     }
 
-    pub(crate) fn to_named_entities_index<'local, Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&'local mut self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
+    pub(crate) fn to_named_entities_index<Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
         let mut result = HashMap::new();
 
         for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
             let entity = Data::try_from(feature)?;
             let name = entity.name().to_owned();
-            result.insert(name, entity);
+            _ = result.insert(name, entity);
         }
 
         Ok(EntityLookup::from(result))
@@ -846,7 +802,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         self.inner.pop()
     }
 
-    pub(crate) fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<FinishMessage, Progress, SchemaType, EntityType> {
+    pub(crate) fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<FinishMessage, Progress, SchemaType, EntityType> {
         progress.start(|| (start,Some(self.len())));
         EntityIndexQueueWatcher { 
             finish: finish, 
@@ -886,7 +842,7 @@ pub(crate) struct EntityIndexQueueWatcher<'progress,Message: AsRef<str>, Progres
     popped: usize,
 }
 
-impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexQueueWatcher<'progress,Message,Progress,SchemaType,EntityType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexQueueWatcher<'_,Message,Progress,SchemaType,EntityType> {
 
     pub(crate) fn pop(&mut self) -> Option<(u64,EntityType)> {
         let result = self.inner.pop();
@@ -1019,7 +975,7 @@ macro_rules! entity {
         }
 
         paste::paste!{
-            impl<'impl_life> Entity<[<$layer Schema>]> for $name {
+            impl Entity<[<$layer Schema>]> for $name {
 
             }
     
@@ -1155,7 +1111,7 @@ impl PointLayer<'_,'_> {
 
     pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
 
-        self.add_feature(point,&[],&[])?;
+        _ = self.add_feature(point,&[],&[])?;
         Ok(())
     
     }
@@ -1168,7 +1124,7 @@ impl TriangleLayer<'_,'_> {
 
     pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
 
-        self.add_feature(geo,&[],&[])?;
+        _ = self.add_feature(geo,&[],&[])?;
         Ok(())
 
     }
@@ -1509,10 +1465,10 @@ impl TileForCulturePrefSorting<'_> {
     pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TileLayer, biomes: &'biomes EntityLookup<BiomeSchema,BiomeForCultureGen>, lakes: &EntityIndex<LakeSchema,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
         let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
-            let closest_water = closest_water as u64;
+            let closest_water = closest_water;
             let closest_water = tiles.try_feature_by_id(&closest_water)?;
             if let Some(lake_id) = closest_water.lake_id()? {
-                let lake_id = lake_id as u64;
+                let lake_id = lake_id;
                 let lake = lakes.try_get(&lake_id)?;
                 Some(lake.size)
             } else {
@@ -1769,7 +1725,7 @@ impl TileLayer<'_,'_> {
 
     pub(crate) fn add_tile(&mut self, tile: NewTile) -> Result<(),CommandError> {
 
-        self.add_feature(tile.geometry,&[
+        _ = self.add_feature(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
                 TileSchema::FIELD_ELEVATION,
@@ -2123,7 +2079,7 @@ impl BiomeSchema {
             for (temperature,id) in row.iter().enumerate() {
                 match matrix_criteria.get_mut(id) {
                     None => {
-                        matrix_criteria.insert(id,vec![(moisture,temperature)]);
+                        _ = matrix_criteria.insert(id,vec![(moisture,temperature)]);
                     },
                     Some(entry) => entry.push((moisture,temperature)),
                 }
@@ -2387,13 +2343,13 @@ entity!(CultureForTowns: Culture {
     namer: String
 });
 
-impl<'impl_life> NamedEntity<CultureSchema> for CultureForTowns {
+impl NamedEntity<CultureSchema> for CultureForTowns {
     fn name(&self) -> &str {
         &self.name
     }
 }
 
-impl<'impl_life> CultureWithNamer for CultureForTowns {
+impl CultureWithNamer for CultureForTowns {
     fn namer(&self) -> &str {
         &self.namer
     }
@@ -2405,19 +2361,19 @@ entity!(CultureForNations: Culture {
     type_: CultureType
 });
 
-impl<'impl_life> NamedEntity<CultureSchema> for CultureForNations {
+impl NamedEntity<CultureSchema> for CultureForNations {
     fn name(&self) -> &str {
         &self.name
     }
 }
 
-impl<'impl_life> CultureWithNamer for CultureForNations {
+impl CultureWithNamer for CultureForNations {
     fn namer(&self) -> &str {
         &self.namer
     }
 }
 
-impl<'impl_life> CultureWithType for CultureForNations {
+impl CultureWithType for CultureForNations {
     fn type_(&self) -> &CultureType {
         &self.type_
     }
@@ -2429,7 +2385,7 @@ entity!(CultureForDissolve: Culture {
     name: String
 });
 
-impl<'impl_life> NamedEntity<CultureSchema> for CultureForDissolve {
+impl NamedEntity<CultureSchema> for CultureForDissolve {
     fn name(&self) -> &str {
         &self.name
     }
@@ -2790,7 +2746,7 @@ impl PropertyLayer<'_,'_> {
             self.update_feature(feature)?;
         } else {
             let (fields,values) = PropertyFeature::to_field_names_values(name, value)?;
-            self.add_feature_without_geometry(&fields,&values)?;
+            _ = self.add_feature_without_geometry(&fields,&values)?;
    
         }
         Ok(())
@@ -2820,7 +2776,7 @@ impl WorldMap {
         }
     }
 
-    fn open_dataset<FilePath: AsRef<Path>>(path: FilePath) -> Result<gdal::Dataset, CommandError> {
+    fn open_dataset<FilePath: AsRef<Path>>(path: FilePath) -> Result<Dataset, CommandError> {
         Ok(Dataset::open_ex(&path, DatasetOptions { 
             open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
             ..Default::default()

@@ -35,7 +35,7 @@ pub(crate) struct ScoredTileForTowns {
     pub(crate) town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, town_counts: &TownCountsArg, overwrite_layer: &OverwriteTownsArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, town_counts: &TownCountsArg, overwrite_layer: &OverwriteTownsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // a lot of this is ported from AFMG
 
@@ -67,7 +67,7 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
             tile_id: tile.fid,
             grouping_id: tile.grouping_id
         })?;
-        placed_towns.insert(tile.fid,fid); 
+        _ = placed_towns.insert(tile.fid,fid); 
     }
 
     // even though we have the town locations indicated in the towns layer, there are going to be occasions
@@ -134,7 +134,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             let s = spacing * town_spacing_normal.sample(rng).clamp(0.2,2.0);
             if !towns_finder.points_in_target(&entry.tile.site, s) {
                 let entry = tiles.remove(i);
-                town_cultures.insert(entry.tile.culture.clone());
+                _ = town_cultures.insert(entry.tile.culture.clone());
                 towns.push((entry,false)); // true means it's a capital
                 progress.update(|| towns.len());
             }
@@ -202,7 +202,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
             let entry = &tiles[i];
             if !capitals_finder.points_in_target(&entry.tile.site, spacing) {
                 let entry = tiles.remove(i);
-                capital_cultures.insert(entry.tile.culture.clone());
+                _ = capital_cultures.insert(entry.tile.culture.clone());
                 capitals.push((entry,true)); // true means it's a capital
                 progress.update(|| capitals.len());
             }
@@ -250,7 +250,7 @@ pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rn
     Ok(tiles)
 }
 
-pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     struct TownDetails {
         population: i32,
@@ -274,15 +274,15 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
 
     for town in towns_layer.read_features().into_entities::<TownForPopulation>().watch(progress,"Populating towns.","Towns populated.") {
         let (_,town) = town?;
-        let tile = tile_map.try_get(&(town.tile_id as u64))?;
+        let tile = tile_map.try_get(&(town.tile_id))?;
 
         // figure out if it's a port
         let port_location = if let Some(closest_water) = tile.harbor_tile_id {
-            let harbor = tile_map.try_get(&(closest_water as u64))?;
+            let harbor = tile_map.try_get(&(closest_water))?;
 
             // add it to the map of towns by feature for removing port status later.
             match coastal_towns.get_mut(&harbor.grouping_id) {
-                None => { coastal_towns.insert(harbor.grouping_id, vec![town.fid]); },
+                None => _ = coastal_towns.insert(harbor.grouping_id, vec![town.fid]),
                 Some(entry) => entry.push(town.fid),
             }
 
@@ -290,7 +290,7 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
             if harbor.temperature > 0.0 {
                 let on_large_water = if let Some(lake_id) = harbor.lake_id {
                     // don't make it a port if the lake is only 1 tile big
-                    let lake = lake_map.try_get(&(lake_id as u64))?;
+                    let lake = lake_map.try_get(&(lake_id))?;
                     lake.size > 1
                 } else {
                     harbor.grouping.is_ocean()
@@ -338,7 +338,7 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
         };
 
 
-        town_details.insert(town.fid,TownDetails {
+        _ = town_details.insert(town.fid,TownDetails {
             new_location,
             population,
             is_port

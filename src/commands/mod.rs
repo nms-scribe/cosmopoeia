@@ -7,7 +7,6 @@ use clap::Args;
 use serde::Serialize;
 use serde::Deserialize;
 use paste::paste;
-use ron::from_str as from_ron_str;
 use ordered_float::OrderedFloat;
 use rangemap::RangeMap;
 
@@ -56,12 +55,13 @@ pub(crate) trait Task {
 #[macro_export]
 /// Defines a runnable command-line command or subcommand enum
 macro_rules! command_def {
-    ($(#[$attr:meta])* $visibility: vis $struct_name: ident {$($command_name: ident),*}) => {
+    ($(#[$attr:meta])* $visibility: vis $struct_name: ident {$($(#[$command_attr:meta])* $command_name: ident),*}) => {
 
         #[derive(Subcommand)]
         $(#[$attr])*
         $visibility enum $struct_name {
             $(
+                $(#[$command_attr])*
                 $command_name($command_name)
             ),*
         }
@@ -81,20 +81,35 @@ macro_rules! command_def {
 // "Dev" commands are generally hidden, intended for testing during development. While they should be usable by users, they rarely are, and are hidden to keep the UI clean.
 
 command_def!{
+    /// Primary cosmopoeia commands
     pub MainCommand {
+        /// Commands used for examining link with gdal library
         Gdal,
+        /// Support commands used mostly during development
         Dev,
+        /// Creates a world map.
         Create,
+        /// Support command for calculating tile neighbors after creation
         CreateCalcNeighbors,
+        /// Support command to create tiles without calculating neighbors or processing elevations
         CreateTiles,
+        /// Runs a terrain process on the world to manipulate elevations or ocean status
         Terrain,
+        /// Generates climate data for a world
         GenClimate,
+        /// Generates water features for a world
         GenWater,
+        /// Generates biomes for a world
         GenBiome,
+        /// Generates populations and cultures for a world
         GenPeople,
+        /// Generates towns, cities and other urban centers for a world
         GenTowns,
+        /// Generates nations for a world
         GenNations,
+        /// Generates subnations (provinces and other administrative divisions) for a world
         GenSubnations,
+        /// Creates a world map, generates natural features, and populates it with nations and subnations
         BigBang
     }
 }

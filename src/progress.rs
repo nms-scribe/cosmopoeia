@@ -220,7 +220,7 @@ pub(crate) struct IteratorWatcher<'progress,Message: AsRef<str>, Progress: Progr
     inner: Enumerate<IteratorType>
 }
 
-impl<'watcher,Message: AsRef<str>, Progress: ProgressObserver, ItemType, IteratorType: Iterator<Item=ItemType>> Iterator for IteratorWatcher<'watcher,Message,Progress,IteratorType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType, IteratorType: Iterator<Item=ItemType>> Iterator for IteratorWatcher<'_,Message,Progress,IteratorType> {
 
     type Item = ItemType;
 
@@ -244,7 +244,7 @@ impl<'watcher,Message: AsRef<str>, Progress: ProgressObserver, ItemType, Iterato
 
 pub(crate) trait WatchableIterator: Iterator + Sized {
 
-    fn watch<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self>;
+    fn watch<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self>;
 }
 
 impl<IteratorType: Iterator> WatchableIterator for IteratorType {
@@ -253,7 +253,7 @@ impl<IteratorType: Iterator> WatchableIterator for IteratorType {
     // - patterns which deal with popping items off a queue -- for that I have various WatchableQueues
     // - patterns where we don't know an endpoint -- might be handled with a macro_rule wrapping the section.
 
-    fn watch<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self> {
+    fn watch<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self> {
         progress.start(|| (start,self.size_hint().1));
         IteratorWatcher { 
             finish: finish, 
@@ -274,7 +274,7 @@ pub(crate) struct QueueWatcher<'progress,Message: AsRef<str>, Progress: Progress
     pushed: usize,
 }
 
-impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> QueueWatcher<'progress,Message,Progress,ItemType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType> QueueWatcher<'_,Message,Progress,ItemType> {
 
     pub(crate) fn pop(&mut self) -> Option<ItemType> {
         let result = self.inner.pop();
@@ -301,12 +301,12 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> QueueW
 
 pub(crate) trait WatchableQueue<ItemType: Sized> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType>;
+    fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType>;
 }
 
 impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
+    fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         QueueWatcher { 
             finish: finish, 
@@ -330,7 +330,7 @@ pub(crate) struct DequeWatcher<'progress,Message: AsRef<str>, Progress: Progress
     pushed: usize,
 }
 
-impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> DequeWatcher<'progress,Message,Progress,ItemType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType> DequeWatcher<'_,Message,Progress,ItemType> {
 
     pub(crate) fn pop_front(&mut self) -> Option<ItemType> {
         let result = self.inner.pop_front();
@@ -354,12 +354,12 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType> DequeW
 
 pub(crate) trait WatchableDeque<ItemType: Sized> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType>;
+    fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType>;
 }
 
 impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType> {
+    fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         DequeWatcher { 
             finish: finish, 
@@ -382,7 +382,7 @@ pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: 
     pushed: usize,
 }
 
-impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'progress,Message,Progress,ItemType,PriorityType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'_,Message,Progress,ItemType,PriorityType> {
 
     pub(crate) fn pop(&mut self) -> Option<(ItemType,PriorityType)> {
         let result = self.inner.pop();
@@ -397,7 +397,7 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::h
     }
 
     pub(crate) fn push(&mut self, value: ItemType, priority: PriorityType) {
-        self.inner.push(value,priority);
+        _ = self.inner.push(value,priority);
         self.pushed += 1;
         self.progress.update_step_length(|| self.pushed);
     }
@@ -406,12 +406,12 @@ impl<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::h
 
 pub(crate) trait WatchablePriorityQueue<ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
+    fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
 }
 
 impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
 
-    fn watch_queue<'progress, StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'progress mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
+    fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));
         PriorityQueueWatcher { 
             finish: finish, 

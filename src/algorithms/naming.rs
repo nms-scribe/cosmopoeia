@@ -64,7 +64,7 @@ impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
 // This was almost directly ported from AFMG.
 
 fn is_ref_vowel(c: &char) -> bool {
-    // FUTURE: Are these *all* the vowels? I guess we're probably just dealing with latin characters, trying to support other character sets might be a bad idea.
+    // FUTURE: Are these *all* the vowels? I guess we're probably just dealing with latin characters, and more specifically characters that at least some English speaker might think of as vowels, trying to support other character sets and languages would be better done by offering a vowel list option in the naming sources.
     matches!(c,'a'|'e'|'i'|'o'|'u'|'y'|'ɑ'|'\''|'ə'|'ø'|'ɛ'|'œ'|'æ'|'ɶ'|'ɒ'|'ɨ'|'ɪ'|'ɔ'|'ɐ'|'ʊ'|'ɤ'|'ɯ'|'а'|'о'|'и'|'е'|'ё'|'э'|'ы'|'у'|'ю'|'я'|'à'|'è'|'ì'|'ò'|'ù'|'ỳ'|'ẁ'|'ȁ'|'ȅ'|'ȉ'|'ȍ'|'ȕ'|'á'|'é'|'í'|'ó'|'ú'|'ý'|'ẃ'|'ő'|'ű'|'â'|'ê'|'î'|'ô'|'û'|'ŷ'|'ŵ'|'ä'|'ë'|'ï'|'ö'|'ü'|'ÿ'|'ẅ'|'ã'|'ẽ'|'ĩ'|'õ'|'ũ'|'ỹ'|'ą'|'ę'|'į'|'ǫ'|'ų'|'ā'|'ē'|'ī'|'ō'|'ū'|'ȳ'|'ă'|'ĕ'|'ĭ'|'ŏ'|'ŭ'|'ǎ'|'ě'|'ǐ'|'ǒ'|'ǔ'|'ȧ'|'ė'|'ȯ'|'ẏ'|'ẇ'|'ạ'|'ẹ'|'ị'|'ọ'|'ụ'|'ỵ'|'ẉ'|'ḛ'|'ḭ'|'ṵ'|'ṳ')
 }
 
@@ -212,7 +212,7 @@ struct MarkovGenerator {
 impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
-    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<HashMap<Option<char>, Vec<std::string::String>>,CommandError> {
+    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<HashMap<Option<char>, Vec<String>>,CommandError> {
         if array.len() > 0 {
             let mut chain = HashMap::new();
 
@@ -287,7 +287,7 @@ impl MarkovGenerator {
                     i += syllable.len().min(1); 
                     match chain.get_mut(&prev_char) {
                         None => {
-                            chain.insert(prev_char,vec![syllable]);
+                            _ = chain.insert(prev_char,vec![syllable]);
                         },
                         Some(entry) => entry.push(syllable),
                     }
@@ -642,7 +642,7 @@ impl NamerSet {
 
         for (name,name_base) in source.source {
             let namer = Namer::new(name_base,&mut NamerLoadObserver::new(&name,progress))?;
-            map.insert(name, namer);
+            _ = map.insert(name, namer);
         }
         
         let default_namer = if let Some(default_namer) = args.default_namer {
@@ -704,7 +704,7 @@ impl NamerSetSource {
     fn add_namer(&mut self, data: NamerSource) {
         let name = data.name.clone();
         // if the name already exists, then we're replacing the existing one.
-        self.source.insert(name, data);
+        _ = self.source.insert(name, data);
     }
     
     pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
@@ -732,7 +732,7 @@ impl NamerSetSource {
             sum += word.len();
             for (a,b) in word.chars().zip(word.chars().skip(1)) {
                 if a == b {
-                    duplicate_chars.insert(a);
+                    _ = duplicate_chars.insert(a);
                 }
             }
 

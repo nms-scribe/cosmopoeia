@@ -59,16 +59,16 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             }
         }
 
-        let mut tile = tile_map.try_get_mut(&fid)?;
+        let tile = tile_map.try_get_mut(&fid)?;
         tile.water_count = water_count;
         tile.closest_water_tile_id = closest_water;
         if on_shore {
             if is_land {
-                shore_distances.insert(fid,1);
-                land_queue.push(fid,Reverse(1));
+                _ = shore_distances.insert(fid,1);
+                _ = land_queue.push(fid,Reverse(1));
             } else {
-                shore_distances.insert(fid,-1);
-                water_queue.push(fid,Reverse(1));
+                _ = shore_distances.insert(fid,-1);
+                _ = water_queue.push(fid,Reverse(1));
             }
         }
 
@@ -97,7 +97,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             };
 
             if replace_distance {
-                shore_distances.insert(*neighbor_id,cost);
+                _ = shore_distances.insert(*neighbor_id,cost);
                 land_queue.push(*neighbor_id, Reverse(cost));
             }
 
@@ -125,7 +125,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             };
 
             if replace_distance {
-                shore_distances.insert(*neighbor_id,-cost);
+                _ = shore_distances.insert(*neighbor_id,-cost);
                 water_queue.push(*neighbor_id, Reverse(cost));
             }
 
