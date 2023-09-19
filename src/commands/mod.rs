@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::ops::Range;
 
 use clap::Subcommand;
 use clap::Parser;
@@ -6,6 +7,10 @@ use clap::Args;
 use serde::Serialize;
 use serde::Deserialize;
 use paste::paste;
+use ron::from_str as from_ron_str;
+use ordered_float::OrderedFloat;
+use rangemap::RangeMap;
+
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -38,6 +43,7 @@ use gen_towns::GenTowns;
 use gen_nations::GenNations;
 use gen_subnations::GenSubnations;
 use big_bang::BigBang;
+use crate::utils::ArgRange;
 
 
 pub(crate) trait Task {
@@ -186,6 +192,24 @@ pub struct TemperatureRangeArg {
 
 }
 
+fn parse_wind_range(value: &str) -> Result<(Range<OrderedFloat<f64>>, u16), &'static str> {
+    const HELP_MESSAGE: &str = "Format for wind range is `S..N:Direction`, where south and north are south and north (not inclusive) latitude and direction is clockwise degrees from north.";
+    // I already parse out a range for ArgRange. However, I only allow exclusive ranges here, since that's
+    // how I map them.
+    if let Some((range,direction)) = value.split_once(':') {
+        let range = range.parse().map_err(|_| HELP_MESSAGE)?;
+        let direction = direction.parse().map_err(|_| HELP_MESSAGE)?;
+        let range = match range {
+            ArgRange::Exclusive(min, max) => OrderedFloat(min)..OrderedFloat(max),
+            ArgRange::Inclusive(_,_) | ArgRange::Single(_) => Err(HELP_MESSAGE)?
+        };
+        Ok((range,direction))
+    
+    } else {
+        Err(HELP_MESSAGE)
+    }
+}
+
 #[derive(Args)]
 pub struct WindsArg {
     
@@ -213,20 +237,28 @@ pub struct WindsArg {
     /// Wind direction below latitude 60 S
     pub south_polar_wind: u16,
 
+    #[arg(long,allow_hyphen_values=true,value_parser(parse_wind_range))]
+    /// Specify a range of latitudes and a wind direction (S lat..N lat:Direction), later mappings will override earlier.
+    pub wind_range: Vec<(Range<OrderedFloat<f64>>, u16)>
+
 
 }
 
 impl WindsArg {
 
-    pub(crate) fn to_range_map(&self) -> rangemap::RangeMap<ordered_float::OrderedFloat<f64>, u16> {
-        let mut result = rangemap::RangeMap::new();
-        result.insert(ordered_float::OrderedFloat(-90.0)..ordered_float::OrderedFloat(-60.0),self.south_polar_wind);
-        result.insert(ordered_float::OrderedFloat(-60.0)..ordered_float::OrderedFloat(-30.0),self.south_middle_wind);
-        result.insert(ordered_float::OrderedFloat(-30.0)..ordered_float::OrderedFloat(0.0),self.south_tropical_wind);
-        result.insert(ordered_float::OrderedFloat(0.0)..ordered_float::OrderedFloat(30.0),self.north_tropical_wind);
-        result.insert(ordered_float::OrderedFloat(30.0)..ordered_float::OrderedFloat(60.0),self.north_middle_wind);
+    pub(crate) fn to_range_map(&self) -> RangeMap<OrderedFloat<f64>, u16> {
+        let mut result = RangeMap::new();
+        result.insert(OrderedFloat(-90.0)..OrderedFloat(-60.0),self.south_polar_wind);
+        result.insert(OrderedFloat(-60.0)..OrderedFloat(-30.0),self.south_middle_wind);
+        result.insert(OrderedFloat(-30.0)..OrderedFloat(0.0),self.south_tropical_wind);
+        result.insert(OrderedFloat(0.0)..OrderedFloat(30.0),self.north_tropical_wind);
+        result.insert(OrderedFloat(30.0)..OrderedFloat(60.0),self.north_middle_wind);
         // note that the last one is set at 90.1 since the range map is not inclusive
-        result.insert(ordered_float::OrderedFloat(60.0)..ordered_float::OrderedFloat(90.1),self.north_polar_wind);
+        result.insert(OrderedFloat(60.0)..OrderedFloat(90.1),self.north_polar_wind);
+
+        for range in &self.wind_range {
+            result.insert(range.0.clone(),range.1)
+        }
         result
 
     }

@@ -2,8 +2,6 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::BufReader;
 use std::collections::HashMap;
-use std::str::FromStr;
-use std::fmt::Display;
 
 use clap::Args;
 use clap::Subcommand;
@@ -34,79 +32,6 @@ use crate::commands::OceanSourceArg;
 use crate::commands::RandomSeedArg;
 
 
-
-impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>> Deserialize<'deserializer> for ArgRange<NumberType> {
-
-    fn deserialize<Deserializer>(deserializer: Deserializer) -> Result<Self, Deserializer::Error>
-    where
-        Deserializer: serde::Deserializer<'deserializer> {
-
-        // https://stackoverflow.com/q/56582722/300213
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum StrOrNum<NumberType> {
-            Str(String),
-            Num(NumberType)
-        }
-
-        let value = StrOrNum::deserialize(deserializer)?;
-        match value {
-            StrOrNum::Str(deserialized) => deserialized.parse().map_err(|e: CommandError| serde::de::Error::custom(e.to_string())),
-            StrOrNum::Num(deserialized) => Ok(ArgRange::Single(deserialized)),
-        }
-        
-    }
-}
-
-impl<NumberType: FromStr + Display> Serialize for ArgRange<NumberType> {
-
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> {
-    type Err = CommandError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some((first,mut last)) = s.split_once("..") {
-            let include_last = if last.starts_with('=') {
-                last = last.trim_start_matches('=');
-                true
-            } else {
-                false
-            };
-
-            let first = first.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            let last = last.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            if first > last {
-                Err(CommandError::InvalidRangeArgument(s.to_owned()))?
-            }
-
-            Ok(if include_last {
-                ArgRange::Inclusive(first,last)
-            } else {
-                ArgRange::Exclusive(first,last)
-            })
-        } else {
-            let number = s.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            Ok(ArgRange::Single(number))
-        }
-    }
-}
-
-impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ArgRange::Inclusive(min,max) => write!(f,"{}..={}",min,max),
-            ArgRange::Exclusive(min,max) => write!(f,"{}..{}",min,max),
-            ArgRange::Single(single) => write!(f,"{}",single),
-        }
-    }
-}
 
 
 subcommand_def!{
