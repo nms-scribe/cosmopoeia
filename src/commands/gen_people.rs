@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-
 use clap::Args;
 use clap::Subcommand;
 use rand::Rng;
 
-use super::Task;
+use crate::commands::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;
@@ -14,7 +12,6 @@ use crate::algorithms::population::generate_populations;
 use crate::algorithms::cultures::generate_cultures;
 use crate::algorithms::cultures::expand_cultures;
 use crate::algorithms::culture_sets::CultureSet;
-use crate::algorithms::naming::NamerSetSource;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::utils::random_number_generator;
@@ -22,9 +19,14 @@ use crate::algorithms::tiles::CultureTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::world_map::WorldMapTransaction;
 use crate::commands::TargetArg;
-use super::RandomSeedArg;
-use super::OverwriteCulturesArg;
-use super::BezierScaleArg;
+use crate::commands::RandomSeedArg;
+use crate::commands::OverwriteCulturesArg;
+use crate::commands::BezierScaleArg;
+use crate::commands::NamerArg;
+use crate::commands::SizeVarianceArg;
+use crate::commands::RiverThresholdArg;
+use crate::commands::ExpansionFactorArg;
+use crate::commands::CulturesGenArg;
 
 subcommand_def!{
     /// Generates background population of tiles
@@ -34,10 +36,9 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="10")]
-        /// A waterflow threshold above which population increases along the coast
-        pub estuary_threshold: f64
-
+        #[clap(flatten)]
+        pub river_threshold_arg: RiverThresholdArg,
+        
     }
 }
 
@@ -50,7 +51,7 @@ impl Task for Population {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(self.estuary_threshold, target, progress)
+            Self::run_with_parameters(&self.river_threshold_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -59,7 +60,7 @@ impl Task for Population {
 }
 
 impl Population {
-    fn run_with_parameters<Progress: ProgressObserver>(estuary_threshold: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(estuary_threshold: &RiverThresholdArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating population");
         generate_populations(target, estuary_threshold, progress)
     }
@@ -75,30 +76,18 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,required(true))] 
-        /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
-        pub cultures: Vec<PathBuf>,
+        #[clap(flatten)]
+        pub cultures_arg: CulturesGenArg,
 
-        #[arg(long,required=true)]
-        /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        pub namers: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// Namer to use when a culture is not available, or one will be randomly chosen
-        pub default_namer: Option<String>,
+        #[clap(flatten)]
+        pub namer_arg: NamerArg,
         
-        #[arg(long,default_value("10"))]
-        /// The number of cultures to generate
-        pub count: usize,
+        #[clap(flatten)]
+        pub size_variance_arg: SizeVarianceArg,
 
-        #[arg(long,default_value("1"))]
-        /// A number, clamped to 0-10, which controls how much cultures can vary in size
-        pub size_variance: f64,
-
-        #[arg(long,default_value="10")]
-        /// A waterflow threshold above which the tile will count as a river
-        pub river_threshold: f64,
-
+        #[clap(flatten)]
+        pub river_threshold_arg: RiverThresholdArg,
+    
         #[clap(flatten)]
         pub random_seed_arg: RandomSeedArg,
 
@@ -115,16 +104,12 @@ impl Task for CreateCultures {
 
         let mut random = random_number_generator(self.random_seed_arg);
 
-        let namer_set = NamerSetSource::from_files(self.namers)?;
-
-        let mut loaded_namers = NamerSet::load_from(namer_set,self.default_namer, &mut random, progress)?;
-
-        let cultures = CultureSet::from_files(self.cultures,&mut random,&mut loaded_namers)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, cultures, &loaded_namers, self.count, self.size_variance, self.river_threshold, self.overwrite_cultures_arg, target, progress)
+            Self::run_with_parameters(&mut random, &self.cultures_arg, &mut loaded_namers, &self.size_variance_arg, &self.river_threshold_arg, &self.overwrite_cultures_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -133,11 +118,12 @@ impl Task for CreateCultures {
 }
 
 impl CreateCultures {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_cultures: OverwriteCulturesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
-        let size_variance = size_variance.clamp(0.0, 10.0);
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, cultures_arg: &CulturesGenArg, namers: &mut NamerSet, size_variance: &SizeVarianceArg, river_threshold: &RiverThresholdArg, overwrite_cultures: &OverwriteCulturesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
 
         progress.announce("Generating cultures");
-        generate_cultures(target, random, cultures, namers, culture_count, size_variance, river_threshold, overwrite_cultures, progress)
+        let cultures = CultureSet::from_files(&cultures_arg.cultures,random,namers)?;
+
+        generate_cultures(target, random, &cultures, namers, &cultures_arg.culture_count, size_variance, river_threshold, overwrite_cultures, progress)
     }
     
 }
@@ -150,13 +136,11 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value="10")]
-        /// A waterflow threshold above which the tile will count as a river
-        pub river_threshold: f64,
-
-        #[arg(long,default_value("1"))]
-        /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
-        pub limit_factor: f64
+        #[clap(flatten)]
+        pub river_threshold_arg: RiverThresholdArg,
+    
+        #[clap(flatten)]
+        pub expansion_factor_arg: ExpansionFactorArg,
 
     }
 }
@@ -168,7 +152,7 @@ impl Task for ExpandCultures {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
         target.with_transaction(|target| {
-            Self::run_with_parameters(self.river_threshold, self.limit_factor, target, progress)
+            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -177,7 +161,7 @@ impl Task for ExpandCultures {
 }
 
 impl ExpandCultures {
-    fn run_with_parameters<Progress: ProgressObserver>(river_threshold: f64, limit_factor: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying cultures to tiles");
     
         expand_cultures(target, river_threshold, limit_factor, progress)
@@ -284,29 +268,20 @@ pub struct DefaultArgs {
     #[clap(flatten)]
     pub target_arg: TargetArg,
 
-    #[arg(long,required(true))] 
-    /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
-    pub cultures: Vec<PathBuf>,
+    #[clap(flatten)]
+    pub cultures_arg: CulturesGenArg,
 
-    #[arg(long,default_value="10")]
-    /// A waterflow threshold above which the tile will count as a river
-    pub river_threshold: f64,
+    #[clap(flatten)]
+    pub river_threshold_arg: RiverThresholdArg,
 
-    #[arg(long,default_value("1"))]
-    /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures will expand. The higher the number, the less neutral lands.
-    pub limit_factor: f64,
+    #[clap(flatten)]
+    pub expansion_factor_arg: ExpansionFactorArg,
 
-    #[arg(long,required=true)]
-    /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-    pub namers: Vec<PathBuf>,
+    #[clap(flatten)]
+    pub namer_arg: NamerArg,
 
-    #[arg(long,default_value("10"))]
-    /// The number of cultures to generate
-    pub culture_count: usize,
-
-    #[arg(long,default_value("1"))]
-    /// A number, clamped to 0-10, which controls how much cultures can vary in size
-    pub size_variance: f64,
+    #[clap(flatten)]
+    pub size_variance_arg: SizeVarianceArg,
 
     #[clap(flatten)]
     pub bezier_scale_arg: BezierScaleArg,
@@ -317,10 +292,6 @@ pub struct DefaultArgs {
     #[clap(flatten)]
     pub overwrite_cultures_arg: OverwriteCulturesArg,
 
-    #[arg(long)]
-    /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
-    pub default_namer: Option<String>
-    
 
 }
 
@@ -346,22 +317,17 @@ impl Task for GenPeople {
 
             let mut random = random_number_generator(default_args.random_seed_arg);
 
-            let namer_set = NamerSetSource::from_files(default_args.namers)?;
+            let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
     
-            let mut loaded_namers = NamerSet::load_from(namer_set, default_args.default_namer, &mut random, progress)?;
-    
-            let cultures = CultureSet::from_files(default_args.cultures,&mut random,&mut loaded_namers)?;
-            
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
     
             Self::run_default(
-                default_args.river_threshold, 
-                cultures, 
-                &loaded_namers, 
-                default_args.culture_count, 
-                default_args.size_variance, 
-                default_args.overwrite_cultures_arg, 
-                default_args.limit_factor, 
+                &default_args.river_threshold_arg, 
+                &default_args.cultures_arg, 
+                &mut loaded_namers, 
+                &default_args.size_variance_arg, 
+                &default_args.overwrite_cultures_arg, 
+                &default_args.expansion_factor_arg, 
                 &default_args.bezier_scale_arg, 
                 &mut target, 
                 &mut random, 
@@ -379,11 +345,11 @@ impl Task for GenPeople {
 }
 
 impl GenPeople {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: f64, cultures: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, overwrite_cultures: OverwriteCulturesArg, limit_factor: f64, bezier_scale: &BezierScaleArg, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: &RiverThresholdArg, cultures: &CulturesGenArg, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_cultures: &OverwriteCulturesArg, limit_factor: &ExpansionFactorArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
             Population::run_with_parameters(river_threshold, target, progress)?;
     
-            CreateCultures::run_with_parameters(random, cultures, namers, culture_count, size_variance, river_threshold, overwrite_cultures, target, progress)?;
+            CreateCultures::run_with_parameters(random, cultures, namers, size_variance, river_threshold, overwrite_cultures, target, progress)?;
     
             ExpandCultures::run_with_parameters(river_threshold, limit_factor, target, progress)?;
     

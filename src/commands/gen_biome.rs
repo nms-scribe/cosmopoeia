@@ -1,7 +1,7 @@
 use clap::Args;
 use clap::Subcommand;
 
-use super::Task;
+use crate::commands::Task;
 use crate::commands::TargetArg;
 use crate::errors::CommandError;
 use crate::subcommand_def;
@@ -15,8 +15,8 @@ use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::BiomeMatrix;
-use super::OverwriteBiomesArg;
-use super::BezierScaleArg;
+use crate::commands::OverwriteBiomesArg;
+use crate::commands::BezierScaleArg;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -42,7 +42,7 @@ impl Task for Data {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(self.overwrite_biomes_arg, target, progress)
+            Self::run_with_parameters(&self.overwrite_biomes_arg, target, progress)
 
         })?;
 
@@ -52,7 +52,7 @@ impl Task for Data {
 
 impl Data {
 
-    fn run_with_parameters<Progress: ProgressObserver>(overwrite: OverwriteBiomesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(overwrite: &OverwriteBiomesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
 
         progress.announce("Filling biome defaults");
 
@@ -224,7 +224,7 @@ impl Task for GenBiome {
         if let Some(args) = self.default_args {
             let mut target = WorldMap::edit(args.target_arg.target)?;
 
-            Self::run_default(args.overwrite_biomes_arg, &args.bezier_scale_arg, &mut target, progress)
+            Self::run_default(&args.overwrite_biomes_arg, &args.bezier_scale_arg, &mut target, progress)
     
         } else if let Some(command) = self.command {
 
@@ -237,7 +237,7 @@ impl Task for GenBiome {
 }
 
 impl GenBiome {
-    pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {            
             Data::run_with_parameters(ovewrite_biomes, target, progress)
 

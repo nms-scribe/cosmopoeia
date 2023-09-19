@@ -9,7 +9,7 @@ use gdal::version::VersionInfo;
 use gdal::Metadata;
 use gdal::MetadataEntry;
 
-use super::Task;
+use crate::commands::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;

@@ -22,6 +22,7 @@ use crate::utils::split_string_from_end;
 use crate::utils::RandomIndex;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
+use crate::commands::NamerArg;
 
 struct NamerLoadObserver<'data,Progress: ProgressObserver> {
     name: &'data str,
@@ -634,7 +635,9 @@ impl NamerSet {
         }
     }
 
-    pub(crate) fn load_from<Random: Rng, Progress: ProgressObserver>(source: NamerSetSource, default_namer: Option<String>, rng: &mut Random, progress: &mut Progress) -> Result<NamerSet, CommandError> {
+    pub(crate) fn load_from<Random: Rng, Progress: ProgressObserver>(args: NamerArg, rng: &mut Random, progress: &mut Progress) -> Result<NamerSet, CommandError> {
+        let source = NamerSetSource::from_files(args.namers)?;
+
         let mut map = HashMap::new();
 
         for (name,name_base) in source.source {
@@ -642,7 +645,7 @@ impl NamerSet {
             map.insert(name, namer);
         }
         
-        let default_namer = if let Some(default_namer) = default_namer {
+        let default_namer = if let Some(default_namer) = args.default_namer {
             if !map.contains_key(&default_namer) {
                 Err(CommandError::UnknownNamer(default_namer.to_owned()))?
             }

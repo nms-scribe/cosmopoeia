@@ -26,6 +26,8 @@ use crate::world_map::TileForTowns;
 use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
 use crate::commands::OverwriteTownsArg;
+use crate::commands::RiverThresholdArg;
+use crate::commands::TownCountsArg;
 
 pub(crate) struct ScoredTileForTowns {
     pub(crate) tile: TileForTowns,
@@ -33,7 +35,7 @@ pub(crate) struct ScoredTileForTowns {
     pub(crate) town_score: OrderedFloat<f64>
 }
 
-pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, capital_count: usize, town_count: Option<usize>, overwrite_layer: OverwriteTownsArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, town_counts: &TownCountsArg, overwrite_layer: &OverwriteTownsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // a lot of this is ported from AFMG
 
@@ -43,9 +45,9 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
 
     let extent = tiles_layer.get_extent()?;
 
-    let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, capital_count, progress);
+    let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, &town_counts.capital_count, progress);
 
-    let towns = place_towns(rng, &mut tiles, &extent, town_count, tiles_layer.feature_count(), &capitals_finder, progress)?;
+    let towns = place_towns(rng, &mut tiles, &extent, &town_counts.town_count, tiles_layer.feature_count(), &capitals_finder, progress)?;
 
     // write the towns
 
@@ -85,13 +87,13 @@ pub(crate) fn generate_towns<'culture, Random: Rng, Progress: ProgressObserver, 
     Ok(())
 }
 
-pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, town_count: Option<usize>, total_tiles_count: usize, capitals_finder: &PointFinder, progress: &mut Progress) -> Result<Vec<(ScoredTileForTowns, bool)>,CommandError> {
+pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, town_count: &Option<usize>, total_tiles_count: usize, capitals_finder: &PointFinder, progress: &mut Progress) -> Result<Vec<(ScoredTileForTowns, bool)>,CommandError> {
     let mut towns_finder;
     let mut town_cultures;
     let mut towns;
 
     let town_count = if let Some(town_count) = town_count {
-        if town_count > tiles.len() {
+        if town_count > &tiles.len() {
             let reduced_town_count = tiles.len();
             if tiles.len() == 0 {
                 progress.warning(|| "There aren't enough populated cells left to generate any towns.")
@@ -100,7 +102,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             }
             reduced_town_count
         } else {
-            town_count
+            *town_count
         }
     } else {
         tiles.len() / 5 / ((total_tiles_count / 10000) as f64).powf(0.8).round() as usize
@@ -158,7 +160,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     Ok(towns)
 }
 
-pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: usize, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
+pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: &usize, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
     let mut capitals_finder;
     let mut capitals;
     let mut capital_cultures;
@@ -173,7 +175,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
         }
         capital_count
     } else {
-        capital_count
+        *capital_count
     };
 
     let mut spacing = (extent.width + extent.height) / 2.0 / capital_count as f64;
@@ -248,7 +250,7 @@ pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rn
     Ok(tiles)
 }
 
-pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     struct TownDetails {
         population: i32,
@@ -326,7 +328,7 @@ pub(crate) fn populate_towns<'culture, Progress: ProgressObserver>(target: &mut 
 
         let population = population.floor() as i32;
 
-        let (is_port,new_location) = if port_location.is_none() && tile.water_flow > river_threshold {
+        let (is_port,new_location) = if port_location.is_none() && tile.water_flow > river_threshold.river_threshold {
             let shift = (tile.water_flow / 150.0).min(1.0);
             let x = if (tile.site.x.into_inner() % 2.0) < 1.0 { tile.site.x + shift } else { tile.site.x - shift };
             let y = if (tile.site.y.into_inner() % 2.0) < 1.0 { tile.site.y + shift } else { tile.site.y - shift };

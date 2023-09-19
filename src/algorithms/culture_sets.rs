@@ -196,7 +196,7 @@ impl CultureSet {
         }
     }
 
-    pub(crate) fn from_files<Random: Rng>(files: Vec<PathBuf>, rng: &mut Random, namers: &mut NamerSet) -> Result<Self,CommandError> {
+    pub(crate) fn from_files<Random: Rng>(files: &Vec<PathBuf>, rng: &mut Random, namers: &mut NamerSet) -> Result<Self,CommandError> {
         let mut result = Self::empty();
 
         for file in files {

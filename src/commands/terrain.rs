@@ -14,7 +14,7 @@ use serde::Deserialize;
 use serde_json::from_reader as from_json_reader;
 use serde_json::to_string_pretty as to_json_string_pretty;
 
-use super::Task;
+use crate::commands::Task;
 use crate::world_map::WorldMap;
 use crate::errors::CommandError;
 use crate::subcommand_def;
@@ -28,10 +28,10 @@ use crate::raster::RasterMap;
 use crate::algorithms::terrain::SampleOceanBelowLoaded;
 use crate::algorithms::terrain::SampleOceanMaskedLoaded;
 use crate::algorithms::terrain::SampleElevationLoaded;
-use super::TargetArg;
+use crate::commands::TargetArg;
 use crate::commands::ElevationSourceArg;
 use crate::commands::OceanSourceArg;
-use super::RandomSeedArg;
+use crate::commands::RandomSeedArg;
 
 
 

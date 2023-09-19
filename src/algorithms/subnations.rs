@@ -31,9 +31,10 @@ use crate::world_map::CultureSchema;
 use crate::world_map::EntityLookup;
 use crate::world_map::SubnationForNormalize;
 use crate::commands::OverwriteSubnationsArg;
+use crate::commands::SubnationPercentArg;
 
 
-pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: f64, overwrite_layer: OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_layer: &OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForSubnations>(progress)?;
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForSubnations>(progress)?; 
@@ -60,7 +61,7 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
             continue; // at least two towns are required to get a province
         }
 
-        let subnation_count = ((nation_towns.len() as f64 * subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
+        let subnation_count = ((nation_towns.len() as f64 * subnation_percentage.subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
         nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital_town_id)));
     
         for i in 0..subnation_count {
@@ -99,9 +100,9 @@ pub(crate) fn generate_subnations<'culture, Random: Rng, Progress: ProgressObser
     Ok(())
 }
 
-pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, subnation_percentage: &SubnationPercentArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let max = subnation_max_cost(rng, subnation_percentage);
+    let max = subnation_max_cost(rng, subnation_percentage.subnation_percentage);
 
     let mut tile_layer = target.edit_tile_layer()?;
 
@@ -212,9 +213,9 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
     Some(total_cost)
 }
 
-pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn fill_empty_subnations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let max = subnation_max_cost(rng, subnation_percentage);
+    let max = subnation_max_cost(rng, subnation_percentage.subnation_percentage);
 
     let mut tile_layer = target.edit_tile_layer()?;
 

@@ -9,8 +9,9 @@ use crate::world_map::TileForPopulation;
 use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
 use crate::world_map::LakeForPopulation;
+use crate::commands::RiverThresholdArg;
 
-pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: &RiverThresholdArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // This algorithm is almost the same as found in AFMG
 
@@ -58,7 +59,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                 }
                 suitability -= (tile.elevation_scaled - 50) as f64/5.0; // low elevation is preferred
                 if tile.shore_distance == 1 {
-                    if tile.water_flow > estuary_threshold {
+                    if tile.water_flow > estuary_threshold.river_threshold {
                         suitability += 15.0 // estuaries are liked
                     }
                     if let Some(water_cell) = tile.harbor_tile_id {

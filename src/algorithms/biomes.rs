@@ -14,7 +14,7 @@ use crate::world_map::Grouping;
 use crate::world_map::TileSchema;
 use crate::commands::OverwriteBiomesArg;
 
-pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: OverwriteBiomesArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteBiomesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut biomes = target.create_biomes_layer(overwrite_layer)?;
 

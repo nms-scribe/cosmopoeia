@@ -3,7 +3,7 @@ use clap::Args;
 use clap::Subcommand;
 use rand::Rng;
 
-use super::Task;
+use crate::commands::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::utils::random_number_generator;
@@ -22,9 +22,9 @@ use crate::commands::TargetArg;
 use crate::commands::ElevationSourceArg;
 use crate::commands::terrain::TerrainCommand;
 use crate::commands::ElevationLimitsArg;
-use super::TileCountArg;
-use super::RandomSeedArg;
-use super::OverwriteTilesArg;
+use crate::commands::TileCountArg;
+use crate::commands::RandomSeedArg;
+use crate::commands::OverwriteTilesArg;
 
 // I don't form the subcommands for this quite the same, since I already have a subcommand for specifying the source.
 
@@ -253,7 +253,7 @@ subcommand_def!{
 
 impl CreateTiles {
 
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: ElevationLimits, tiles: TileCountArg, overwrite: OverwriteTilesArg, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: &ElevationLimits, tiles: &TileCountArg, overwrite: &OverwriteTilesArg, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
         let voronois = generate_random_tiles(random, extent, tiles.tile_count, progress)?;
     
         progress.announce("Create tiles from voronoi polygons");
@@ -276,7 +276,7 @@ impl Task for CreateTiles {
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(loaded_source.extent, loaded_source.limits, self.tile_count_arg, self.overwrite_tiles_arg, &mut random, target, progress)
+            Self::run_with_parameters(loaded_source.extent, &loaded_source.limits, &self.tile_count_arg, &self.overwrite_tiles_arg, &mut random, target, progress)
 
         })?;
 
@@ -319,15 +319,15 @@ impl Task for Create {
 
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
 
-        Self::run_default(self.tile_count_arg,self.overwrite_tiles_arg,loaded_source, &mut target, &mut random, progress)
+        Self::run_default(&self.tile_count_arg,&self.overwrite_tiles_arg,loaded_source, &mut target, &mut random, progress)
 
     }
 }
 
 impl Create {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: TileCountArg, overwrite_tiles: OverwriteTilesArg, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: &TileCountArg, overwrite_tiles: &OverwriteTilesArg, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
-            CreateTiles::run_with_parameters(loaded_source.extent, loaded_source.limits, tiles, overwrite_tiles, random, target, progress)?;
+            CreateTiles::run_with_parameters(loaded_source.extent, &loaded_source.limits, tiles, overwrite_tiles, random, target, progress)?;
 
             CreateCalcNeighbors::run_with_parameters(target, progress)?;
 

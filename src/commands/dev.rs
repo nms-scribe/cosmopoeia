@@ -4,7 +4,7 @@ use clap::Args;
 use clap::Subcommand;
 use rand::Rng;
 
-use super::Task;
+use crate::commands::Task;
 use crate::commands::TargetArg;
 use crate::errors::CommandError;
 use crate::subcommand_def;
@@ -29,9 +29,10 @@ use crate::world_map::ElevationLimits;
 use crate::command_def;
 use crate::progress::ProgressObserver;
 use crate::commands::ElevationSourceArg;
-use super::ElevationLimitsArg;
-use super::RandomSeedArg;
-use super::OverwriteTilesArg;
+use crate::commands::ElevationLimitsArg;
+use crate::commands::RandomSeedArg;
+use crate::commands::OverwriteTilesArg;
+use crate::commands::NamerArg;
 
 
 subcommand_def!{
@@ -213,7 +214,7 @@ impl Task for VoronoiFromTriangles {
         let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
 
         target.with_transaction(|target| {
-            load_tile_layer(target,self.overwrite_tiles_arg,voronoi.into_iter(),&limits,progress)
+            load_tile_layer(target,&self.overwrite_tiles_arg,voronoi.into_iter(),&limits,progress)
         })?;
 
         target.save(progress)
@@ -227,16 +228,8 @@ subcommand_def!{
     /// Tool for testing name generator data
     pub struct Namers {
 
-        /// Files to load namer-data from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        pub namer_data: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
-        pub default_namer: Option<String>,
-
-        #[arg(long)]
-        // if true, the namer will load the defaults before any of the passed files.
-        pub defaults: bool,
+        #[clap(flatten)]
+        pub namer_arg: NamerArg,
 
         #[arg(long)]
         /// If this is set, text files loaded as namer_data will be parsed as markov seed lists. Otherwise, they will be list-picker generators.
@@ -270,14 +263,14 @@ impl Task for Namers {
         
         }
         
-        let namers = NamerSetSource::from_files(self.namer_data)?;
-
         if self.write_json {
+            let namers = NamerSetSource::from_files(self.namer_arg.namers)?;
+
             print!("{}",namers.to_json()?)
 
         } else {
             let mut random = random_number_generator(self.random_seed_arg);
-            let mut namers = NamerSet::load_from(namers, self.default_namer, &mut random, progress)?;
+            let mut namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
             if let Some(key) = self.language {
                 test_namer(&mut namers, &key, &mut random)
@@ -309,13 +302,8 @@ subcommand_def!{
         /// Files to load culture data from, more than one may be specified to load multiple cultures into the set.
         pub culture_data: Vec<PathBuf>,
 
-        #[arg(long,required(true))]
-        /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        pub namers: Vec<PathBuf>,
-
-        #[arg(long)]
-        /// The name generator to use for naming nations and towns in tiles without a culture, or one will be randomly chosen
-        pub default_namer: Option<String>,
+        #[clap(flatten)]
+        pub namer_arg: NamerArg,
 
         #[arg(long)]
         /// If true, the command will serialize the namer data into one JSON document rather than test the naming.
@@ -342,11 +330,9 @@ impl Task for Cultures {
 
         let mut random = crate::utils::random_number_generator(self.random_seed_arg);
 
-        let namer_set = NamerSetSource::from_files(self.namers)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
-        let mut loaded_namers = NamerSet::load_from(namer_set, self.default_namer, &mut random, progress)?;
-
-        let cultures = CultureSet::from_files(self.culture_data,&mut random,&mut loaded_namers)?;
+        let cultures = CultureSet::from_files(&self.culture_data,&mut random,&mut loaded_namers)?;
 
         if self.write_json {
             print!("{}",cultures.to_json()?)

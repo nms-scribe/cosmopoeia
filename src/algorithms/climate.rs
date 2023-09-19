@@ -11,15 +11,18 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::Grouping;
 use crate::world_map::TileSchema;
+use crate::commands::TemperatureRangeArg;
+use crate::commands::WindsArg;
+use crate::commands::PrecipitationArg;
 
-pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, equator_temp: i8, polar_temp: i8, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, temperatures: &TemperatureRangeArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut layer = target.edit_tile_layer()?;
 
     // Algorithm borrowed from AFMG with some modifications
 
-    let equator_temp = equator_temp as f64;
-    let polar_temp = polar_temp as f64;
+    let equator_temp = temperatures.equator_temp as f64;
+    let polar_temp = temperatures.polar_temp as f64;
     let temp_delta = equator_temp - polar_temp;
     const EXPONENT: f64 = 0.5;
 
@@ -60,12 +63,20 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
     Ok(())
 }
 
-pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTransaction, winds: [i32; 6], progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTransaction, winds: &WindsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut layer = target.edit_tile_layer()?;
 
     // Algorithm borrowed from AFMG with some modifications
 
+    let winds = [
+        winds.north_polar_wind as i32,
+        winds.north_middle_wind as i32,
+        winds.north_tropical_wind as i32,
+        winds.south_tropical_wind as i32,
+        winds.south_middle_wind as i32,
+        winds.south_polar_wind as i32
+    ];
 
     let features = layer.read_features().to_entities_vec::<_,TileForWinds>(progress)?;
 
@@ -87,7 +98,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
     Ok(())
 }
 
-pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut WorldMapTransaction, moisture: u16, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut WorldMapTransaction, precipitation: &PrecipitationArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut layer = target.edit_tile_layer()?;
 
@@ -100,7 +111,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
     // I believe what this does is scale the moisture scale correctly to the size of the map. Otherwise, I don't know.
     let cells_number_modifier = (layer.feature_count() as f64 / 10000.0).powf(0.25);
-    let prec_input_modifier = moisture as f64/100.0;
+    let prec_input_modifier = precipitation.precipitation_factor as f64/100.0;
     let modifier = cells_number_modifier * prec_input_modifier;
 
     entity!(TileDataForPrecipitation: Tile {

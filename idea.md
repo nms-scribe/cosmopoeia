@@ -372,10 +372,12 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] grouping::calculate_grouping: replace the `table.keys().next().cloned().map(|first| table.try_remove(&first))` call with a call to IndexMap::pop. It was originally written this way because I was using HashMap which doesn't have a pop. Keep in mind that this would work backward, so check if that matters first.
     [X] Also, can this then become a queue_watcher?
 [X] PointGenerator::make_point -- can I utilize Point::create_geometry in the function?
-[ ] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
+[X] Default values (`default_value`) for CLI arguments should be stored in a constant, so I can change them more easily.
     [-] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
-    [ ] Probably the easiest way I can think of to do this (macros are potentially possible but basically require me to parse a whole struct) is to make use of the #[clap(flatten)] attribute and just group the attributes into sets of standard attributes. This means additional member chaining, but it will work from a UI point of view. Go through each command and look for "shared" arguments. Some of them contain multiple arguments (wind directions, extents)
-    [ ] Keep in mind that the terrain commands, also have to be #[serde(flatten)]
+    [X] Probably the easiest way I can think of to do this (macros are potentially possible but basically require me to parse a whole struct) is to make use of the #[clap(flatten)] attribute and just group the attributes into sets of standard attributes. This means additional member chaining, but it will work from a UI point of view. Go through each command and look for "shared" arguments. Some of them contain multiple arguments (wind directions, extents)
+    [-] Keep in mind that the terrain commands, also have to be #[serde(flatten)]
+[ ] Consider if it makes sense to turn the TemperatureArg into an ArgRange
+[ ] Consider turning the WindsArg into a map of directions by latitude range
 [ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
 [ ] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
 

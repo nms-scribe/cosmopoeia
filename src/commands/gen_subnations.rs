@@ -1,16 +1,13 @@
-use std::path::PathBuf;
-
 use clap::Args;
 use clap::Subcommand;
 use rand::Rng;
 
-use super::Task;
+use crate::commands::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;
 use crate::world_map::WorldMap;
 use crate::progress::ProgressObserver;
-use crate::algorithms::naming::NamerSetSource;
 use crate::world_map::CultureForNations;
 use crate::world_map::CultureSchema;
 use crate::utils::random_number_generator;
@@ -28,9 +25,11 @@ use crate::world_map::NamedEntity;
 use crate::world_map::CultureWithNamer;
 use crate::world_map::CultureWithType;
 use crate::commands::TargetArg;
-use super::RandomSeedArg;
-use super::OverwriteSubnationsArg;
-use super::BezierScaleArg;
+use crate::commands::RandomSeedArg;
+use crate::commands::OverwriteSubnationsArg;
+use crate::commands::BezierScaleArg;
+use crate::commands::NamerArg;
+use crate::commands::SubnationPercentArg;
 
 
 
@@ -42,17 +41,11 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,required=true)]
-        /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        pub namers: Vec<PathBuf>,
+        #[clap(flatten)]
+        pub namer_arg: NamerArg,
 
-        #[arg(long)]
-        /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
-        pub default_namer: Option<String>,
-
-        #[arg(long,default_value("20"))]
-        /// The percent of towns in each nation to use for subnations
-        pub subnation_percentage: f64,
+        #[clap(flatten)]
+        pub subnation_percent_arg: SubnationPercentArg,
 
         #[clap(flatten)]
         pub random_seed_arg: RandomSeedArg,
@@ -73,16 +66,14 @@ impl Task for Create {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        let namers = NamerSetSource::from_files(self.namers)?;
-
-        let mut loaded_namers = NamerSet::load_from(namers, self.default_namer, &mut random, progress)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
         let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
 
 
         target.with_transaction(|target| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.subnation_percentage, self.overwrite_subnations_arg, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, &self.overwrite_subnations_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -91,7 +82,7 @@ impl Task for Create {
 }
 
 impl Create {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, overwrite_subnations: OverwriteSubnationsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_subnations: &OverwriteSubnationsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating subnations");
                 
         generate_subnations(target, random, culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, progress)
@@ -109,9 +100,8 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,default_value("20"))]
-        /// The percent of towns in each nation to use for subnations
-        pub subnation_percentage: f64,
+        #[clap(flatten)]
+        pub subnation_percent_arg: SubnationPercentArg,
 
         #[clap(flatten)]
         pub random_seed_arg: RandomSeedArg,
@@ -131,7 +121,7 @@ impl Task for Expand {
         
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, self.subnation_percentage, target, progress)
+            Self::run_with_parameters(&mut random, &self.subnation_percent_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -140,7 +130,7 @@ impl Task for Expand {
 }
 
 impl Expand {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, subnation_percentage: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(random: &mut Random, subnation_percentage: &SubnationPercentArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying subnations to tiles");
     
         expand_subnations(target, random, subnation_percentage, progress)
@@ -159,17 +149,11 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
-        #[arg(long,required=true)]
-        /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-        pub namers: Vec<PathBuf>,
+        #[clap(flatten)]
+        pub namer_arg: NamerArg,
 
-        #[arg(long)]
-        /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
-        pub default_namer: Option<String>,
-
-        #[arg(long,default_value("20"))]
-        /// The percent of towns in each nation to use for subnations
-        pub subnation_percentage: f64,
+        #[clap(flatten)]
+        pub subnation_percent_arg: SubnationPercentArg,
 
         #[clap(flatten)]
         pub random_seed_arg: RandomSeedArg,
@@ -186,14 +170,12 @@ impl Task for FillEmpty {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
         
-        let namers = NamerSetSource::from_files(self.namers)?;
-
-        let mut loaded_namers = NamerSet::load_from(namers, self.default_namer, &mut random, progress)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
         let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, self.subnation_percentage, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, target, progress)
         })?;
 
         target.save(progress)
@@ -202,7 +184,7 @@ impl Task for FillEmpty {
 }
 
 impl FillEmpty {
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Creating new subnations to fill rest of nations");
     
         fill_empty_subnations(target, random, culture_lookup, loaded_namers, subnation_percentage, progress)
@@ -348,17 +330,11 @@ pub struct DefaultArgs {
     #[clap(flatten)]
     pub target_arg: TargetArg,
 
-    #[arg(long,required=true)]
-    /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
-    pub namers: Vec<PathBuf>,
+    #[clap(flatten)]
+    pub namer_arg: NamerArg,
 
-    #[arg(long)]
-    /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
-    pub default_namer: Option<String>,
-
-    #[arg(long,default_value("20"))]
-    /// The percent of towns in each nation to use for subnations
-    pub subnation_percentage: f64,
+    #[clap(flatten)]
+    pub subnation_percent_arg: SubnationPercentArg,
 
     #[clap(flatten)]
     pub bezier_scale_arg: BezierScaleArg,
@@ -397,13 +373,11 @@ impl Task for GenSubnations {
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
 
-            let namers = NamerSetSource::from_files(default_args.namers)?;
-
-            let mut loaded_namers = NamerSet::load_from(namers, default_args.default_namer, &mut random, progress)?;
+            let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
 
             let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
     
-            Self::run_default(&mut random, culture_lookup, &mut loaded_namers, default_args.subnation_percentage, default_args.overwrite_subnations_arg, &default_args.bezier_scale_arg, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.subnation_percent_arg, &default_args.overwrite_subnations_arg, &default_args.bezier_scale_arg, &mut target, progress)
 
         } else if let Some(command) = self.command {
 
@@ -416,7 +390,7 @@ impl Task for GenSubnations {
 
 
 impl GenSubnations {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: f64, overwrite_subnations: OverwriteSubnationsArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_subnations: &OverwriteSubnationsArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
             Create::run_with_parameters(random, &culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, target, progress)?;

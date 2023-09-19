@@ -174,6 +174,160 @@ pub struct BezierScaleArg {
 
 }
 
+#[derive(Args)]
+pub struct TemperatureRangeArg {
+        /// The rough temperature (in celsius) at the equator
+        #[arg(long,default_value="25",allow_hyphen_values=true)]
+        pub equator_temp: i8,
+
+        /// The rough temperature (in celsius) at the poles
+        #[arg(long,default_value="-15",allow_hyphen_values=true)]
+        pub polar_temp: i8,
+
+}
+
+#[derive(Args)]
+pub struct WindsArg {
+    #[arg(long,default_value="225")]
+    /// Wind direction above latitude 60 N
+    pub north_polar_wind: u16,
+
+    #[arg(long,default_value="45")]
+    /// Wind direction from latitude 30 N to 60 N
+    pub north_middle_wind: u16,
+
+    #[arg(long,default_value="225")]
+    /// Wind direction from the equator to latitude 30 N
+    pub north_tropical_wind: u16,
+
+    #[arg(long,default_value="315")]
+    /// Wind direction from the equator to latitude 30 S
+    pub south_tropical_wind: u16,
+
+    #[arg(long,default_value="135")]
+    /// Wind direction from latitude 30 S to 60 S
+    pub south_middle_wind: u16,
+
+    #[arg(long,default_value="315")]
+    /// Wind direction below latitude 60 S
+    pub south_polar_wind: u16,
+
+
+}
+
+#[derive(Args)]
+pub struct PrecipitationArg {
+
+    #[arg(long,default_value="100")]
+    /// Amount of global moisture on a scale of 0-500
+    pub precipitation_factor: u16,
+
+}
+
+#[derive(Args)]
+pub struct NamerArg {
+
+    #[arg(long,required=true)]
+    /// Files to load name generators from, more than one may be specified to load multiple languages. Later language names will override previous ones.
+    pub namers: Vec<PathBuf>,
+
+    #[arg(long)]
+    /// The name generator to use for naming towns in tiles without a culture, or one will be randomly chosen
+    pub default_namer: Option<String>,
+
+
+}
+
+
+fn validate_size_variance(value: &str) -> Result<f64,String> {
+    // FUTURE: Maybe someday clap will support float ranges
+    const LOW: f64 = 0.0;
+    const HIGH: f64 = 10.0;
+
+    let value = value.parse::<f64>().map_err(|_| format!("Argument '{value}' must be a float."))?;
+    if (LOW..=HIGH).contains(&value) {
+        Ok(value)
+    } else {
+        Err(format!("Argument must be between {LOW} and {HIGH}."))
+    }
+}
+
+#[derive(Args)]
+pub struct SizeVarianceArg {
+
+    #[arg(long,default_value("1"),value_parser(validate_size_variance))]
+    /// A number, clamped to 0-10, which controls how much cultures can vary in size
+    pub size_variance: f64,
+
+
+}
+
+#[derive(Args)]
+pub struct RiverThresholdArg {
+
+    #[arg(long,default_value="10")]
+    /// A waterflow threshold above which the tile will count as a river
+    pub river_threshold: f64,
+
+
+}
+
+#[derive(Args)]
+pub struct ExpansionFactorArg {
+
+    #[arg(long,default_value("1"))]
+    /// A number, usually ranging from 0.1 to 2.0, which limits how far cultures and nations will expand. The higher the number, the fewer neutral lands.
+    pub expansion_factor: f64
+
+}
+
+#[derive(Args)]
+pub struct CulturesGenArg {
+
+    #[arg(long,required(true))] 
+    /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
+    pub cultures: Vec<PathBuf>,
+
+    #[arg(long,default_value("10"))]
+    /// The number of cultures to generate
+    pub culture_count: usize,
+
+
+}
+
+#[derive(Args)]
+pub struct SubnationPercentArg {
+
+    #[arg(long,default_value("20"))]
+    /// The percent of towns in each nation to use for subnations
+    pub subnation_percentage: f64,
+
+
+}
+
+#[derive(Args)]
+pub struct TownCountsArg {
+    #[arg(long,default_value="20")]
+    /// The number of national capitals to create
+    pub capital_count: usize,
+
+    #[arg(long)]
+    /// The number of non-capital towns to create
+    pub town_count: Option<usize>,
+
+
+}
+
+
+#[derive(Args)]
+pub struct LakeBufferScaleArg {
+    #[arg(long,default_value="2")]
+    /// This number is used for determining a buffer between the lake and the tile. The higher the number, the smaller and simpler the lakes.
+    pub lake_buffer_scale: f64
+
+
+}
+
 macro_rules! overwrite_arg {
     ($layer: ident) => {
         paste!{

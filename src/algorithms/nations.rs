@@ -28,8 +28,11 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
 use crate::utils::generate_colors;
 use crate::commands::OverwriteNationsArg;
+use crate::commands::SizeVarianceArg;
+use crate::commands::RiverThresholdArg;
+use crate::commands::ExpansionFactorArg;
 
-pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: f64, overwrite_layer: OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_layer: &OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
@@ -46,7 +49,7 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
             let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
             let center_tile_id = town.tile_id;
             let capital_town_id = town.fid;
-            let expansionism = rng.gen_range(0.1..1.0) * size_variance + 1.0;
+            let expansionism = rng.gen_range(0.1..1.0) * size_variance.size_variance + 1.0;
             nations.push(NewNation {
                 name,
                 center_tile_id,
@@ -75,7 +78,7 @@ pub(crate) fn generate_nations<'culture, Random: Rng, Progress: ProgressObserver
     Ok(())
 }
 
-pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, limit_factor: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, progress: &mut Progress) -> Result<(),CommandError> {
 
 
     let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForPlacement>(progress)?;
@@ -96,7 +99,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let mut capitals = HashSet::new();
 
-    let max_expansion_cost = OrderedFloat::from((tiles.feature_count() / 2) as f64 * limit_factor);
+    let max_expansion_cost = OrderedFloat::from((tiles.feature_count() / 2) as f64 * limit_factor.expansion_factor);
 
     for nation in nations {
 
@@ -146,7 +149,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
             let height_cost = get_height_cost(neighbor, &nation.type_);
 
-            let river_cost = get_river_cost(neighbor, river_threshold, &nation.type_);
+            let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &nation.type_);
 
             let shore_cost = get_shore_cost(neighbor, &nation.type_);
 

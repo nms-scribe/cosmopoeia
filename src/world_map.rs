@@ -2919,17 +2919,17 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_tile_layer(&mut self, overwrite: OverwriteTilesArg) -> Result<TileLayer,CommandError> {
+    pub(crate) fn create_tile_layer(&mut self, overwrite: &OverwriteTilesArg) -> Result<TileLayer,CommandError> {
         Ok(TileLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_tiles)?)
 
     }
 
-    pub(crate) fn create_rivers_layer(&mut self, overwrite: OverwriteRiversArg) -> Result<RiverLayer,CommandError> {
+    pub(crate) fn create_rivers_layer(&mut self, overwrite: &OverwriteRiversArg) -> Result<RiverLayer,CommandError> {
         Ok(RiverLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_rivers)?)
 
     }
 
-    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: OverwriteLakesArg) -> Result<LakeLayer,CommandError> {
+    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: &OverwriteLakesArg) -> Result<LakeLayer,CommandError> {
         Ok(LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_lakes)?)
     }
 
@@ -2942,7 +2942,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_biomes_layer(&mut self, overwrite: OverwriteBiomesArg) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn create_biomes_layer(&mut self, overwrite: &OverwriteBiomesArg) -> Result<BiomeLayer,CommandError> {
         Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_biomes)?)
     }
 
@@ -2951,7 +2951,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_cultures_layer(&mut self, overwrite: OverwriteCulturesArg) -> Result<CultureLayer,CommandError> {
+    pub(crate) fn create_cultures_layer(&mut self, overwrite: &OverwriteCulturesArg) -> Result<CultureLayer,CommandError> {
         Ok(CultureLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_cultures)?)
     }
 
@@ -2960,7 +2960,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: OverwriteTownsArg) -> Result<TownLayer,CommandError> {
+    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: &OverwriteTownsArg) -> Result<TownLayer,CommandError> {
         Ok(TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_towns)?)
     }
 
@@ -2969,7 +2969,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
 
     }
 
-    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: OverwriteNationsArg) -> Result<NationLayer,CommandError> {
+    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: &OverwriteNationsArg) -> Result<NationLayer,CommandError> {
         Ok(NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_nations)?)
     }
 
@@ -2977,7 +2977,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         Ok(NationLayer::open_from_dataset(&mut self.dataset)?)
     }
 
-    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: OverwriteSubnationsArg) -> Result<SubnationLayer,CommandError> {
+    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: &OverwriteSubnationsArg) -> Result<SubnationLayer,CommandError> {
         Ok(SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_subnations)?)
     }
 
@@ -2985,11 +2985,11 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         Ok(SubnationLayer::open_from_dataset(&mut self.dataset)?)
     }
 
-    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: OverwriteCoastlineArg) -> Result<CoastlineLayer,CommandError> {
+    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: &OverwriteCoastlineArg) -> Result<CoastlineLayer,CommandError> {
         Ok(CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline.overwrite_coastline)?)
     }
 
-    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: OverwriteOceanArg) -> Result<OceanLayer,CommandError> {
+    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: &OverwriteOceanArg) -> Result<OceanLayer,CommandError> {
         Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean.overwrite_ocean)?)
     }
 

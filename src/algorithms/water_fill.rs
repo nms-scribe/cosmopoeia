@@ -19,6 +19,8 @@ use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
 use crate::commands::OverwriteLakesArg;
 use crate::commands::BezierScaleArg;
+use crate::commands::LakeBufferScaleArg;
+use crate::algorithms::tiles::find_lowest_neighbors;
 
 struct Lake {
     elevation: f64,
@@ -107,7 +109,7 @@ impl Lake {
 }
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: f64, overwrite_layer: OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
 
     let mut tiles_layer = target.edit_tile_layer()?;
@@ -158,7 +160,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 Task::AddToFlow(accumulation)
             } else {
                 // we need to recalculate to find the lowest neighbors that we can assume are above:
-                let (_,lowest_elevation) = super::tiles::find_lowest_neighbors(tile,&tile_map)?;
+                let (_,lowest_elevation) = find_lowest_neighbors(tile,&tile_map)?;
 
                 // assuming that succeeded, we can create a new lake now.
                 if let Some(lowest_elevation) = lowest_elevation {
@@ -399,7 +401,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     // figure out some numbers for generating curvy lakes.
     let tile_area = tiles_layer.estimate_average_tile_area()?;
     let tile_width = tile_area.sqrt();
-    let buffer_distance = (tile_width/10.0) * -lake_buffer_scale;
+    let buffer_distance = (tile_width/10.0) * -lake_buffer_scale.lake_buffer_scale;
     // the next isn't customizable, it just seems to work right. 
     let simplify_tolerance = tile_width/10.0;
     let mut new_lake_map = HashMap::new();

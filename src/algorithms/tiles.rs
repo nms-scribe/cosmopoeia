@@ -77,7 +77,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
 
 
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
@@ -223,7 +223,7 @@ pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TileLayer<'_,'_>) 
     })
 }
 
-pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_coastline: OverwriteCoastlineArg, overwrite_ocean: OverwriteOceanArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_coastline: &OverwriteCoastlineArg, overwrite_ocean: &OverwriteOceanArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // FUTURE: There is an issue with coastlines extending over the edge of the borders after curving. I will have to deal with these someday.
     // FUTURE: After curving, towns which are along the coastline will sometimes now be in the ocean. I may need to deal with that as well, someday.

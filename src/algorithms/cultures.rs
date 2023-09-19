@@ -33,6 +33,9 @@ use crate::world_map::EntityLookup;
 use crate::world_map::BiomeSchema;
 use crate::utils::generate_colors;
 use crate::commands::OverwriteCulturesArg;
+use crate::commands::SizeVarianceArg;
+use crate::commands::RiverThresholdArg;
+use crate::commands::ExpansionFactorArg;
 
 impl CultureType {
 
@@ -53,15 +56,15 @@ impl CultureType {
 
 
 
-pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: CultureSet, namers: &NamerSet, culture_count: usize, size_variance: f64, river_threshold: f64, overwrite_layer: OverwriteCulturesArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: &CultureSet, namers: &NamerSet, culture_count: &usize, size_variance: &SizeVarianceArg, river_threshold: &RiverThresholdArg, overwrite_layer: &OverwriteCulturesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     // Algorithm copied from AFMG
 
-    let culture_count = if culture_count > culture_set.len() {
+    let culture_count = if culture_count > &culture_set.len() {
         progress.warning(|| format!("The provided culture set is not large enough to produce the requested number of cultures. The count will be limited to {}.",culture_set.len()));
         culture_set.len()
     } else {
-        culture_count
+        *culture_count
     };
 
     let biomes = target.edit_biomes_layer()?.read_features().to_named_entities_index(progress)?;
@@ -152,9 +155,9 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         let name = culture_source.name().to_owned();
 
         // define the culture type
-        let culture_type = get_culture_type(&center, river_threshold, rng)?;
+        let culture_type = get_culture_type(&center, river_threshold.river_threshold, rng)?;
         
-        let expansionism = culture_type.generate_expansionism(rng,size_variance);
+        let expansionism = culture_type.generate_expansionism(rng,size_variance.size_variance);
 
         let namer = culture_source.namer_name();
 
@@ -285,7 +288,7 @@ fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
 }
 
 
-pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: f64, limit_factor: f64, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
 
@@ -304,7 +307,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     let mut costs = HashMap::new();
 
     // This is how far the cultures will be able to spread.
-    let max_expansion_cost = OrderedFloat::from(tiles.feature_count() as f64 * 0.6 * limit_factor);
+    let max_expansion_cost = OrderedFloat::from(tiles.feature_count() as f64 * 0.6 * limit_factor.expansion_factor);
 
     let mut culture_centers = HashSet::new();
     
@@ -349,7 +352,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
             let height_cost = get_height_cost(neighbor, &culture.type_);
 
-            let river_cost = get_river_cost(neighbor, river_threshold, &culture.type_);
+            let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &culture.type_);
 
             let type_cost = get_shore_cost(neighbor, &culture.type_);
 

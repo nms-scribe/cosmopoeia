@@ -43,7 +43,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
     (chosen_segment.expect("Whoever called this function passed an empty list.").clone(),total_flow)
 }
 
-pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_layer: OverwriteRiversArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_layer: &OverwriteRiversArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.edit_tile_layer()?;
 
