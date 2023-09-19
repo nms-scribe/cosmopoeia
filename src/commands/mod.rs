@@ -188,6 +188,7 @@ pub struct TemperatureRangeArg {
 
 #[derive(Args)]
 pub struct WindsArg {
+    
     #[arg(long,default_value="225")]
     /// Wind direction above latitude 60 N
     pub north_polar_wind: u16,
@@ -213,6 +214,22 @@ pub struct WindsArg {
     pub south_polar_wind: u16,
 
 
+}
+
+impl WindsArg {
+
+    pub(crate) fn to_range_map(&self) -> rangemap::RangeMap<ordered_float::OrderedFloat<f64>, u16> {
+        let mut result = rangemap::RangeMap::new();
+        result.insert(ordered_float::OrderedFloat(-90.0)..ordered_float::OrderedFloat(-60.0),self.south_polar_wind);
+        result.insert(ordered_float::OrderedFloat(-60.0)..ordered_float::OrderedFloat(-30.0),self.south_middle_wind);
+        result.insert(ordered_float::OrderedFloat(-30.0)..ordered_float::OrderedFloat(0.0),self.south_tropical_wind);
+        result.insert(ordered_float::OrderedFloat(0.0)..ordered_float::OrderedFloat(30.0),self.north_tropical_wind);
+        result.insert(ordered_float::OrderedFloat(30.0)..ordered_float::OrderedFloat(60.0),self.north_middle_wind);
+        // note that the last one is set at 90.1 since the range map is not inclusive
+        result.insert(ordered_float::OrderedFloat(60.0)..ordered_float::OrderedFloat(90.1),self.north_polar_wind);
+        result
+
+    }
 }
 
 #[derive(Args)]

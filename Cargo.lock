@@ -241,6 +241,7 @@ dependencies = [
  "qutee",
  "rand 0.8.5",
  "rand_distr 0.4.3",
+ "rangemap",
  "ron",
  "serde",
  "serde_json",
@@ -864,6 +865,12 @@ checksum = "cbf7e9e623549b0e21f6e97cf8ecf247c1a8fd2e8a992ae265314300b2455d5c"
 dependencies = [
  "rand_core 0.3.1",
 ]
+
+[[package]]
+name = "rangemap"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "977b1e897f9d764566891689e642653e5ed90c6895106acd005eb4c1d0203991"
 
 [[package]]
 name = "rawpointer"

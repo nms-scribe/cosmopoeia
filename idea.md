@@ -376,8 +376,9 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
     [-] I wonder if I could store help values for those arguments as well? What if I had a set of macros defining the argument fields?
     [X] Probably the easiest way I can think of to do this (macros are potentially possible but basically require me to parse a whole struct) is to make use of the #[clap(flatten)] attribute and just group the attributes into sets of standard attributes. This means additional member chaining, but it will work from a UI point of view. Go through each command and look for "shared" arguments. Some of them contain multiple arguments (wind directions, extents)
     [-] Keep in mind that the terrain commands, also have to be #[serde(flatten)]
-[ ] Consider if it makes sense to turn the TemperatureArg into an ArgRange
+[-] Consider if it makes sense to turn the TemperatureArg into an ArgRange
 [ ] Consider turning the WindsArg into a map of directions by latitude range
+[ ] Wind arguments should be based on hadley cell latitudes, which may differ with tilt.
 [ ] naming: is_ref_vowel -- do I have all the vowels? Is there a unicode class I could use?
 [ ] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
 

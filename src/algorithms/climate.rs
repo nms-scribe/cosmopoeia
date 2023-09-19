@@ -69,22 +69,14 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     // Algorithm borrowed from AFMG with some modifications
 
-    let winds = [
-        winds.north_polar_wind as i32,
-        winds.north_middle_wind as i32,
-        winds.north_tropical_wind as i32,
-        winds.south_tropical_wind as i32,
-        winds.south_middle_wind as i32,
-        winds.south_polar_wind as i32
-    ];
+    let winds = winds.to_range_map();
 
     let features = layer.read_features().to_entities_vec::<_,TileForWinds>(progress)?;
 
     for feature in features.iter().watch(progress,"Generating winds.","Winds generated.") {
 
-        let wind_tier = ((feature.site_y - 89.0)/30.0).abs().floor() as usize;
-        let wind_dir = winds[wind_tier];
-
+        let wind_dir = winds.get(&ordered_float::OrderedFloat(feature.site_y)).copied().unwrap_or_else(|| 90) as i32;
+ 
         if let Some(mut working_feature) = layer.feature_by_id(&feature.fid) {
             working_feature.set_wind(wind_dir)?;
 
