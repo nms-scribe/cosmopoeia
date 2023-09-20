@@ -63,12 +63,13 @@ impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
 
 // This was almost directly ported from AFMG.
 
-fn is_ref_vowel(c: &char) -> bool {
+#[allow(clippy::trivially_copy_pass_by_ref)] // this one is used in a call to 'map' that passes references
+const fn is_ref_vowel(c: &char) -> bool {
     // FUTURE: Are these *all* the vowels? I guess we're probably just dealing with latin characters, and more specifically characters that at least some English speaker might think of as vowels, trying to support other character sets and languages would be better done by offering a vowel list option in the naming sources.
     matches!(c,'a'|'e'|'i'|'o'|'u'|'y'|'ɑ'|'\''|'ə'|'ø'|'ɛ'|'œ'|'æ'|'ɶ'|'ɒ'|'ɨ'|'ɪ'|'ɔ'|'ɐ'|'ʊ'|'ɤ'|'ɯ'|'а'|'о'|'и'|'е'|'ё'|'э'|'ы'|'у'|'ю'|'я'|'à'|'è'|'ì'|'ò'|'ù'|'ỳ'|'ẁ'|'ȁ'|'ȅ'|'ȉ'|'ȍ'|'ȕ'|'á'|'é'|'í'|'ó'|'ú'|'ý'|'ẃ'|'ő'|'ű'|'â'|'ê'|'î'|'ô'|'û'|'ŷ'|'ŵ'|'ä'|'ë'|'ï'|'ö'|'ü'|'ÿ'|'ẅ'|'ã'|'ẽ'|'ĩ'|'õ'|'ũ'|'ỹ'|'ą'|'ę'|'į'|'ǫ'|'ų'|'ā'|'ē'|'ī'|'ō'|'ū'|'ȳ'|'ă'|'ĕ'|'ĭ'|'ŏ'|'ŭ'|'ǎ'|'ě'|'ǐ'|'ǒ'|'ǔ'|'ȧ'|'ė'|'ȯ'|'ẏ'|'ẇ'|'ạ'|'ẹ'|'ị'|'ọ'|'ụ'|'ỵ'|'ẉ'|'ḛ'|'ḭ'|'ṵ'|'ṳ')
 }
 
-fn is_vowel(c: char) -> bool {
+const fn is_vowel(c: char) -> bool {
     is_ref_vowel(&c)
 }
 
@@ -96,37 +97,37 @@ impl StateNameBehavior {
 
     fn apply(&self, name: String) -> String {
         match self {
-                StateNameBehavior::TrimSuffixes(suffixes) => {
+            Self::TrimSuffixes(suffixes) => {
+                Self::trim_suffixes(name, suffixes)
+            },
+            Self::TrimSuffixesIfLonger(suffixes, len) => {
+                if name.len() > *len {
                     Self::trim_suffixes(name, suffixes)
-                },
-                StateNameBehavior::TrimSuffixesIfLonger(suffixes, len) => {
-                    if name.len() > *len {
-                        Self::trim_suffixes(name, suffixes)
-                    } else {
-                        name
-                    }
-                },
-                StateNameBehavior::ForceVowel(suffix) => {
-                    if name.ends_with(is_vowel) {
-                        name
-                    } else {
-                        name + suffix
-                    }
-                },
-                StateNameBehavior::ForcePrefix(prefix) => {
-                    let mut name = name;
-                    name.insert_str(0, prefix);
-                    name
-                },
-                StateNameBehavior::ForcePrefixByLetterClass(cons_prefix,vowel_prefix) => {
-                    let mut name = name;
-                    if name.starts_with(is_vowel) {
-                        name.insert_str(0, vowel_prefix)
-                    } else {
-                        name.insert_str(0, cons_prefix)
-                    }
+                } else {
                     name
                 }
+            },
+            Self::ForceVowel(suffix) => {
+                if name.ends_with(is_vowel) {
+                    name
+                } else {
+                    name + suffix
+                }
+            },
+            Self::ForcePrefix(prefix) => {
+                let mut name = name;
+                name.insert_str(0, prefix);
+                name
+            },
+            Self::ForcePrefixByLetterClass(cons_prefix,vowel_prefix) => {
+                let mut name = name;
+                if name.starts_with(is_vowel) {
+                    name.insert_str(0, vowel_prefix)
+                } else {
+                    name.insert_str(0, cons_prefix)
+                }
+                name
+            }
         }
 
     }
@@ -149,29 +150,29 @@ impl StateSuffixBehavior {
     // will be applied at all.
     fn apply<Random: Rng>(&self, rng: &mut Random, name: &String) -> Result<Option<String>,()> { 
         match self {
-                StateSuffixBehavior::NoSuffix => Err(()),
-                StateSuffixBehavior::Default => Ok(None), // let the caller apply the default.
-                StateSuffixBehavior::Suffix(suffix) => Ok(Some(suffix.to_owned())),
-                StateSuffixBehavior::ProbableSuffix(prob, suffix) => if rng.gen_bool(*prob) {
-                    Ok(Some(suffix.to_owned()))
-                } else {
-                    Ok(None)
-                },
-                StateSuffixBehavior::ProbableSuffixIfShorter(len, prob, suffix) => if (&name.len() < len) && rng.gen_bool(*prob) {
-                    Ok(Some(suffix.to_owned()))
-                } else {
-                    Ok(None)
-                },
-                StateSuffixBehavior::Choice(list) => {
-                    for choice in list {
-                        match choice.apply(rng,name) {
-                                Ok(Some(suffix)) => return Ok(Some(suffix)),
-                                Err(()) => return Err(()),
-                                _ => ()
-                        }
+            Self::NoSuffix => Err(()),
+            Self::Default => Ok(None), // let the caller apply the default.
+            Self::Suffix(suffix) => Ok(Some(suffix.clone())),
+            Self::ProbableSuffix(prob, suffix) => if rng.gen_bool(*prob) {
+                Ok(Some(suffix.clone()))
+            } else {
+                Ok(None)
+            },
+            Self::ProbableSuffixIfShorter(len, prob, suffix) => if (&name.len() < len) && rng.gen_bool(*prob) {
+                Ok(Some(suffix.clone()))
+            } else {
+                Ok(None)
+            },
+            Self::Choice(list) => {
+                for choice in list {
+                    match choice.apply(rng,name) {
+                            Ok(Some(suffix)) => return Ok(Some(suffix)),
+                            Err(()) => return Err(()),
+                            _ => ()
                     }
-                    Ok(None)
-                },
+                }
+                Ok(None)
+            },
         }
     }
 }
@@ -213,29 +214,31 @@ impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
     fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<HashMap<Option<char>, Vec<String>>,CommandError> {
-        if !array.is_empty() {
+        if array.is_empty() {
+            Err(CommandError::EmptyNamerInput(name.to_owned()))
+        } else {
             let mut chain = HashMap::new();
 
             progress.start_known_endpoint(|| array.len());
     
             for (j,n) in array.iter().enumerate() {
-                let name: Vec<char> = n.trim().chars().collect();
-                let basic = name.iter().all(|c| matches!(c, '\u{0000}'..='\u{007f}')); // basic chars and English rules can be applied
+                let word: Vec<char> = n.trim().chars().collect();
+                let basic = word.iter().all(|c| matches!(c, '\u{0000}'..='\u{007f}')); // basic chars and English rules can be applied
     
                 // split word into pseudo-syllables
                 let mut syllable = String::new();
                 let mut i = 0; 
-                while i < name.len() {
+                while i < word.len() {
                     let prev_char = if i == 0 { 
                         None 
                     } else { 
-                        name.get(i-1).copied() 
+                        word.get(i-1).copied() 
                     }; // pre-onset letter
                     let mut vowel_found = false; 
     
-                    for c in i..name.len() {
-                        let current_char = name[c];
-                        let next_char = name.get(c + 1); // next char
+                    for c in i..word.len() {
+                        let current_char = word[c];
+                        let next_char = word.get(c + 1); // next char
                         syllable.push(current_char);
                         if (syllable == " ") || (syllable == "-") { 
                             // syllable starts with space or hyphen
@@ -273,7 +276,7 @@ impl MarkovGenerator {
                                 // two same vowels in a row
                                 break
                             }; 
-                            if vowel_found && name.get(c + 2).map(is_ref_vowel).unwrap_or_else(|| false) {
+                            if vowel_found && word.get(c + 2).map_or_else(|| false, is_ref_vowel) {
                                 // syllable has vowel and additional vowel is expected soon
                                 break
                             }; 
@@ -300,14 +303,12 @@ impl MarkovGenerator {
     
             progress.finish();
 
-            if !chain.is_empty() {
-                Ok(chain)
-            } else {
+            if chain.is_empty() {
                 Err(CommandError::EmptyNamerInput(name.to_owned()))
+            } else {
+                Ok(chain)
             }
     
-        } else {
-            Err(CommandError::EmptyNamerInput(name.to_owned()))
         }
 
     }
@@ -331,7 +332,7 @@ impl MarkovGenerator {
         let cutoff_len = cutoff_len.unwrap_or(self.cutoff_len);
 
         let mut choices = self.chain.get(&None).expect("How would we get an empty chain?"); // As long as the input wasn't empty, this shouldn't panic
-        let mut cur = choices.choose(rng).to_owned();
+        let mut cur = choices.choose(rng).clone();
         let mut word = String::new();
         for _ in 0..20 {
        
@@ -346,7 +347,7 @@ impl MarkovGenerator {
                 }
             } else if (word.len() + cur.len()) > cutoff_len {
                 // word too long
-                if (word.len() < min_len) || !choices.contains(&"".to_owned()) {
+                if (word.len() < min_len) || !choices.contains(&String::new()) {
                     // either 1) it would be too short
                     // or 2) can't end the word with the previous choices
                     // so add it anyway.
@@ -360,7 +361,7 @@ impl MarkovGenerator {
             }
 
             word.push_str(&cur);
-            cur = choices.choose(rng).to_owned();
+            cur = choices.choose(rng).clone();
         }
 
         // parse word to get a final name
@@ -407,7 +408,7 @@ impl MarkovGenerator {
         }
 
         if name.len() < 2 {
-            name = self.seed_words.choose(rng).to_owned();
+            name = self.seed_words.choose(rng).clone();
         }
 
         name
@@ -424,19 +425,19 @@ struct ListPicker {
 impl ListPicker {
 
     fn new(name: &str, list: Vec<String>) -> Result<Self,CommandError> {
-        if !list.is_empty() {
+        if list.is_empty() {
+            Err(CommandError::EmptyNamerInput(name.to_owned()))
+        } else {
             Ok(Self {
                 available: list,
                 picked: Vec::new()
             })    
-        } else {
-            Err(CommandError::EmptyNamerInput(name.to_owned()))
         }
     }
 
     fn pick_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
         if self.available.is_empty() {
-            self.available = std::mem::replace(&mut self.picked, Vec::new())
+            self.available = core::mem::replace(&mut self.picked, Vec::new())
         }
 
         let picked = self.available.remove(rng.gen_range(0..self.available.len()));
@@ -454,8 +455,8 @@ impl NamerMethod {
 
     pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
         match self {
-            NamerMethod::Markov(markov) => markov.make_word(rng, None, None),
-            NamerMethod::ListPicker(picker) => picker.pick_word(rng)
+            Self::Markov(markov) => markov.make_word(rng, None, None),
+            Self::ListPicker(picker) => picker.pick_word(rng)
         }
     }
 
@@ -525,7 +526,7 @@ impl Namer {
 
         let suffixing = &self.state_suffix;
 
-        if let StateSuffixBehavior::NoSuffix = suffixing {
+        if matches!(suffixing, StateSuffixBehavior::NoSuffix) {
             return name
         }
 
@@ -543,10 +544,10 @@ impl Namer {
                 trimmed_name.to_owned()
             } else if !is_penultimate_vowel && rng.gen_bool(0.7) {
                 // ~60% for cv
-                let mut name = trimmed_name.to_owned();
+                let mut trimmed_name = trimmed_name.to_owned();
                 // trim off the vowel before adding suffix
-                name.push(ending[0]);
-                name
+                trimmed_name.push(ending[0]);
+                trimmed_name
             } else {
                 // no suffix, just return this.
                 return name;
@@ -567,11 +568,11 @@ impl Namer {
             Err(()) => return name, // don't apply a suffix, and return the original name.
         };
 
-        Self::validate_suffix(suffixed_name, suffix) 
+        Self::validate_suffix(suffixed_name, &suffix) 
     }
     
 
-    fn validate_suffix(name: String, suffix: String) -> String {
+    fn validate_suffix(name: String, suffix: &str) -> String {
         let mut name = name;
         if name.ends_with(&suffix) {
             // no suffix if name already ends with it
@@ -600,7 +601,7 @@ impl Namer {
             // remove name last letter if it's a suffix first letter (Again)
             name = split_string_from_end(&name, 1).0.to_owned();
         }; 
-        name + &suffix
+        name + suffix
     }
 
 
@@ -632,7 +633,7 @@ impl NamerSet {
         }
     }
 
-    pub(crate) fn load_from<Random: Rng, Progress: ProgressObserver>(args: NamerArg, rng: &mut Random, progress: &mut Progress) -> Result<NamerSet, CommandError> {
+    pub(crate) fn load_from<Random: Rng, Progress: ProgressObserver>(args: NamerArg, rng: &mut Random, progress: &mut Progress) -> Result<Self, CommandError> {
         let source = NamerSetSource::from_files(args.namers)?;
 
         let mut map = HashMap::new();
@@ -644,18 +645,18 @@ impl NamerSet {
         
         let default_namer = if let Some(default_namer) = args.default_namer {
             if !map.contains_key(&default_namer) {
-                Err(CommandError::UnknownNamer(default_namer.to_owned()))?
+                return Err(CommandError::UnknownNamer(default_namer))
             }
             default_namer    
         } else {
             let keys: Vec<&String> = map.keys().collect();
-            let result = keys.choose(rng).to_owned().to_owned();
-            progress.message(|| format!("Using default namer '{}'",result));
+            let result = keys.choose(rng).to_owned().clone();
+            progress.message(|| format!("Using default namer '{result}'"));
             result
         };
 
         
-        Ok(NamerSet {
+        Ok(Self {
             default_namer,
             map
         })
@@ -676,7 +677,7 @@ impl NamerSetSource {
     }
 
     pub(crate) fn from_files(files: Vec<PathBuf>) -> Result<Self,CommandError> {
-        let mut result = NamerSetSource::empty();
+        let mut result = Self::empty();
 
         for file in files {
             result.extend_from_file(file,false)?;
@@ -692,8 +693,8 @@ impl NamerSetSource {
         let mut ser = JSONSerializer::with_formatter(&mut buf, formatter);
         // I don't want to serialize a map, I want to serialize it as an array.
         let data = self.source.values().collect::<Vec<_>>();
-        data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
-        String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))
+        data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{e}")))?;
+        String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{e}")))
     
 
     }
@@ -705,9 +706,9 @@ impl NamerSetSource {
     }
     
     pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
-        let data = from_json_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?;
-        for data in data {
-            self.add_namer(data)
+        let data = from_json_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?;
+        for datum in data {
+            self.add_namer(datum)
         }
 
         Ok(())
@@ -721,7 +722,7 @@ impl NamerSetSource {
         let mut sum = 0;
         let mut duplicate_chars = HashSet::new();
         for line in source.lines() {
-            let word = line.map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?; 
+            let word = line.map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?; 
             min = match min {
                 Some(n) => Some(n.min(word.len())),
                 None => Some(word.len())
@@ -739,7 +740,7 @@ impl NamerSetSource {
 
         if text_is_markov {
             let min_len = min.unwrap_or(0);
-            let avg_len = sum / list.len();
+            let avg_len = sum.div_euclid(list.len());
             let cutoff_len = avg_len;
 
             self.add_namer(NamerSource {
@@ -777,12 +778,11 @@ impl NamerSetSource {
         }
 
         let format = match file.as_ref().extension().and_then(OsStr::to_str) {
-            Some("json") => Format::JSON,
             Some("txt") => Format::TextList(file.as_ref().file_stem().and_then(OsStr::to_str).unwrap_or("").to_owned()),
-            Some(_) | None => Format::JSON, // this is the default, although perhaps the 'txt' should be the default?
+            Some("json" | _) | None => Format::JSON, // this is the default, although perhaps the 'txt' should be the default?
         };
 
-        let namer_source = File::open(file).map_err(|e| CommandError::NamerSourceRead(format!("{}",e)))?;
+        let namer_source = File::open(file).map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?;
         let reader = BufReader::new(namer_source);
 
         match format {

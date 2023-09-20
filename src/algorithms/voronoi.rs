@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::cmp::Ordering;
+use core::cmp::Ordering;
 
 use gdal::vector::OGRwkbGeometryType;
 use ordered_float::NotNan;
@@ -9,7 +9,7 @@ use gdal::vector::Geometry;
 use crate::utils::create_polygon;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::NewTile;
+use crate::world_map::NewTileSite;
 use crate::utils::Extent;
 use crate::utils::Point;
 use crate::errors::CommandError;
@@ -43,7 +43,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         })
     }
 
-    pub(crate) fn circumcenter(points: (&Point,&Point,&Point)) -> Result<Point,CommandError> {
+    pub(crate) fn circumcenter(points: (&Point,&Point,&Point)) -> Point {
         // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
 
         let (a,b,c) = points;
@@ -56,7 +56,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
         let u: Point = (ux,uy).into();
 
-        Ok(u)
+        u
 
     }
 
@@ -127,13 +127,13 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
                                     let b_distance = (b_run) * (b_run) + (b_rise) * (b_rise);
                                     a_distance.cmp(&b_distance)
                                 },
-                                a => {
+                                slope_compare => {
                                     // both are in the same quadrant now, but the slopes are not the same, we can just return the result of slope comparison:
                                     // in the northeast quadrant, a lower positive slope means it is closer to east and further away.
                                     // in the southeast quadrant, a lower negative slope means it is closer to south and further away.
                                     // in the southwest quadrant, a lower positive slope means it is closer to west and further away.
                                     // in the northwest quadrant, a lower negative slope means it is closer to north and further away from the start.
-                                    a
+                                    slope_compare
                                 }
                             }
 
@@ -149,15 +149,15 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    pub(crate) fn create_voronoi(site: Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<NewTile>,CommandError> {
-        if (voronoi.vertices.len() >= 3) && extent.contains(&site) {
+    pub(crate) fn create_voronoi(site: &Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<NewTileSite>,CommandError> {
+        if (voronoi.vertices.len() >= 3) && extent.contains(site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
             // to clip the edges.
             let mut vertices = voronoi.vertices;
             // sort the vertices clockwise to make sure it's a real polygon.
             let mut needs_a_trim = false;
-            Self::sort_clockwise(&site,&mut vertices,extent,&mut needs_a_trim);
+            Self::sort_clockwise(site,&mut vertices,extent,&mut needs_a_trim);
             vertices.push(vertices[0].clone());
             let polygon = create_polygon(&vertices)?;
             let polygon = if needs_a_trim {
@@ -166,7 +166,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             } else {
                 Some(polygon)
             };
-            Ok(polygon.map(|a| NewTile {
+            Ok(polygon.map(|a| NewTileSite {
                 geometry: a,
                 site_x: *site.x,
                 site_y: *site.y,
@@ -201,7 +201,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
                .try_into()
                .map_err(|_| CommandError::VoronoiExpectsTriangles)?;
 
-            let circumcenter = Self::circumcenter((&points[0],&points[1],&points[2]))?;
+            let circumcenter = Self::circumcenter((&points[0],&points[1],&points[2]));
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {
@@ -241,7 +241,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
 impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator for VoronoiGenerator<GeometryIterator> {
 
-    type Item = Result<NewTile,CommandError>;
+    type Item = Result<NewTileSite,CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.phase {
@@ -256,7 +256,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
                 for value in iter.by_ref() {
                     // create_voronoi returns none for various reasons if the polygon shouldn't be written. 
                     // If it does that, I have to keep trying. 
-                    result = Self::create_voronoi(value.0, value.1,&self.extent,&self.extent_geo).transpose();
+                    result = Self::create_voronoi(&value.0, value.1,&self.extent,&self.extent_geo).transpose();
                     if result.is_some() {
                         break;
                     }

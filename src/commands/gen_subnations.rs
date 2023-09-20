@@ -62,7 +62,7 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -71,9 +71,9 @@ impl Task for Create {
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, &self.overwrite_subnations_arg, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, &self.overwrite_subnations_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -115,13 +115,13 @@ impl Task for Expand {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
         
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, &self.subnation_percent_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&mut random, &self.subnation_percent_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -166,7 +166,7 @@ impl Task for FillEmpty {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
         
@@ -174,8 +174,8 @@ impl Task for FillEmpty {
 
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -213,8 +213,8 @@ impl Task for Normalize {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -250,8 +250,8 @@ impl Task for Dissolve {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -290,8 +290,8 @@ impl Task for Curvify {
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
         let bezier_scale = self.bezier_scale_arg;
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&bezier_scale, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&bezier_scale, transaction, progress)
         })?;
 
         target.save(progress)
@@ -369,7 +369,7 @@ impl Task for GenSubnations {
 
         if let Some(default_args) = self.default_args {
 
-            let mut random = random_number_generator(default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed_arg);
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
 
@@ -391,19 +391,19 @@ impl Task for GenSubnations {
 
 impl GenSubnations {
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_subnations: &OverwriteSubnationsArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Create::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, target, progress)?;
+            Create::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, transaction, progress)?;
 
-            Expand::run_with_parameters(random, subnation_percentage, target, progress)?;
+            Expand::run_with_parameters(random, subnation_percentage, transaction, progress)?;
 
-            FillEmpty::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, target, progress)?;
+            FillEmpty::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, transaction, progress)?;
 
-            Normalize::run_with_parameters(target, progress)?;
+            Normalize::run_with_parameters(transaction, progress)?;
 
-            Dissolve::run_with_parameters(target, progress)?;
+            Dissolve::run_with_parameters(transaction, progress)?;
 
-            Curvify::run_with_parameters(bezier_scale, target, progress)
+            Curvify::run_with_parameters(bezier_scale, transaction, progress)
 
 
         })?;

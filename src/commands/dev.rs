@@ -20,7 +20,6 @@ use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::random_points::load_points_layer;
 use crate::algorithms::triangles::load_triangles_layer;
 use crate::algorithms::tiles::load_tile_layer;
-use crate::world_map::NewTile;
 use crate::algorithms::naming::NamerSetSource;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
@@ -64,13 +63,13 @@ impl Task for PointsFromHeightmap {
         let source = RasterMap::open(self.heightmap_arg.source)?;
         let extent = source.bounds()?.extent();
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
-        let random = random_number_generator(self.random_seed_arg);
+        let random = random_number_generator(&self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.points);
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
             progress.announce("Generating random points");
 
-            load_points_layer(target, self.overwrite, generator, progress)
+            load_points_layer(transaction, self.overwrite, generator, progress)
         })?;
 
         target.save(progress)?;
@@ -119,13 +118,13 @@ impl Task for PointsFromExtent {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
-        let random = random_number_generator(self.random_seed_arg);
+        let random = random_number_generator(&self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.points);
         
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
             progress.announce("Generating random points");
 
-            load_points_layer(target, self.overwrite, generator, progress)
+            load_points_layer(transaction, self.overwrite, generator, progress)
         })?;
 
         target.save(progress)?;
@@ -161,8 +160,8 @@ impl Task for TrianglesFromPoints {
 
         generator.start(progress)?;
     
-        target.with_transaction(|target| {
-            load_triangles_layer(target, self.overwrite, generator, progress)
+        target.with_transaction(|transaction| {
+            load_triangles_layer(transaction, self.overwrite, generator, progress)
         })?;
 
         target.save(progress)
@@ -203,18 +202,20 @@ impl Task for VoronoiFromTriangles {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        let mut triangles = target.triangles_layer()?;
+        target.with_transaction(|transaction| {
+            let mut triangles = transaction.edit_triangles_layer()?;
     
-        let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
-
-        progress.announce("Create tiles from voronoi polygons");
+            let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
     
-        generator.start(progress)?;
+            progress.announce("Create tiles from voronoi polygons");
+        
+            generator.start(progress)?;
+        
+            // I need to collect this because I can't borrow the transaction as mutable with an active iterator.
+            #[allow(clippy::needless_collect)]
+            let voronoi: Vec<_> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
     
-        let voronoi: Vec<Result<NewTile,CommandError>> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
-
-        target.with_transaction(|target| {
-            load_tile_layer(target,&self.overwrite_tiles_arg,voronoi.into_iter(),&limits,progress)
+            load_tile_layer(transaction,&self.overwrite_tiles_arg,voronoi.into_iter(),&limits,progress)
         })?;
 
         target.save(progress)
@@ -269,7 +270,7 @@ impl Task for Namers {
             print!("{}",namers.to_json()?)
 
         } else {
-            let mut random = random_number_generator(self.random_seed_arg);
+            let mut random = random_number_generator(&self.random_seed_arg);
             let mut namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
             if let Some(key) = self.language {
@@ -328,7 +329,7 @@ impl Task for Cultures {
         
         }
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 

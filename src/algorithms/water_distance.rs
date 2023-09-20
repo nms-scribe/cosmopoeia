@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use core::cmp::Reverse;
 use std::collections::HashMap;
 
 use priority_queue::PriorityQueue;
@@ -59,9 +59,9 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
             }
         }
 
-        let tile = tile_map.try_get_mut(&fid)?;
-        tile.water_count = water_count;
-        tile.closest_water_tile_id = closest_water;
+        let edit_tile = tile_map.try_get_mut(&fid)?;
+        edit_tile.water_count = water_count;
+        edit_tile.closest_water_tile_id = closest_water;
         if on_shore {
             if is_land {
                 _ = shore_distances.insert(fid,1);
@@ -127,7 +127,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
     for (fid,tile) in tile_map.into_iter().watch(progress, "Writing data.", "Data written.") {
 
-        let mut feature = tiles.try_feature_by_id(&fid)?;
+        let mut feature = tiles.try_feature_by_id(fid)?;
         let shore_distance = shore_distances.remove(&fid).expect("Why wouldn't this value have been generated for the tile?");
         feature.set_shore_distance(shore_distance)?;
         feature.set_harbor_tile_id(tile.closest_water_tile_id)?;

@@ -55,7 +55,7 @@ struct TerrainParameters {
 
 impl TerrainParameters {
 
-    fn get_blob_power(tile_count: usize) -> f64 {
+    const fn get_blob_power(tile_count: usize) -> f64 {
         // These numbers came from AFMG
         match tile_count {
             0..=1001 => 0.93,
@@ -75,7 +75,7 @@ impl TerrainParameters {
         }        
     }
 
-    fn get_line_power(tile_count: usize) -> f64 {
+    const fn get_line_power(tile_count: usize) -> f64 {
         match tile_count {
             0..=1001 => 0.75,
             1002..=2001 => 0.77,
@@ -107,14 +107,14 @@ impl TerrainParameters {
             0.0
         };
 
-        Self {
-            elevations,
-            expanse_above_sea_level,
-            positive_elevation_scale,
-            negative_elevation_scale,
-            blob_power,
-            line_power,
-            extents,
+        Self { 
+            elevations, 
+            positive_elevation_scale, 
+            negative_elevation_scale, 
+            expanse_above_sea_level, 
+            blob_power, 
+            line_power, 
+            extents 
         }
 
     }
@@ -130,27 +130,27 @@ impl TerrainParameters {
         self.extents.south + y
     }
 
-    fn get_height_delta(&self, height_delta: &i8) -> (f64,f64) {
+    fn get_height_delta(&self, height_delta: i8) -> (f64,f64) {
         // convert the delta relative to the above sea level range, rather than below, so the
         // input to convert needs to be positive.
         let (height_delta,sign) = if height_delta.is_negative() {
             (height_delta.abs(),-1.0)
         } else {
-            (*height_delta,1.0)
+            (height_delta,1.0)
         };
-        let result = self.convert_relative_height(&height_delta, RelativeHeightTruncation::UnTruncated,false);
+        let result = self.convert_relative_height(height_delta, &RelativeHeightTruncation::UnTruncated,false);
         (result,sign)
 
     }
 
-    fn get_signed_height_delta(&self, height_delta: &i8) -> f64 {
+    fn get_signed_height_delta(&self, height_delta: i8) -> f64 {
         let (value,sign) = self.get_height_delta(height_delta);
         value.copysign(sign)
     }
 
     fn gen_height_delta<Random: Rng>(&self, rng: &mut Random, height_delta: &ArgRange<i8>) -> (f64,f64) {
         let chosen = height_delta.choose(rng);
-        self.get_height_delta(&chosen)
+        self.get_height_delta(chosen)
     }
 
     fn gen_signed_height_delta<Random: Rng>(&self, rng: &mut Random, height_delta: &ArgRange<i8>) -> f64 {
@@ -160,20 +160,20 @@ impl TerrainParameters {
 
 
 
-    fn convert_relative_height(&self, value: &i8, direction: RelativeHeightTruncation, clamp: bool) -> f64 {
+    fn convert_relative_height(&self, value: i8, direction: &RelativeHeightTruncation, clamp: bool) -> f64 {
         let max_elevation = self.elevations.max_elevation;
         let min_elevation = self.elevations.min_elevation;
-        let result = if value == &100 {
+        let result = if value == 100 {
             max_elevation
-        } else if value == &-100 {
+        } else if value == -100 {
             min_elevation
         } else {
             let fraction = match direction {
-                RelativeHeightTruncation::Floor => (*value as f64/100.0).floor(),
-                RelativeHeightTruncation::Ceil => (*value as f64/100.0).ceil(),
-                RelativeHeightTruncation::UnTruncated => *value as f64/100.0,
+                RelativeHeightTruncation::Floor => (value as f64/100.0).floor(),
+                RelativeHeightTruncation::Ceil => (value as f64/100.0).ceil(),
+                RelativeHeightTruncation::UnTruncated => value as f64/100.0,
             };
-            if value >= &0 {
+            if value >= 0 {
                 fraction * max_elevation
             } else if min_elevation < 0.0 {
                 -fraction * min_elevation
@@ -191,17 +191,20 @@ impl TerrainParameters {
     fn convert_height_filter(&self, height_filter: &Option<ArgRange<i8>>) -> ArgRange<f64> {
         match height_filter {
             Some(ArgRange::Inclusive(min, max)) => ArgRange::Inclusive(
-                self.convert_relative_height(min, RelativeHeightTruncation::Floor,true), 
-                self.convert_relative_height(max, RelativeHeightTruncation::Ceil,true)
+                self.convert_relative_height(*min, &RelativeHeightTruncation::Floor,true), 
+                self.convert_relative_height(*max, &RelativeHeightTruncation::Ceil,true)
             ),
             Some(ArgRange::Exclusive(min, max)) => ArgRange::Exclusive(
-                self.convert_relative_height(min, RelativeHeightTruncation::Floor,true), 
-                self.convert_relative_height(max, RelativeHeightTruncation::Ceil,true)
+                self.convert_relative_height(*min, &RelativeHeightTruncation::Floor,true), 
+                self.convert_relative_height(*max, &RelativeHeightTruncation::Ceil,true)
             ),
-            Some(ArgRange::Single(single)) => ArgRange::Inclusive(
-                self.convert_relative_height(single, RelativeHeightTruncation::Floor,true), 
-                self.convert_relative_height(single, RelativeHeightTruncation::Ceil,true)
-            ),
+            Some(ArgRange::Single(single)) => {
+                let single = *single;
+                ArgRange::Inclusive(
+                    self.convert_relative_height(single, &RelativeHeightTruncation::Floor,true), 
+                    self.convert_relative_height(single, &RelativeHeightTruncation::Ceil,true)
+                )
+            },
             None => ArgRange::Inclusive(self.elevations.min_elevation, self.elevations.max_elevation)
         }
     }
@@ -211,7 +214,7 @@ impl TerrainParameters {
         if self.elevations.min_elevation < 0.0 {
             h >= (self.elevations.min_elevation * limit_fraction)
         } else {
-            h >= (self.elevations.max_elevation - (self.expanse_above_sea_level * limit_fraction))
+            h >= self.expanse_above_sea_level.mul_add(-limit_fraction, self.elevations.max_elevation)
         }
 
     }
@@ -229,11 +232,11 @@ impl TerrainParameters {
     }
 
     fn gen_end_y<Random: Rng>(&self, rng: &mut Random) -> f64 {
-        rng.gen_range(0.0..(self.extents.height * 0.7)) + self.extents.height * 0.15 + self.extents.south
+        self.extents.height.mul_add(0.15, rng.gen_range(0.0..(self.extents.height * 0.7)) + self.extents.south)
     }
     
     fn gen_end_x<Random: Rng>(&self, rng: &mut Random) -> f64 {
-        rng.gen_range(0.0..(self.extents.width * 0.8)) + self.extents.width * 0.1 + self.extents.west
+        self.extents.width.mul_add(0.1, rng.gen_range(0.0..(self.extents.width * 0.8)) + self.extents.west)
     }
 
     
@@ -261,8 +264,10 @@ trait ProcessTerrainTilesWithPointIndex {
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError>;
 
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, _: &mut EntityIndex<TileSchema,TileForTerrain>, _: &mut Progress) -> Result<(),CommandError> {
-        // I've added this function to make it easier to change requirements later.
-        unimplemented!("This process requires a point index.")
+        // I've added this function to make it easier to change task requirements later. If I were to put this unimplemented
+        // in the match statement that calls process_terrain_tiles, I might forget to change it to call this function instead. This
+        // way, if I change the requirements later, I just have to change what trait is implemented and the function being implemented.
+        unreachable!("Code never should have called this.")
     }
 
 
@@ -285,7 +290,7 @@ pub(crate) struct SampleOceanBelowLoaded {
 
 impl SampleOceanBelowLoaded {
 
-    pub(crate) fn new(raster: RasterMap, elevation: f64) -> Self {
+    pub(crate) const fn new(raster: RasterMap, elevation: f64) -> Self {
         Self {
             raster,
             elevation,
@@ -314,14 +319,14 @@ impl ProcessTerrainTiles for SampleOceanBelowLoaded {
             let is_ocean = if let Some(elevation) = band.get_value(x, y) {
                 let is_no_data = match no_data_value {
                     Some(no_data_value) if no_data_value.is_nan() => elevation.is_nan(),
-                    Some(no_data_value) => elevation == no_data_value,
+                    Some(no_data_value) => (elevation - no_data_value).abs() < f64::EPSILON,
                     None => false,
                 };
 
-                if !is_no_data {
-                    elevation < &self.elevation
-                } else {
+                if is_no_data {
                     false
+                } else {
+                    elevation < &self.elevation
                 }
 
 
@@ -348,7 +353,7 @@ pub(crate) struct SampleOceanMaskedLoaded {
 
 impl SampleOceanMaskedLoaded {
 
-    pub(crate) fn new(raster: RasterMap) -> Self {
+    pub(crate) const fn new(raster: RasterMap) -> Self {
         Self {
             raster
         }
@@ -378,7 +383,7 @@ impl ProcessTerrainTiles for SampleOceanMaskedLoaded {
             let is_ocean = if let Some(elevation) = band.get_value(x, y) {
                 match no_data_value {
                     Some(no_data_value) if no_data_value.is_nan() => !elevation.is_nan(),
-                    Some(no_data_value) => elevation != no_data_value,
+                    Some(no_data_value) => (elevation - no_data_value).abs() > f64::EPSILON,
                     None => true,
                 }
 
@@ -404,7 +409,7 @@ pub(crate) struct SampleElevationLoaded {
 }
 
 impl SampleElevationLoaded {
-    pub(crate) fn new(raster: RasterMap) -> Self {
+    pub(crate) const fn new(raster: RasterMap) -> Self {
         Self {
             raster
         }
@@ -451,7 +456,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
         
         let count = self.count.choose(rng);
 
-        progress.announce(&format!("Generating {} hills.",count));
+        progress.announce(&format!("Generating {count} hills."));
 
 
         for i in 0..count {
@@ -492,8 +497,8 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
                 }
             }
 
-            for (tile_id,height_delta) in change_map {
-                tile_map.try_get_mut(&tile_id)?.elevation += height_delta.copysign(sign);
+            for (tile_id,calculated_height_delta) in change_map {
+                tile_map.try_get_mut(&tile_id)?.elevation += calculated_height_delta.copysign(sign);
             }
 
         }
@@ -509,7 +514,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
 
         let count = self.count.choose(rng);
 
-        progress.announce(&format!("Generating {} ranges.",count));
+        progress.announce(&format!("Generating {count} ranges."));
 
         let lower_dist_limit = parameters.extents.width / 8.0;
         let upper_dist_limit = parameters.extents.width / 3.0;
@@ -551,7 +556,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             let mut spread_count = 0;
 
             while !queue.is_empty() {
-                let frontier = std::mem::replace(&mut queue, Vec::new());
+                let frontier = core::mem::replace(&mut queue, Vec::new());
                 spread_count += 1;
                 for tile_id in frontier {
                     tile_map.try_get_mut(&tile_id)?.elevation += (height_delta * (rng.gen_range(0.0..0.3) + 0.85)).copysign(sign);
@@ -571,8 +576,8 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             }
 
             // create some prominences in the range.
-            for (i,mut current_id) in range.into_iter().enumerate() {
-                if (i % 6) != 0 {
+            for (j,mut current_id) in range.into_iter().enumerate() {
+                if (j % 6) != 0 {
                     continue;
                 }
                 for _ in 0..spread_count {
@@ -590,7 +595,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                         }
                     }
                     if let Some((min_tile_id,elevation)) = min_elevation {
-                        tile_map.try_get_mut(&min_tile_id)?.elevation = ((current_elevation * 2.0) + elevation.copysign(sign)) / 3.0;
+                        tile_map.try_get_mut(&min_tile_id)?.elevation = current_elevation.mul_add(2.0, elevation.copysign(sign)) / 3.0;
                         current_id = min_tile_id;
                     } else {
                         break;
@@ -688,17 +693,17 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
         let e_west = parameters.extents.west;
         let (start_x,start_y,end_x,end_y) = match self.direction {
             StraitDirection::Vertical => {
-                let start_x = rng.gen_range(0.0..(e_width * 0.4)) + (e_width * 0.3);
+                let start_x = e_width.mul_add(0.3, rng.gen_range(0.0..(e_width * 0.4)));
                 let start_y = 5.0;
-                let end_x = e_width - start_x - (e_width * 0.1) + rng.gen_range(0.0..(e_width * 0.2));
+                let end_x = e_width.mul_add(-0.1, e_width - start_x + rng.gen_range(0.0..(e_width * 0.2)));
                 let end_y = e_height - 5.0;
                 (start_x,start_y,end_x,end_y)
             },
             StraitDirection::Horizontal => {
                 let start_x = 5.0;
-                let start_y = rng.gen_range(0.0..(e_height * 0.4)) + (e_height * 0.3);
+                let start_y = e_height.mul_add(0.3, rng.gen_range(0.0..(e_height * 0.4)));
                 let end_x = e_width - 5.0;
-                let end_y = e_height - start_y - (e_height * 0.1) + rng.gen_range(0.0..(e_height * 0.2));
+                let end_y = e_height.mul_add(-0.1, e_height - start_y + rng.gen_range(0.0..(e_height * 0.2)));
                 (start_x,start_y,end_x,end_y)
             },
         };
@@ -719,7 +724,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
 
         while width > 0.0 {
 
-            let exp = 0.99 - (step * width);
+            let exp = step.mul_add(-width, 0.99);
             for tile_id in &range {
                 let tile = tile_map.try_get(tile_id)?;
                 // NOTE: For some reason the AFMG code for this didn't change the elevation for the first row,
@@ -734,7 +739,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
                 let mut new_elevation = parameters.elevations.min_elevation + new_elevation_diff;
                 if new_elevation > parameters.elevations.max_elevation {
                     // I'm not exactly sure what this is doing, but it's taken from AFMG
-                    new_elevation = (parameters.expanse_above_sea_level * 0.5) + parameters.elevations.min_elevation;
+                    new_elevation = parameters.expanse_above_sea_level.mul_add(0.5, parameters.elevations.min_elevation);
                 }
 
                 for (neighbor_id,_) in &tile.neighbors {
@@ -747,7 +752,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
 
                 tile_map.try_get_mut(tile_id)?.elevation = new_elevation;
             }
-            range = std::mem::replace(&mut next_queue, Vec::new());
+            range = core::mem::replace(&mut next_queue, Vec::new());
 
             width -= 1.0;
             progress.update(|| progress_width - (width.ceil() as usize));
@@ -775,12 +780,12 @@ impl ProcessTerrainTiles for Mask {
 
             let nx = (x * 2.0) / parameters.extents.width - 1.0; // -1<--:0:-->1
             let ny = (y * 2.0) / parameters.extents.height - 1.0; // -1<--:0:-->1
-            let mut distance = (1.0 - nx.powi(2)) * (1.0 - ny.powi(2)); // 0<--:1:-->0
+            let mut distance = nx.mul_add(-nx, 1.0) * ny.mul_add(-ny, 1.0); // 0<--:1:-->0
             if self.power.is_sign_negative() {
                 distance = 1.0 - distance; // inverted, // 1<--:0:-->1
             }
             let masked = tile.elevation * distance;
-            let new_elevation = ((tile.elevation * (factor - 1.0)) + masked)/factor;
+            let new_elevation = tile.elevation.mul_add(factor - 1.0, masked)/factor;
 
             tile.elevation = new_elevation;
 
@@ -883,7 +888,7 @@ impl ProcessTerrainTiles for Add {
         progress.announce(&format!("Adding {} to some elevations.",self.height_delta));
 
         let filter = parameters.convert_height_filter(&self.height_filter);
-        let height_delta = parameters.get_signed_height_delta(&self.height_delta);
+        let height_delta = parameters.get_signed_height_delta(self.height_delta);
 
         for (_,tile) in tile_map.iter_mut().watch(progress, "Adding heights.", "Heights added.") {
 
@@ -932,10 +937,10 @@ impl ProcessTerrainTiles for Smooth {
                 heights.push(neighbor.elevation);
             }
             let average = heights.iter().sum::<f64>()/heights.len() as f64;
-            let new_height = if self.fr == 1.0 {
+            let new_height = if (self.fr - 1.0).abs() < f64::EPSILON {
                 average
             } else {
-                parameters.clamp_elevation((tile.elevation * (self.fr - 1.0) + average) / self.fr)
+                parameters.clamp_elevation(tile.elevation.mul_add(self.fr - 1.0, average) / self.fr)
             };
             changed_heights.push((*fid,new_height));
         }
@@ -961,7 +966,7 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
 
         let count = self.count.choose(rng);
 
-        progress.announce(&format!("Placing {} ocean seeds.",count));
+        progress.announce(&format!("Placing {count} ocean seeds."));
 
         for _ in 0..count {
 
@@ -1158,7 +1163,7 @@ impl TerrainTask {
     
             // I only want to create the point index if any of the tasks require it. If none of them
             // require it, it's a waste of time to create it.
-            let tile_map = if selves.iter().any(|s| s.requires_point_index()) {
+            let tile_map = if selves.iter().any(Self::requires_point_index) {
                 // estimate the spacing between tiles:
                 // * divide the area of the extents up by the number of tiles to get the average area covered by a tile.
                 // * the distance across, if the tiles were square, is the square root of this area.
@@ -1203,7 +1208,7 @@ impl TerrainTask {
                     }        
     
     
-                    let mut feature = layer.try_feature_by_id(&fid)?;
+                    let mut feature = layer.try_feature_by_id(fid)?;
                     if elevation_changed {
     
                         let elevation = parameters.clamp_elevation(tile.elevation);
@@ -1238,22 +1243,22 @@ impl TerrainTask {
 
     fn requires_point_index(&self) -> bool {
         match self {
-            TerrainTask::ClearOcean(params) => params.requires_point_index(),
-            TerrainTask::RandomUniform(params) => params.requires_point_index(),
-            TerrainTask::AddHill(params) => params.requires_point_index(),
-            TerrainTask::AddRange(params) => params.requires_point_index(),
-            TerrainTask::AddStrait(params) => params.requires_point_index(),
-            TerrainTask::Mask(params) => params.requires_point_index(),
-            TerrainTask::Invert(params) => params.requires_point_index(),
-            TerrainTask::Add(params) => params.requires_point_index(),
-            TerrainTask::Multiply(params) => params.requires_point_index(),
-            TerrainTask::Smooth(params) => params.requires_point_index(),
-            TerrainTask::SeedOcean(params) => params.requires_point_index(),
-            TerrainTask::FillOcean(params) => params.requires_point_index(),
-            TerrainTask::FloodOcean(params) => params.requires_point_index(),
-            TerrainTask::SampleOceanMasked(params) => params.requires_point_index(),
-            TerrainTask::SampleOceanBelow(params) => params.requires_point_index(),
-            TerrainTask::SampleElevation(params) => params.requires_point_index(),
+            Self::ClearOcean(params) => params.requires_point_index(),
+            Self::RandomUniform(params) => params.requires_point_index(),
+            Self::AddHill(params) => params.requires_point_index(),
+            Self::AddRange(params) => params.requires_point_index(),
+            Self::AddStrait(params) => params.requires_point_index(),
+            Self::Mask(params) => params.requires_point_index(),
+            Self::Invert(params) => params.requires_point_index(),
+            Self::Add(params) => params.requires_point_index(),
+            Self::Multiply(params) => params.requires_point_index(),
+            Self::Smooth(params) => params.requires_point_index(),
+            Self::SeedOcean(params) => params.requires_point_index(),
+            Self::FillOcean(params) => params.requires_point_index(),
+            Self::FloodOcean(params) => params.requires_point_index(),
+            Self::SampleOceanMasked(params) => params.requires_point_index(),
+            Self::SampleOceanBelow(params) => params.requires_point_index(),
+            Self::SampleElevation(params) => params.requires_point_index(),
         }
     }
 

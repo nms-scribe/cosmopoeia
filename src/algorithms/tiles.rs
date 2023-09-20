@@ -9,7 +9,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::errors::CommandError;
-use crate::world_map::NewTile;
+use crate::world_map::NewTileSite;
 use crate::world_map::TileForCalcNeighbors;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileWithNeighborsElevation;
@@ -77,7 +77,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
 
 
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
@@ -85,7 +85,7 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
     // generated points in the same order. If I could somehow "map" the sites with their original points, I could apply an incrementing
     // id to the points while I'm generating and have it here to sort by. Until that time, I'm sorting by x,y. This sort is a little
     // bit heavy, so there might be a better way.
-    let collected_tiles: Result<Vec<NewTile>,CommandError> = generator.watch(progress,"Collecting tiles", "Tiles collected.").collect();
+    let collected_tiles: Result<Vec<NewTileSite>,CommandError> = generator.watch(progress,"Collecting tiles", "Tiles collected.").collect();
     let mut collected_tiles = collected_tiles?;
     collected_tiles.sort_by_cached_key(|tile| (ordered_float::OrderedFloat::from(tile.site_x),ordered_float::OrderedFloat::from(tile.site_y)));
 
@@ -95,7 +95,7 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTile,CommandErr
 
     let mut props = target.create_properties_layer()?;
 
-    props.set_elevation_limits(limits)?;
+    _ = props.set_elevation_limits(limits)?;
 
     Ok(())
 
@@ -175,7 +175,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // sort the neighbors by tile_id, to help ensure random reproducibility
         neighbors.sort_by_key(|n| n.0);
 
-        let mut feature = layer.try_feature_by_id(fid)?;
+        let mut feature = layer.try_feature_by_id(*fid)?;
         feature.set_neighbors(&neighbors)?;
         layer.update_feature(feature)?;
 
@@ -198,7 +198,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &D
             if neighbor_elevation < *lowest_elevation {
                 *lowest_elevation = neighbor_elevation;
                 lowest = vec![*neighbor_fid];
-            } else if neighbor_elevation == *lowest_elevation {
+            } else if (neighbor_elevation - *lowest_elevation).abs() < f64::EPSILON {
                 lowest.push(*neighbor_fid)
             }
         } else {
@@ -213,7 +213,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &D
 
 pub(crate) fn find_tile_site_point(tile: Option<u64>, tiles: &TileLayer<'_,'_>) -> Result<Option<Point>, CommandError> {
     Ok(if let Some(x) = tile {
-        if let Some(x) = tiles.feature_by_id(&x) {
+        if let Some(x) = tiles.feature_by_id(x) {
             Some(x.site()?)
         } else {
             None
@@ -243,20 +243,20 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
 
         // it's much faster to union two geometries rather than union them one at a time.
         let mut next_tiles = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-        for tile in iterator {
-            next_tiles.add_geometry(tile?.geometry()?.clone())?;
+        for next_tile in iterator {
+            next_tiles.add_geometry(next_tile?.geometry()?.clone())?;
         }
         progress.start_unknown_endpoint(|| "Uniting tiles.");
 
         let tile_union = first_tile.union(&next_tiles).ok_or_else(|| CommandError::GdalUnionFailed)?;
-        let tile_union = if !tile_union.is_valid() {
+        let tile_union = if tile_union.is_valid() {
+            tile_union
+        } else {
             // I'm writing to stdout here because the is_valid also writes to stdout
             progress.warning(||"fixing invalid union");
             let mut validate_options = gdal::cpl::CslStringList::new();
             validate_options.add_string("METHOD=STRUCTURE")?;
             tile_union.make_valid(&validate_options)?
-        } else {
-            tile_union
         };
         progress.finish(|| "Tiles united.");
         Some(tile_union)
@@ -491,11 +491,11 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 }
             }
 
-            if !usable_neighbors.is_empty() {
+            if usable_neighbors.is_empty() {
+                None
+            } else {
                 let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).expect("Why would there be no max if we know the list isn't empty?").0;
                 Some((*chosen_value,tile.geometry().clone()))
-            } else {
-                None
             }
         } else {
             None
@@ -521,7 +521,10 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
         let fid = feature.fid()?;
         let geometry = if let Some(geometries) = new_polygon_map.remove(&fid) {
             // it should never be 0 if it's in the map, but since I'm already allowing for empty geographies, might as well check.
-            if !geometries.is_empty() {
+            if geometries.is_empty() {
+                empty_features.push((fid,feature.get_name()?));
+                Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?            
+            } else {
                 let mut geometries = geometries.into_iter();
                 let first = geometries.next().expect("Why would next fail if the len > 0?"); 
                 let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
@@ -530,22 +533,19 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 }
                 let united = first.union(&remaining).ok_or_else(|| CommandError::GdalUnionFailed)?;
                 let united = force_multipolygon(united)?;
-                if !united.is_valid() {
+                if united.is_valid() {
+                    united
+                } else {
                     // I'm writing to stdout here because the is_valid also writes to stdout
                     // FUTURE: I can't use the progress.warning because it is borrowed for mutable, is there another way?
-                    eprintln!("fixing invalid feature {}",fid);
+                    eprintln!("fixing invalid feature {fid}");
                     let mut validate_options = gdal::cpl::CslStringList::new();
                     validate_options.add_string("METHOD=STRUCTURE")?;
                     united.make_valid(&validate_options)?
-                } else {
-                    united
                 }
-            } else {
-                empty_features.push((fid,feature.name()?));
-                Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?            
             }
         } else {
-            empty_features.push((fid,feature.name()?));
+            empty_features.push((fid,feature.get_name()?));
             // An empty multipolygon appears to be the answer, at the very least I no longer get the null geometry pointer
             // errors in the later ones.
             Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?
@@ -555,13 +555,13 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
     }
 
-    let polygon_layer = ThemeType::edit_theme_layer(target)?;
+    let edit_polygon_layer = ThemeType::edit_theme_layer(target)?;
 
     for (fid,geometry) in changed_features.into_iter().watch(progress, "Writing geometries.", "Geometries written.") {
 
-        let mut feature: ThemeType::Feature<'_> = polygon_layer.try_feature_by_id(&fid)?;
+        let mut feature: ThemeType::Feature<'_> = edit_polygon_layer.try_feature_by_id(fid)?;
         feature.set_geometry(geometry)?;
-        polygon_layer.update_feature(feature)?;    
+        edit_polygon_layer.update_feature(feature)?;    
 
     }
 

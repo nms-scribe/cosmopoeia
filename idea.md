@@ -383,114 +383,8 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 [X] Upgrade rust to latest -- not that there are any features I think I need (although NonZero might be nice) but it might be a good idea to keep it up since my version is almost 9 months old now. But cargo add is supposed to be much faster.
 [X] Look at other lints I might want to do
 [X] Work through clippy warnings
-[ ] clippy::arithmetic_side_effects
-[ ] clippy::as_conversions
-[ ] clippy::assertions_on_result_states
-[ ] clippy::bool_to_int_with_if
-[ ] clippy::branches_sharing_code
-[ ] clippy::cargo_common_metadata
-[ ] clippy::checked_conversions
-[ ] clippy::cloned_instead_of_copied
-[ ] clippy::cognitive_complexity
-[ ] clippy::collection_is_never_read
-[ ] clippy::default_trait_access
-[ ] clippy::derive_partial_eq_without_eq
-[ ] clippy::else_if_without_else
-[ ] clippy::empty_structs_with_brackets
-[ ] clippy::equatable_if_let
-[ ] clippy::explicit_deref_methods
-[ ] clippy::explicit_into_iter_loop
-[ ] clippy::explicit_iter_loop
-[ ] clippy::float_cmp
-[ ] clippy::float_cmp_const
-[ ] clippy::format_push_string
-[ ] clippy::if_not_else
-[ ] clippy::if_then_some_else_none
-[ ] clippy::implicit_clone
-[ ] clippy::imprecise_flops
-[ ] clippy::inconsistent_struct_constructor
-[ ] clippy::index_refutable_slice
-[ ] clippy::indexing_slicing
-[ ] clippy::inefficient_to_string
-[ ] clippy::integer_division
-[ ] clippy::float_arithmetic
-[ ] clippy::invalid_upcast_comparisons
-[ ] clippy::items_after_statements
-[ ] clippy::iter_on_empty_collections
-[ ] clippy::iter_on_single_items
-[ ] clippy::large_stack_arrays
-[ ] clippy::large_stack_frames
-[ ] clippy::large_types_passed_by_value
-[ ] clippy::manual_clamp
-[ ] clippy::manual_let_else
-[ ] clippy::manual_ok_or
-[ ] clippy::manual_string_new
-[ ] clippy::map_unwrap_or
-[ ] clippy::match_bool
-[ ] clippy::match_on_vec_items
-[ ] clippy::match_same_arms
-[ ] clippy::maybe_infinite_iter
-[ ] clippy::mismatching_type_param_order
-[ ] clippy::missing_asserts_for_indexing
-[ ] clippy::missing_const_for_fn
-[ ] clippy::missing_panics_doc
-[ ] clippy::mixed_read_write_in_expression
-[ ] clippy::module_name_repetitions
-[ ] clippy::multiple_crate_versions
-[ ] clippy::multiple_inherent_impl
-[ ] clippy::must_use_candidate
-[ ] clippy::mut_mut
-[ ] clippy::naive_bytecount
-[ ] clippy::needless_collect
-[ ] clippy::needless_continue
-[ ] clippy::needless_pass_by_value
-[ ] clippy::option_if_let_else
-[ ] clippy::option_option
-[ ] clippy::or_fun_call
-[ ] clippy::redundant_clone
-[ ] clippy::redundant_closure_for_method_calls
-[ ] clippy::redundant_else
-[ ] clippy::redundant_pub_crate
-[ ] clippy::redundant_type_annotations
-[ ] clippy::ref_binding_to_reference
-[ ] clippy::ref_binding_to_reference
-[ ] clippy::rest_pat_in_fully_bound_structs
-[ ] clippy::return_self_not_must_use
-[ ] clippy::same_functions_in_if_condition
-[ ] clippy::same_name_method
-[ ] clippy::shadow_unrelated
-[ ] clippy::similar_names
-[ ] clippy::single_call_fn
-[ ] clippy::single_char_lifetime_names
-[ ] clippy::single_match_else
-[ ] clippy::stable_sort_primitive
-[ ] clippy::std_instead_of_core
-[ ] clippy::str_to_string
-[ ] clippy::string_lit_chars_any
-[ ] clippy::string_slice
-[ ] clippy::string_to_string
-[ ] clippy::suboptimal_flops
-[ ] clippy::suspicious_operation_groupings
-[ ] clippy::suspicious_xor_used_as_pow
-[ ] clippy::todo
-[ ] clippy::trait_duplication_in_bounds
-[ ] clippy::trivially_copy_pass_by_ref
-[ ] clippy::try_err
-[ ] clippy::tuple_array_conversions
-[ ] clippy::type_repetition_in_bounds
-[ ] clippy::unicode_not_nfc
-[ ] clippy::unimplemented
-[ ] clippy::uninlined_format_args
-[ ] clippy::unnecessary_struct_initialization
-[ ] clippy::unnecessary_wraps
-[ ] clippy::unnested_or_patterns
-[ ] clippy::unreachable
-[ ] clippy::unused_peekable
-[ ] clippy::unused_self
-[ ] clippy::unwrap_in_result
-[ ] clippy::use_self
-[ ] clippy::useless_let_if_seq
-[ ] clippy::zero_sized_map_values
+[-] In ProcessTerrainTilesWithPointIndex, rethink unimplemented pattern. I can catch things at compile time if I don't implement those things.
+[X] In layer!, to_field_names_values should be replaced with a New<FeatureName> struct and an 'add' function.
 
 
 ## Complex Pre-release tasks
@@ -508,6 +402,12 @@ These are things that really should be done before release, but they might take 
 
 ## Post-release tasks and feature requests.
 
+[ ] Turn on the following clippies and figure out how to deal with them:
+    #![warn(clippy::arithmetic_side_effects)]
+    #![warn(clippy::as_conversions)]
+    #![warn(clippy::indexing_slicing)]
+    #![warn(clippy::float_arithmetic)]
+    #![warn(clippy::cargo_common_metadata)]
 [ ] Add a spheremode option which causes points to be generated at higher spacing at higher latitudes and changes how distance and area are calculated where that's important.
     [ ] RasterBounds::pixels_to_coords and coords_to_pixels -- make sure these are calculated correctly for spheremode
     [ ] I may need to bring in my own delaunay algorithm. First, I wouldn't need to collect points into a geometry. But second, when I add sphere_mode, the changes to the distance formula might change. Third, I might be able to remove an array collection step in there, before generating voronoi. Not sure.

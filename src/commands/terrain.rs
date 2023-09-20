@@ -49,9 +49,9 @@ impl LoadTerrainTask for Recipe {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading recipe tasks.");
-        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         let reader = BufReader::new(recipe_data);
-        let tasks: Vec<TerrainCommand> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let tasks: Vec<Command> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         progress.finish(|| "Recipe tasks loaded.");
         let mut result = Vec::new();
         for task in tasks {
@@ -83,15 +83,17 @@ impl LoadTerrainTask for RecipeSet {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading recipe set.");
-        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         let reader = BufReader::new(recipe_data);
-        let mut tasks: HashMap<String,Vec<TerrainCommand>> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
+        let mut tasks: HashMap<String,Vec<Command>> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         progress.finish(|| "Recipe set loaded.");
-        if !tasks.is_empty() {
+        if tasks.is_empty() {
+            Err(CommandError::RecipeFileRead("Recipe set is empty.".to_owned()))
+        } else {
             let chosen_key = if let Some(recipe) = self.recipe {
                 recipe
             } else {
-                tasks.keys().choose(random).expect("Why would this fail if the len > 0?").to_owned() 
+                tasks.keys().choose(random).expect("Why would this fail if the len > 0?").clone() 
             };
             if let Some(tasks) = tasks.remove(&chosen_key) {
                 let mut result = Vec::new();
@@ -100,11 +102,9 @@ impl LoadTerrainTask for RecipeSet {
                 }
                 Ok(result)
             } else {
-                Err(CommandError::RecipeFileRead(format!("Can't find recipe '{}' in set.",chosen_key)))
+                Err(CommandError::RecipeFileRead(format!("Can't find recipe '{chosen_key}' in set.")))
             }
     
-        } else {
-            Err(CommandError::RecipeFileRead("Recipe set is empty.".to_owned()))
         }
     }
 
@@ -500,7 +500,7 @@ impl LoadTerrainTask for SampleElevation {
 
 #[derive(Deserialize,Serialize,Subcommand)]
 #[command(disable_help_subcommand(true))]
-pub enum TerrainCommand {
+pub enum Command {
     Recipe(Recipe),
     RecipeSet(RecipeSet),
     Clear(Clear),
@@ -522,34 +522,34 @@ pub enum TerrainCommand {
     SampleElevation(SampleElevation),
 }
 
-impl TerrainCommand {
+impl Command {
 
     pub(crate) fn to_json(&self) -> Result<String,CommandError> {
-        to_json_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{}",e)))
+        to_json_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{e}")))
     }
 
     pub(crate) fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
 
         match self {
-            TerrainCommand::Clear(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::ClearOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::RandomUniform(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Recipe(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::RecipeSet(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::AddHill(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::AddRange(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::AddStrait(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Mask(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Invert(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Add(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Multiply(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::Smooth(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SeedOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::FillOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::FloodOcean(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SampleOceanMasked(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SampleOceanBelow(params) => params.load_terrain_task(random,progress),
-            TerrainCommand::SampleElevation(params) => params.load_terrain_task(random,progress),
+            Self::Clear(params) => params.load_terrain_task(random,progress),
+            Self::ClearOcean(params) => params.load_terrain_task(random,progress),
+            Self::RandomUniform(params) => params.load_terrain_task(random,progress),
+            Self::Recipe(params) => params.load_terrain_task(random,progress),
+            Self::RecipeSet(params) => params.load_terrain_task(random,progress),
+            Self::AddHill(params) => params.load_terrain_task(random,progress),
+            Self::AddRange(params) => params.load_terrain_task(random,progress),
+            Self::AddStrait(params) => params.load_terrain_task(random,progress),
+            Self::Mask(params) => params.load_terrain_task(random,progress),
+            Self::Invert(params) => params.load_terrain_task(random,progress),
+            Self::Add(params) => params.load_terrain_task(random,progress),
+            Self::Multiply(params) => params.load_terrain_task(random,progress),
+            Self::Smooth(params) => params.load_terrain_task(random,progress),
+            Self::SeedOcean(params) => params.load_terrain_task(random,progress),
+            Self::FillOcean(params) => params.load_terrain_task(random,progress),
+            Self::FloodOcean(params) => params.load_terrain_task(random,progress),
+            Self::SampleOceanMasked(params) => params.load_terrain_task(random,progress),
+            Self::SampleOceanBelow(params) => params.load_terrain_task(random,progress),
+            Self::SampleElevation(params) => params.load_terrain_task(random,progress),
         }
     }
 
@@ -564,7 +564,7 @@ subcommand_def!{
         pub target_arg: TargetArg,
 
         #[command(subcommand)]
-        pub command: TerrainCommand,
+        pub command: Command,
 
         #[clap(flatten)]
         pub random_seed_arg: RandomSeedArg,
@@ -580,7 +580,7 @@ impl Task for Terrain {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -596,14 +596,14 @@ impl Task for Terrain {
 }
 
 impl Terrain {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, terrain_command: TerrainCommand, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, terrain_command: Command, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+        target.with_transaction(|transaction| {
 
             progress.announce("Loading terrain processes.");
 
             let processes = terrain_command.load_terrain_task(random, progress)?;
 
-            TerrainTask::process_terrain(&processes,random,target,progress)
+            TerrainTask::process_terrain(&processes,random,transaction,progress)
 
         })?;
 

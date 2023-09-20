@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use core::cmp::Ordering;
 
 use crate::world_map::TileForWaterflow;
 use crate::errors::CommandError;
@@ -20,7 +20,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let mut layer = target.edit_tile_layer()?;
 
     // from the AFMG code, this is also done in calculating precipitation. I'm wondering if it's unscaling the precipitation somehow?
-    let cells_number_modifier = ((layer.feature_count() / 10000) as f64).powf(0.25);
+    let cells_number_modifier = (layer.feature_count() as f64 / 10000.0).powf(0.25);
 
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();
@@ -79,7 +79,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing flow.","Flow written.") {
-        if let Some(mut working_feature) = layer.feature_by_id(fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(*fid) {
 
             working_feature.set_water_flow(tile.water_flow)?;
             working_feature.set_water_accumulation(tile.water_accumulation)?;

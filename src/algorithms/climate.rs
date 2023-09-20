@@ -47,7 +47,7 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
         };
         let temp = (adabiatic_temp*100.0).round()/100.0;
 
-        if let Some(mut working_feature) = layer.feature_by_id(&feature.fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
             working_feature.set_temperature(temp)?;
 
             layer.update_feature(working_feature)?;
@@ -76,7 +76,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         let wind_dir = winds.get(&ordered_float::OrderedFloat(feature.site_y)).copied().unwrap_or(90) as i32;
  
-        if let Some(mut working_feature) = layer.feature_by_id(&feature.fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
             working_feature.set_wind(wind_dir)?;
 
             layer.update_feature(working_feature)?;
@@ -210,7 +210,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                             // difference in height
                             let diff = (next.elevation_scaled - current.elevation_scaled).max(0) as f64;
                             // additional modifier for high elevation of mountains
-                            let elev_modifier = (next.elevation_scaled / 70).pow(2) as f64;
+                            let elev_modifier = (next.elevation_scaled as f64 / 70.0).powi(2);
                             (normal_loss + diff + elev_modifier).clamp(1.0,humidity.max(1.0))
                         } else {
                             humidity
@@ -257,7 +257,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     }
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing precipitation.","Precipitation written.") {
-        if let Some(mut working_feature) = layer.feature_by_id(fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(*fid) {
 
             working_feature.set_precipitation(tile.precipitation)?;
 

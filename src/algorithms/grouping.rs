@@ -90,13 +90,13 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                 // going to turn the whole thing into continent.
                 // -- The only solution is to know if we found a tile on the border of the map, and if we have one of those
                 // then it's a continent.
-            } else if group_len > (tile_count / 100) { 
+            } else if group_len > (tile_count.div_euclid(100)) { 
                 // NOTE: AFMG had 10 here. That didn't make enough large islands into continents on my map
                 // NOTE: The comparsion shouldn't be made against the tile count, but against a potential
                 // tile count if the map extended to the entire world.
                 // NOTE: Alternatively, we could have a "Scale" parameter which would be required for calculating this.
                 Grouping::Continent
-            } else if group_len > (tile_count / 1000) {
+            } else if group_len > (tile_count.div_euclid(1000)) {
                 Grouping::Island
             } else {
                 Grouping::Islet // Except it's not really that small either, but what the heck it will work.
@@ -114,7 +114,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
     for (grouping,grouping_id,group) in groupings.iter().watch(progress,"Writing grouping types.","Grouping types written.") {
         for tile in group {
-            let mut feature = tiles.try_feature_by_id(tile)?;
+            let mut feature = tiles.try_feature_by_id(*tile)?;
             feature.set_grouping(grouping)?;
             feature.set_grouping_id(*grouping_id)?;
             tiles.update_feature(feature)?;

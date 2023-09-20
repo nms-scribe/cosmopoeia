@@ -47,7 +47,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     let mut work_queue = work_queue.watch_queue(progress, "Calculating population.", "Population calculated.");
     while let Some(fid) = work_queue.pop() {
         let (habitability,population) = {
-            let tile = tiles.try_entity_by_id::<TileForPopulation>(&fid)?; 
+            let tile = tiles.try_entity_by_id::<TileForPopulation>(fid)?; 
             let mut suitability = if tile.lake_id.is_some() {
                 0.0
             } else {
@@ -63,7 +63,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                         suitability += 15.0 // estuaries are liked
                     }
                     if let Some(water_cell) = tile.harbor_tile_id {
-                        let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&water_cell)?;
+                        let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(water_cell)?;
                         if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id)).transpose()?.map(|l| &l.type_) {
                             match lake_type {
                                 LakeType::Fresh => suitability += 30.0,
@@ -75,7 +75,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                             }
                         } else if water_cell.grouping.is_ocean() {
                             suitability += 5.0;
-                            if let Some(1) = tile.water_count {
+                            if tile.water_count == Some(1) { // let pattern unecessary
                                 // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which
                                 // probably makes a good harbor.
                                 suitability += 20.0
@@ -93,7 +93,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
             }
         };
 
-        let mut feature = tiles.try_feature_by_id(&fid)?;
+        let mut feature = tiles.try_feature_by_id(fid)?;
 
         feature.set_habitability(habitability)?;
         feature.set_population(population)?;

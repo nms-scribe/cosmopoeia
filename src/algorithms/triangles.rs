@@ -81,7 +81,7 @@ pub(crate) fn load_triangles_layer<Generator: Iterator<Item=Result<Geometry,Comm
     let mut target = target.create_triangles_layer(overwrite_layer)?;
 
     for triangle in generator.watch(progress,"Writing triangles.","Triangles written.") {
-        target.add_triangle(triangle?.to_owned())?;
+        _ = target.add_triangle(triangle?.clone())?;
     }
 
     Ok(())

@@ -16,7 +16,7 @@ impl FeatureFix for Feature<'_> {
         let field_id = unsafe { gdal_sys::OGR_F_GetFieldIndex(self.c_feature(), c_str_field_name.as_ptr()) };
         if field_id == -1 {
             return Err(GdalError::InvalidFieldName {
-                field_name: field_name.to_string(),
+                field_name: field_name.to_owned(),
                 method_name: "OGR_F_GetFieldIndex",
             });
         }
@@ -51,6 +51,7 @@ impl GeometryFix for Geometry {
             // However, I *think* cloning will take care of that. Because the original
             // value won't dereference the API handle, as it's not owned, but clone
             // will set it to owned.
+            #[allow(clippy::redundant_clone)] // this clone *must* be called or the code breaks
             Some(geometry.clone())
         }
     }

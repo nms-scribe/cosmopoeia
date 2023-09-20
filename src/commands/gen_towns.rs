@@ -53,7 +53,7 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -62,9 +62,9 @@ impl Task for Create {
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForTowns>(progress)?;
 
         
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.town_counts_arg, &self.overwrite_towns_arg, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.town_counts_arg, &self.overwrite_towns_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -100,9 +100,9 @@ impl Task for Populate {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.river_threshold_arg, target, progress)
+            Self::run_with_parameters(&self.river_threshold_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -172,7 +172,7 @@ impl Task for GenTowns {
 
         if let Some(default_args) = self.default_args {
         
-            let mut random = random_number_generator(default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed_arg);
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
     
@@ -195,11 +195,11 @@ impl Task for GenTowns {
 
 impl GenTowns {
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, count_args: &TownCountsArg, river_threshold: &RiverThresholdArg, overwrite_towns: &OverwriteTownsArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Create::run_with_parameters(random, culture_lookup, loaded_namers, count_args, overwrite_towns, target, progress)?;
+            Create::run_with_parameters(random, culture_lookup, loaded_namers, count_args, overwrite_towns, transaction, progress)?;
 
-            Populate::run_with_parameters(river_threshold, target, progress)
+            Populate::run_with_parameters(river_threshold, transaction, progress)
 
         })?;
 

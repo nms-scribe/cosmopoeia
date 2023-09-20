@@ -49,9 +49,9 @@ impl Task for Population {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.river_threshold_arg, target, progress)
+            Self::run_with_parameters(&self.river_threshold_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -102,14 +102,14 @@ impl Task for CreateCultures {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&mut random, &self.cultures_arg, &mut loaded_namers, &self.size_variance_arg, &self.river_threshold_arg, &self.overwrite_cultures_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&mut random, &self.cultures_arg, &mut loaded_namers, &self.size_variance_arg, &self.river_threshold_arg, &self.overwrite_cultures_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -151,8 +151,8 @@ impl Task for ExpandCultures {
 
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -187,8 +187,8 @@ impl Task for DissolveCultures {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -229,8 +229,8 @@ impl Task for CurvifyCultures {
         let mut target = WorldMap::edit(self.target_arg.target)?;
         let bezier_scale = self.bezier_scale_arg;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&bezier_scale, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&bezier_scale, transaction, progress)
         })?;
 
         target.save(progress)
@@ -315,7 +315,7 @@ impl Task for GenPeople {
 
         if let Some(default_args) = self.default_args {
 
-            let mut random = random_number_generator(default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed_arg);
 
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
     
@@ -346,16 +346,16 @@ impl Task for GenPeople {
 
 impl GenPeople {
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(river_threshold: &RiverThresholdArg, cultures: &CulturesGenArg, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_cultures: &OverwriteCulturesArg, limit_factor: &ExpansionFactorArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
-            Population::run_with_parameters(river_threshold, target, progress)?;
+        target.with_transaction(|transaction| {
+            Population::run_with_parameters(river_threshold, transaction, progress)?;
     
-            CreateCultures::run_with_parameters(random, cultures, namers, size_variance, river_threshold, overwrite_cultures, target, progress)?;
+            CreateCultures::run_with_parameters(random, cultures, namers, size_variance, river_threshold, overwrite_cultures, transaction, progress)?;
     
-            ExpandCultures::run_with_parameters(river_threshold, limit_factor, target, progress)?;
+            ExpandCultures::run_with_parameters(river_threshold, limit_factor, transaction, progress)?;
     
-            DissolveCultures::run_with_parameters(target, progress)?;
+            DissolveCultures::run_with_parameters(transaction, progress)?;
     
-            CurvifyCultures::run_with_parameters(bezier_scale, target, progress)
+            CurvifyCultures::run_with_parameters(bezier_scale, transaction, progress)
     
         })?;
     

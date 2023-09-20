@@ -77,7 +77,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     let (max_habitability, mut populated) = get_culturable_tiles(&mut tile_layer, &biomes, &lake_map, progress)?;
 
     let culture_count = if populated.len() < (culture_count * 25) {
-        let fixed_culture_count = populated.len()/25;
+        let fixed_culture_count = populated.len().div_euclid(25);
         if fixed_culture_count == 0 {
             progress.warning(|| "There aren't enough habitable tiles to support urban societies. Only the 'wildlands' culture will be created.")
         } else {
@@ -96,7 +96,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
     let (width,height) = tile_layer.get_layer_size()?;
     let spacing = (width + height) / 2.0 / culture_count as f64;
-    let max_tile_choice = populated.len() / 2;
+    let max_tile_choice = populated.len().div_euclid(2);
 
     // I need to avoid duplicate names
     let mut culture_names = HashMap::new();
@@ -413,7 +413,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing cultures.","Cultures written.") {
 
-        let mut feature = tiles.try_feature_by_id(fid)?;
+        let mut feature = tiles.try_feature_by_id(*fid)?;
 
         feature.set_culture(tile.culture.as_deref())?;
 

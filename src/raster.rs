@@ -89,7 +89,7 @@ impl<DataType: GdalType> RasterBandBuffer<DataType> {
 
     }
 
-    pub(crate) fn no_data_value(&self) -> &Option<f64> {
+    pub(crate) const fn no_data_value(&self) -> &Option<f64> {
         &self.no_data
     }
     
@@ -124,9 +124,9 @@ impl RasterMap {
         let width = self.dataset.raster_size().0;
         let no_data = band.no_data_value();
         Ok(RasterBandBuffer { 
-            buffer,
-            width,
-            no_data
+            width, 
+            buffer, 
+            no_data 
         })
     }
 

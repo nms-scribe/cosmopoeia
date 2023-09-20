@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::ops::Range;
+use core::ops::Range;
 
 use clap::Subcommand;
 use clap::Parser;
@@ -216,7 +216,7 @@ fn parse_wind_range(value: &str) -> Result<(Range<OrderedFloat<f64>>, u16), &'st
         let direction = direction.parse().map_err(|_| HELP_MESSAGE)?;
         let range = match range {
             ArgRange::Exclusive(min, max) => OrderedFloat(min)..OrderedFloat(max),
-            ArgRange::Inclusive(_,_) | ArgRange::Single(_) => Err(HELP_MESSAGE)?
+            ArgRange::Inclusive(_,_) | ArgRange::Single(_) => return Err(HELP_MESSAGE)
         };
         Ok((range,direction))
     
@@ -462,61 +462,61 @@ pub struct OverwriteAllArg {
 
 impl OverwriteAllArg {
 
-    fn overwrite_tiles(&self) -> OverwriteTilesArg {
+    const fn overwrite_tiles(&self) -> OverwriteTilesArg {
         OverwriteTilesArg {
             overwrite_tiles: self.overwrite_tiles_arg.overwrite_tiles || self.overwrite_all
         }
     }
 
-    fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
+    const fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
         OverwriteCoastlineArg {
             overwrite_coastline: self.overwrite_coastline_arg.overwrite_coastline || self.overwrite_all
         }
     }
 
-    fn overwrite_ocean(&self) -> OverwriteOceanArg {
+    const fn overwrite_ocean(&self) -> OverwriteOceanArg {
         OverwriteOceanArg {
             overwrite_ocean: self.overwrite_ocean_arg.overwrite_ocean || self.overwrite_all
         }
     }
 
-    fn overwrite_lakes(&self) -> OverwriteLakesArg {
+    const fn overwrite_lakes(&self) -> OverwriteLakesArg {
         OverwriteLakesArg {
             overwrite_lakes: self.overwrite_lakes_arg.overwrite_lakes || self.overwrite_all
         }
     }
 
-    fn overwrite_rivers(&self) -> OverwriteRiversArg {
+    const fn overwrite_rivers(&self) -> OverwriteRiversArg {
         OverwriteRiversArg {
             overwrite_rivers: self.overwrite_rivers_arg.overwrite_rivers || self.overwrite_all
         }
     }
 
-    fn overwrite_biomes(&self) -> OverwriteBiomesArg {
+    const fn overwrite_biomes(&self) -> OverwriteBiomesArg {
         OverwriteBiomesArg {
             overwrite_biomes: self.overwrite_biomes_arg.overwrite_biomes || self.overwrite_all
         }
     }
 
-    fn overwrite_cultures(&self) -> OverwriteCulturesArg {
+    const fn overwrite_cultures(&self) -> OverwriteCulturesArg {
         OverwriteCulturesArg {
             overwrite_cultures: self.overwrite_cultures_arg.overwrite_cultures || self.overwrite_all
         }
     }
 
-    fn overwrite_towns(&self) -> OverwriteTownsArg {
+    const fn overwrite_towns(&self) -> OverwriteTownsArg {
         OverwriteTownsArg {
             overwrite_towns: self.overwrite_towns_arg.overwrite_towns || self.overwrite_all
         }
     }
 
-    fn overwrite_nations(&self) -> OverwriteNationsArg {
+    const fn overwrite_nations(&self) -> OverwriteNationsArg {
         OverwriteNationsArg {
             overwrite_nations: self.overwrite_nations_arg.overwrite_nations || self.overwrite_all
         }
     }
 
-    fn overwrite_subnations(&self) -> OverwriteSubnationsArg {
+    const fn overwrite_subnations(&self) -> OverwriteSubnationsArg {
         OverwriteSubnationsArg {
             overwrite_subnations: self.overwrite_subnations_arg.overwrite_subnations || self.overwrite_all
         }
@@ -548,25 +548,25 @@ pub struct OverwriteAllWaterArg {
 
 impl OverwriteAllWaterArg {
 
-    fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
+    const fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
         OverwriteCoastlineArg {
             overwrite_coastline: self.overwrite_coastline_arg.overwrite_coastline || self.overwrite_all
         }
     }
 
-    fn overwrite_ocean(&self) -> OverwriteOceanArg {
+    const fn overwrite_ocean(&self) -> OverwriteOceanArg {
         OverwriteOceanArg {
             overwrite_ocean: self.overwrite_ocean_arg.overwrite_ocean || self.overwrite_all
         }
     }
 
-    fn overwrite_lakes(&self) -> OverwriteLakesArg {
+    const fn overwrite_lakes(&self) -> OverwriteLakesArg {
         OverwriteLakesArg {
             overwrite_lakes: self.overwrite_lakes_arg.overwrite_lakes || self.overwrite_all
         }
     }
 
-    fn overwrite_rivers(&self) -> OverwriteRiversArg {
+    const fn overwrite_rivers(&self) -> OverwriteRiversArg {
         OverwriteRiversArg {
             overwrite_rivers: self.overwrite_rivers_arg.overwrite_rivers || self.overwrite_all
         }
@@ -594,13 +594,13 @@ pub struct OverwriteAllOceanArg {
 impl OverwriteAllOceanArg {
 
 
-    fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
+    const fn overwrite_coastline(&self) -> OverwriteCoastlineArg {
         OverwriteCoastlineArg {
             overwrite_coastline: self.overwrite_coastline_arg.overwrite_coastline || self.overwrite_all
         }
     }
 
-    fn overwrite_ocean(&self) -> OverwriteOceanArg {
+    const fn overwrite_ocean(&self) -> OverwriteOceanArg {
         OverwriteOceanArg {
             overwrite_ocean: self.overwrite_ocean_arg.overwrite_ocean || self.overwrite_all
         }

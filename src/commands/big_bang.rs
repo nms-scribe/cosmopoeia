@@ -2,14 +2,14 @@ use clap::Args;
 use rand::Rng;
 
 use crate::subcommand_def;
-use crate::commands::create::CreateSource;
+use crate::commands::create::Source;
 use crate::commands::Task;
 use crate::commands::TargetArg;
 use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
 use crate::world_map::WorldMap;
 use crate::algorithms::naming::NamerSet;
-use crate::commands::create::LoadCreateSource;
+use crate::commands::create::LoadSource;
 use crate::commands::create::LoadedSource;
 use crate::commands::create::Create;
 use crate::commands::gen_climate::GenClimate;
@@ -35,6 +35,7 @@ use crate::commands::CulturesGenArg;
 use crate::commands::SubnationPercentArg;
 use crate::commands::TownCountsArg;
 use crate::commands::LakeBufferScaleArg;
+use crate::utils::random_number_generator;
 
 
 #[derive(Args)]
@@ -98,7 +99,7 @@ subcommand_def!{
         pub primitive_args: PrimitiveArgs,
 
         #[command(subcommand)]
-        pub source: CreateSource,
+        pub source: Source,
 
 
     }
@@ -108,13 +109,13 @@ impl Task for BigBang {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = crate::utils::random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
-        Self::run_default(&mut random,self.primitive_args,&self.cultures_arg,&mut loaded_namers,loaded_source,self.target_arg,progress)
+        Self::run_default(&mut random,&self.primitive_args,&self.cultures_arg,&mut loaded_namers,loaded_source,self.target_arg,progress)
 
     }
 }
@@ -122,7 +123,7 @@ impl Task for BigBang {
 impl BigBang {
 
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: &CulturesGenArg, namers: &mut NamerSet, loaded_source: LoadedSource, target_arg: TargetArg, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: &PrimitiveArgs, cultures: &CulturesGenArg, namers: &mut NamerSet, loaded_source: LoadedSource, target_arg: TargetArg, progress: &mut Progress) -> Result<(), CommandError> {
 
         let mut target = WorldMap::create_or_edit(target_arg.target)?;
 

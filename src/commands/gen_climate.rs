@@ -36,9 +36,9 @@ impl Task for Temperature {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.temperatures_arg, target, progress)
+            Self::run_with_parameters(&self.temperatures_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -78,9 +78,9 @@ impl Task for Winds {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.winds_arg, target, progress)
+            Self::run_with_parameters(&self.winds_arg, transaction, progress)
 
         })?;
 
@@ -121,9 +121,9 @@ impl Task for Precipitation {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.precipitation_arg, target, progress)
+            Self::run_with_parameters(&self.precipitation_arg, transaction, progress)
 
         })?;
 
@@ -204,13 +204,13 @@ impl Task for GenClimate {
 
 impl GenClimate {
     pub(crate) fn run_default<Progress: ProgressObserver>(temperatures: &TemperatureRangeArg, winds: &WindsArg, precipitation: &PrecipitationArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
     
-            Temperature::run_with_parameters(temperatures, target, progress)?;
+            Temperature::run_with_parameters(temperatures, transaction, progress)?;
     
-            Winds::run_with_parameters(winds, target, progress)?;
+            Winds::run_with_parameters(winds, transaction, progress)?;
     
-            Precipitation::run_with_parameters(precipitation, target, progress)
+            Precipitation::run_with_parameters(precipitation, transaction, progress)
     
         })?;
             

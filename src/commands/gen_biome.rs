@@ -40,9 +40,9 @@ impl Task for Data {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.overwrite_biomes_arg, target, progress)
+            Self::run_with_parameters(&self.overwrite_biomes_arg, transaction, progress)
 
         })?;
 
@@ -80,9 +80,9 @@ impl Task for Apply {
 
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run(target, &biomes, progress)
+            Self::run_with_parameters(transaction, &biomes, progress)
 
         })?;
 
@@ -94,7 +94,7 @@ impl Task for Apply {
 
 impl Apply {
 
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: &BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: &BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying biomes to tiles");
     
         apply_biomes(target, biomes, progress)
@@ -121,8 +121,8 @@ impl Task for Dissolve {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -162,8 +162,8 @@ impl Task for Curvify {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&self.bezier_scale_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&self.bezier_scale_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -238,17 +238,17 @@ impl Task for GenBiome {
 
 impl GenBiome {
     pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {            
-            Data::run_with_parameters(ovewrite_biomes, target, progress)
+        target.with_transaction(|transaction| {            
+            Data::run_with_parameters(ovewrite_biomes, transaction, progress)
 
         })?;
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
-        target.with_transaction(|target| {            
-            Apply::run(target, &biomes, progress)?;
+        target.with_transaction(|transaction| {            
+            Apply::run_with_parameters(transaction, &biomes, progress)?;
 
-            Dissolve::run_with_parameters(target, progress)?;
+            Dissolve::run_with_parameters(transaction, progress)?;
 
-            Curvify::run_with_parameters(bezier_scale, target, progress)
+            Curvify::run_with_parameters(bezier_scale, transaction, progress)
 
         })?;
 

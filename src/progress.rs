@@ -73,7 +73,7 @@ pub(crate) struct ConsoleProgressBar {
 
 impl ConsoleProgressBar {
 
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             bar: None
         }
@@ -106,7 +106,7 @@ impl ConsoleProgressBar {
 
     }
 
-    fn start<Message: AsRef<str>>(&mut self, message: Message, step_count: Option<usize>) {
+    fn start_bar<Message: AsRef<str>>(&mut self, message: Message, step_count: Option<usize>) {
         if let Some(bar) = &mut self.bar {
             bar.reset();
             if let Some(step_count) = step_count {
@@ -133,31 +133,6 @@ impl ConsoleProgressBar {
 
     }
 
-    pub(crate) fn announce(&self, message: &str) {
-        let message = format!("== {} ==",message);
-        if let Some(bar) = &self.bar {
-            bar.println(message)
-        } else {
-            eprintln!("{}",message)
-        }
-    }
-
-    pub(crate) fn message(&self, message: &str) {
-        if let Some(bar) = &self.bar {
-            bar.println(message)
-        } else {
-            eprintln!("{}",message)
-        }
-    }
-
-    pub(crate) fn warning(&self, message: &str) {
-        let message = format!("!! {} !!",style(message).red());
-        if let Some(bar) = &self.bar {
-            bar.println(message)
-        } else {
-            eprintln!("{}",message)
-        }
-    }
 
 }
 
@@ -165,16 +140,16 @@ impl ProgressObserver for ConsoleProgressBar {
 
     fn start_known_endpoint<Message: AsRef<str>, Callback: FnOnce() -> (Message,usize)>(&mut self, callback: Callback) {
         let (message,step_count) = callback();
-        self.start(message, Some(step_count))
+        self.start_bar(message, Some(step_count))
     }
 
     fn start_unknown_endpoint<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
-        self.start(callback(), None)
+        self.start_bar(callback(), None)
     }
 
     fn start<Message: AsRef<str>, Callback: FnOnce() -> (Message,Option<usize>)>(&mut self, callback: Callback) {
         let (message,step_count) = callback();
-        self.start(message, step_count)
+        self.start_bar(message, step_count)
     }
 
 
@@ -193,11 +168,21 @@ impl ProgressObserver for ConsoleProgressBar {
 
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
-        ConsoleProgressBar::message(self, callback().as_ref())
+        let message = callback();
+        if let Some(bar) = &self.bar {
+            bar.println(message)
+        } else {
+            eprintln!("{}",message.as_ref())
+        }
     }
 
     fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback){
-        ConsoleProgressBar::warning(self, callback().as_ref());
+        let message = format!("!! {} !!",style(callback().as_ref()).red());
+        if let Some(bar) = &self.bar {
+            bar.println(message)
+        } else {
+            eprintln!("{message}")
+        };
     }
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
@@ -209,7 +194,12 @@ impl ProgressObserver for ConsoleProgressBar {
     }
 
     fn announce(&self, message: &str) {
-        ConsoleProgressBar::announce(self, message)
+        let message = format!("== {message} ==");
+        if let Some(bar) = &self.bar {
+            bar.println(message)
+        } else {
+            eprintln!("{message}")
+        }
     }
 
 }
@@ -374,7 +364,7 @@ impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
 
 }
 
-pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
+pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: core::hash::Hash + Eq, PriorityType: Ord> {
     finish: Message,
     progress: &'progress mut Progress,
     inner: PriorityQueue<ItemType,PriorityType>,
@@ -382,7 +372,7 @@ pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: 
     pushed: usize,
 }
 
-impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'_,Message,Progress,ItemType,PriorityType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: core::hash::Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'_,Message,Progress,ItemType,PriorityType> {
 
     pub(crate) fn pop(&mut self) -> Option<(ItemType,PriorityType)> {
         let result = self.inner.pop();
@@ -404,12 +394,12 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: std::hash::Hash 
 
 } 
 
-pub(crate) trait WatchablePriorityQueue<ItemType: std::hash::Hash + Eq, PriorityType: Ord> {
+pub(crate) trait WatchablePriorityQueue<ItemType: core::hash::Hash + Eq, PriorityType: Ord> {
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
 }
 
-impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
+impl<ItemType: core::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));

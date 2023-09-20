@@ -61,10 +61,10 @@ fn test_bezier() {
     let mut i = 0;
     while let Some(curve) = curves.segment_at(i) {
         let expected_curve = &expected[i];
-        assert_eq!(curve.0,&expected_curve.0,"At curve {}, point 0",i);
-        assert_eq!(curve.1,&expected_curve.1,"At curve {}, point 1",i);
-        assert_eq!(curve.2,&expected_curve.2,"At curve {}, point 2",i);
-        assert_eq!(curve.3,&expected_curve.3,"At curve {}, point 3",i);
+        assert_eq!(curve.0,&expected_curve.0,"At curve {i}, point 0");
+        assert_eq!(curve.1,&expected_curve.1,"At curve {i}, point 1");
+        assert_eq!(curve.2,&expected_curve.2,"At curve {i}, point 2");
+        assert_eq!(curve.3,&expected_curve.3,"At curve {i}, point 3");
         i += 1;
     }
 

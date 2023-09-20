@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use std::hash::Hash;
+use core::hash::Hash;
 use std::collections::HashSet;
 use std::collections::hash_map::IntoIter;
 
@@ -85,6 +85,7 @@ fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,i32)>,Command
     from_ron_str(&value).map_err(|_| CommandError::InvalidValueForNeighborDirections(value))   
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)] // Although it seems like it would be more efficient, the call to to_ron_string just references it again anyway.
 fn id_ref_to_string(value: &u64) -> String {
     to_ron_string(value).expect("Why would serialization fail on a f64?") 
 }
@@ -328,7 +329,7 @@ macro_rules! feature_set_field {
     }};
 }
 
-macro_rules! feature_to_value {
+macro_rules! feature_field_value {
     ($prop: expr; f64) => {
         Some(FieldValue::RealValue(NotNan::<f64>::try_from($prop)?.into_inner()))
     };
@@ -353,42 +354,42 @@ macro_rules! feature_to_value {
         }
     };
     ($prop: expr; id_list) => {
-        Some(FieldValue::StringValue(id_list_to_string($prop)))
+        Some(FieldValue::StringValue(id_list_to_string(&$prop)))
     };
     ($prop: expr; neighbor_directions) => {
-        Some(FieldValue::StringValue(neighbor_directions_to_string($prop)))
+        Some(FieldValue::StringValue(neighbor_directions_to_string(&$prop)))
     };
     ($prop: expr; id_ref) => {
         // store id_ref as a string so I can use u64, as fields only support i64
         Some(FieldValue::StringValue(id_ref_to_string(&$prop)))
     };
     ($prop: expr; river_segment_from) => {{
-        Some(FieldValue::StringValue(Into::<String>::into($prop)))
+        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
     ($prop: expr; river_segment_to) => {{
-        Some(FieldValue::StringValue(Into::<String>::into($prop)))
+        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
     ($prop: expr; string) => {{
         Some(FieldValue::StringValue($prop.to_owned()))
     }};
     ($prop: expr; option_string) => {{
-        if let Some(value) = $prop {
+        if let Some(value) = &$prop {
             Some(FieldValue::StringValue(value.to_owned()))
         } else {
             None
         }
     }};
     ($prop: expr; biome_criteria) => {{
-        Some(FieldValue::StringValue(Into::<String>::into($prop)))
+        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
     ($prop: expr; lake_type) => {{
-        Some(FieldValue::StringValue(Into::<String>::into($prop)))
+        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
     ($prop: expr; grouping) => {{
-        Some(FieldValue::StringValue(Into::<String>::into($prop)))
+        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
     ($prop: expr; culture_type) => {{
-        Some(FieldValue::StringValue(Into::<String>::into($prop)))
+        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
 
 }
@@ -419,7 +420,7 @@ pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data
 
 pub(crate) trait NamedFeature<'data_life,SchemaType: Schema>: TypedFeature<'data_life,SchemaType> {
 
-    fn name(&self) -> Result<String,CommandError>;
+    fn get_name(&self) -> Result<String,CommandError>;
 
 }
 
@@ -487,7 +488,7 @@ macro_rules! get_field_type_for_prop_type {
 }
 
 macro_rules! layer {
-    ($(#[to_field_names_values($to_values_attr: meta)])* $name: ident [$layer_name: literal]: $geometry_type: ident {$(
+    ($(#[add_struct($add_struct_attr: meta)])* $name: ident [$layer_name: literal]: $geometry_type: ident {$(
         $(#[doc = $doc_attr: literal])? $(#[get($get_attr: meta)])* $(#[set($set_attr: meta)])* $prop: ident: $prop_type: ident
     ),*$(,)?}) => {
 
@@ -574,18 +575,6 @@ macro_rules! layer {
             
             impl [<$name Feature>]<'_> {
 
-                // feature initializer function
-                $(#[$to_values_attr])* pub(crate) fn to_field_names_values($($prop: feature_set_field_type!($prop_type)),*) -> Result<([&'static str; feature_count_fields!($($prop),*)],[Option<FieldValue>; feature_count_fields!($($prop),*)]),CommandError> {
-                    Ok(([
-                        $(paste!{
-                            [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
-                        }),*
-                    ],[
-                        $(feature_to_value!($prop; $prop_type)),*
-                    ]))
-        
-                }
-            
                 // property functions
                 $(
                     paste!{
@@ -607,7 +596,40 @@ macro_rules! layer {
         }
 
         paste!{
+
+            $(#[$add_struct_attr])* 
+            pub(crate) struct [<New $name>] {
+                $(
+                    pub(crate) $prop: feature_get_field_type!($prop_type)
+                ),*
+            }
+        }
+
+        paste!{
             pub(crate) type [<$name Layer>]<'layer,'feature> = MapLayer<'layer,'feature,[<$name Schema>],[<$name Feature>]<'feature>>;
+
+            impl [<$name Layer>]<'_,'_> {
+
+                $(#[$add_struct_attr])*
+                // I've marked entity as possibly not used because some calls have no fields and it won't be assigned.          
+                fn add_struct(&mut self, _entity: &[<New $name>], geometry: Option<Geometry>) -> Result<u64,CommandError> {
+                    let field_names = [
+                        $(paste!{
+                            [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
+                        }),*
+                    ];
+                    let field_values = [
+                        $(feature_field_value!(_entity.$prop; $prop_type)),*
+                    ];
+                    if let Some(geometry) = geometry {
+                        self.add_feature(geometry, &field_names, &field_values)
+                    } else {
+                        self.add_feature_without_geometry(&field_names, &field_values)
+                    }
+
+                }
+                
+            }
 
         }
 
@@ -619,8 +641,8 @@ macro_rules! layer {
 
 pub(crate) struct TypedFeatureIterator<'data_life, SchemaType: Schema, Feature: TypedFeature<'data_life,SchemaType>> {
     features: FeatureIterator<'data_life>,
-    _phantom_feature: std::marker::PhantomData<Feature>,
-    _phantom_schema: std::marker::PhantomData<SchemaType>
+    _phantom_feature: core::marker::PhantomData<Feature>,
+    _phantom_schema: core::marker::PhantomData<SchemaType>
 }
 
 impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> Iterator for TypedFeatureIterator<'impl_life, SchemaType, Feature> {
@@ -639,8 +661,8 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
     fn from(features: FeatureIterator<'impl_life>) -> Self {
         Self {
             features,
-            _phantom_feature: Default::default(),
-            _phantom_schema: Default::default()
+            _phantom_feature: core::marker::PhantomData,
+            _phantom_schema: core::marker::PhantomData
         }
     }
 }
@@ -711,7 +733,7 @@ pub(crate) trait NamedEntity<SchemaType: Schema>: Entity<SchemaType> {
 
 pub(crate) struct EntityIterator<'data_life, SchemaType: Schema, Feature: TypedFeature<'data_life,SchemaType>, Data: Entity<SchemaType>> {
     features: TypedFeatureIterator<'data_life,SchemaType,Feature>,
-    data: std::marker::PhantomData<Data>
+    data: core::marker::PhantomData<Data>
 }
 
 // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
@@ -722,8 +744,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
         if let Some(feature) = self.features.next() {
             match (feature.fid(),Data::try_from(feature)) {
                 (Ok(fid), Ok(entity)) => Some(Ok((fid,entity))),
-                (Err(e), Ok(_)) => Some(Err(e)),
-                (_, Err(e)) => Some(Err(e)),
+                (Err(e), Ok(_)) | (_, Err(e)) => Some(Err(e)),
             }
         } else {
             None
@@ -739,7 +760,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life, SchemaTyp
     fn from(features: TypedFeatureIterator<'impl_life,SchemaType,Feature>) -> Self {
         Self {
             features,
-            data: Default::default()
+            data: core::marker::PhantomData
         }
     }
 }
@@ -748,7 +769,7 @@ pub(crate) struct EntityIndex<SchemaType: Schema, EntityType: Entity<SchemaType>
     // I use an IndexMap instead of HashMap as it ensures that the map maintains an order when iterating.
     // This helps me get reproducible results with the same random seed.
     inner: IndexMap<u64,EntityType>,
-    _phantom: std::marker::PhantomData<SchemaType>
+    _phantom: core::marker::PhantomData<SchemaType>
 }
 
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,EntityType> {
@@ -761,18 +782,21 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         inner.sort_keys();
         Self {
             inner,
-            _phantom: Default::default()
+            _phantom: core::marker::PhantomData
         }
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn try_get(&self, key: &u64) -> Result<&EntityType,CommandError> {
         self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn try_get_mut(&mut self, key: &u64) -> Result<&mut EntityType,CommandError> {
         self.inner.get_mut(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn try_remove(&mut self, key: &u64) -> Result<EntityType,CommandError> {
         self.inner.remove(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
     }
@@ -793,6 +817,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         self.inner.len()
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
         self.inner.get(key)
     }
@@ -855,10 +880,12 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, Entity
         result
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
         self.inner.maybe_get(key)
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn try_remove(&mut self, key: &u64) -> Result<EntityType,CommandError> {
         let result = self.inner.try_remove(key)?;
         self.popped += 1;
@@ -876,15 +903,15 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, Entity
 
 pub(crate) struct EntityLookup<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> {
     inner: HashMap<String,EntityType>,
-    _phantom: std::marker::PhantomData<SchemaType>
+    _phantom: core::marker::PhantomData<SchemaType>
 }
 
 impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> EntityLookup<SchemaType,EntityType> {
 
-    fn from(inner: HashMap<String,EntityType>) -> Self {
+    const fn from(inner: HashMap<String,EntityType>) -> Self {
         Self {
             inner,
-            _phantom: Default::default()
+            _phantom: core::marker::PhantomData
         }
     }
 
@@ -999,8 +1026,8 @@ macro_rules! entity {
 
 pub(crate) struct MapLayer<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, SchemaType>> {
     layer: Layer<'layer>,
-    _phantom_feature: std::marker::PhantomData<&'feature Feature>,
-    _phantom_schema: std::marker::PhantomData<SchemaType>
+    _phantom_feature: core::marker::PhantomData<&'feature Feature>,
+    _phantom_schema: core::marker::PhantomData<SchemaType>
 }
 
 impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, SchemaType>> MapLayer<'layer,'feature,SchemaType,Feature> {
@@ -1031,8 +1058,8 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         
         Ok(Self {
             layer,
-            _phantom_feature: Default::default(),
-            _phantom_schema: Default::default()
+            _phantom_feature: core::marker::PhantomData,
+            _phantom_schema: core::marker::PhantomData
         })
     }
 
@@ -1041,19 +1068,19 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         let layer = dataset.layer_by_name(SchemaType::LAYER_NAME)?;
         Ok(Self {
             layer,
-            _phantom_feature: Default::default(),
-            _phantom_schema: Default::default()
+            _phantom_feature: core::marker::PhantomData,
+            _phantom_schema: core::marker::PhantomData
         })
 
     }
 
     // FUTURE: I wish I could get rid of the lifetime thingie...
-    pub(crate) fn feature_by_id(&'feature self, fid: &u64) -> Option<Feature> {
-        self.layer.feature(*fid).map(Feature::from)
+    pub(crate) fn feature_by_id(&'feature self, fid: u64) -> Option<Feature> {
+        self.layer.feature(fid).map(Feature::from)
     }
 
-    pub(crate) fn try_feature_by_id(&'feature self, fid: &u64) -> Result<Feature,CommandError> {
-        self.layer.feature(*fid).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,*fid)).map(Feature::from)
+    pub(crate) fn try_feature_by_id(&'feature self, fid: u64) -> Result<Feature,CommandError> {
+        self.layer.feature(fid).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,fid)).map(Feature::from)
     }
 
 
@@ -1104,29 +1131,27 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
 
 }
 
-layer!(#[to_field_names_values(allow(dead_code))] Point["points"]: wkbPoint {});
+layer!(Point["points"]: wkbPoint {});
 
 
 impl PointLayer<'_,'_> {
 
-    pub(crate) fn add_point(&mut self, point: Geometry) -> Result<(),CommandError> {
+    pub(crate) fn add_point(&mut self, point: Geometry) -> Result<u64,CommandError> {
 
-        _ = self.add_feature(point,&[],&[])?;
-        Ok(())
+        self.add_struct(&NewPoint {  }, Some(point))
     
     }
 
 }
 
-layer!(#[to_field_names_values(allow(dead_code))] Triangle["triangles"]: wkbPolygon {});
+layer!(Triangle["triangles"]: wkbPolygon {});
 
 impl TriangleLayer<'_,'_> {
 
-    pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<(),CommandError> {
+    pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<u64,CommandError> {
 
-        _ = self.add_feature(geo,&[],&[])?;
-        Ok(())
-
+        self.add_struct(&NewTriangle {  }, Some(geo))
+        
     }
 
 
@@ -1144,12 +1169,12 @@ pub(crate) enum Grouping {
 
 impl Grouping {
 
-    pub(crate) fn is_ocean(&self) -> bool {
-        matches!(self,Grouping::Ocean)
+    pub(crate) const fn is_ocean(&self) -> bool {
+        matches!(self,Self::Ocean)
     }
 
-    pub(crate) fn is_water(&self) -> bool {
-        matches!(self,Grouping::Ocean | Grouping::Lake)
+    pub(crate) const fn is_water(&self) -> bool {
+        matches!(self,Self::Ocean | Self::Lake)
     }
 
 
@@ -1169,7 +1194,7 @@ impl TryFrom<String> for Grouping {
     }
 }
 
-layer!(#[to_field_names_values(allow(dead_code))] Tile["tiles"]: wkbPolygon {
+layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: wkbPolygon {
     /// longitude of the node point for the tile's voronoi
     #[set(allow(dead_code))] site_x: f64,
     /// latitude of the node point for the tile's voronoi
@@ -1267,7 +1292,7 @@ impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T 
 }
 
 
-entity!(NewTile: Tile {
+entity!(NewTileSite: Tile {
     geometry: Geometry,
     site_x: f64, 
     site_y: f64
@@ -1285,14 +1310,14 @@ entity!(TileForTerrain: Tile {
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     // 'old' values so the algorithm can check if it's changed.
-    old_elevation: f64 = |feature: &TileFeature| feature.elevation(),
-    old_grouping: Grouping = |feature: &TileFeature| feature.grouping()
+    old_elevation: f64 = TileFeature::elevation,
+    old_grouping: Grouping = TileFeature::grouping
 });
 
 impl TileForTerrain {
 
     pub(crate) fn elevation_changed(&self) -> bool {
-        self.elevation != self.old_elevation
+        (self.elevation - self.old_elevation).abs() > f64::EPSILON
     }
 
     pub(crate) fn grouping_changed(&self) -> bool {
@@ -1463,7 +1488,7 @@ impl TileForCulturePrefSorting<'_> {
         let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
             let closest_water = closest_water;
-            let closest_water = tiles.try_feature_by_id(&closest_water)?;
+            let closest_water = tiles.try_feature_by_id(closest_water)?;
             if let Some(lake_id) = closest_water.lake_id()? {
                 let lake_id = lake_id;
                 let lake = lakes.try_get(&lake_id)?;
@@ -1716,11 +1741,12 @@ impl TileLayer<'_,'_> {
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     // FUTURE: It would also be nice to get rid of the lifetimes
-    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: &u64) -> Result<Data,CommandError> {
+    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: u64) -> Result<Data,CommandError> {
         self.try_feature_by_id(fid)?.try_into()
     }
 
-    pub(crate) fn add_tile(&mut self, tile: NewTile) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, tile: NewTileSite) -> Result<(),CommandError> {
+        // tiles are initialized with incomplete definitions in the table. It is a user error to access fields which haven't been assigned yet by running an algorithm before required algorithms are completed.
 
         _ = self.add_feature(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
@@ -1729,14 +1755,14 @@ impl TileLayer<'_,'_> {
                 TileSchema::FIELD_ELEVATION_SCALED,
                 TileSchema::FIELD_GROUPING,
             ],&[
-                feature_to_value!(tile.site_x; f64),
-                feature_to_value!(tile.site_y; f64),
+                feature_field_value!(tile.site_x; f64),
+                feature_field_value!(tile.site_y; f64),
                 // initial tiles start with 0 elevation, terrain commands will edit this...
-                feature_to_value!(0.0; f64), // FUTURE: Watch that this type stays correct
+                feature_field_value!(0.0; f64), // FUTURE: Watch that this type stays correct
                 // and scaled elevation starts with 20.
-                feature_to_value!(20; i32), // FUTURE: Watch that this type stays correct
+                feature_field_value!(20; i32), // FUTURE: Watch that this type stays correct
                 // tiles are continent by default until someone samples some ocean.
-                feature_to_value!(&Grouping::Continent; grouping)
+                feature_field_value!(Grouping::Continent; grouping)
             ])?;
         Ok(())
 
@@ -1841,37 +1867,20 @@ impl From<&RiverSegmentTo> for String {
 
 layer!(River["rivers"]: wkbLineString {
     // clippy doesn't understand why I'm using 'from_*' here.
-    #[get(allow(clippy::wrong_self_convention))] #[set(allow(dead_code))] from_tile_id: id_ref,
-    #[get(allow(clippy::wrong_self_convention))] #[set(allow(dead_code))] from_type: river_segment_from,
-    #[get(allow(clippy::wrong_self_convention))] #[set(allow(dead_code))] from_flow: f64,
-    #[set(allow(dead_code))] to_tile_id: id_ref,
-    #[set(allow(dead_code))] to_type: river_segment_to,
-    #[set(allow(dead_code))] to_flow: f64,
+    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_tile_id: id_ref,
+    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_type: river_segment_from,
+    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_flow: f64,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] to_tile_id: id_ref,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] to_type: river_segment_to,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] to_flow: f64,
 });
 
-
-entity!(NewRiver: River {
-    from_tile_id: u64,
-    from_type: RiverSegmentFrom,
-    from_flow: f64,
-    to_tile_id: u64,
-    to_type: RiverSegmentTo,
-    to_flow: f64,
-    line: Vec<Point> = |_| Ok::<_,CommandError>(Vec::new())
-});
 
 impl RiverLayer<'_,'_> {
 
-    pub(crate) fn add_segment(&mut self, segment: &NewRiver) -> Result<u64,CommandError> {
-        let geometry = create_line(&segment.line)?;
-        let (field_names,field_values) = RiverFeature::to_field_names_values(
-            segment.from_tile_id, 
-            &segment.from_type, 
-            segment.from_flow, 
-            segment.to_tile_id, 
-            &segment.to_type,
-            segment.to_flow)?;
-        self.add_feature(geometry, &field_names, &field_values)
+    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, line: &Vec<Point>) -> Result<u64,CommandError> {
+        let geometry = create_line(line)?;
+        self.add_struct(new_river, Some(geometry))
     }
 
 }
@@ -1928,30 +1937,10 @@ entity!(LakeForTownPopulation: Lake {
 });
 
 
-
-#[derive(Clone)]
-pub(crate) struct NewLake {
-    pub(crate) elevation: f64,
-    pub(crate) type_: LakeType,
-    pub(crate) flow: f64,
-    pub(crate) size: i32,
-    pub(crate) temperature: f64,
-    pub(crate) evaporation: f64,
-    pub(crate) geometry: Geometry,
-}
-
 impl LakeLayer<'_,'_> {
 
-    pub(crate) fn add_lake(&mut self, lake: NewLake) -> Result<u64,CommandError> {
-        let (field_names,field_values) = LakeFeature::to_field_names_values(
-            lake.elevation,
-            &lake.type_,
-            lake.flow,
-            lake.size,
-            lake.temperature,
-            lake.evaporation
-        )?;
-        self.add_feature(lake.geometry, &field_names, &field_values)
+    pub(crate) fn add_lake(&mut self, lake: &NewLake, geometry: Geometry) -> Result<u64,CommandError> {
+        self.add_struct(lake, Some(geometry))
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -2014,8 +2003,31 @@ layer!(Biome["biomes"]: wkbMultiPolygon {
     #[set(allow(dead_code))] color: string,
 });
 
+impl Entity<BiomeSchema> for NewBiome {
+
+}
+
+impl TryFrom<BiomeFeature<'_>> for NewBiome {
+
+    type Error = CommandError;
+
+    fn try_from(value: BiomeFeature) -> Result<Self,Self::Error> {
+        Ok(Self {
+            name: value.name()?,
+            habitability: value.habitability()?,
+            criteria: value.criteria()?,
+            movement_cost: value.movement_cost()?,
+            supports_nomadic: value.supports_nomadic()?,
+            supports_hunting: value.supports_hunting()?,
+            color: value.color()?,
+        })
+    }
+}
+
+
+
 impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
-    fn name(&self) -> Result<String,CommandError> {
+    fn get_name(&self) -> Result<String,CommandError> {
         self.name()
     }
 }
@@ -2119,26 +2131,26 @@ impl BiomeSchema {
                 BiomeCriteria::Matrix(list) => {
                     for (moist,temp) in list {
                         let (moist,temp) = (*moist,*temp);
-                        if !matrix[moist][temp].is_empty() {
-                            Err(CommandError::DuplicateBiomeMatrixSlot(moist,temp))?
-                        } else {
+                        if matrix[moist][temp].is_empty() {
                             matrix[moist][temp] = biome.name.clone()
 
+                        } else {
+                            return Err(CommandError::DuplicateBiomeMatrixSlot(moist,temp))
                         }
                     }
                 },
                 BiomeCriteria::Wetland => if wetland.is_some() {
-                    Err(CommandError::DuplicateWetlandBiome)?
+                    return Err(CommandError::DuplicateWetlandBiome)
                 } else {
                     wetland = Some(biome.name.clone())
                 },
                 BiomeCriteria::Glacier => if glacier.is_some() {
-                    Err(CommandError::DuplicateGlacierBiome)?
+                    return Err(CommandError::DuplicateGlacierBiome)
                 } else {
                     glacier = Some(biome.name.clone())
                 },
                 BiomeCriteria::Ocean => if ocean.is_some() {
-                    Err(CommandError::DuplicateOceanBiome)?
+                    return Err(CommandError::DuplicateOceanBiome)
                 } else {
                     ocean = Some(biome.name.clone())
                 }
@@ -2156,29 +2168,15 @@ impl BiomeSchema {
                 }
             }
         }
-        Ok(BiomeMatrix {
-            matrix,
-            glacier,
-            ocean,
-            wetland,
+        Ok(BiomeMatrix { 
+            matrix, 
+            ocean, 
+            glacier, 
+            wetland 
         })
     }
 
 }
-
-impl BiomeFeature<'_> {
-
-}
-
-entity!(NewBiome: Biome {
-    name: String,
-    habitability: i32,
-    criteria: BiomeCriteria,
-    movement_cost: i32,
-    supports_nomadic: bool,
-    supports_hunting: bool,
-    color: String
-});
 
 entity!(BiomeForPopulation: Biome {
     name: String,
@@ -2239,10 +2237,7 @@ impl NamedEntity<BiomeSchema> for BiomeForDissolve {
 impl BiomeLayer<'_,'_> {
 
     pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
-
-        let (field_names,field_values) = BiomeFeature::to_field_names_values(
-            &biome.name,biome.habitability,&biome.criteria,biome.movement_cost,biome.supports_nomadic,biome.supports_hunting,&biome.color)?;
-        self.add_feature_without_geometry(&field_names, &field_values)
+        self.add_struct(biome, None)
 
     }
 
@@ -2293,11 +2288,11 @@ layer!(Culture["cultures"]: wkbMultiPolygon {
     #[set(allow(dead_code))] type_: culture_type,
     #[set(allow(dead_code))] expansionism: f64,
     #[set(allow(dead_code))] center_tile_id: id_ref,
-    #[set(allow(dead_code))] color: string,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] color: string,
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
-    fn name(&self) -> Result<String,CommandError> {
+    fn get_name(&self) -> Result<String,CommandError> {
         self.name()
     }
 }
@@ -2311,7 +2306,7 @@ pub(crate) trait CultureWithNamer {
     fn namer(&self) -> &str;
 
     fn get_namer<'namers, Culture: CultureWithNamer>(culture: Option<&Culture>, namers: &'namers mut NamerSet) -> Result<&'namers mut Namer, CommandError> {
-        let namer = namers.get_mut(culture.map(|culture| culture.namer()))?;
+        let namer = namers.get_mut(culture.map(CultureWithNamer::namer))?;
         Ok(namer)
     }
     
@@ -2321,16 +2316,6 @@ pub(crate) trait CultureWithType {
 
     fn type_(&self) -> &CultureType;
 }
-
-
-entity!(NewCulture: Culture {
-    name: String,
-    namer: String,
-    type_: CultureType,
-    expansionism: f64,
-    center_tile_id: u64,
-    color: String
-});
 
 // needs to be hashable in order to fit into a priority queue
 entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement: Culture {
@@ -2397,11 +2382,7 @@ impl NamedEntity<CultureSchema> for CultureForDissolve {
 impl CultureLayer<'_,'_> {
 
     pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
-
-        let (field_names,field_values) = CultureFeature::to_field_names_values(
-            &culture.name,&culture.namer,&culture.type_,culture.expansionism,culture.center_tile_id,&culture.color)?;
-        self.add_feature_without_geometry(&field_names, &field_values)
-
+        self.add_struct(culture, None)
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -2417,27 +2398,18 @@ layer!(Town["towns"]: wkbPoint {
     #[set(allow(dead_code))] culture: option_string,
     #[set(allow(dead_code))] is_capital: bool,
     #[set(allow(dead_code))] tile_id: id_ref,
-    #[set(allow(dead_code))] grouping_id: id_ref, 
+    #[get(allow(dead_code))] #[set(allow(dead_code))] grouping_id: id_ref, 
     #[get(allow(dead_code))] population: i32,
     #[get(allow(dead_code))] is_port: bool,
 });
 
 impl TownFeature<'_> {
 
-    pub(crate) fn move_to(&mut self, new_location: Point) -> Result<(),CommandError> {
+    pub(crate) fn move_to(&mut self, new_location: &Point) -> Result<(),CommandError> {
         Ok(self.feature.set_geometry(new_location.create_geometry()?)?)
     }
 
 }
-
-entity!(NewTown: Town {
-    geometry: Geometry,
-    name: String,
-    culture: Option<String>,
-    is_capital: bool,
-    tile_id: u64,
-    grouping_id: u64
-});
 
 entity!(TownForPopulation: Town {
     fid: u64,
@@ -2466,17 +2438,8 @@ entity!(TownForEmptySubnations: Town {
 
 impl TownLayer<'_,'_> {
 
-    pub(crate) fn add_town(&mut self, town: NewTown) -> Result<u64,CommandError> {
-        let (field_names,field_values) = TownFeature::to_field_names_values(
-            &town.name,
-            town.culture.as_deref(),
-            town.is_capital,
-            town.tile_id,
-            town.grouping_id,
-            0,
-            false
-        )?;
-        self.add_feature(town.geometry, &field_names, &field_values)
+    pub(crate) fn add_town(&mut self, town: &NewTown, geometry: Geometry) -> Result<u64,CommandError> {
+        self.add_struct(town, Some(geometry))
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -2499,21 +2462,10 @@ layer!(Nation["nations"]: wkbMultiPolygon {
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
-    fn name(&self) -> Result<String,CommandError> {
+    fn get_name(&self) -> Result<String,CommandError> {
         self.name()
     }
 }
-
-
-entity!(NewNation: Nation {
-    name: String,
-    culture: Option<String>,
-    center_tile_id: u64,
-    type_: CultureType,
-    expansionism: f64,
-    capital_town_id: u64,
-    color: String
-});
 
 // needs to be hashable in order to fit into a priority queue
 entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement: Nation {
@@ -2538,17 +2490,8 @@ entity!(NationForEmptySubnations: Nation {
 
 impl NationLayer<'_,'_> {
 
-    pub(crate) fn add_nation(&mut self, nation: NewNation) -> Result<u64,CommandError> {
-        let (field_names,field_values) = NationFeature::to_field_names_values(
-            &nation.name,
-            nation.culture.as_deref(),
-            nation.center_tile_id,
-            &nation.type_,
-            nation.expansionism,
-            nation.capital_town_id,
-            &nation.color
-        )?;
-        self.add_feature_without_geometry(&field_names, &field_values)
+    pub(crate) fn add_nation(&mut self, nation: &NewNation) -> Result<u64,CommandError> {
+        self.add_struct(nation, None)
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -2562,31 +2505,19 @@ impl NationLayer<'_,'_> {
 
 layer!(Subnation["subnations"]: wkbMultiPolygon {
     #[set(allow(dead_code))] name: string,
-    #[set(allow(dead_code))] culture: option_string,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] culture: option_string,
     #[set(allow(dead_code))] center_tile_id: id_ref,
-    #[set(allow(dead_code))] type_: culture_type,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] type_: culture_type,
     #[set(allow(dead_code))] seat_town_id: option_id_ref, 
     #[set(allow(dead_code))] nation_id: id_ref, 
-    #[set(allow(dead_code))] color: string,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] color: string,
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
-    fn name(&self) -> Result<String,CommandError> {
+    fn get_name(&self) -> Result<String,CommandError> {
         self.name()
     }
 }
-
-
-entity!(NewSubnation: Subnation {
-    name: String,
-    culture: Option<String>,
-    center_tile_id: u64,
-    type_: CultureType,
-    seat_town_id: Option<u64>,
-    nation_id: u64,
-    color: String
-});
-
 
 entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement: Subnation {
     fid: u64,
@@ -2601,17 +2532,8 @@ entity!(SubnationForNormalize: Subnation {
 
 impl SubnationLayer<'_,'_> {
 
-    pub(crate) fn add_subnation(&mut self, subnation: NewSubnation) -> Result<u64,CommandError> {
-        let (field_names,field_values) = SubnationFeature::to_field_names_values(
-            &subnation.name,
-            subnation.culture.as_deref(),
-            subnation.center_tile_id,
-            &subnation.type_,
-            subnation.seat_town_id,
-            subnation.nation_id,
-            &subnation.color
-        )?;
-        self.add_feature_without_geometry(&field_names, &field_values)
+    pub(crate) fn add_subnation(&mut self, subnation: &NewSubnation) -> Result<u64,CommandError> {
+        self.add_struct(subnation, None)
     }
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
@@ -2628,8 +2550,7 @@ layer!(Coastline["coastlines"]: wkbPolygon  {
 impl CoastlineLayer<'_,'_> {
 
     pub(crate) fn add_land_mass(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
-        let (field_names,field_values) = CoastlineFeature::to_field_names_values()?;
-        self.add_feature(geometry, &field_names, &field_values)
+        self.add_struct(&NewCoastline {  }, Some(geometry))
     }
 
 }
@@ -2640,8 +2561,7 @@ layer!(Ocean["oceans"]: wkbPolygon {
 impl OceanLayer<'_,'_> {
 
     pub(crate) fn add_ocean(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
-        let (field_names,field_values) = OceanFeature::to_field_names_values()?;
-        self.add_feature(geometry, &field_names, &field_values)
+        self.add_struct(&NewOcean {  }, Some(geometry))
     }
 
 }
@@ -2734,7 +2654,7 @@ impl PropertyLayer<'_,'_> {
         self.get_property(PropertySchema::PROP_ELEVATION_LIMITS)?.try_into()
     }
 
-    fn set_property(&mut self, name: &str, value: &str) -> Result<(),CommandError> {
+    fn set_property(&mut self, name: &str, value: &str) -> Result<u64,CommandError> {
         let mut found = None;
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
             if feature.name()? == name {
@@ -2743,18 +2663,20 @@ impl PropertyLayer<'_,'_> {
             }
         }
         if let Some(found) = found {
-            let mut feature = self.try_feature_by_id(&found)?;
+            let mut feature = self.try_feature_by_id(found)?;
             feature.set_value(value)?;
             self.update_feature(feature)?;
+            Ok(found)
         } else {
-            let (fields,values) = PropertyFeature::to_field_names_values(name, value)?;
-            _ = self.add_feature_without_geometry(&fields,&values)?;
+            self.add_struct(&NewProperty { 
+                name: name.to_owned(), 
+                value: value.to_owned() 
+            }, None)
    
         }
-        Ok(())
     }
 
-    pub(crate) fn set_elevation_limits(&mut self, value: &ElevationLimits) -> Result<(),CommandError> {
+    pub(crate) fn set_elevation_limits(&mut self, value: &ElevationLimits) -> Result<u64,CommandError> {
         self.set_property(PropertySchema::PROP_ELEVATION_LIMITS, &Into::<String>::into(value))
     }
 
@@ -2772,9 +2694,9 @@ impl WorldMap {
     const GDAL_DRIVER: &str = "GPKG";
 
     fn new(dataset: Dataset, path: PathBuf) -> Self {
-        Self {
-            dataset,
-            path
+        Self { 
+            path, 
+            dataset 
         }
     }
 
@@ -2833,10 +2755,6 @@ impl WorldMap {
         PointLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn triangles_layer(&self) -> Result<TriangleLayer,CommandError> {
-        TriangleLayer::open_from_dataset(&self.dataset)
-    }
-
     pub(crate) fn tiles_layer(&self) -> Result<TileLayer,CommandError> {
         TileLayer::open_from_dataset(&self.dataset)
     }
@@ -2875,6 +2793,10 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TriangleLayer,CommandError> {
         TriangleLayer::create_from_dataset(&mut self.dataset, overwrite)
 
+    }
+
+    pub(crate) fn edit_triangles_layer(&self) -> Result<TriangleLayer, CommandError> {
+        TriangleLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn create_tile_layer(&mut self, overwrite: &OverwriteTilesArg) -> Result<TileLayer,CommandError> {

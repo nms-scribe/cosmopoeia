@@ -60,7 +60,7 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
@@ -68,9 +68,9 @@ impl Task for Create {
 
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.size_variance_arg, &self.overwrite_nations_arg, target, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.size_variance_arg, &self.overwrite_nations_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -110,8 +110,8 @@ impl Task for Expand {
 
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -147,8 +147,8 @@ impl Task for Normalize {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -184,8 +184,8 @@ impl Task for Dissolve {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -225,8 +225,8 @@ impl Task for Curvify {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&self.bezier_scale_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&self.bezier_scale_arg, transaction, progress)
         })?;
 
         target.save(progress)
@@ -307,7 +307,7 @@ impl Task for GenNations {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(default_args) = self.default_args {
-            let mut random = random_number_generator(default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed_arg);
 
             let mut target = WorldMap::edit(default_args.target_arg.target)?;
     
@@ -331,17 +331,17 @@ impl Task for GenNations {
 impl GenNations {
 
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: &SizeVarianceArg, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, bezier_scale: &BezierScaleArg, overwrite_nations: &OverwriteNationsArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
     
-            Create::run_with_parameters(random, culture_lookup, loaded_namers, size_variance, overwrite_nations, target, progress)?;
+            Create::run_with_parameters(random, culture_lookup, loaded_namers, size_variance, overwrite_nations, transaction, progress)?;
     
-            Expand::run_with_parameters(river_threshold, limit_factor, target, progress)?;
+            Expand::run_with_parameters(river_threshold, limit_factor, transaction, progress)?;
     
-            Normalize::run_with_parameters(target, progress)?;
+            Normalize::run_with_parameters(transaction, progress)?;
     
-            Dissolve::run_with_parameters(target, progress)?;
+            Dissolve::run_with_parameters(transaction, progress)?;
     
-            Curvify::run_with_parameters(bezier_scale, target, progress)
+            Curvify::run_with_parameters(bezier_scale, transaction, progress)
     
         })?;
     

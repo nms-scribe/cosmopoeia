@@ -30,7 +30,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
     for segment in list {
         total_flow += segment.to_flow;
         if let Some(potential) = chosen_segment {
-            if (segment.to_flow > potential.to_flow) || ((segment.to_flow == potential.to_flow) && segment.to > potential.to) {
+            if (segment.to_flow > potential.to_flow) || (((segment.to_flow - potential.to_flow).abs() < f64::EPSILON) && segment.to > potential.to) {
                 chosen_segment = Some(segment)
             }
         } else {
@@ -60,7 +60,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
             continue;
         }
 
-        if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(&segment.from),tiles.feature_by_id(&segment.to)) {
+        if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(segment.from),tiles.feature_by_id(segment.to)) {
             let from_lake = from_tile.lake_id()?;
             let to_lake = to_tile.lake_id()?;
             if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
@@ -73,15 +73,14 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point.as_ref(),&[start_point,end_point],next_point.as_ref());
                 // convert that to a polyline.
                 let line = bezier.to_poly_line(bezier_scale)?;
-                segments.push(NewRiver {
+                segments.push((NewRiver {
                     from_tile_id: segment.from,
                     from_type,
                     from_flow,
                     to_tile_id: segment.to,
                     to_type,
-                    to_flow: segment.to_flow,
-                    line
-                })
+                    to_flow: segment.to_flow
+                },line))
 
             } // I don't want to add segments that are going between tiles in the same lake. As that can create weird arms in lakes with concave sides
 
@@ -92,8 +91,8 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
     let mut segments_layer = target.create_rivers_layer(overwrite_layer)?;
 
     
-    for segment in segments.iter().watch(progress,"Writing rivers.","Rivers written.") {
-        _ = segments_layer.add_segment(segment)?;
+    for (river,segment) in segments.iter().watch(progress,"Writing rivers.","Rivers written.") {
+        _ = segments_layer.add_segment(river,segment)?;
     }
 
     Ok(())
@@ -227,12 +226,12 @@ fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_cle
         if let Some(next) = segment_clean_queue.last() {
             if (segment.from == next.from) && (segment.to == next.to) {
                 // we found a duplicate, pop it off and merge it.
-                let next = segment_clean_queue.pop().expect("Why would pop fail if we just found a value with last?");
+                let duplicate = segment_clean_queue.pop().expect("Why would pop fail if we just found a value with last?");
                 let merged = Rc::from(RiverSegment {
                     from: segment.from,
                     to: segment.to,
-                    to_flow: segment.to_flow.max(next.to_flow),
-                    from_lake: segment.from_lake || next.from_lake, // if one is from a lake, then both are from a lake
+                    to_flow: segment.to_flow.max(duplicate.to_flow),
+                    from_lake: segment.from_lake || duplicate.from_lake, // if one is from a lake, then both are from a lake
                 });
                 // put the merged back on the queue for the next processing.
                 segment_clean_queue.push(merged);

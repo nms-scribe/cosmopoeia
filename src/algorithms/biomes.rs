@@ -80,7 +80,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
     
         };
 
-        if let Some(mut tile) = tiles_layer.feature_by_id(&tile.fid) {
+        if let Some(mut tile) = tiles_layer.feature_by_id(tile.fid) {
 
             tile.set_biome(&biome)?;
 

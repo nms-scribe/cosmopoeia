@@ -12,6 +12,7 @@ use crate::utils::Point;
 use crate::world_map::TypedFeature;
 use crate::utils::PolyBezier;
 use crate::commands::BezierScaleArg;
+use crate::world_map::TypedFeatureIterator;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -24,10 +25,10 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
 
         for i in 0..multipolygon.geometry_count() {
             let polygon = multipolygon.get_geometry(i);
-            for i in 0..polygon.geometry_count() {
-                let ring = polygon.get_geometry(i);
-                for i in 0..ring.point_count() {
-                    let vertex: Point = ring.get_point(i as i32).try_into()?;
+            for j in 0..polygon.geometry_count() {
+                let ring = polygon.get_geometry(j);
+                for k in 0..ring.point_count() {
+                    let vertex: Point = ring.get_point(k as i32).try_into()?;
                     match vertex_index.get_mut(&vertex) {
                         Some(entry) => *entry += 1,
                         None => {
@@ -40,10 +41,64 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     }
 
     let mut segment_cache: HashMap<Point, Vec<Vec<Point>>> = HashMap::new();
-    let mut polygon_segments = HashMap::new();
+    let read_features = ThemeType::read_features(&mut subject_layer);
+    let polygon_segments = break_segments::<ThemeType,_>(read_features, &vertex_index, &mut segment_cache, progress)?;
 
-    // break the ring into segments where the ends indicate intersections with the boundaries of other polygons.
-    for feature in ThemeType::read_features(&mut subject_layer).watch(progress,"Breaking segments.","Segments broken.") {
+    for value in segment_cache.values_mut().watch(progress, "Curvifying line segments.", "Line segments curvified.") {
+        for line in value {
+            // if this is a polygon, the polybezier stuff should automatically be curving based off the end points.
+            let bezier = PolyBezier::from_poly_line(line);
+            *line = bezier.to_poly_line(bezier_scale)?;
+        }
+    }
+
+    let layer = ThemeType::edit_theme_layer(target)?;
+
+    for multipolygon in polygon_segments.map.iter().watch(progress, "Writing reshaped polygons.", "Reshaped polygons written.") {
+        let mut multipolygon_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
+        let (fid,multipolygon) = multipolygon;
+        for polygon in multipolygon {
+            let mut polygon_geometry = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
+            for ring in polygon {
+                let mut ring_geometry = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
+
+                for UniqueSegment { point,index,reversed } in ring {
+                    let mut line = segment_cache.get(point).expect("Why wouldn't this key be here if we just inserted it?")[*index].clone();
+                    if *reversed {
+                        line.reverse();
+                    }
+                    for new_point in line {
+                        ring_geometry.add_point_2d(new_point.to_tuple());
+                    }
+                        
+                }
+                polygon_geometry.add_geometry(ring_geometry)?;
+            }
+            multipolygon_geometry.add_geometry(polygon_geometry)?;
+        }
+        let mut feature = layer.try_feature_by_id(*fid)?;
+        feature.set_geometry(multipolygon_geometry)?;
+        layer.update_feature(feature)?;
+
+    }
+
+
+    Ok(())
+}
+
+struct UniqueSegment {
+    point: Point,
+    index: usize,
+    reversed: bool
+}
+
+struct BrokenSegments {
+    map: HashMap<u64, Vec<Vec<Vec<UniqueSegment>>>>
+}
+
+fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, vertex_index: &HashMap<Point, i32>, segment_cache: &mut HashMap<Point, Vec<Vec<Point>>>, progress: &mut Progress) -> Result<BrokenSegments, CommandError> {
+    let mut polygon_segments = HashMap::new();
+    for feature in read_features.watch(progress,"Breaking segments.","Segments broken.") {
         let fid = feature.fid()?;
         let multipolygon = feature.geometry()?;
         let mut polygons = Vec::new();
@@ -69,8 +124,8 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                     let mut prev_share_count = vertex_index.get(&prev_vertex).expect("Why wouldn't this key be here if we just inserted it?");
                     let mut current_segment = vec![prev_vertex.clone()];
 
-                    for vertex in vertexes {
-                        let next_vertex = vertex?;
+                    for next_vertex in vertexes {
+                        let next_vertex = next_vertex?;
                         let next_share_count = vertex_index.get(&next_vertex).expect("Why wouldn't this key be here if we just inserted it?");
 
                         // a segment should break at all intersections:
@@ -114,7 +169,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                     if let Some(match_segments) = segment_cache.get(segment.last().expect("Why wouldn't this key be here if we just inserted it?")) { // look from last first, because it's the more likely we're matching the reversed order.
                         matched_id = find_segment_match(match_segments, &segment,true);
                     } 
-                    
+                
                     if matched_id.is_none() {
                         // nothing was found, so look through in the ordinary order, there's a small chance it might match.
                         if let Some(match_segments) = segment_cache.get(&segment[0]) {
@@ -137,7 +192,11 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                                 cache.len() - 1
                             },
                         };
-                        (point,index,false)
+                        UniqueSegment {
+                            point,
+                            index,
+                            reversed: false
+                        }
 
                     };
 
@@ -154,51 +213,13 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
 
         _ = polygon_segments.insert(fid, polygons);
     }
-
-    for value in segment_cache.values_mut().watch(progress, "Curvifying line segments.", "Line segments curvified.") {
-        for line in value {
-            // if this is a polygon, the polybezier stuff should automatically be curving based off the end points.
-            let bezier = PolyBezier::from_poly_line(line);
-            *line = bezier.to_poly_line(bezier_scale)?;
-        }
-    }
-
-    let layer = ThemeType::edit_theme_layer(target)?;
-
-    for multipolygon in polygon_segments.iter().watch(progress, "Writing reshaped polygons.", "Reshaped polygons written.") {
-        let mut multipolygon_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-        let (fid,multipolygon) = multipolygon;
-        for polygon in multipolygon {
-            let mut polygon_geometry = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
-            for ring in polygon {
-                let mut ring_geometry = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
-
-                for (point,index,reversed) in ring {
-                    let mut line = segment_cache.get(point).expect("Why wouldn't this key be here if we just inserted it?")[*index].clone();
-                    if *reversed {
-                        line.reverse();
-                    }
-                    for point in line {
-                        ring_geometry.add_point_2d(point.to_tuple());
-                    }
-                        
-                }
-                polygon_geometry.add_geometry(ring_geometry)?;
-            }
-            multipolygon_geometry.add_geometry(polygon_geometry)?;
-        }
-        let mut feature = layer.try_feature_by_id(fid)?;
-        feature.set_geometry(multipolygon_geometry)?;
-        layer.update_feature(feature)?;
-
-    }
-
-
-    Ok(())
+    Ok(BrokenSegments { 
+        map: polygon_segments
+    })
 }
 
-fn find_segment_match(match_segments: &[Vec<Point>], segment: &Vec<Point>, reverse: bool) -> Option<(Point, usize, bool)> {
-    for (i,match_segment) in match_segments.iter().enumerate() {
+fn find_segment_match(match_segments: &[Vec<Point>], segment: &Vec<Point>, reverse: bool) -> Option<UniqueSegment> {
+    for (index,match_segment) in match_segments.iter().enumerate() {
         if (!match_segment.is_empty()) && match_segment.len() == segment.len() {
             // search by reversed
             let matched = if reverse {
@@ -207,7 +228,11 @@ fn find_segment_match(match_segments: &[Vec<Point>], segment: &Vec<Point>, rever
                 match_segment.iter().eq(segment.iter())
             };
             if matched {
-                return Some((segment.last().expect("Why wouldn't last work if we know the len > 0?").clone(),i,true));
+                return Some(UniqueSegment {
+                    point: segment.last().expect("Why wouldn't last work if we know the len > 0?").clone(),
+                    index,
+                    reversed: true
+                });
             }
         }
     }

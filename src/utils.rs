@@ -1,6 +1,6 @@
-use std::hash::Hash;
-use std::str::FromStr;
-use std::fmt::Display;
+use core::hash::Hash;
+use core::str::FromStr;
+use core::fmt::Display;
 
 use ordered_float::NotNan;
 use ordered_float::FloatIsNan;
@@ -28,13 +28,13 @@ use crate::progress::WatchableIterator;
 use crate::commands::RandomSeedArg;
 use crate::commands::BezierScaleArg;
 
-pub(crate) fn random_number_generator(arg: RandomSeedArg) -> StdRng {
+pub(crate) fn random_number_generator(arg: &RandomSeedArg) -> StdRng {
     let seed = if let Some(seed) = arg.seed {
         seed
     } else {
         let mut seeder = StdRng::from_entropy();
         let seed = seeder.gen::<u64>();
-        println!("Using random seed {}",seed);
+        println!("Using random seed {seed}");
         seed
     };
     StdRng::seed_from_u64(seed)
@@ -138,15 +138,15 @@ impl Extent {
     pub(crate) fn new(west: f64, south: f64, east: f64, north: f64) -> Self {
         let width = east - west;
         let height = north - south;
-        Self {
-            west,
-            south,
-            width,
-            height
+        Self { 
+            height, 
+            width, 
+            south, 
+            west 
         }
     }
 
-    pub(crate) fn new_with_dimensions(west: f64, south: f64, width: f64, height: f64) -> Self {
+    pub(crate) const fn new_with_dimensions(west: f64, south: f64, width: f64, height: f64) -> Self {
         Self {
             height,
             width,
@@ -315,7 +315,7 @@ impl Point {
         (*self.x,*self.y)
     }
 
-    pub(crate) fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
+    pub(crate) const fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
         Self { x, y }
     }
 
@@ -325,10 +325,10 @@ impl Point {
 
     pub(crate) fn normalized(&self) -> Self {
         let length = (self.x * self.x + self.y * self.y).sqrt();
-        if length != 0.0 {
-            Point::new(self.x / length, self.y / length)
+        if length == 0.0 {
+            Self::new(NotNan::from(0), NotNan::from(0))
         } else {
-            Point::new(NotNan::from(0), NotNan::from(0))
+            Self::new(self.x / length, self.y / length)
         }
     }
 
@@ -342,7 +342,7 @@ impl Point {
 
     fn abs(&self) -> f64 {
         // the absolute value of a vector is it's distance from 0,0.
-        (self.x.powi(2) + self.y.powi(2)).sqrt()
+        self.x.hypot(self.y.into_inner())
     }
 
     pub(crate) fn perpendicular(&self, negate_second: bool) -> Self {
@@ -414,7 +414,7 @@ impl TryFrom<(f64,f64)> for Point {
     }
 }
 
-impl std::ops::Sub for &Point {
+impl core::ops::Sub for &Point {
     type Output = Point;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -425,7 +425,7 @@ impl std::ops::Sub for &Point {
     }
 }
 
-impl std::ops::Add for &Point {
+impl core::ops::Add for &Point {
     type Output = Point;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -461,8 +461,8 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: &BezierScaleArg) -> 
     for i in 0..geometry.geometry_count() {
         let ring = geometry.get_geometry(i);
         let mut points = Vec::new();
-        for i in 0..ring.point_count() {
-            let point = ring.get_point(i as i32).try_into()?;
+        for j in 0..ring.point_count() {
+            let point = ring.get_point(j as i32).try_into()?;
             points.push(point)
         }
 
@@ -658,7 +658,7 @@ impl PolyBezier {
     
         let tangents = start.iter().chain(tangents.iter()).chain(end.iter());
         // the tangents are normalized -- we just need the direction, not the distance, so this is a unit vector pointing the same direction.
-        let tangents = tangents.map(|u| u.normalized());
+        let tangents = tangents.map(Point::normalized);
         let tangents: Vec<Point> = tangents.collect();
     
         // Build Bezier curves
@@ -750,10 +750,10 @@ pub(crate) mod title_case {
             
             let mut first = true;
             for word in source.split(' ') {
-                if !first {
-                    write!(f," ")?;
-                } else {
+                if first {
                     first = false;
+                } else {
+                    write!(f," ")?;
                 }
                 let mut chars = word.chars();
                 if let Some(first_char) = chars.next() {
@@ -813,12 +813,12 @@ pub(crate) mod namers_pretty_print {
 
     impl<'indent> PrettyFormatter<'indent> {
         /// Construct a pretty printer formatter that defaults to using two spaces for indentation.
-        pub(crate) fn new() -> Self {
+        pub(crate) const fn new() -> Self {
             PrettyFormatter::with_indent(b"  ")
         }
 
         /// Construct a pretty printer formatter that uses the `indent` string for indentation.
-        pub(crate) fn with_indent(indent: &'indent [u8]) -> Self {
+        pub(crate) const fn with_indent(indent: &'indent [u8]) -> Self {
             PrettyFormatter {
                 current_indent: 0,
                 has_value: false,
@@ -1079,7 +1079,12 @@ pub(crate) mod point_finder {
         }
 
         pub(crate) fn add_point(&mut self, point: Point) -> Result<(),CommandError> {
-            self.inner.insert_at(point.to_tuple(),point.clone()).map_err(|_| CommandError::PointFinderOutOfBounds(point.x.into(),point.y.into()))
+            self.inner.insert_at(point.to_tuple(),point).map_err(|e|  {
+                match e {
+                    qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
+                }
+                
+            })
 
         }
 
@@ -1098,7 +1103,7 @@ pub(crate) mod point_finder {
 
         }
 
-        pub(crate) fn fill_from(other: &PointFinder, additional_size: usize) -> Result<Self,CommandError> {
+        pub(crate) fn fill_from(other: &Self, additional_size: usize) -> Result<Self,CommandError> {
             let bounds = other.bounds.clone();
             let capacity = other.capacity + additional_size;
             let mut result = Self {
@@ -1133,7 +1138,12 @@ pub(crate) mod point_finder {
         }
 
         pub(crate) fn add_tile(&mut self, point: Point, tile: u64) -> Result<(),CommandError> {
-            self.inner.insert_at(point.to_tuple(),(point.clone(),tile)).map_err(|_| CommandError::PointFinderOutOfBounds(point.x.into(),point.y.into()))
+            self.inner.insert_at(point.to_tuple(),(point,tile)).map_err(|e|  {
+                match e {
+                    qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
+                }
+                
+            })
 
         }
 
@@ -1266,17 +1276,17 @@ impl<NumberType: SampleUniform + PartialOrd + Copy + TruncOrSelf> ArgRange<Numbe
 
     pub(crate) fn choose<Random: Rng>(&self, rng: &mut Random) -> NumberType {
         match self  {
-            ArgRange::Inclusive(min,max) => rng.gen_range(*min..=*max),
-            ArgRange::Exclusive(min,max) => rng.gen_range(*min..*max),
-            ArgRange::Single(value) => *value,
+            Self::Inclusive(min,max) => rng.gen_range(*min..=*max),
+            Self::Exclusive(min,max) => rng.gen_range(*min..*max),
+            Self::Single(value) => *value,
         }
     }
 
     pub(crate) fn includes(&self, value: &NumberType) -> bool {
         match self {
-            ArgRange::Inclusive(min, max) => (value >= min) && (value <= max),
-            ArgRange::Exclusive(min, max) => (value >= min) && (value < max),
-            ArgRange::Single(value) => value.trunc_or_self() == value.trunc_or_self(),
+            Self::Inclusive(min, max) => (value >= min) && (value <= max),
+            Self::Exclusive(min, max) => (value >= min) && (value < max),
+            Self::Single(single) => single.trunc_or_self() == single.trunc_or_self(),
         }
     }
 }
@@ -1300,7 +1310,7 @@ impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>
         let value = StrOrNum::deserialize(deserializer)?;
         match value {
             StrOrNum::Str(deserialized) => deserialized.parse().map_err(|e: CommandError| serde::de::Error::custom(e.to_string())),
-            StrOrNum::Num(deserialized) => Ok(ArgRange::Single(deserialized)),
+            StrOrNum::Num(deserialized) => Ok(Self::Single(deserialized)),
         }
         
     }
@@ -1330,28 +1340,28 @@ impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> {
             let first = first.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
             let last = last.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
             if first > last {
-                Err(CommandError::InvalidRangeArgument(s.to_owned()))?
+                return Err(CommandError::InvalidRangeArgument(s.to_owned()))
             }
 
             Ok(if include_last {
-                ArgRange::Inclusive(first,last)
+                Self::Inclusive(first,last)
             } else {
-                ArgRange::Exclusive(first,last)
+                Self::Exclusive(first,last)
             })
         } else {
             let number = s.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            Ok(ArgRange::Single(number))
+            Ok(Self::Single(number))
         }
     }
 }
 
 impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
 
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ArgRange::Inclusive(min,max) => write!(f,"{}..={}",min,max),
-            ArgRange::Exclusive(min,max) => write!(f,"{}..{}",min,max),
-            ArgRange::Single(single) => write!(f,"{}",single),
+            Self::Inclusive(min,max) => write!(f,"{min}..={max}"),
+            Self::Exclusive(min,max) => write!(f,"{min}..{max}"),
+            Self::Single(single) => write!(f,"{single}"),
         }
     }
 }

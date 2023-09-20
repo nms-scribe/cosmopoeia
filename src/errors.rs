@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt::Display;
+use core::fmt::Display;
 
 pub(crate) use gdal::errors::GdalError;
 use gdal::raster::GdalDataType;
@@ -81,55 +81,55 @@ impl<OkType> MissingErrorToOption<OkType> for Result<OkType,CommandError> {
 }
 
 impl Display for CommandError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::GdalError(a) => write!(f,"gdal: {}",a),
+            Self::GdalError(a) => write!(f,"gdal: {a}"),
             Self::VoronoiExpectsPolygons => write!(f,"Voronoi input data should be polygons."),
             Self::VoronoiExpectsTriangles => write!(f,"Voronoi input polygons should be triangles."),
             Self::FloatIsNan => write!(f,"A float was not a number."),
-            Self::MissingField(a) => write!(f,"While loading data, a record had no value for '{}'",a),
-            Self::MissingGeometry(a) => write!(f,"While loading data, a record had no geometry in '{}'",a),
-            Self::MissingFeature(layer, id) => write!(f,"Layer '{}' has no feature id '{}'",layer,id),
-            Self::InvalidValueForIdList(a) => write!(f,"Invalid value ('{}') found for id_list field.",a),
-            Self::InvalidValueForNeighborDirections(a) => write!(f,"Invalid value ('{}') found for neighbors field",a),
-            Self::InvalidValueForIdRef(a) => write!(f,"Invalid value ('{}') an id reference field",a),
-            Self::InvalidValueForSegmentFrom(a) => write!(f,"Invalid value ('{}') found for river from_type field.",a),
-            Self::InvalidValueForSegmentTo(a) => write!(f,"Invalid value ('{}') found for river to_type field.",a),
-            Self::InvalidBiomeMatrixValue(a) => write!(f,"Invalid value ('{}') for biome matrix field.",a),
-            Self::InvalidValueForLakeType(a) => write!(f,"Invalid value ('{}') for lake type field.",a),
-            Self::InvalidValueForGroupingType(a) => write!(f,"Invalid value ('{}') for grouping type field.",a),
-            Self::InvalidValueForCultureType(a) => write!(f,"Invalid value ('{}') for culture type field.",a),
+            Self::MissingField(a) => write!(f,"While loading data, a record had no value for '{a}'"),
+            Self::MissingGeometry(a) => write!(f,"While loading data, a record had no geometry in '{a}'"),
+            Self::MissingFeature(layer, id) => write!(f,"Layer '{layer}' has no feature id '{id}'"),
+            Self::InvalidValueForIdList(a) => write!(f,"Invalid value ('{a}') found for id_list field."),
+            Self::InvalidValueForNeighborDirections(a) => write!(f,"Invalid value ('{a}') found for neighbors field"),
+            Self::InvalidValueForIdRef(a) => write!(f,"Invalid value ('{a}') an id reference field"),
+            Self::InvalidValueForSegmentFrom(a) => write!(f,"Invalid value ('{a}') found for river from_type field."),
+            Self::InvalidValueForSegmentTo(a) => write!(f,"Invalid value ('{a}') found for river to_type field."),
+            Self::InvalidBiomeMatrixValue(a) => write!(f,"Invalid value ('{a}') for biome matrix field."),
+            Self::InvalidValueForLakeType(a) => write!(f,"Invalid value ('{a}') for lake type field."),
+            Self::InvalidValueForGroupingType(a) => write!(f,"Invalid value ('{a}') for grouping type field."),
+            Self::InvalidValueForCultureType(a) => write!(f,"Invalid value ('{a}') for culture type field."),
             Self::MissingGlacierBiome => write!(f,"Glacier biome is not specified as criteria in biomes table."),
             Self::MissingWetlandBiome => write!(f,"Wetland biome is not specified as criteria in biomes table."),
             Self::MissingOceanBiome => write!(f,"Ocean biome is not specified as criteria in biomes table."),
-            Self::MissingBiomeMatrixSlot(a, b) => write!(f,"Matrix criteria at ({},{}) not specified in biome table.",a,b),
+            Self::MissingBiomeMatrixSlot(a, b) => write!(f,"Matrix criteria at ({a},{b}) not specified in biome table."),
             Self::DuplicateGlacierBiome => write!(f,"Glacier biome is specified twice in biomes table."),
             Self::DuplicateWetlandBiome => write!(f,"Wetland biome is specified twice in biomes table."),
             Self::DuplicateOceanBiome => write!(f,"Ocean biome is specified twice in biomes table."),
-            Self::DuplicateBiomeMatrixSlot(a, b) => write!(f,"Matrix criteria at ({},{}) specified twice in biome table.",a,b),
-            Self::UnknownLookup(a,b) => write!(f,"Layer '{}' has no feature with the name '{}'.",a,b),
-            Self::UnknownNamer(a) => write!(f,"Namer '{}' not found in supplied name generators.",a),
-            Self::NamerSourceRead(a) => write!(f,"Error reading namer source: {}",a),
-            Self::NamerSourceWrite(a) => write!(f,"Error writing namer source: {}",a),
-            Self::CultureSourceRead(a) => write!(f,"Error reading culture source: {}",a),
-            Self::CultureSourceWrite(a) => write!(f,"Error writing culture source: {}",a),
-            Self::PointFinderOutOfBounds(a, b) => write!(f,"An out of bounds point ({},{}) was added to a point finder",a,b),
+            Self::DuplicateBiomeMatrixSlot(a, b) => write!(f,"Matrix criteria at ({a},{b}) specified twice in biome table."),
+            Self::UnknownLookup(a,b) => write!(f,"Layer '{a}' has no feature with the name '{b}'."),
+            Self::UnknownNamer(a) => write!(f,"Namer '{a}' not found in supplied name generators."),
+            Self::NamerSourceRead(a) => write!(f,"Error reading namer source: {a}"),
+            Self::NamerSourceWrite(a) => write!(f,"Error writing namer source: {a}"),
+            Self::CultureSourceRead(a) => write!(f,"Error reading culture source: {a}"),
+            Self::CultureSourceWrite(a) => write!(f,"Error writing culture source: {a}"),
+            Self::PointFinderOutOfBounds(a, b) => write!(f,"An out of bounds point ({a},{b}) was added to a point finder"),
             Self::CantFindMiddlePoint(a, b, len) => match len {
-                0 => write!(f,"Can't find middle point between tiles {} and {}. No matching points found.",a,b),
-                1 => write!(f,"Can't find middle point between tiles {} and {}. One matching point found.",a,b),
-                len => write!(f,"Can't find middle point between tiles {} and {}. {len} matching points found, need 2.",a,b),
+                0 => write!(f,"Can't find middle point between tiles {a} and {b}. No matching points found."),
+                1 => write!(f,"Can't find middle point between tiles {a} and {b}. One matching point found."),
+                len => write!(f,"Can't find middle point between tiles {a} and {b}. {len} matching points found, need 2."),
             },
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
-            Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({}) is not supported",a),
-            Self::MaxElevationMustBePositive(a) => write!(f,"maximum elevation {} must be positive",a),
-            Self::MinElevationMustBeLess(a, b) => write!(f,"minimum elevation {} must be less than maximum {}",a,b),
-            Self::RecipeFileRead(a) => write!(f,"Error reading recipe file: {}",a),
-            Self::TerrainProcessWrite(a)  => write!(f,"Error serializing terrain process: {}",a),
-            Self::InvalidPropertyValue(a,b) => write!(f,"Invalid value for property {} ('{}')",a,b),
-            Self::PropertyNotSet(a) => write!(f,"Property {} has not been set.",a),
-            Self::InvalidRangeArgument(a) => write!(f,"Invalid range expression '{}' in terrain processing parameters.",a),
+            Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({a}) is not supported"),
+            Self::MaxElevationMustBePositive(a) => write!(f,"maximum elevation {a} must be positive"),
+            Self::MinElevationMustBeLess(a, b) => write!(f,"minimum elevation {a} must be less than maximum {b}"),
+            Self::RecipeFileRead(a) => write!(f,"Error reading recipe file: {a}"),
+            Self::TerrainProcessWrite(a)  => write!(f,"Error serializing terrain process: {a}"),
+            Self::InvalidPropertyValue(a,b) => write!(f,"Invalid value for property {a} ('{b}')"),
+            Self::PropertyNotSet(a) => write!(f,"Property {a} has not been set."),
+            Self::InvalidRangeArgument(a) => write!(f,"Invalid range expression '{a}' in terrain processing parameters."),
             Self::CantFindTileNearPoint => write!(f,"No tile was found close to a supplied point, even at max expansion."),
-            Self::EmptyNamerInput(a) => write!(f,"Namer '{}' data did not contain any words.",a),
+            Self::EmptyNamerInput(a) => write!(f,"Namer '{a}' data did not contain any words."),
             Self::TilePreferenceMultiplyMissingData => write!(f,"Tile preference multiplication in culture set needs at least one term"),
             Self::TilePreferenceDivideMissingData => write!(f,"Tile preference division in culture set needs at least one term"),
             Self::TilePreferenceAddMissingData => write!(f,"Tile preference addition in culture set needs at least one term"),
@@ -166,10 +166,10 @@ impl Error for ProgramError {
 
 impl Display for ProgramError {
 
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::ArgumentError(a) => write!(f,"{}",a),
-            Self::CommandError(a) => write!(f,"{}",a),
+            Self::ArgumentError(a) => write!(f,"{a}"),
+            Self::CommandError(a) => write!(f,"{a}"),
         }
     }
 }

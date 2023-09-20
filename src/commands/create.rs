@@ -20,7 +20,7 @@ use crate::world_map::ElevationLimits;
 use crate::world_map::WorldMapTransaction;
 use crate::commands::TargetArg;
 use crate::commands::ElevationSourceArg;
-use crate::commands::terrain::TerrainCommand;
+use crate::commands::terrain::Command as TerrainCommand;
 use crate::commands::ElevationLimitsArg;
 use crate::commands::TileCountArg;
 use crate::commands::RandomSeedArg;
@@ -55,9 +55,9 @@ impl Task for CreateCalcNeighbors {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(target, progress)
+            Self::run_with_parameters(transaction, progress)
 
         })?;
 
@@ -73,19 +73,10 @@ pub(crate) struct LoadedSource {
     post_processes: Vec<TerrainTask>
 }
 
-pub(crate) trait LoadCreateSource {
+pub(crate) trait LoadSource {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError>;
 
-}
-
-trait LoadedCreateSource {
-
-    fn load_extents(&self) -> Extent;
-
-    fn load_limits(&self) -> ElevationLimits;
-
-    fn into_post_processes(self) -> Option<Vec<TerrainTask>>;
 }
 
 #[derive(Args)]
@@ -112,7 +103,7 @@ subcommand_def!{
     }
 }
 
-impl LoadCreateSource for FromHeightmap {
+impl LoadSource for FromHeightmap {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
         progress.announce(&format!("Loading {}",self.heightmap_arg.source.to_string_lossy()));
@@ -180,7 +171,7 @@ subcommand_def!{
     }
 }
 
-impl LoadCreateSource for Blank {
+impl LoadSource for Blank {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
 
@@ -212,17 +203,17 @@ impl LoadCreateSource for Blank {
 #[command(subcommand_value_name="SOURCE")]
 #[command(subcommand_help_heading("Sources"))]
 #[command(disable_help_subcommand(true))]
-pub enum CreateSource {
+pub enum Source {
     FromHeightmap(FromHeightmap),
     Blank(Blank)
 }
 
-impl LoadCreateSource for CreateSource {
+impl LoadSource for Source {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
         match self {
-            CreateSource::FromHeightmap(source) => source.load(random,progress),
-            CreateSource::Blank(source) => source.load(random,progress),
+            Self::FromHeightmap(source) => source.load(random,progress),
+            Self::Blank(source) => source.load(random,progress),
         }
     }
 
@@ -246,7 +237,7 @@ subcommand_def!{
         pub overwrite_tiles_arg: OverwriteTilesArg,
 
         #[command(subcommand)]
-        pub source: CreateSource,
+        pub source: Source,
 
     }
 }
@@ -268,15 +259,15 @@ impl Task for CreateTiles {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let loaded_source = self.source.load(&mut random, progress)?;
 
         let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(loaded_source.extent, &loaded_source.limits, &self.tile_count_arg, &self.overwrite_tiles_arg, &mut random, target, progress)
+            Self::run_with_parameters(loaded_source.extent, &loaded_source.limits, &self.tile_count_arg, &self.overwrite_tiles_arg, &mut random, transaction, progress)
 
         })?;
 
@@ -303,7 +294,7 @@ subcommand_def!{
         pub overwrite_tiles_arg: OverwriteTilesArg,
 
         #[command(subcommand)]
-        pub source: CreateSource,
+        pub source: Source,
 
     }
 }
@@ -313,7 +304,7 @@ impl Task for Create {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed_arg);
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
@@ -326,12 +317,12 @@ impl Task for Create {
 
 impl Create {
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: &TileCountArg, overwrite_tiles: &OverwriteTilesArg, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
-            CreateTiles::run_with_parameters(loaded_source.extent, &loaded_source.limits, tiles, overwrite_tiles, random, target, progress)?;
+        target.with_transaction(|transaction| {
+            CreateTiles::run_with_parameters(loaded_source.extent, &loaded_source.limits, tiles, overwrite_tiles, random, transaction, progress)?;
 
-            CreateCalcNeighbors::run_with_parameters(target, progress)?;
+            CreateCalcNeighbors::run_with_parameters(transaction, progress)?;
 
-            TerrainTask::process_terrain(&loaded_source.post_processes, random, target,progress)?;
+            TerrainTask::process_terrain(&loaded_source.post_processes, random, transaction,progress)?;
 
             Ok(())
 

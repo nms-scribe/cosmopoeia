@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use core::cmp::Reverse;
 use std::collections::HashMap;
 
 use priority_queue::PriorityQueue;
@@ -79,11 +79,11 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
             };
             let color = nation.color.clone();
 
-            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or(CultureType::Generic);
+            let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
 
             let seat_town_id = Some(*seat);
 
-            _ = subnations.add_subnation(NewSubnation {
+            _ = subnations.add_subnation(&NewSubnation {
                 name,
                 culture,
                 center_tile_id,
@@ -129,10 +129,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
         for (neighbor_id,_) in &tile.neighbors {
             let neighbor = tile_map.try_get(neighbor_id)?;
 
-            let total_cost = match subnation_expansion_cost(neighbor, &subnation, priority) {
-                Some(value) => value,
-                None => continue,
-            };
+            let Some(total_cost) = subnation_expansion_cost(neighbor, &subnation, priority) else { continue };
 
             if total_cost.0 <= max {
 
@@ -158,21 +155,21 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
         }
     
-        for (tile_id,subnation_id) in place_subnations {
-            let tile = tile_map.try_get_mut(&tile_id)?;
-            tile.subnation_id = Some(subnation_id);
+        for (place_tile_id,subnation_id) in place_subnations {
+            let place_tile = tile_map.try_get_mut(&place_tile_id)?;
+            place_tile.subnation_id = Some(subnation_id);
         }
 
 
 
     }
 
-    let tile_layer = target.edit_tile_layer()?;
+    let tile_layer_update = target.edit_tile_layer()?;
 
     for (fid,tile) in tile_map.into_iter().watch(progress,"Writing subnations.","Subnations written.") {
-        let mut feature = tile_layer.try_feature_by_id(&fid)?;
+        let mut feature = tile_layer_update.try_feature_by_id(fid)?;
         feature.set_subnation_id(tile.subnation_id)?;
-        tile_layer.update_feature(feature)?;
+        tile_layer_update.update_feature(feature)?;
     }
 
 
@@ -181,10 +178,10 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 }
 
 pub(crate) fn subnation_max_cost<Random: Rng>(rng: &mut Random, subnation_percentage: f64) -> f64 {
-    if subnation_percentage == 100.0 {
+    if (subnation_percentage - 100.0).abs() < f64::EPSILON {
         1000.0
     } else {
-        Normal::new(20.0f64,5.0f64).expect("Why would these constants fail if they naver have before?").sample(rng).clamp(5.0,100.0) * subnation_percentage.powf(0.5)
+        Normal::new(20.0f64,5.0f64).expect("Why would these constants fail if they naver have before?").sample(rng).clamp(5.0,100.0) * subnation_percentage.sqrt()
     }
 }
 
@@ -253,7 +250,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                 let culture = tile.culture.as_ref().or_else(|| nation.culture.as_ref()).cloned();
                 let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
 
-                let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or(CultureType::Generic);
+                let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
 
                 let nation_id = nation.fid;
                 let color = nation.color.clone();
@@ -265,25 +262,26 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                     nation_id,
                 };
 
-
-
                 _ = tile_subnation_changes.insert(tile_id, subnation.fid);
+                
                 let mut costs = HashMap::new();
                 _ = costs.insert(tile_id, OrderedFloat::from(1.0));
+                
                 let mut queue = PriorityQueue::new();
                 _ = queue.push(tile_id,Reverse(OrderedFloat::from(0.0)));
-                while let Some((tile_id,priority)) = queue.pop() {
-                    let tile = tile_map.try_get(&tile_id)?;
+
+                while let Some((expand_tile_id,priority)) = queue.pop() {
+                    let expand_tile = tile_map.try_get(&expand_tile_id)?;
                     // check if we've got a seat, or a better one.
-                    match (tile.town_id,seat) {
-                        (Some(town_id),None) => seat = Some((town_id,tile.population)),
-                        (Some(new_town_id),Some((_,old_population))) if tile.population > old_population => {
-                            seat = Some((new_town_id,tile.population))
+                    match (expand_tile.town_id,seat) {
+                        (Some(town_id),None) => seat = Some((town_id,expand_tile.population)),
+                        (Some(new_town_id),Some((_,old_population))) if expand_tile.population > old_population => {
+                            seat = Some((new_town_id,expand_tile.population))
                         },
                         (Some(_),Some(_)) | (None,_) => {}
                     }
 
-                    for (neighbor_id,_) in &tile.neighbors {
+                    for (neighbor_id,_) in &expand_tile.neighbors {
 
                         if nation_tiles.get(neighbor_id).is_none() {
                             // we've already placed this in another subnation, or it wasn't available.
@@ -337,9 +335,9 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
                 let seat_town_id = seat.map(|(id,_)| id);
 
-                let name = if let (Some(seat),true) = (seat_town_id,rng.gen_bool(0.5)) {
+                let name = if let (Some(seat_town_id),true) = (seat_town_id,rng.gen_bool(0.5)) {
                     // name by town
-                    let town = town_map.try_get(&seat)?;
+                    let town = town_map.try_get(&seat_town_id)?;
                     town.name.clone()
                 } else {
                     // new name by culture
@@ -371,7 +369,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
     let mut subnations_layer = target.edit_subnations_layer()?;
 
     for (temp_id,subnation) in new_subnations.into_iter().watch(progress, "Writing new subnations.", "New subnations written.") {
-        let real_id = subnations_layer.add_subnation(subnation)?;
+        let real_id = subnations_layer.add_subnation(&subnation)?;
         _ = assigned_ids.insert(temp_id, real_id);
     }
 
@@ -379,7 +377,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
     for (tile_id,temp_subnation_id) in tile_subnation_changes.into_iter().watch(progress,"Writing new subnations to tiles.","New subnations written to tiles.") {
 
-        let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
+        let mut tile = tiles_layer.try_feature_by_id(tile_id)?;
 
         let real_id = assigned_ids.get(&temp_subnation_id).expect("How would we use an id that we didn't add to the map?");
 
@@ -431,15 +429,15 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
             let neighbor = tile_map.try_get(neighbor_id)?;
 
             if neighbor.nation_id == tile.nation_id {
-                if neighbor.subnation_id != tile.subnation_id {
+                if neighbor.subnation_id == tile.subnation_id {
+                    buddy_count += 1;
+                } else {
                     if let Some(count) = adversaries.get(&neighbor.subnation_id) {
                         _ = adversaries.insert(neighbor.subnation_id, count + 1)
                     } else {
                         _ = adversaries.insert(neighbor.subnation_id, 1)
                     };
                     adversary_count += 1;
-                } else {
-                    buddy_count += 1;
                 }
             }
 
@@ -459,9 +457,9 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
         if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
             if count > buddy_count {
-                let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
-                tile.set_subnation_id(worst_adversary)?;
-                tiles_layer.update_feature(tile)?    
+                let mut change_tile = tiles_layer.try_feature_by_id(tile_id)?;
+                change_tile.set_subnation_id(worst_adversary)?;
+                tiles_layer.update_feature(change_tile)?    
             }
 
         }

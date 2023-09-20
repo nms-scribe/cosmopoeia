@@ -50,9 +50,9 @@ impl Task for Coastline {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_all_ocean_arg.overwrite_coastline(), &self.overwrite_all_ocean_arg.overwrite_ocean(), target, progress)
+            Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_all_ocean_arg.overwrite_coastline(), &self.overwrite_all_ocean_arg.overwrite_ocean(), transaction, progress)
         })?;
 
         target.save(progress)
@@ -89,8 +89,8 @@ impl Task for Flow {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        _ = target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        _ = target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -137,8 +137,8 @@ impl Task for Lakes {
 
         let water_flow_result = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(water_flow_result, &self.bezier_scale_arg, &self.buffer_scale_arg, &self.overwrite_lakes_arg, target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(water_flow_result, &self.bezier_scale_arg, &self.buffer_scale_arg, &self.overwrite_lakes_arg, transaction, progress)
 
         })?;
 
@@ -177,8 +177,8 @@ impl Task for Rivers {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_rivers_arg, progress, target)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_rivers_arg, progress, transaction)
         })?;
 
         target.save(progress)
@@ -214,8 +214,8 @@ impl Task for ShoreDistance {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -250,8 +250,8 @@ impl Task for Grouping {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        target.with_transaction(|target| {
-            Self::run_with_parameters(target, progress)
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, progress)
         })?;
 
         target.save(progress)
@@ -342,19 +342,19 @@ impl Task for GenWater {
 
 impl GenWater {
     pub(crate) fn run_default<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_coastline: &OverwriteCoastlineArg, overwrite_ocean: &OverwriteOceanArg, overwrite_lakes: &OverwriteLakesArg, overwrite_rivers: &OverwriteRiversArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|target| {
+        target.with_transaction(|transaction| {
         
-            Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, target, progress)?;
+            Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, transaction, progress)?;
 
-            let water_flow_result = Flow::run_with_parameters(target, progress)?;
+            let water_flow_result = Flow::run_with_parameters(transaction, progress)?;
 
-            Lakes::run_with_parameters(water_flow_result, bezier_scale, lake_buffer_scale, overwrite_lakes, target, progress)?;
+            Lakes::run_with_parameters(water_flow_result, bezier_scale, lake_buffer_scale, overwrite_lakes, transaction, progress)?;
 
-            Rivers::run_with_parameters(bezier_scale, overwrite_rivers, progress, target)?;
+            Rivers::run_with_parameters(bezier_scale, overwrite_rivers, progress, transaction)?;
 
-            ShoreDistance::run_with_parameters(target, progress)?;
+            ShoreDistance::run_with_parameters(transaction, progress)?;
 
-            Grouping::run_with_parameters(target, progress)
+            Grouping::run_with_parameters(transaction, progress)
         
         })?;
         

@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use core::cmp::Reverse;
 use std::collections::HashSet;
 use std::collections::HashMap;
 
@@ -46,10 +46,10 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
             let namer = Culture::get_namer(culture_data, namers)?;
             let name = namer.make_state_name(rng);
-            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or(CultureType::Generic);
+            let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
             let center_tile_id = town.tile_id;
             let capital_town_id = town.fid;
-            let expansionism = rng.gen_range(0.1..1.0) * size_variance.size_variance + 1.0;
+            let expansionism = rng.gen_range(0.1f64..1.0f64).mul_add(size_variance.size_variance, 1.0);
             nations.push(NewNation {
                 name,
                 center_tile_id,
@@ -72,7 +72,7 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
 
     let mut nations_layer = target.create_nations_layer(overwrite_layer)?;
     for nation in nations.into_iter().watch(progress,"Writing nations.","Nations written.") {
-        _ = nations_layer.add_nation(nation)?;
+        _ = nations_layer.add_nation(&nation)?;
     }
 
     Ok(())
@@ -99,7 +99,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let mut capitals = HashSet::new();
 
-    let max_expansion_cost = OrderedFloat::from((tiles.feature_count() / 2) as f64 * limit_factor.expansion_factor);
+    let max_expansion_cost = OrderedFloat::from((tiles.feature_count() as f64 / 2.0) * limit_factor.expansion_factor);
 
     for nation in nations {
 
@@ -187,9 +187,9 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         }
 
-        for (tile_id,nation_id) in place_nations {
-            let tile = tile_map.try_get_mut(&tile_id)?;
-            tile.nation_id = Some(nation_id);
+        for (place_tile_id,nation_id) in place_nations {
+            let place_tile = tile_map.try_get_mut(&place_tile_id)?;
+            place_tile.nation_id = Some(nation_id);
         }
 
 
@@ -197,7 +197,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing nations.","Nations written.") {
 
-        let mut feature = tiles.try_feature_by_id(fid)?;
+        let mut feature = tiles.try_feature_by_id(*fid)?;
 
         feature.set_nation_id(tile.nation_id)?;
 
@@ -209,11 +209,10 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     Ok(())
 }
 
-pub(crate) fn get_shore_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
+pub(crate) const fn get_shore_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
     match culture_type {
         CultureType::Lake => match neighbor.shore_distance {
-            1 => 0.0,
-            2 => 0.0, 
+            2 | 1 => 0.0, 
             ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
             -1 => 0.0,
         },
@@ -226,32 +225,23 @@ pub(crate) fn get_shore_cost(neighbor: &TileForNationExpand, culture_type: &Cult
         CultureType::Nomadic => match neighbor.shore_distance {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
         CultureType::Generic  => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
         CultureType::River => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
         CultureType::Hunting => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0,
+            -1 | ..=-2 | 0 | 2.. => 0.0,
         },
         CultureType::Highland => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
     }
 
@@ -279,7 +269,7 @@ pub(crate) fn get_river_cost(neighbor: &TileForNationExpand, river_threshold: f6
     }
 }
 
-pub(crate) fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
+pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
     // This is similar to the way cultures work, but not exactly.
     match culture_type {
         CultureType::Lake => if neighbor.lake_id.is_some() {
@@ -309,17 +299,6 @@ pub(crate) fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &Cul
         } else {
             0.0
         },
-        CultureType::Nomadic => if neighbor.grouping.is_water() {
-            1000.0
-        } else if neighbor.elevation_scaled >= 67 {
-            // mountain crossing penalty
-            2200.0 
-        } else if neighbor.elevation_scaled > 44 {
-            // hill crossing penalt
-            300.0
-        } else {
-            0.0
-        },
         CultureType::Highland => if neighbor.grouping.is_water() {
             // general sea/lake corssing penalty
             1000.0
@@ -330,6 +309,7 @@ pub(crate) fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &Cul
             // no penalty in highlands
             0.0
         },
+        CultureType::Nomadic |
         CultureType::Generic |
         CultureType::River |
         CultureType::Hunting => if neighbor.grouping.is_water() {
@@ -413,15 +393,15 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
             }
 
             if !neighbor.grouping.is_water() {
-                if neighbor.nation_id != tile.nation_id {
+                if neighbor.nation_id == tile.nation_id {
+                    buddy_count += 1;
+                } else {
                     if let Some(count) = adversaries.get(&neighbor.nation_id) {
                         _ = adversaries.insert(neighbor.nation_id, count + 1);
                     } else {
                         _ = adversaries.insert(neighbor.nation_id, 1);
                     };
                     adversary_count += 1;
-                } else {
-                    buddy_count += 1;
                 }
             }
 
@@ -445,9 +425,9 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
 
         if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
             if count > buddy_count {
-                let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
-                tile.set_nation_id(worst_adversary)?;
-                tiles_layer.update_feature(tile)?    
+                let mut change_tile = tiles_layer.try_feature_by_id(tile_id)?;
+                change_tile.set_nation_id(worst_adversary)?;
+                tiles_layer.update_feature(change_tile)?    
             }
 
         }

@@ -45,7 +45,7 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
 
     let extent = tiles_layer.get_extent()?;
 
-    let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, &town_counts.capital_count, progress);
+    let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, town_counts.capital_count, progress);
 
     let towns = place_towns(rng, &mut tiles, &extent, &town_counts.town_count, tiles_layer.feature_count(), &capitals_finder, progress)?;
 
@@ -59,14 +59,15 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
         let culture = tile.culture;
         let namer = Culture::get_namer(culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?, namers)?;
         let name = namer.make_name(rng);
-        let fid = towns_layer.add_town(NewTown {
-            geometry: tile.site.create_geometry()?,
+        let fid = towns_layer.add_town(&NewTown {
             name,
             culture,
             is_capital,
             tile_id: tile.fid,
-            grouping_id: tile.grouping_id
-        })?;
+            grouping_id: tile.grouping_id,
+            population: 0,
+            is_port: false
+        },tile.site.create_geometry()?)?;
         _ = placed_towns.insert(tile.fid,fid); 
     }
 
@@ -74,14 +75,14 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
     // where I want to easily figure out if a tile has a town, so write that there as well.
     // FUTURE: If the user re-writes the towns with a different seed, there's going to be erroneous data in tiles.
     // Maybe delete it.
-    let mut tiles_layer = target.edit_tile_layer()?;
+    let mut editing_tiles_layer = target.edit_tile_layer()?;
     // I have to update all tiles, otherwise we might have erroneous data from a previous run.
-    let tiles: Vec<u64> = tiles_layer.read_features().watch(progress,"Reading tiles.","Tiles read.").map(|f| f.fid()).collect::<Result<Vec<_>,_>>()?;
-    for fid in tiles {
+    let editing_tiles: Vec<u64> = editing_tiles_layer.read_features().watch(progress,"Reading tiles.","Tiles read.").map(|f| f.fid()).collect::<Result<Vec<_>,_>>()?;
+    for fid in editing_tiles {
         let town = placed_towns.get(&fid);
-        let mut tile = tiles_layer.try_feature_by_id(&fid)?;
+        let mut tile = editing_tiles_layer.try_feature_by_id(fid)?;
         tile.set_town_id(town.copied())?;
-        tiles_layer.update_feature(tile)?;
+        editing_tiles_layer.update_feature(tile)?;
     }
 
     Ok(())
@@ -98,14 +99,14 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             if tiles.is_empty() {
                 progress.warning(|| "There aren't enough populated cells left to generate any towns.")
             } else {
-                progress.warning(|| format!("There aren't enough populated cells to generate the requested number of towns. Only {} towns will be generated.",reduced_town_count))
+                progress.warning(|| format!("There aren't enough populated cells to generate the requested number of towns. Only {reduced_town_count} towns will be generated."))
             }
             reduced_town_count
         } else {
             *town_count
         }
     } else {
-        tiles.len() / 5 / ((total_tiles_count / 10000) as f64).powf(0.8).round() as usize
+        tiles.len().div_euclid(5).div_euclid((total_tiles_count as f64 / 10000.0).powf(0.8).round() as usize)
     };
 
     let mut spacing = (extent.width + extent.height) / 150.0 / ((town_count as f64).powf(0.7)/66.0);
@@ -117,7 +118,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             towns_finder = PointFinder::fill_from(&capitals_finder,town_count)?;
             towns = vec![];
             town_cultures = HashSet::new();
-            tiles.sort_by_key(|ScoredTileForTowns{town_score,..}| std::cmp::Reverse(*town_score));
+            tiles.sort_by_key(|ScoredTileForTowns{town_score,..}| core::cmp::Reverse(*town_score));
         };
     }
 
@@ -128,11 +129,11 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     loop {
         // can't use a for loop, because the range changes
         let i = 0;
-        progress.start_known_endpoint(|| (format!("Placing towns at spacing {}",spacing),town_count));
+        progress.start_known_endpoint(|| (format!("Placing towns at spacing {spacing}"),town_count));
         while (i < tiles.len()) && (towns.len() < town_count) {
-            let entry = &tiles[i];
+            let candidate = &tiles[i];
             let s = spacing * town_spacing_normal.sample(rng).clamp(0.2,2.0);
-            if !towns_finder.points_in_target(&entry.tile.site, s) {
+            if !towns_finder.points_in_target(&candidate.tile.site, s) {
                 let entry = tiles.remove(i);
                 _ = town_cultures.insert(entry.tile.culture.clone());
                 towns.push((entry,false)); // true means it's a capital
@@ -160,22 +161,22 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     Ok(towns)
 }
 
-pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: &usize, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
+pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: usize, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
     let mut capitals_finder;
     let mut capitals;
     let mut capital_cultures;
 
 
     let capital_count = if tiles.len() < (capital_count * 10) {
-        let capital_count = tiles.len() / 10;
-        if capital_count == 0 {
+        let fixed_capital_count = tiles.len().div_euclid(10);
+        if fixed_capital_count == 0 {
             progress.warning(|| "There aren't enough populated cells to generate national capitals. Other towns will still be generated.")
         } else {
-            progress.warning(|| format!("There aren't enough populated cells to generate the requested number of national capitals. Only {} capitals will be generated.",capital_count))
+            progress.warning(|| format!("There aren't enough populated cells to generate the requested number of national capitals. Only {fixed_capital_count} capitals will be generated."))
         }
-        capital_count
+        fixed_capital_count
     } else {
-        *capital_count
+        capital_count
     };
 
     let mut spacing = (extent.width + extent.height) / 2.0 / capital_count as f64;
@@ -187,7 +188,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
             capitals = vec![];
             capital_cultures = HashSet::new();
             // sort the tiles so highest scores is at 0
-            tiles.sort_by_key(|ScoredTileForTowns{capital_score,..}| std::cmp::Reverse(*capital_score));
+            tiles.sort_by_key(|ScoredTileForTowns{capital_score,..}| core::cmp::Reverse(*capital_score));
         };
     }
 
@@ -197,10 +198,10 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
     loop {
         // can't use a for loop, because the range changes
         let i = 0;
-        progress.start_known_endpoint(|| (format!("Placing capitals at spacing {}",spacing),capital_count));
+        progress.start_known_endpoint(|| (format!("Placing capitals at spacing {spacing}"),capital_count));
         while (i < tiles.len()) && (capitals.len() < capital_count) {
-            let entry = &tiles[i];
-            if !capitals_finder.points_in_target(&entry.tile.site, spacing) {
+            let candidate = &tiles[i];
+            if !capitals_finder.points_in_target(&candidate.tile.site, spacing) {
                 let entry = tiles.remove(i);
                 _ = capital_cultures.insert(entry.tile.culture.clone());
                 capitals.push((entry,true)); // true means it's a capital
@@ -232,7 +233,7 @@ pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rn
     for tile in tiles_layer.read_features().into_entities::<TileForTowns>().watch(progress, "Reading tiles.", "Tiles read.") {
         let (_,tile) = tile?;
         if tile.habitability > 0.0 {
-            let capital_score = tile.habitability * (0.5 + rng.gen_range(0.0..1.0) * 0.5);
+            let capital_score = tile.habitability * rng.gen_range(0.0f64..1.0f64).mul_add(0.5, 0.5);
             let town_score = tile.habitability * town_score_normal.sample(rng).clamp(0.0,20.0);
             if (capital_score > 0.0) || (town_score > 0.0) {
                 let capital_score = OrderedFloat::from(capital_score);
@@ -338,10 +339,10 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
         };
 
 
-        _ = town_details.insert(town.fid,TownDetails {
-            new_location,
-            population,
-            is_port
+        _ = town_details.insert(town.fid,TownDetails { 
+            population, 
+            is_port, 
+            new_location 
         });
     }
 
@@ -353,9 +354,9 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
     }
 
     for (fid,town) in town_details.into_iter().watch(progress,"Writing town details.","Town details written.") {
-        let mut town_feature = towns_layer.try_feature_by_id(&fid)?;
+        let mut town_feature = towns_layer.try_feature_by_id(fid)?;
         if let Some(new_location) = town.new_location {
-            town_feature.move_to(new_location)?;
+            town_feature.move_to(&new_location)?;
         }
         town_feature.set_population(town.population)?;
         town_feature.set_is_port(town.is_port)?;

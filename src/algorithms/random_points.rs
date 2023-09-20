@@ -76,7 +76,7 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
         macro_rules! jitter {
             () => {
                 // gen creates random number between >= 0.0, < 1.0
-                self.random.gen::<f64>() * self.jitter_spread - self.jitter_shift
+                self.random.gen::<f64>().mul_add(self.jitter_spread, -self.jitter_shift)
             };
         }
 
@@ -130,7 +130,7 @@ pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,Command
     // boundary points    
 
     for point in generator.watch(progress,"Writing points.","Points written.") {
-        target_points.add_point(point?)?;
+        _ = target_points.add_point(point?)?;
     }
 
     Ok(())
