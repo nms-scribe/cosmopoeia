@@ -18,10 +18,10 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     // we need a lake information map
     let mut lakes_layer = target.edit_lakes_layer()?;
 
-    let lake_map = lakes_layer.read_features().to_entities_index::<_,LakeForPopulation>(progress)?;
+    let lake_map = lakes_layer.read_features().into_entities_index::<_,LakeForPopulation>(progress)?;
 
     // and a biome map
-    let biome_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForPopulation>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.read_features().into_named_entities_index::<_,BiomeForPopulation>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 

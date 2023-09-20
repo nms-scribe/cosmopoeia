@@ -36,8 +36,8 @@ use crate::commands::SubnationPercentArg;
 
 pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_layer: &OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForSubnations>(progress)?;
-    let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForSubnations>(progress)?; 
+    let town_map = target.edit_towns_layer()?.read_features().into_entities_index::<_,TownForSubnations>(progress)?;
+    let nations = target.edit_nations_layer()?.read_features().into_entities_vec::<_,NationForSubnations>(progress)?; 
     let mut towns_by_nation = HashMap::new();
 
     for tile in target.edit_tile_layer()?.read_features().into_entities::<TileForSubnations>().watch(progress, "Reading tiles.", "Tiles read.") {
@@ -56,7 +56,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
     let mut subnations = target.create_subnations_layer(overwrite_layer)?;
 
     for nation in nations.into_iter().watch(progress,"Creating subnations.","Subnations created.") {
-        let mut nation_towns = towns_by_nation.remove(&nation.fid).unwrap_or_else(|| vec![]);
+        let mut nation_towns = towns_by_nation.remove(&nation.fid).unwrap_or_default();
         if nation_towns.len() < 2 {
             continue; // at least two towns are required to get a province
         }
@@ -64,14 +64,13 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
         let subnation_count = ((nation_towns.len() as f64 * subnation_percentage.subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
         nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital_town_id)));
     
-        for i in 0..subnation_count {
-            let center_tile_id = nation_towns[i].0.fid;
-            let seat = nation_towns[i].1;
-            let culture = nation_towns[i].0.culture.clone();
+        for (center_tile,seat) in nation_towns.iter().take(subnation_count) {
+            let center_tile_id = center_tile.fid;
+            let culture = center_tile.culture.clone();
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
             let name = if rng.gen_bool(0.5) {
                 // name by town
-                let town = town_map.try_get(&(seat))?;
+                let town = town_map.try_get(seat)?;
                 town.name.clone()
             } else {
                 // new name by culture
@@ -80,9 +79,9 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
             };
             let color = nation.color.clone();
 
-            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
+            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or(CultureType::Generic);
 
-            let seat_town_id = Some(seat);
+            let seat_town_id = Some(*seat);
 
             _ = subnations.add_subnation(NewSubnation {
                 name,
@@ -106,7 +105,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
     let mut tile_layer = target.edit_tile_layer()?;
 
-    let mut tile_map = tile_layer.read_features().to_entities_index::<_,TileForSubnationExpand>(progress)?;
+    let mut tile_map = tile_layer.read_features().into_entities_index::<_,TileForSubnationExpand>(progress)?;
 
     let mut costs = HashMap::new();
 
@@ -128,7 +127,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
         let tile = tile_map.try_get(&(tile_id))?;
         for (neighbor_id,_) in &tile.neighbors {
-            let neighbor = tile_map.try_get(&neighbor_id)?;
+            let neighbor = tile_map.try_get(neighbor_id)?;
 
             let total_cost = match subnation_expansion_cost(neighbor, &subnation, priority) {
                 Some(value) => value,
@@ -141,19 +140,15 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                 // then I can place or replace the culture with this one. This will remove cultures that were previously
                 // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
                 // may still be spreading, don't worry).
-                let replace_subnation = if let Some(neighbor_cost) = costs.get(&neighbor_id) {
-                    if &total_cost.0 < neighbor_cost {
-                        true
-                    } else {
-                        false
-                    }
+                let replace_subnation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                    &total_cost.0 < neighbor_cost
                 } else {
                     true
                 };
 
                 if replace_subnation {
                     if !neighbor.grouping.is_ocean() { // this is also true for nations.
-                        place_subnations.push((*neighbor_id,subnation.fid.clone()));
+                        place_subnations.push((*neighbor_id,subnation.fid));
                     }
                     _ = costs.insert(*neighbor_id, total_cost);
                     queue.push((*neighbor_id,subnation.clone()), Reverse(total_cost));
@@ -221,7 +216,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
     let mut tiles_by_nation = HashMap::new();
 
-    let tile_map = tile_layer.read_features().to_entities_index_for_each::<_,TileForEmptySubnations,_>(|fid,tile| {
+    let tile_map = tile_layer.read_features().into_entities_index_for_each::<_,TileForEmptySubnations,_>(|fid,tile| {
         if let (Some(nation_id),None) = (tile.nation_id,tile.subnation_id) {
             // use a priority queue to make it easier to remove by value as well.
             match tiles_by_nation.get_mut(&nation_id) {
@@ -238,9 +233,9 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
         Ok(())
     }, progress)?;
 
-    let town_map = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForEmptySubnations>(progress)?;
+    let town_map = target.edit_towns_layer()?.read_features().into_entities_index::<_,TownForEmptySubnations>(progress)?;
 
-    let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForEmptySubnations>(progress)?;
+    let nations = target.edit_nations_layer()?.read_features().into_entities_vec::<_,NationForEmptySubnations>(progress)?;
 
     let mut tile_subnation_changes = HashMap::new();
     let mut new_subnations = Vec::new();
@@ -254,10 +249,11 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                 let mut seat = None;
                 let center_tile_id = tile_id;
 
+                #[allow(clippy::unnecessary_lazy_evaluations)] // I disagree, it's calling a function
                 let culture = tile.culture.as_ref().or_else(|| nation.culture.as_ref()).cloned();
                 let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
 
-                let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
+                let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or(CultureType::Generic);
 
                 let nation_id = nation.fid;
                 let color = nation.color.clone();
@@ -295,7 +291,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                         }
 
 
-                        let neighbor = tile_map.try_get(&neighbor_id)?;
+                        let neighbor = tile_map.try_get(neighbor_id)?;
                         if neighbor.subnation_id.is_some() {
                             continue;
                         }
@@ -317,12 +313,8 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                             // then I can place or replace the culture with this one. This will remove cultures that were previously
                             // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
                             // may still be spreading, don't worry).
-                            let replace_subnation = if let Some(neighbor_cost) = costs.get(&neighbor_id) {
-                                if &total_cost < neighbor_cost {
-                                    true
-                                } else {
-                                    false
-                                }
+                            let replace_subnation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                                &total_cost < neighbor_cost
                             } else {
                                 true
                             };
@@ -403,12 +395,12 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
 pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let subnations_map = target.edit_subnations_layer()?.read_features().to_entities_index::<_,SubnationForNormalize>(progress)?;
+    let subnations_map = target.edit_subnations_layer()?.read_features().into_entities_index::<_,SubnationForNormalize>(progress)?;
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
     let mut tile_list = Vec::new();
-    let tile_map = tiles_layer.read_features().to_entities_index_for_each::<_,TileForSubnationNormalize,_>(|fid,_| {
+    let tile_map = tiles_layer.read_features().into_entities_index_for_each::<_,TileForSubnationNormalize,_>(|fid,_| {
         tile_list.push(*fid);
         Ok(())
     },progress)?;
@@ -426,10 +418,8 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
             // This prevents very small subnations which were created with "Fill Empty" from being
             // deleted.
             let subnation = subnations_map.try_get(&(subnation_id))?;
-            if subnation.seat_town_id.is_none() {
-                if tile_id == subnation.center_tile_id {
-                    continue;
-                }
+            if subnation.seat_town_id.is_none() && tile_id == subnation.center_tile_id {
+                continue;
             }
         }
 
@@ -438,7 +428,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
         let mut buddy_count = 0;
         for (neighbor_id,_) in &tile.neighbors {
 
-            let neighbor = tile_map.try_get(&neighbor_id)?;
+            let neighbor = tile_map.try_get(neighbor_id)?;
 
             if neighbor.nation_id == tile.nation_id {
                 if neighbor.subnation_id != tile.subnation_id {
@@ -467,7 +457,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
             continue;
         }
 
-        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).and_then(|(adversary,count)| Some((adversary,count))) {
+        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
             if count > buddy_count {
                 let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
                 tile.set_subnation_id(worst_adversary)?;

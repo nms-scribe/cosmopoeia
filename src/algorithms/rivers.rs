@@ -30,10 +30,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
     for segment in list {
         total_flow += segment.to_flow;
         if let Some(potential) = chosen_segment {
-            if segment.to_flow > potential.to_flow {
-                chosen_segment = Some(segment)
-            } else if (segment.to_flow == potential.to_flow) && segment.to > potential.to {
-                // I want this algorithm to be reproducible.
+            if (segment.to_flow > potential.to_flow) || ((segment.to_flow == potential.to_flow) && segment.to > potential.to) {
                 chosen_segment = Some(segment)
             }
         } else {
@@ -51,7 +48,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
 
     let segment_clean_queue = gen_water_rivers_find_segments(&mut tiles, progress)?;
 
-    let (tile_from_index, tile_to_index, segment_draw_queue) = generate_water_rivers_clean_and_index(segment_clean_queue, progress);
+    let CleanedAndIndexedSegments {tile_from_index, tile_to_index, segment_draw_queue} = generate_water_rivers_clean_and_index(segment_clean_queue, progress);
 
     for segment in segment_draw_queue.iter().watch(progress,"Drawing segments.","Segments drawn.") {
 
@@ -75,11 +72,11 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 // create the bezier
                 let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point.as_ref(),&[start_point,end_point],next_point.as_ref());
                 // convert that to a polyline.
-                let line = bezier.to_poly_line(&bezier_scale)?;
+                let line = bezier.to_poly_line(bezier_scale)?;
                 segments.push(NewRiver {
                     from_tile_id: segment.from,
                     from_type,
-                    from_flow: from_flow,
+                    from_flow,
                     to_tile_id: segment.to,
                     to_type,
                     to_flow: segment.to_flow,
@@ -129,13 +126,9 @@ pub(crate) fn generate_water_river_from_type(segment: &Rc<RiverSegment>, tile_fr
             // if >1 segments, then it's a confluence, But it could be a branching confluence if multiple others go to that same point
             Some(list) => match list.len() {
                 0 => {
-                    if branch_start_count > 1 {
-                        // even if it's branch, as there is no previous segment, its still a source
-                        (RiverSegmentFrom::Source,None,0.0)
-
-                    } else {
-                        (RiverSegmentFrom::Source,None,0.0) // much like ending with a mouth, multiple rivers could start from the same source and not be connected.
-                    }
+                    // even if it's branch, as there is no previous segment, its still a source
+                    // much like ending with a mouth, multiple rivers could start from the same source and not be connected.
+                    (RiverSegmentFrom::Source,None,0.0)
                 },
                 1 => {
                     let previous_tile = Some(list[0].from);
@@ -203,13 +196,19 @@ pub(crate) fn generate_water_river_to_type(segment: &Rc<RiverSegment>, tile_to_i
     (to_type, next_tile)
 }
 
-pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_clean_queue: Vec<Rc<RiverSegment>>, progress: &mut Progress) -> (HashMap<u64, Vec<Rc<RiverSegment>>>, HashMap<u64, Vec<Rc<RiverSegment>>>, Vec<Rc<RiverSegment>>) {
+struct CleanedAndIndexedSegments {
+    tile_from_index: HashMap<u64, Vec<Rc<RiverSegment>>>, 
+    tile_to_index: HashMap<u64, Vec<Rc<RiverSegment>>>, 
+    segment_draw_queue: Vec<Rc<RiverSegment>>
+}
+
+fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_clean_queue: Vec<Rc<RiverSegment>>, progress: &mut Progress) -> CleanedAndIndexedSegments {
 
 
     let mut segment_clean_queue = segment_clean_queue;
     let mut tile_from_index = HashMap::new();
     let mut tile_to_index = HashMap::new();
-    let mut result_queue = Vec::new();
+    let mut segment_draw_queue = Vec::new();
 
     // sort so that segments with the same to and from are equal, as we need to go through them in groups.
     segment_clean_queue.sort_by(|a,b| {
@@ -255,11 +254,16 @@ pub(crate) fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(
             },
             Some(entry) => entry.push(segment.clone()),
         };
-        result_queue.push(segment);
+        segment_draw_queue.push(segment);
 
     }
 
-    (tile_from_index, tile_to_index, result_queue)
+    CleanedAndIndexedSegments {
+        tile_from_index,
+        tile_to_index,
+        segment_draw_queue
+    }
+
 }
 
 pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: &mut TileLayer<'_,'_>, progress: &mut Progress) -> Result<Vec<Rc<RiverSegment>>, CommandError> {

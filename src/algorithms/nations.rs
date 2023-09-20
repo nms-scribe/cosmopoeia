@@ -46,7 +46,7 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
             let namer = Culture::get_namer(culture_data, namers)?;
             let name = namer.make_state_name(rng);
-            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or_else(|| CultureType::Generic);
+            let type_ = culture_data.map(|c| c.type_()).cloned().unwrap_or(CultureType::Generic);
             let center_tile_id = town.tile_id;
             let capital_town_id = town.fid;
             let expansionism = rng.gen_range(0.1..1.0) * size_variance.size_variance + 1.0;
@@ -81,14 +81,14 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
 pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-    let nations = target.edit_nations_layer()?.read_features().to_entities_vec::<_,NationForPlacement>(progress)?;
+    let nations = target.edit_nations_layer()?.read_features().into_entities_vec::<_,NationForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForNationExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.read_features().into_named_entities_index::<_,BiomeForNationExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 
     // we're working with a tile map, and completely overwriting whatever is there.
-    let mut tile_map = tiles.read_features().to_entities_index::<_,TileForNationExpand>(progress)?;
+    let mut tile_map = tiles.read_features().into_entities_index::<_,TileForNationExpand>(progress)?;
 
     // priority queue keeps tasks sorted by priority
     // Since I need to go for the least priorities first, I need the double queue to get pop_min
@@ -131,7 +131,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 continue; // don't overwrite capital cells
             }
 
-            let neighbor = tile_map.try_get(&neighbor_id)?;
+            let neighbor = tile_map.try_get(neighbor_id)?;
 
             let culture_cost = if tile.culture == neighbor.culture {-9.0} else { 100.0 };
 
@@ -163,19 +163,15 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 // then I can place or replace the culture with this one. This will remove cultures that were previously
                 // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
                 // may still be spreading, don't worry).
-                let replace_nation = if let Some(neighbor_cost) = costs.get(&neighbor_id) {
-                    if &total_cost < neighbor_cost {
-                        true
-                    } else {
-                        false
-                    }
+                let replace_nation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                    &total_cost < neighbor_cost
                 } else {
                     true
                 };
 
                 if replace_nation {
                     if !neighbor.grouping.is_ocean() { 
-                        place_nations.push((*neighbor_id,nation.fid.clone()));
+                        place_nations.push((*neighbor_id,nation.fid));
                         // even if we don't place the culture, because people can't live here, it will still spread.
                     }
                     _ = costs.insert(*neighbor_id, total_cost);
@@ -201,7 +197,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing nations.","Nations written.") {
 
-        let mut feature = tiles.try_feature_by_id(&fid)?;
+        let mut feature = tiles.try_feature_by_id(fid)?;
 
         feature.set_nation_id(tile.nation_id)?;
 
@@ -383,12 +379,12 @@ pub(crate) fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForNa
 
 pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let town_index = target.edit_towns_layer()?.read_features().to_entities_index::<_,TownForNationNormalize>(progress)?;
+    let town_index = target.edit_towns_layer()?.read_features().into_entities_index::<_,TownForNationNormalize>(progress)?;
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
     let mut tile_list = Vec::new();
-    let tile_map = tiles_layer.read_features().to_entities_index_for_each::<_,TileForNationNormalize,_>(|fid,_| {
+    let tile_map = tiles_layer.read_features().into_entities_index_for_each::<_,TileForNationNormalize,_>(|fid,_| {
         tile_list.push(*fid);
         Ok(())
     }, progress)?;
@@ -406,7 +402,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
         let mut buddy_count = 0;
         for (neighbor_id,_) in &tile.neighbors {
 
-            let neighbor = tile_map.try_get(&neighbor_id)?;
+            let neighbor = tile_map.try_get(neighbor_id)?;
 
             if let Some(town_id) = neighbor.town_id {
                 let town = town_index.try_get(&(town_id))?;
@@ -447,7 +443,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
             continue;
         }
 
-        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).and_then(|(adversary,count)| Some((adversary,count))) {
+        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
             if count > buddy_count {
                 let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
                 tile.set_nation_id(worst_adversary)?;

@@ -80,7 +80,7 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
     for fid in tiles {
         let town = placed_towns.get(&fid);
         let mut tile = tiles_layer.try_feature_by_id(&fid)?;
-        tile.set_town_id(town.map(|n| *n))?;
+        tile.set_town_id(town.copied())?;
         tiles_layer.update_feature(tile)?;
     }
 
@@ -95,7 +95,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     let town_count = if let Some(town_count) = town_count {
         if town_count > &tiles.len() {
             let reduced_town_count = tiles.len();
-            if tiles.len() == 0 {
+            if tiles.is_empty() {
                 progress.warning(|| "There aren't enough populated cells left to generate any towns.")
             } else {
                 progress.warning(|| format!("There aren't enough populated cells to generate the requested number of towns. Only {} towns will be generated.",reduced_town_count))
@@ -145,13 +145,13 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             // reset everything, add what we found back to the tiles, and sort it again
             tiles.extend(towns.into_iter().map(|(a,_)| a));
             reset_town_search!();
-            spacing = spacing / 2.0;
+            spacing /= 2.0;
             if spacing <= 1.0 {
                 progress.finish(|| format!("Only {} towns could be placed.",towns.len()));
                 break;
-            } else {
-                progress.finish(|| "Not enough towns could be placed, trying again with reduced spacing.");
             }
+            
+            progress.finish(|| "Not enough towns could be placed, trying again with reduced spacing.");
         } else {
             progress.finish(|| "Towns placed.");
             break;
@@ -214,7 +214,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
             // reset everything, add what we found back to the tiles, and sort it again
             tiles.extend(capitals.into_iter().map(|(a,_)| a));
             reset_capital_search!();
-            spacing = spacing / 1.2;
+            spacing /= 1.2;
         } else {
             progress.finish(|| "Capitals placed.");
             break;
@@ -260,11 +260,11 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let mut tile_layer = target.edit_tile_layer()?;
 
-    let tile_map = tile_layer.read_features().to_entities_index::<_,TileForTownPopulation>(progress)?;
+    let tile_map = tile_layer.read_features().into_entities_index::<_,TileForTownPopulation>(progress)?;
 
     let mut lake_layer = target.edit_lakes_layer()?;
 
-    let lake_map = lake_layer.read_features().to_entities_index::<_,LakeForTownPopulation>(progress)?;
+    let lake_map = lake_layer.read_features().into_entities_index::<_,LakeForTownPopulation>(progress)?;
 
     let mut coastal_towns = HashMap::new();
 

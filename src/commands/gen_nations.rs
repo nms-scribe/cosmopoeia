@@ -66,7 +66,7 @@ impl Task for Create {
 
         let mut loaded_namers = NamerSet::load_from(self.namers_arg, &mut random, progress)?;
 
-        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
         target.with_transaction(|target| {
 
@@ -81,7 +81,7 @@ impl Task for Create {
 impl Create {
     fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_nations: &OverwriteNationsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating nations");
-        generate_nations(target, random, &culture_lookup, loaded_namers, size_variance, overwrite_nations, progress)
+        generate_nations(target, random, culture_lookup, loaded_namers, size_variance, overwrite_nations, progress)
     }
     
 }
@@ -238,7 +238,7 @@ impl Curvify {
     fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making nation polygons curvy");
     
-        curvify_layer_by_theme::<_,NationTheme>(target, &bezier_scale, progress)
+        curvify_layer_by_theme::<_,NationTheme>(target, bezier_scale, progress)
     }
     
 }
@@ -313,7 +313,7 @@ impl Task for GenNations {
     
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
 
-            let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+            let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
     
             Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.size_variance_arg, &default_args.river_threshold_arg, &default_args.expansion_factor_arg, &default_args.bezier_scale_arg, &default_args.overwrite_nations_arg, &mut target, progress)
 

@@ -7,7 +7,6 @@ use gdal::vector::Geometry;
 use crate::utils::bezierify_polygon;
 use crate::world_map::NewLake;
 use crate::errors::CommandError;
-use crate::world_map::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
@@ -15,12 +14,11 @@ use crate::progress::WatchableQueue;
 use crate::world_map::TileLayer;
 use crate::world_map::LakeType;
 use crate::world_map::TypedFeature;
-use crate::world_map::EntityIndex;
-use crate::world_map::TileSchema;
 use crate::commands::OverwriteLakesArg;
 use crate::commands::BezierScaleArg;
 use crate::commands::LakeBufferScaleArg;
 use crate::algorithms::tiles::find_lowest_neighbors;
+use super::water_flow::WaterFlowResult;
 
 struct Lake {
     elevation: f64,
@@ -42,7 +40,7 @@ impl Lake {
         let mut lake_geometry = tile.geometry()?.clone();
         
         for tile in tiles {
-            let tile = layer.try_feature_by_id(&tile)?; 
+            let tile = layer.try_feature_by_id(tile)?; 
             let tile = tile.geometry()?; 
             lake_geometry = tile.union(&lake_geometry).ok_or_else(|| CommandError::GdalUnionFailed)?; 
             if !lake_geometry.is_valid() {
@@ -75,7 +73,7 @@ impl Lake {
         let flow_per_tile = self.flow / self.contained_tiles.len() as f64;
         let lake_type = if lake_temp < -3.0 {
             LakeType::Frozen
-        } else if self.outlet_tiles.len() == 0 {
+        } else if self.outlet_tiles.is_empty() {
             // NOTE: This was what AFMG did. It's based off of real equations I've seen elsewhere, but I don't
             // know where they come from. However...
             // if lake_evap > (flow_per_tile * 4.0) {
@@ -109,7 +107,7 @@ impl Lake {
 }
 
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
-pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, tile_map: EntityIndex<TileSchema,TileForWaterFill>, tile_queue: Vec<(u64,f64)>, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, water_flow_result: WaterFlowResult, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
 
     let mut tiles_layer = target.edit_tile_layer()?;
@@ -119,10 +117,10 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
         AddToFlow(f64)
     }
 
-    let mut tile_queue = tile_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
+    let mut tile_queue = water_flow_result.lake_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
 
-    let mut tile_map = tile_map;
-    let mut next_lake_id = (0..).into_iter();
+    let mut tile_map = water_flow_result.tile_map;
+    let mut next_lake_id = 0..;
     let mut lake_map = HashMap::new();
 
     while let Some((tile_fid,accumulation)) = tile_queue.pop() {
@@ -148,7 +146,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
             // we already calculated the lowest neighbors that are actually below the tile in Flow, so let's just check that first.
 
             let flow_to = &tile.flow_to;
-            if flow_to.len() > 0 {
+            if !flow_to.is_empty() {
                 // we've got tiles that are lowever in elevation to go to...
                 let neighbor_flow = accumulation/flow_to.len() as f64;
 
@@ -208,7 +206,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
             Task::FillLake(lake_id,accumulation) => {
                 let (new_lake,accumulation,delete_lakes) = if let Some(lake) = lake_map.get(&lake_id) {
                     let outlet_tiles = &lake.outlet_tiles;
-                    if outlet_tiles.len() > 0 {
+                    if !outlet_tiles.is_empty() {
                         // we can automatically flow to those tiles.
                         let neighbor_flow = accumulation/outlet_tiles.len() as f64;
 
@@ -282,7 +280,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                                     // it's too high to fill. This is now part of the shoreline.
                                     new_shoreline.push((sponsor_fid,check_fid));
                                     // And this might change our spillover elevation
-                                    new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(check.elevation)).or_else(|| Some(check.elevation));
+                                    new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(check.elevation)).or(Some(check.elevation));
                                 } else if let Some(lake_id) = check.lake_id {
                                     // it's in a lake already...
                                     if let Some(other_lake) = lake_map.get(&lake_id) {
@@ -324,7 +322,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                                 elevation: new_lake_elevation,
                                 flow: new_lake_flow,
                                 bottom_elevation: new_bottom_elevation,
-                                spillover_elevation: new_spillover_elevation.unwrap_or_else(|| new_lake_elevation),
+                                spillover_elevation: new_spillover_elevation.unwrap_or(new_lake_elevation),
                                 contained_tiles: new_contained_tiles,
                                 tile_temperatures: new_temperatures,
                                 shoreline_tiles: new_shoreline,
@@ -354,20 +352,20 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 // update the new lake.
                 // mark the contained tiles...
                 for tile in &new_lake.contained_tiles {
-                    let tile = tile_map.try_get_mut(&tile)?; 
+                    let tile = tile_map.try_get_mut(tile)?; 
                     tile.lake_id = Some(lake_id);
                     tile.outlet_from = Vec::new()
                 }
 
                 // mark the outlet tiles...
                 for (sponsor,tile) in &new_lake.outlet_tiles {
-                    let tile = tile_map.try_get_mut(&tile)?; 
+                    let tile = tile_map.try_get_mut(tile)?; 
                     tile.outlet_from = vec![*sponsor];
                 }
 
                 if accumulation > 0.0 { // we're still not done we have to do something with the remaining water.
                     let outlet_tiles = &new_lake.outlet_tiles;
-                    if outlet_tiles.len() > 0 {
+                    if !outlet_tiles.is_empty() {
                         // this is the same as above, but with the new lake.
                         // we can automatically flow to those tiles.
                         let neighbor_flow = accumulation/outlet_tiles.len() as f64;
@@ -408,11 +406,11 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 
     for (id,lake) in lake_map.into_iter().watch(progress,"Drawing lakes.","Lakes drawn.") {
-        if lake.contained_tiles.len() > 0 {
+        if !lake.contained_tiles.is_empty() {
             let lake_geometry = lake.dissolve_tiles(&mut tiles_layer)?;
             let (lake_temp,lake_evap,lake_type) = lake.get_temp_evap_and_type();
 
-            let geometry = make_curvy_lakes(lake_geometry, &lake_bezier_scale, buffer_distance, simplify_tolerance)?;
+            let geometry = make_curvy_lakes(lake_geometry, lake_bezier_scale, buffer_distance, simplify_tolerance)?;
             let lake = NewLake {
                 elevation: lake.elevation,
                 type_: lake_type.clone(),
@@ -420,7 +418,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 size: lake.contained_tiles.len() as i32,
                 temperature: lake_temp,
                 evaporation: lake_evap,
-                geometry: geometry
+                geometry
             };
             lakes.push(lake.clone());
             _ = new_lake_map.insert(id, lake);
@@ -479,13 +477,13 @@ pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: &BezierSca
     let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
     if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
         for i in 0..lake_geometry.geometry_count() {
-            for geometry in bezierify_polygon(&lake_geometry.get_geometry(i),&bezier_scale)? {
+            for geometry in bezierify_polygon(&lake_geometry.get_geometry(i),bezier_scale)? {
                 new_geometry.add_geometry(geometry)?;
             }
         }
 
     } else {
-        for geometry in bezierify_polygon(&lake_geometry,&bezier_scale)? {
+        for geometry in bezierify_polygon(&lake_geometry,bezier_scale)? {
             new_geometry.add_geometry(geometry)?;
         }
 
@@ -511,9 +509,9 @@ pub(crate) fn simplify_lake_geometry(lake_geometry: Geometry, buffer_distance: f
             if simplify_tolerance <= 0.0 {
                 simplified = lake_geometry;
                 break;
-            } else {
-                simplified = lake_geometry.simplify(simplify_tolerance)?;
             }
+            
+            simplified = lake_geometry.simplify(simplify_tolerance)?;
         }
         simplified
     } else {

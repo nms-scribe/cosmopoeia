@@ -51,23 +51,23 @@ impl TilePreference {
 
         // formulaes borrowed from AFMG
         Ok(match self {
-            TilePreference::Habitability => OrderedFloat::from(tile.habitability),
-            TilePreference::ShoreDistance => OrderedFloat::from(tile.shore_distance as f64),
-            TilePreference::Elevation => OrderedFloat::from(tile.elevation_scaled as f64),
-            TilePreference::NormalizedHabitability => OrderedFloat::from((tile.habitability / max_habitability) * 3.0),
-            TilePreference::Temperature(goal) => OrderedFloat::from((tile.temperature - goal).abs() + 1.0),
-            TilePreference::Biomes(preferred_biomes, fee) => OrderedFloat::from(if preferred_biomes.contains(&tile.biome.name) {
+            Self::Habitability => OrderedFloat::from(tile.habitability),
+            Self::ShoreDistance => OrderedFloat::from(tile.shore_distance as f64),
+            Self::Elevation => OrderedFloat::from(tile.elevation_scaled as f64),
+            Self::NormalizedHabitability => OrderedFloat::from((tile.habitability / max_habitability) * 3.0),
+            Self::Temperature(goal) => OrderedFloat::from((tile.temperature - goal).abs() + 1.0),
+            Self::Biomes(preferred_biomes, fee) => OrderedFloat::from(if preferred_biomes.contains(&tile.biome.name) {
                 1.0
             } else {
                 *fee
             }),
-            TilePreference::OceanCoast(fee) => OrderedFloat::from(if tile.water_count.is_some() && tile.neighboring_lake_size.is_none() {
+            Self::OceanCoast(fee) => OrderedFloat::from(if tile.water_count.is_some() && tile.neighboring_lake_size.is_none() {
                 1.0
             } else {
                 *fee
             }),
-            TilePreference::Negate(pref) => -pref.get_value(tile, max_habitability)?,
-            TilePreference::Multiply(prefs) => {
+            Self::Negate(pref) => -pref.get_value(tile, max_habitability)?,
+            Self::Multiply(prefs) => {
                 let mut prefs = prefs.iter();
                 let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceMultiplyMissingData)?.get_value(tile, max_habitability)?; 
                 for pref in prefs {
@@ -75,7 +75,7 @@ impl TilePreference {
                 }
                 result
             },
-            TilePreference::Divide(prefs) => {
+            Self::Divide(prefs) => {
                 let mut prefs = prefs.iter();
                 let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceDivideMissingData)?.get_value(tile, max_habitability)?; 
                 for pref in prefs {
@@ -83,7 +83,7 @@ impl TilePreference {
                 }
                 result
             },
-            TilePreference::Add(prefs) => {
+            Self::Add(prefs) => {
                 let mut prefs = prefs.iter();
                 let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceAddMissingData)?.get_value(tile, max_habitability)?; 
                 for pref in prefs {
@@ -91,7 +91,7 @@ impl TilePreference {
                 }
                 result
             },
-            TilePreference::Pow(pref, pow) => OrderedFloat::from(pref.get_value(tile, max_habitability)?.powf(*pow)),
+            Self::Pow(pref, pow) => OrderedFloat::from(pref.get_value(tile, max_habitability)?.powf(*pow)),
         })
         
     }
@@ -120,11 +120,10 @@ pub(crate) struct CultureSetItem {
 
 impl CultureSetItem {
 
-    fn from<Random: Rng>(value: CultureSetItemSource, rng: &mut Random, namers: &mut NamerSet) -> Vec<Self> {
+    fn from<Random: Rng>(value: &CultureSetItemSource, rng: &mut Random, namers: &mut NamerSet) -> Vec<Self> {
         let mut result = Vec::new();
         let count = match value.count {
-            None => 1,
-            Some(0) => 1,
+            Some(0) | None => 1,
             Some(c) => c
         };
 
@@ -132,7 +131,7 @@ impl CultureSetItem {
             let namer = match &value.namer {
                 Some(namer) => namer.clone(),
                 None => {
-                    namers.list_names().choose(rng).to_owned().to_owned()
+                    namers.list_names().choose(rng).clone().clone()
                 },
             };
     
@@ -144,10 +143,7 @@ impl CultureSetItem {
                 }
             };
     
-            let probability = match value.probability {
-                Some(probability) => probability,
-                None => 1.0,
-            };
+            let probability = value.probability.unwrap_or(1.0);
     
             let preferences = match &value.preferences {
                 Some(preferences) => preferences.clone(),
@@ -174,7 +170,7 @@ impl CultureSetItem {
         &self.namer
     }
 
-    pub(crate) fn preferences(&self) -> &TilePreference {
+    pub(crate) const fn preferences(&self) -> &TilePreference {
         &self.preferences
     }
 }
@@ -190,7 +186,7 @@ pub(crate) struct CultureSet {
 
 impl CultureSet {
 
-    fn empty() -> Self {
+    const fn empty() -> Self {
         Self {
             source: Vec::new()
         }
@@ -212,8 +208,8 @@ impl CultureSet {
         let mut buf = Vec::new();
         let formatter = PrettyFormatter::with_indent(b"    ");
         let mut ser = JSONSerializer::with_formatter(&mut buf, formatter);
-        self.source.serialize(&mut ser).map_err(|e| CommandError::CultureSourceWrite(format!("{}",e)))?;
-        Ok(String::from_utf8(buf).map_err(|e| CommandError::CultureSourceWrite(format!("{}",e)))?)
+        self.source.serialize(&mut ser).map_err(|e| CommandError::CultureSourceWrite(format!("{e}")))?;
+        String::from_utf8(buf).map_err(|e| CommandError::CultureSourceWrite(format!("{e}")))
     
     }
 
@@ -222,9 +218,9 @@ impl CultureSet {
     }
     
     pub(crate) fn extend_from_json<Reader: std::io::Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
-        let data = from_json_reader::<_,Vec<CultureSetItemSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
-        for data in data {
-            for item in CultureSetItem::from(data,rng,namers) {
+        let data = from_json_reader::<_,Vec<CultureSetItemSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{e}")))?;
+        for datum in data {
+            for item in CultureSetItem::from(&datum,rng,namers) {
                 self.add_culture(item)
             }
         }
@@ -241,11 +237,10 @@ impl CultureSet {
         }
 
         let format = match file.as_ref().extension().and_then(OsStr::to_str) {
-            Some("json") => Format::JSON,
-            Some(_) | None => Format::JSON, // this is the default, I'm probably not supporting any other formats anyway, but just in case.
+            Some("json" | _) | None => Format::JSON, // this is the default, I'm probably not supporting any other formats anyway, but just in case.
         };
 
-        let culture_source = File::open(file).map_err(|e| CommandError::CultureSourceRead(format!("{}",e)))?;
+        let culture_source = File::open(file).map_err(|e| CommandError::CultureSourceRead(format!("{e}")))?;
         let reader = BufReader::new(culture_source);
 
         match format {
@@ -267,7 +262,7 @@ impl CultureSet {
         let mut result = Vec::new();
         let mut available = self.source.clone();
         let mut i = 0;
-        while (result.len() < culture_count) && (available.len() > 0) {
+        while (result.len() < culture_count) && (!available.is_empty()) {
             let choice = loop {
                 i += 1;
                 let choice = available.choose_index(rng);
@@ -285,7 +280,7 @@ impl CultureSet {
 }
 
 // allow indexing the culture set by usize.
-impl std::ops::Index<usize> for CultureSet {
+impl core::ops::Index<usize> for CultureSet {
     type Output = CultureSetItem;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -297,7 +292,7 @@ impl std::ops::Index<usize> for CultureSet {
 impl<'data_life> IntoIterator for &'data_life CultureSet {
     type Item = &'data_life CultureSetItem;
 
-    type IntoIter = std::slice::Iter<'data_life, CultureSetItem>;
+    type IntoIter = core::slice::Iter<'data_life, CultureSetItem>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.source.iter()

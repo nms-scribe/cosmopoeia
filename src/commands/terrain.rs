@@ -87,7 +87,7 @@ impl LoadTerrainTask for RecipeSet {
         let reader = BufReader::new(recipe_data);
         let mut tasks: HashMap<String,Vec<TerrainCommand>> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{}",e)))?;
         progress.finish(|| "Recipe set loaded.");
-        if tasks.len() > 0 {
+        if !tasks.is_empty() {
             let chosen_key = if let Some(recipe) = self.recipe {
                 recipe
             } else {
@@ -468,7 +468,7 @@ impl LoadTerrainTask for SampleOceanMasked {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading ocean raster.");
-        let raster = RasterMap::open(&self.ocean_arg.source)?;
+        let raster = RasterMap::open(self.ocean_arg.source)?;
         progress.finish(|| "Ocean raster loaded.");
         Ok(vec![TerrainTask::SampleOceanMasked(SampleOceanMaskedLoaded::new(raster))])
     }
@@ -491,7 +491,7 @@ impl LoadTerrainTask for SampleElevation {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading elevation raster.");
-        let raster = RasterMap::open(&self.heightmap_arg.source)?;
+        let raster = RasterMap::open(self.heightmap_arg.source)?;
         progress.finish(|| "Elevation raster loaded.");
         Ok(vec![TerrainTask::SampleElevation(SampleElevationLoaded::new(raster))])
     }
@@ -525,8 +525,7 @@ pub enum TerrainCommand {
 impl TerrainCommand {
 
     pub(crate) fn to_json(&self) -> Result<String,CommandError> {
-        // NOTE: Not technically a recipe read error, but this shouldn't be used very often.
-        Ok(to_json_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{}",e)))?)
+        to_json_string_pretty(self).map_err(|e| CommandError::TerrainProcessWrite(format!("{}",e)))
     }
 
     pub(crate) fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {

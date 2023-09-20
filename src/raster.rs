@@ -152,7 +152,7 @@ impl RasterMap {
         };
 
         let statistics = band.compute_raster_min_max(is_approx_ok)?;
-        Ok(ElevationLimits::new(statistics.min,statistics.max)?)
+        ElevationLimits::new(statistics.min,statistics.max)
     }
 
 

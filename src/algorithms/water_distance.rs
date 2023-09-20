@@ -19,7 +19,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     let mut land_queue = PriorityQueue::new();
     let mut water_queue = PriorityQueue::new();
 
-    let mut tile_map = tiles.read_features().to_entities_index_for_each::<_,TileForWaterDistance,_>(|fid,_| {
+    let mut tile_map = tiles.read_features().into_entities_index_for_each::<_,TileForWaterDistance,_>(|fid,_| {
         queue.push(*fid);
         Ok(())
     }, progress)?;
@@ -38,7 +38,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let is_land = !tile.grouping.is_water();
 
         for (neighbor_fid,_) in &tile.neighbors {
-            let neighbor = tile_map.try_get(&neighbor_fid)?;
+            let neighbor = tile_map.try_get(neighbor_fid)?;
             if is_land && (neighbor.grouping.is_water()) {
 
                 on_shore = true;
@@ -52,7 +52,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                     water_distance = Some(neighbor_water_distance);
                     closest_water = Some(*neighbor_fid);
                 }
-                *water_count.get_or_insert_with(|| 0) += 1;
+                *water_count.get_or_insert(0) += 1;
             } else if !is_land && !neighbor.grouping.is_water() {
 
                 on_shore = true;
@@ -86,12 +86,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
             let cost = priority.0 + 1;
 
-            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(&neighbor_id) {
-                if &cost < neighbor_cost {
-                    true
-                } else {
-                    false
-                }
+            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(neighbor_id) {
+                &cost < neighbor_cost
             } else {
                 true
             };
@@ -114,12 +110,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
             let cost = priority.0 + 1;
 
-            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(&neighbor_id) {
-                if &cost < neighbor_cost {
-                    true
-                } else {
-                    false
-                }
+            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(neighbor_id) {
+                &cost < neighbor_cost
             } else {
                 true
             };

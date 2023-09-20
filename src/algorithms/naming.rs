@@ -123,7 +123,7 @@ impl StateNameBehavior {
                     if name.starts_with(is_vowel) {
                         name.insert_str(0, vowel_prefix)
                     } else {
-                        name.insert_str(0, &cons_prefix)
+                        name.insert_str(0, cons_prefix)
                     }
                     name
                 }
@@ -213,23 +213,24 @@ impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
     fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<HashMap<Option<char>, Vec<String>>,CommandError> {
-        if array.len() > 0 {
+        if !array.is_empty() {
             let mut chain = HashMap::new();
 
             progress.start_known_endpoint(|| array.len());
     
             for (j,n) in array.iter().enumerate() {
                 let name: Vec<char> = n.trim().chars().collect();
-                let basic = name.iter().all(|c| match c {
-                    '\u{0000}'..='\u{007f}' => true,
-                    _ => false
-                }); // basic chars and English rules can be applied
+                let basic = name.iter().all(|c| matches!(c, '\u{0000}'..='\u{007f}')); // basic chars and English rules can be applied
     
                 // split word into pseudo-syllables
                 let mut syllable = String::new();
                 let mut i = 0; 
                 while i < name.len() {
-                    let prev_char = if i == 0 { None } else { name.get(i-1).map(|c| *c) }; // pre-onset letter
+                    let prev_char = if i == 0 { 
+                        None 
+                    } else { 
+                        name.get(i-1).copied() 
+                    }; // pre-onset letter
                     let mut vowel_found = false; 
     
                     for c in i..name.len() {
@@ -241,7 +242,7 @@ impl MarkovGenerator {
                             break 
                         }; 
                         let next_char = match next_char {
-                            Some(' ') | Some('-') | None => break, // definitely the end of a syllable, no need to check.
+                            Some(' ' | '-') | None => break, // definitely the end of a syllable, no need to check.
                             Some(next_char) => *next_char
                         };
     
@@ -299,7 +300,7 @@ impl MarkovGenerator {
     
             progress.finish();
 
-            if chain.len() > 0 {
+            if !chain.is_empty() {
                 Ok(chain)
             } else {
                 Err(CommandError::EmptyNamerInput(name.to_owned()))
@@ -326,15 +327,15 @@ impl MarkovGenerator {
 
     pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random, min_len: Option<usize>, cutoff_len: Option<usize>) -> String {
 
-        let min_len = min_len.unwrap_or_else(|| self.min_len);
-        let cutoff_len = cutoff_len.unwrap_or_else(|| self.cutoff_len);
+        let min_len = min_len.unwrap_or(self.min_len);
+        let cutoff_len = cutoff_len.unwrap_or(self.cutoff_len);
 
         let mut choices = self.chain.get(&None).expect("How would we get an empty chain?"); // As long as the input wasn't empty, this shouldn't panic
         let mut cur = choices.choose(rng).to_owned();
         let mut word = String::new();
         for _ in 0..20 {
        
-            if cur == "" {
+            if cur.is_empty() {
                 // end of word
                 if word.len() < min_len {
                     cur = String::new();
@@ -343,22 +344,19 @@ impl MarkovGenerator {
                 } else {
                     break
                 }
+            } else if (word.len() + cur.len()) > cutoff_len {
+                // word too long
+                if (word.len() < min_len) || !choices.contains(&"".to_owned()) {
+                    // either 1) it would be too short
+                    // or 2) can't end the word with the previous choices
+                    // so add it anyway.
+                    word.push_str(&cur)
+                    // although, in theory for case 2, I might still be adding on an incorrect ending, but not much else I can do to avoid really long words.
+                    // except, maybe, have more data to start with.
+                }
+                break;
             } else {
-                if (word.len() + cur.len()) > cutoff_len {
-                    // word too long
-                    if word.len() < min_len {
-                        // would be too short, add it anyway
-                        word.push_str(&cur)
-                    } else if !choices.contains(&"".to_owned()) {
-                        // can't end the word with the previous choices, so add the new one anyway.
-                        word.push_str(&cur)
-                        // although, in theory, I might still be adding on an incorrect ending, but not much else I can do to avoid really long words.
-                        // except, maybe, have more data to start with.
-                    }
-                    break;
-                } else {
-                    choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).expect("How would we get an empty chain?")) // As long as the original input wasn't empty, this shouldn't panic
-                };
+                choices = self.chain.get(&cur.chars().last()).unwrap_or_else(|| self.chain.get(&None).expect("How would we get an empty chain?")) // As long as the original input wasn't empty, this shouldn't panic
             }
 
             word.push_str(&cur);
@@ -402,9 +400,9 @@ impl MarkovGenerator {
         }
         
         // join the word if any part has only 1 letter
-        if name.split(" ").any(|part| part.len() < 2) {
+        if name.split(' ').any(|part| part.len() < 2) {
             name = name
-                .split(" ")
+                .split(' ')
                 .collect();
         }
 
@@ -412,7 +410,7 @@ impl MarkovGenerator {
             name = self.seed_words.choose(rng).to_owned();
         }
 
-        return name;
+        name
     }
 
 
@@ -426,7 +424,7 @@ struct ListPicker {
 impl ListPicker {
 
     fn new(name: &str, list: Vec<String>) -> Result<Self,CommandError> {
-        if list.len() > 0 {
+        if !list.is_empty() {
             Ok(Self {
                 available: list,
                 picked: Vec::new()
@@ -437,7 +435,7 @@ impl ListPicker {
     }
 
     fn pick_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
-        if self.available.len() == 0 {
+        if self.available.is_empty() {
             self.available = std::mem::replace(&mut self.picked, Vec::new())
         }
 
@@ -525,8 +523,6 @@ impl Namer {
             name = behavior.apply(name);
         }
 
-        name = name;//.to_title_case();
-
         let suffixing = &self.state_suffix;
 
         if let StateSuffixBehavior::NoSuffix = suffixing {
@@ -571,7 +567,7 @@ impl Namer {
             Err(()) => return name, // don't apply a suffix, and return the original name.
         };
 
-        return Self::validate_suffix(suffixed_name, suffix) 
+        Self::validate_suffix(suffixed_name, suffix) 
     }
     
 
@@ -604,7 +600,7 @@ impl Namer {
             // remove name last letter if it's a suffix first letter (Again)
             name = split_string_from_end(&name, 1).0.to_owned();
         }; 
-        return name + &suffix
+        name + &suffix
     }
 
 
@@ -619,6 +615,7 @@ pub(crate) struct NamerSet {
 impl NamerSet {
 
     pub(crate) fn get_mut(&mut self, name: Option<&str>) -> Result<&mut Namer,CommandError> {
+        #[allow(clippy::unnecessary_lazy_evaluations)] // It's calling a function, so it's not unecessary
         let name = name.unwrap_or_else(|| self.default_namer.as_str());
         self.map.get_mut(name).ok_or_else(|| CommandError::UnknownNamer(name.to_owned()))
     }
@@ -696,7 +693,7 @@ impl NamerSetSource {
         // I don't want to serialize a map, I want to serialize it as an array.
         let data = self.source.values().collect::<Vec<_>>();
         data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?;
-        Ok(String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))?)
+        String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{}",e)))
     
 
     }
@@ -741,7 +738,7 @@ impl NamerSetSource {
         }
 
         if text_is_markov {
-            let min_len = min.unwrap_or_else(|| 0);
+            let min_len = min.unwrap_or(0);
             let avg_len = sum / list.len();
             let cutoff_len = avg_len;
 
@@ -781,7 +778,7 @@ impl NamerSetSource {
 
         let format = match file.as_ref().extension().and_then(OsStr::to_str) {
             Some("json") => Format::JSON,
-            Some("txt") => Format::TextList(file.as_ref().file_stem().and_then(OsStr::to_str).unwrap_or_else(||"").to_owned()),
+            Some("txt") => Format::TextList(file.as_ref().file_stem().and_then(OsStr::to_str).unwrap_or("").to_owned()),
             Some(_) | None => Format::JSON, // this is the default, although perhaps the 'txt' should be the default?
         };
 

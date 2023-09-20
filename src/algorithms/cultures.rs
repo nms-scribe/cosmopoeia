@@ -1,5 +1,5 @@
+use core::cmp::Reverse;
 use std::collections::HashMap;
-use std::cmp::Reverse;
 use std::collections::HashSet;
 
 use rand::Rng;
@@ -42,9 +42,8 @@ impl CultureType {
     fn generate_expansionism<Random: Rng>(&self, rng: &mut Random, size_variance: f64) -> f64 {
         let base = match self {
             Self::Lake => 0.8,
-            Self::Naval => 1.5,
+            Self::Naval | Self::Nomadic => 1.5,
             Self::River => 0.9,
-            Self::Nomadic => 1.5,
             Self::Hunting => 0.7,
             Self::Highland => 1.2,
             Self::Generic => 1.0
@@ -56,33 +55,35 @@ impl CultureType {
 
 
 
-pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: &CultureSet, namers: &NamerSet, culture_count: &usize, size_variance: &SizeVarianceArg, river_threshold: &RiverThresholdArg, overwrite_layer: &OverwriteCulturesArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, culture_set: &CultureSet, namers: &NamerSet, culture_count: usize, size_variance: &SizeVarianceArg, river_threshold: &RiverThresholdArg, overwrite_layer: &OverwriteCulturesArg, progress: &mut Progress) -> Result<(),CommandError> {
+
+    const MAX_ATTEMPTS: usize = 100;
 
     // Algorithm copied from AFMG
 
-    let culture_count = if culture_count > &culture_set.len() {
+    let culture_count = if culture_count > culture_set.len() {
         progress.warning(|| format!("The provided culture set is not large enough to produce the requested number of cultures. The count will be limited to {}.",culture_set.len()));
         culture_set.len()
     } else {
-        *culture_count
+        culture_count
     };
 
-    let biomes = target.edit_biomes_layer()?.read_features().to_named_entities_index(progress)?;
+    let biomes = target.edit_biomes_layer()?.read_features().into_named_entities_index(progress)?;
 
-    let lake_map = target.edit_lakes_layer()?.read_features().to_entities_index::<_,LakeForCultureGen>(progress)?;
+    let lake_map = target.edit_lakes_layer()?.read_features().into_entities_index::<_,LakeForCultureGen>(progress)?;
 
     let mut tile_layer = target.edit_tile_layer()?;
 
     let (max_habitability, mut populated) = get_culturable_tiles(&mut tile_layer, &biomes, &lake_map, progress)?;
 
     let culture_count = if populated.len() < (culture_count * 25) {
-        let culture_count = populated.len()/25;
-        if culture_count == 0 {
+        let fixed_culture_count = populated.len()/25;
+        if fixed_culture_count == 0 {
             progress.warning(|| "There aren't enough habitable tiles to support urban societies. Only the 'wildlands' culture will be created.")
         } else {
-            progress.warning(|| format!("There aren't enough habitiable tiles to support the requested number of cultures. The count will be limited to {}.",culture_count))
+            progress.warning(|| format!("There aren't enough habitiable tiles to support the requested number of cultures. The count will be limited to {fixed_culture_count}."))
         }
-        culture_count
+        fixed_culture_count
 
     } else {
         culture_count
@@ -96,7 +97,6 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     let (width,height) = tile_layer.get_layer_size()?;
     let spacing = (width + height) / 2.0 / culture_count as f64;
     let max_tile_choice = populated.len() / 2;
-    const MAX_ATTEMPTS: usize = 100;
 
     // I need to avoid duplicate names
     let mut culture_names = HashMap::new();
@@ -124,7 +124,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
                 },
             });
         if let Some(err) = error {
-            Err(err)?
+            return Err(err)
         }
 
         let mut spacing = spacing;
@@ -155,7 +155,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         let name = culture_source.name().to_owned();
 
         // define the culture type
-        let culture_type = get_culture_type(&center, river_threshold.river_threshold, rng)?;
+        let culture_type = get_culture_type(&center, river_threshold.river_threshold, rng);
         
         let expansionism = culture_type.generate_expansionism(rng,size_variance.size_variance);
 
@@ -239,40 +239,40 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
     let mut sortable_populated = Vec::new();
 
     for tile in populated.into_iter().watch(progress,"Processing tiles for preference sorting.","Tiles processed.") {
-        sortable_populated.push(TileForCulturePrefSorting::from(tile, &*tile_layer, &biomes, &lake_map)?);
+        sortable_populated.push(TileForCulturePrefSorting::from(tile, &*tile_layer, biomes, lake_map)?);
     }
 
     Ok((max_habitability, sortable_populated))
 }
 
 
-fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_threshold: f64, rng: &mut Random) -> Result<CultureType, CommandError> {
+fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_threshold: f64, rng: &mut Random) -> CultureType {
     if center.elevation_scaled < 70 && center.biome.supports_nomadic {
-        return Ok(CultureType::Nomadic) 
+        return CultureType::Nomadic 
     } else if center.elevation_scaled > 50 {
-        return Ok(CultureType::Highland)
+        return CultureType::Highland
     }
-
+    
     if let Some(water_count) = center.water_count {
         if let Some(neighboring_lake_size) = center.neighboring_lake_size {
             if neighboring_lake_size > 5 {
-                return Ok(CultureType::Lake)
+                return CultureType::Lake
             }
         }
 
         if (center.neighboring_lake_size.is_none() && rng.gen_bool(0.1)) || // on the ocean cost (on water cost and not on a lake)
            ((water_count == 1) && rng.gen_bool(0.6)) || // on exactly one water (makes a good harbor)
            (matches!(center.grouping,Grouping::Islet) && rng.gen_bool(0.4)) { // on a small island
-            return Ok(CultureType::Naval)
+            return CultureType::Naval
         }
     }
     
     if center.water_flow > river_threshold { 
-        return Ok(CultureType::River)
+        CultureType::River
     } else if center.shore_distance > 2 && center.biome.supports_hunting {
-        return Ok(CultureType::Hunting)
+        CultureType::Hunting
     } else {
-        return Ok(CultureType::Generic)
+        CultureType::Generic
     }
 }
 
@@ -284,20 +284,20 @@ fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
             return true;
         }
     }
-    return false;
+    false
 }
 
 
 pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let cultures = target.edit_cultures_layer()?.read_features().to_entities_vec::<_,CultureForPlacement>(progress)?;
+    let cultures = target.edit_cultures_layer()?.read_features().into_entities_vec::<_,CultureForPlacement>(progress)?;
 
-    let biome_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForCultureExpand>(progress)?;
+    let biome_map = target.edit_biomes_layer()?.read_features().into_named_entities_index::<_,BiomeForCultureExpand>(progress)?;
 
     let mut tiles = target.edit_tile_layer()?;
 
     // we're working with a tile map, and completely overwriting whatever is there.
-    let mut tile_map = tiles.read_features().to_entities_index::<_,TileForCultureExpand>(progress)?;
+    let mut tile_map = tiles.read_features().into_entities_index::<_,TileForCultureExpand>(progress)?;
 
     // priority queue keeps tasks sorted by priority
     // Since I need to go for the least priorities first, I need the double queue to get pop_min
@@ -340,7 +340,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                 continue;
             }
 
-            let neighbor = tile_map.try_get(&neighbor_id)?;
+            let neighbor = tile_map.try_get(neighbor_id)?;
 
             let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
 
@@ -367,11 +367,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                 // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
                 // may still be spreading, don't worry).
                 let replace_culture = if let Some(neighbor_cost) = costs.get(neighbor_id) {
-                    if &total_cost < neighbor_cost {
-                        true
-                    } else {
-                        false
-                    }
+                    &total_cost < neighbor_cost
                 } else {
                     true
                 };
@@ -408,9 +404,8 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
         }
 
-        for (tile_id,culture) in place_cultures {
-            let tile = tile_map.try_get_mut(&tile_id)?;
-            tile.culture = Some(culture);
+        for (place_tile_id,place_culture) in place_cultures {
+            tile_map.try_get_mut(&place_tile_id)?.culture = Some(place_culture);
         }
 
 
@@ -418,7 +413,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing cultures.","Cultures written.") {
 
-        let mut feature = tiles.try_feature_by_id(&fid)?;
+        let mut feature = tiles.try_feature_by_id(fid)?;
 
         feature.set_culture(tile.culture.as_deref())?;
 
@@ -430,11 +425,10 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     Ok(())
 }
 
-fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -> f64 {
+const fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -> f64 {
     match culture_type {
         CultureType::Lake => match neighbor.shore_distance {
-            1 => 0.0,
-            2 => 0.0, 
+            2 | 1 => 0.0, 
             ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
             -1 => 0.0,
         },
@@ -447,32 +441,23 @@ fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -
         CultureType::Nomadic => match neighbor.shore_distance {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
         CultureType::Generic  => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
         CultureType::River => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
         CultureType::Hunting => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0,
+            -1 | ..=-2 | 0 | 2.. => 0.0,
         },
         CultureType::Highland => match neighbor.shore_distance {
             1 => 20.0, // penalty for reaching the coast
-            2 => 0.0, 
-            ..=-2 | 0 | 2.. => 0.0, 
-            -1 => 0.0,
+            -1 | ..=-2 | 0 | 2.. => 0.0,
         },
     }
 

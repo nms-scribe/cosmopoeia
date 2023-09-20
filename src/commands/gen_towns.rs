@@ -59,7 +59,7 @@ impl Task for Create {
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
-        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForTowns>(progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForTowns>(progress)?;
 
         
         target.with_transaction(|target| {
@@ -75,7 +75,7 @@ impl Task for Create {
 impl Create {
     fn run_with_parameters<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, count_arg: &TownCountsArg, overwrite_towns: &OverwriteTownsArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Generating towns");
-        generate_towns(target, random, &culture_lookup, loaded_namers, count_arg, overwrite_towns, progress)
+        generate_towns(target, random, culture_lookup, loaded_namers, count_arg, overwrite_towns, progress)
     }
 }
 
@@ -178,7 +178,7 @@ impl Task for GenTowns {
     
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
 
-            let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForTowns>(progress)?;
+            let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForTowns>(progress)?;
     
     
             Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.town_counts_arg, &default_args.river_threshold_arg, &default_args.overwrite_towns_arg, &mut target, progress)

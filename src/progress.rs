@@ -1,5 +1,5 @@
-use std::time::Duration;
-use std::iter::Enumerate;
+use core::time::Duration;
+use core::iter::Enumerate;
 use std::collections::VecDeque;
 
 use indicatif::ProgressBar;
@@ -193,11 +193,11 @@ impl ProgressObserver for ConsoleProgressBar {
 
 
     fn message<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback) {
-        ConsoleProgressBar::message(&self, callback().as_ref())
+        ConsoleProgressBar::message(self, callback().as_ref())
     }
 
     fn warning<Message: AsRef<str>, Callback: FnOnce() -> Message>(&self, callback: Callback){
-        ConsoleProgressBar::warning(&self, callback().as_ref());
+        ConsoleProgressBar::warning(self, callback().as_ref());
     }
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {
@@ -209,7 +209,7 @@ impl ProgressObserver for ConsoleProgressBar {
     }
 
     fn announce(&self, message: &str) {
-        ConsoleProgressBar::announce(&self, message)
+        ConsoleProgressBar::announce(self, message)
     }
 
 }
@@ -256,8 +256,8 @@ impl<IteratorType: Iterator> WatchableIterator for IteratorType {
     fn watch<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self> {
         progress.start(|| (start,self.size_hint().1));
         IteratorWatcher { 
-            finish: finish, 
-            progress: progress, 
+            finish, 
+            progress, 
             inner: self.enumerate()
         }
 
@@ -309,8 +309,8 @@ impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         QueueWatcher { 
-            finish: finish, 
-            progress: progress, 
+            finish, 
+            progress, 
             inner: self,
             pushed: 0,
             popped: 0
@@ -362,8 +362,8 @@ impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
         DequeWatcher { 
-            finish: finish, 
-            progress: progress, 
+            finish, 
+            progress, 
             inner: self,
             pushed: 0,
             popped: 0
@@ -414,8 +414,8 @@ impl<ItemType: std::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<I
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));
         PriorityQueueWatcher { 
-            finish: finish, 
-            progress: progress, 
+            finish, 
+            progress, 
             inner: self,
             pushed: 0,
             popped: 0

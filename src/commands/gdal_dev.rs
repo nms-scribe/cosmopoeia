@@ -35,13 +35,13 @@ impl Task for DatasetInfo {
         println!("raster size: {:?}",ds.raster_size()); // I see this as 512,512 for vector.
         println!("metadata:");
         for MetadataEntry { domain, key, value } in ds.metadata() {
-            let domain = if domain == "" { "DEFAULT".to_string() } else { domain };
+            let domain = if domain.is_empty() { "DEFAULT".to_string() } else { domain };
             println!("{domain}: {key}={value}");
         }
         println!("driver: {}",ds.driver().long_name());
         println!("driver metadata:");
         for MetadataEntry { domain, key, value } in ds.driver().metadata() {
-            let domain = if domain == "" { "DEFAULT".to_string() } else { domain };
+            let domain = if domain.is_empty() { "DEFAULT".to_string() } else { domain };
             println!("{domain}: {key}={value}");
         }
         Ok(())

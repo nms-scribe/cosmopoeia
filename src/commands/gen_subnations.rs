@@ -68,7 +68,7 @@ impl Task for Create {
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
-        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
 
         target.with_transaction(|target| {
@@ -172,7 +172,7 @@ impl Task for FillEmpty {
         
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
-        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
         target.with_transaction(|target| {
             Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, target, progress)
@@ -306,7 +306,7 @@ impl Curvify {
         // FUTURE: Technically, subnations have to follow the curves of their owning nations as priority over their own. 
         // Right now, it doesn't seem to make a big difference if you have the nation borders thick enough. But it
         // may become important later.
-        curvify_layer_by_theme::<_,SubnationTheme>(target, &bezier_scale, progress)
+        curvify_layer_by_theme::<_,SubnationTheme>(target, bezier_scale, progress)
     }
     
 }
@@ -375,7 +375,7 @@ impl Task for GenSubnations {
 
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
 
-            let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+            let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
     
             Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.subnation_percent_arg, &default_args.overwrite_subnations_arg, &default_args.bezier_scale_arg, &mut target, progress)
 
@@ -393,11 +393,11 @@ impl GenSubnations {
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(random: &mut Random, culture_lookup: &EntityLookup<CultureSchema, Culture>, loaded_namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_subnations: &OverwriteSubnationsArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|target| {
 
-            Create::run_with_parameters(random, &culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, target, progress)?;
+            Create::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, overwrite_subnations, target, progress)?;
 
             Expand::run_with_parameters(random, subnation_percentage, target, progress)?;
 
-            FillEmpty::run_with_parameters(random, &culture_lookup, loaded_namers, subnation_percentage, target, progress)?;
+            FillEmpty::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, target, progress)?;
 
             Normalize::run_with_parameters(target, progress)?;
 

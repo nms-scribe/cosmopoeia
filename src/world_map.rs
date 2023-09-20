@@ -55,6 +55,7 @@ use crate::commands::OverwriteCulturesArg;
 use crate::commands::OverwriteTownsArg;
 use crate::commands::OverwriteSubnationsArg;
 use crate::commands::OverwriteNationsArg;
+use crate::algorithms::water_flow::WaterFlowResult;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -205,10 +206,10 @@ macro_rules! feature_get_field {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?)
     };
     ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
-        Ok(string_to_id_ref(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        string_to_id_ref(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_string_by_name($field)?.map(|a| string_to_id_ref(a)).transpose()?)
+        $self.feature.field_as_string_by_name($field)?.map(|a| string_to_id_ref(a)).transpose()
     };
     ($self: ident i32 $feature_name: literal $prop: ident $field: path) => {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)?)
@@ -220,16 +221,16 @@ macro_rules! feature_get_field {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)? != 0)
     };
     ($self: ident neighbor_directions $feature_name: literal $prop: ident $field: path) => {
-        Ok(string_to_neighbor_directions(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        string_to_neighbor_directions(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident id_list $feature_name: literal $prop: ident $field: path) => {
-        Ok(string_to_id_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        string_to_id_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident river_segment_from $feature_name: literal $prop: ident $field: path) => {
-        Ok(RiverSegmentFrom::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        RiverSegmentFrom::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident river_segment_to $feature_name: literal $prop: ident $field: path) => {
-        Ok(RiverSegmentTo::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        RiverSegmentTo::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident string $feature_name: literal $prop: ident $field: path) => {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
@@ -247,16 +248,16 @@ macro_rules! feature_get_field {
         }
     };
     ($self: ident biome_criteria $feature_name: literal $prop: ident $field: path) => {
-        Ok(BiomeCriteria::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        BiomeCriteria::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident lake_type $feature_name: literal $prop: ident $field: path) => {
-        Ok(LakeType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        LakeType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident grouping $feature_name: literal $prop: ident $field: path) => {
-        Ok(Grouping::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        Grouping::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident culture_type $feature_name: literal $prop: ident $field: path) => {
-        Ok(CultureType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)?)
+        CultureType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
 }
 
@@ -511,9 +512,7 @@ macro_rules! layer {
         }
 
         paste!{
-            pub(crate) struct [<$name Schema>] {
-
-            }
+            pub(crate) struct [<$name Schema>];
         }
 
         paste!{
@@ -648,7 +647,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
 impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> TypedFeatureIterator<'impl_life, SchemaType, Feature> {
 
-    pub(crate) fn to_entities_vec<Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
+    pub(crate) fn into_entities_vec<Progress: ProgressObserver, Data: TryFrom<Feature,Error=CommandError>>(self, progress: &mut Progress) -> Result<Vec<Data>,CommandError> {
         let mut result = Vec::new();
         for entity in self.watch(progress,format!("Reading {}.",SchemaType::LAYER_NAME),format!("{} read.",SchemaType::LAYER_NAME.to_title_case())) {
             result.push(Data::try_from(entity)?);
@@ -661,13 +660,13 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
     }
 
 
-    pub(crate) fn to_entities_index<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
+    pub(crate) fn into_entities_index<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>>(self, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
-        self.to_entities_index_for_each(|_,_| Ok(()), progress)
+        self.into_entities_index_for_each(|_,_| Ok(()), progress)
 
     }
 
-    pub(crate) fn to_entities_index_for_each<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>, Callback: FnMut(&u64,&Data) -> Result<(),CommandError>>(&mut self, mut callback: Callback, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
+    pub(crate) fn into_entities_index_for_each<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>, Callback: FnMut(&u64,&Data) -> Result<(),CommandError>>(self, mut callback: Callback, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
         let mut result = IndexMap::new();
         for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
@@ -682,7 +681,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
         Ok(EntityIndex::from(result))
     }
 
-    pub(crate) fn to_named_entities_index<Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(&mut self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
+    pub(crate) fn into_named_entities_index<Progress: ProgressObserver, Data: NamedEntity<SchemaType> + TryFrom<Feature,Error=CommandError>>(self, progress: &mut Progress) -> Result<EntityLookup<SchemaType, Data>,CommandError> {
         let mut result = HashMap::new();
 
         for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
@@ -805,8 +804,8 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
     pub(crate) fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<FinishMessage, Progress, SchemaType, EntityType> {
         progress.start(|| (start,Some(self.len())));
         EntityIndexQueueWatcher { 
-            finish: finish, 
-            progress: progress, 
+            finish, 
+            progress, 
             inner: self,
             popped: 0
         }
@@ -927,9 +926,10 @@ macro_rules! entity_field_assign {
 /// Used by `entity!` to generate an expression which tries to convert a feature into an entity.
 macro_rules! entity_from_data {
     ($name: ident $feature: ident, $($field: ident: $type: ty $(= $function: expr)?),*) => {{
+        #[allow(clippy::redundant_closure_call)] // I need to use a closure to call the expression from inside the macro, so it's not redundant.
         Ok($name {
             $(
-                $field: crate::entity_field_assign!($feature $field $type $(= $function)?)
+                $field: $crate::entity_field_assign!($feature $field $type $(= $function)?)
             ),*
         })
     }};
@@ -970,7 +970,7 @@ macro_rules! entity {
         $(#[$struct_attr])* 
         pub(crate) struct $name {
             $(
-                pub(crate) $field: crate::entity_field_def!($type $([$function])?)
+                pub(crate) $field: $crate::entity_field_def!($type $([$function])?)
             ),*
         }
 
@@ -988,7 +988,7 @@ macro_rules! entity {
                 type Error = CommandError;
     
                 fn try_from(value: [<$layer Feature>]) -> Result<Self,Self::Error> {
-                    crate::entity_from_data!($name value, $($field: $type $(= $function)?),*)
+                    $crate::entity_from_data!($name value, $($field: $type $(= $function)?),*)
                 }
             }
     
@@ -1075,13 +1075,13 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         feature.set_geometry(geometry)?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
-                feature.set_field(&field, value)?;
+                feature.set_field(field, value)?;
             } else {
-                feature.set_field_null(&field)?;
+                feature.set_field_null(field)?;
             }
         }
         feature.create(&self.layer)?;
-        Ok(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?)
+        feature.fid().ok_or_else(|| CommandError::MissingField("fid"))
     }
 
 
@@ -1092,13 +1092,13 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         let feature = gdal::vector::Feature::new(self.layer.defn())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
-                feature.set_field(&field, value)?;
+                feature.set_field(field, value)?;
             } else {
-                feature.set_field_null(&field)?;
+                feature.set_field_null(field)?;
             }
         }
         feature.create(&self.layer)?;
-        Ok(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?)
+        feature.fid().ok_or_else(|| CommandError::MissingField("fid"))
 
     }
 
@@ -1155,14 +1155,11 @@ impl Grouping {
 
 }
 
-
-impl Into<String> for &Grouping {
-
-    fn into(self) -> String {
-        to_ron_string(self).expect("Why would serialization fail on a basic enum?")
+impl From<&Grouping> for String {
+    fn from(value: &Grouping) -> Self {
+        to_ron_string(&value).expect("Why would serialization fail on a basic enum?")
     }
 }
-
 
 impl TryFrom<String> for Grouping {
     type Error = CommandError;
@@ -1317,13 +1314,13 @@ entity!(TileForWinds: Tile {
 
 entity!(TileForWaterflow: Tile {
     elevation: f64, 
+    flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
-    precipitation: f64,
+    precipitation: f64, // not in TileForWaterFill
     temperature: f64,
-    water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
     water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
-    flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new())
+    water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
 });
 
 impl TileWithNeighbors for TileForWaterflow {
@@ -1346,14 +1343,14 @@ impl TileWithElevation for TileForWaterflow {
 // of the macro and figure something out, but this is easier.
 entity!(TileForWaterFill: Tile {
     elevation: f64, 
+    flow_to: Vec<u64>, // Initialized to blank in TileForWaterFlow
     grouping: Grouping, 
+    lake_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     neighbors: Vec<(u64,i32)>,
-    water_flow: f64,
-    water_accumulation: f64,
-    flow_to: Vec<u64>,
+    outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()), // Not in TileForWaterFlow
     temperature: f64,
-    outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
-    lake_id: Option<u64> = |_| Ok::<_,CommandError>(None)
+    water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
+    water_flow: f64,  // Initialized to blank in TileForWaterFlow
 });
 
 impl From<TileForWaterflow> for TileForWaterFill {
@@ -1720,7 +1717,7 @@ impl TileLayer<'_,'_> {
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     // FUTURE: It would also be nice to get rid of the lifetimes
     pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: &u64) -> Result<Data,CommandError> {
-        self.try_feature_by_id(&fid)?.try_into()
+        self.try_feature_by_id(fid)?.try_into()
     }
 
     pub(crate) fn add_tile(&mut self, tile: NewTile) -> Result<(),CommandError> {
@@ -1766,20 +1763,23 @@ impl TileLayer<'_,'_> {
 
     // This is for when you want to generate the water fill in a second step, so you can verify the flow first.
     // It's a function here because it's used in a command, which I want to be as simple as possible.
-    pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
+    pub(crate) fn get_index_and_queue_for_water_fill<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<WaterFlowResult,CommandError> {
 
-        let mut tile_queue = Vec::new();
+        let mut lake_queue = Vec::new();
 
-        let tile_map = self.read_features().to_entities_index_for_each::<_,TileForWaterFill,_>(|fid,tile| {
+        let tile_map = self.read_features().into_entities_index_for_each::<_,TileForWaterFill,_>(|fid,tile| {
             if tile.water_accumulation > 0.0 {
-                tile_queue.push((*fid,tile.water_accumulation));
+                lake_queue.push((*fid,tile.water_accumulation));
             }
 
             Ok(())
         },progress)?;
 
 
-        Ok((tile_map,tile_queue))
+        Ok(WaterFlowResult {
+            tile_map,
+            lake_queue
+        })
         
 
     }
@@ -1807,10 +1807,10 @@ impl TryFrom<String> for RiverSegmentFrom {
     }
 }
 
-impl Into<String> for &RiverSegmentFrom {
+impl From<&RiverSegmentFrom> for String {
 
-    fn into(self) -> String {
-        to_ron_string(self).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+    fn from(value: &RiverSegmentFrom) -> Self {
+        to_ron_string(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1831,18 +1831,19 @@ impl TryFrom<String> for RiverSegmentTo {
     }
 }
 
-impl Into<String> for &RiverSegmentTo {
+impl From<&RiverSegmentTo> for String {
 
-    fn into(self) -> String {
-        to_ron_string(self).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+    fn from(value: &RiverSegmentTo) -> Self {
+        to_ron_string(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
 
 layer!(River["rivers"]: wkbLineString {
-    #[set(allow(dead_code))] from_tile_id: id_ref,
-    #[set(allow(dead_code))] from_type: river_segment_from,
-    #[set(allow(dead_code))] from_flow: f64,
+    // clippy doesn't understand why I'm using 'from_*' here.
+    #[get(allow(clippy::wrong_self_convention))] #[set(allow(dead_code))] from_tile_id: id_ref,
+    #[get(allow(clippy::wrong_self_convention))] #[set(allow(dead_code))] from_type: river_segment_from,
+    #[get(allow(clippy::wrong_self_convention))] #[set(allow(dead_code))] from_flow: f64,
     #[set(allow(dead_code))] to_tile_id: id_ref,
     #[set(allow(dead_code))] to_type: river_segment_to,
     #[set(allow(dead_code))] to_flow: f64,
@@ -1886,10 +1887,10 @@ pub(crate) enum LakeType {
 }
 
 
-impl Into<String> for &LakeType {
+impl From<&LakeType> for String {
 
-    fn into(self) -> String {
-        to_ron_string(self).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+    fn from(value: &LakeType) -> Self {
+        to_ron_string(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1978,10 +1979,10 @@ impl TryFrom<String> for BiomeCriteria {
     }
 }
 
-impl Into<String> for &BiomeCriteria {
+impl From<&BiomeCriteria> for String {
 
-    fn into(self) -> String {
-        to_ron_string(self).expect("Why would serialization fail on an enum with no weird structs?") // there shouldn't be any reason to have an error
+    fn from(value: &BiomeCriteria) -> Self {
+        to_ron_string(value).expect("Why would serialization fail on an enum with no weird structs?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -2118,7 +2119,7 @@ impl BiomeSchema {
                 BiomeCriteria::Matrix(list) => {
                     for (moist,temp) in list {
                         let (moist,temp) = (*moist,*temp);
-                        if matrix[moist][temp] != "" {
+                        if !matrix[moist][temp].is_empty() {
                             Err(CommandError::DuplicateBiomeMatrixSlot(moist,temp))?
                         } else {
                             matrix[moist][temp] = biome.name.clone()
@@ -2144,12 +2145,13 @@ impl BiomeSchema {
             }
 
         }
+        // check for missing data
         let wetland = wetland.ok_or_else(|| CommandError::MissingWetlandBiome)?;
         let glacier = glacier.ok_or_else(|| CommandError::MissingGlacierBiome)?;
         let ocean = ocean.ok_or_else(|| CommandError::MissingOceanBiome)?;
-        for moisture in 0..matrix.len() {
-            for temperature in 0..matrix[moisture].len() {
-                if matrix[moisture][temperature] == "" {
+        for (moisture,moisture_dimension) in matrix.iter().enumerate() {
+            for (temperature,temperature_dimension) in moisture_dimension.iter().enumerate() {
+                if temperature_dimension.is_empty() {
                     return Err(CommandError::MissingBiomeMatrixSlot(moisture,temperature))
                 }
             }
@@ -2249,7 +2251,7 @@ impl BiomeLayer<'_,'_> {
     }
 
     pub(crate) fn get_matrix<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<BiomeMatrix,CommandError> {
-        let result = self.read_features().to_entities_vec(progress)?;
+        let result = self.read_features().into_entities_vec(progress)?;
     
         BiomeSchema::build_matrix_from_biomes(&result)
     
@@ -2269,10 +2271,10 @@ pub(crate) enum CultureType {
 }
 
 
-impl Into<String> for &CultureType {
+impl From<&CultureType> for String {
 
-    fn into(self) -> String {
-        to_ron_string(self).expect("Why would serialization fail on a basic enum?")
+    fn from(value: &CultureType) -> Self {
+        to_ron_string(value).expect("Why would serialization fail on a basic enum?")
     }
 }
 
@@ -2694,11 +2696,11 @@ impl ElevationLimits {
     }
 }
 
-impl Into<String> for &ElevationLimits {
+impl From<&ElevationLimits> for String {
 
-    fn into(self) -> String {
+    fn from(value: &ElevationLimits) -> Self {
         // store as tuple for simplicity
-        to_ron_string(&(self.min_elevation,self.max_elevation)).expect("Why would serialization fail on a tuple of numbers?")
+        to_ron_string(&(value.min_elevation,value.max_elevation)).expect("Why would serialization fail on a tuple of numbers?")
     }
 }
 
@@ -2721,7 +2723,7 @@ impl PropertyLayer<'_,'_> {
     fn get_property(&mut self, name: &str) -> Result<String,CommandError> {
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
             if feature.name()? == name {
-                return Ok(feature.value()?)
+                return feature.value()
             }
         }
         Err(CommandError::PropertyNotSet(name.to_owned()))
@@ -2866,87 +2868,87 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     }
 
     pub(crate) fn create_points_layer(&mut self, overwrite: bool) -> Result<PointLayer,CommandError> {
-        Ok(PointLayer::create_from_dataset(&mut self.dataset, overwrite)?)       
+        PointLayer::create_from_dataset(&mut self.dataset, overwrite)       
 
     }
 
     pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TriangleLayer,CommandError> {
-        Ok(TriangleLayer::create_from_dataset(&mut self.dataset, overwrite)?)
+        TriangleLayer::create_from_dataset(&mut self.dataset, overwrite)
 
     }
 
     pub(crate) fn create_tile_layer(&mut self, overwrite: &OverwriteTilesArg) -> Result<TileLayer,CommandError> {
-        Ok(TileLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_tiles)?)
+        TileLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_tiles)
 
     }
 
     pub(crate) fn create_rivers_layer(&mut self, overwrite: &OverwriteRiversArg) -> Result<RiverLayer,CommandError> {
-        Ok(RiverLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_rivers)?)
+        RiverLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_rivers)
 
     }
 
     pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: &OverwriteLakesArg) -> Result<LakeLayer,CommandError> {
-        Ok(LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_lakes)?)
+        LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_lakes)
     }
 
     pub (crate) fn edit_lakes_layer(&mut self) -> Result<LakeLayer,CommandError> {
-        Ok(LakeLayer::open_from_dataset(&mut self.dataset)?)
+        LakeLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn edit_tile_layer(&mut self) -> Result<TileLayer,CommandError> {
-        Ok(TileLayer::open_from_dataset(&mut self.dataset)?)
+        TileLayer::open_from_dataset(&self.dataset)
 
     }
 
     pub(crate) fn create_biomes_layer(&mut self, overwrite: &OverwriteBiomesArg) -> Result<BiomeLayer,CommandError> {
-        Ok(BiomeLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_biomes)?)
+        BiomeLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_biomes)
     }
 
     pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
-        Ok(BiomeLayer::open_from_dataset(&mut self.dataset)?)
+        BiomeLayer::open_from_dataset(&self.dataset)
 
     }
 
     pub(crate) fn create_cultures_layer(&mut self, overwrite: &OverwriteCulturesArg) -> Result<CultureLayer,CommandError> {
-        Ok(CultureLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_cultures)?)
+        CultureLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_cultures)
     }
 
     pub(crate) fn edit_cultures_layer(&mut self) -> Result<CultureLayer,CommandError> {
-        Ok(CultureLayer::open_from_dataset(&mut self.dataset)?)
+        CultureLayer::open_from_dataset(&self.dataset)
 
     }
 
     pub(crate) fn create_towns_layer(&mut self, overwrite_layer: &OverwriteTownsArg) -> Result<TownLayer,CommandError> {
-        Ok(TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_towns)?)
+        TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_towns)
     }
 
     pub(crate) fn edit_towns_layer(&mut self) -> Result<TownLayer,CommandError> {
-        Ok(TownLayer::open_from_dataset(&mut self.dataset)?)
+        TownLayer::open_from_dataset(&self.dataset)
 
     }
 
     pub(crate) fn create_nations_layer(&mut self, overwrite_layer: &OverwriteNationsArg) -> Result<NationLayer,CommandError> {
-        Ok(NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_nations)?)
+        NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_nations)
     }
 
     pub(crate) fn edit_nations_layer(&mut self) -> Result<NationLayer,CommandError> {
-        Ok(NationLayer::open_from_dataset(&mut self.dataset)?)
+        NationLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: &OverwriteSubnationsArg) -> Result<SubnationLayer,CommandError> {
-        Ok(SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_subnations)?)
+        SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_subnations)
     }
 
     pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationLayer,CommandError> {
-        Ok(SubnationLayer::open_from_dataset(&mut self.dataset)?)
+        SubnationLayer::open_from_dataset(&self.dataset)
     }
 
     pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: &OverwriteCoastlineArg) -> Result<CoastlineLayer,CommandError> {
-        Ok(CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline.overwrite_coastline)?)
+        CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline.overwrite_coastline)
     }
 
     pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: &OverwriteOceanArg) -> Result<OceanLayer,CommandError> {
-        Ok(OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean.overwrite_ocean)?)
+        OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean.overwrite_ocean)
     }
 
     /* Uncomment this to add a line layer for playing around with ideas.
@@ -2956,11 +2958,11 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     */
 
     pub(crate) fn create_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
-        Ok(PropertyLayer::create_from_dataset(&mut self.dataset,true)?)
+        PropertyLayer::create_from_dataset(&mut self.dataset,true)
     }
 
     pub(crate) fn edit_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
-        Ok(PropertyLayer::open_from_dataset(&mut self.dataset)?)
+        PropertyLayer::open_from_dataset(&self.dataset)
     }
 
 }

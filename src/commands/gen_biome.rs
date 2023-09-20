@@ -82,7 +82,7 @@ impl Task for Apply {
 
         target.with_transaction(|target| {
 
-            Self::run(target, biomes, progress)
+            Self::run(target, &biomes, progress)
 
         })?;
 
@@ -94,7 +94,7 @@ impl Task for Apply {
 
 impl Apply {
 
-    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, biomes: &BiomeMatrix, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Applying biomes to tiles");
     
         apply_biomes(target, biomes, progress)
@@ -244,7 +244,7 @@ impl GenBiome {
         })?;
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
         target.with_transaction(|target| {            
-            Apply::run(target, biomes, progress)?;
+            Apply::run(target, &biomes, progress)?;
 
             Dissolve::run_with_parameters(target, progress)?;
 

@@ -124,7 +124,7 @@ impl BigBang {
 
     pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: PrimitiveArgs, cultures: &CulturesGenArg, namers: &mut NamerSet, loaded_source: LoadedSource, target_arg: TargetArg, progress: &mut Progress) -> Result<(), CommandError> {
 
-        let mut target = WorldMap::create_or_edit(&target_arg.target)?;
+        let mut target = WorldMap::create_or_edit(target_arg.target)?;
 
         Create::run_default(&primitive_args.tile_count_arg, &primitive_args.overwrite_all_arg.overwrite_tiles(), loaded_source, &mut target, random, progress)?;
 
@@ -151,10 +151,10 @@ impl BigBang {
         GenBiome::run_default(&primitive_args.overwrite_all_arg.overwrite_biomes(), &primitive_args.bezier_scale_arg, &mut target, progress)?;
 
         // The 'namer_set' here is not loaded, it's only used to verify that a namer exists for a culture while creating. Just to be clear, I'm not loading the namers twice, they are only loaded in `get_lookup_and_namers` below.
-        GenPeople::run_default(&primitive_args.river_threshold_arg, &cultures, namers, &primitive_args.size_variance_arg, &primitive_args.overwrite_all_arg.overwrite_cultures(), &primitive_args.expansion_factor_arg, &primitive_args.bezier_scale_arg, &mut target, random, progress)?;
+        GenPeople::run_default(&primitive_args.river_threshold_arg, cultures, namers, &primitive_args.size_variance_arg, &primitive_args.overwrite_all_arg.overwrite_cultures(), &primitive_args.expansion_factor_arg, &primitive_args.bezier_scale_arg, &mut target, random, progress)?;
 
         // CultureForNations implements everything that all the algorithms need.
-        let culture_lookup = target.cultures_layer()?.read_features().to_named_entities_index::<_,CultureForNations>(progress)?;
+        let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
     
         GenTowns::run_default(random, &culture_lookup, namers, &primitive_args.town_counts_arg, &primitive_args.river_threshold_arg, &primitive_args.overwrite_all_arg.overwrite_towns(), &mut target, progress)?;
 

@@ -166,11 +166,12 @@ impl Extent {
     }
 
     pub(crate) fn create_geometry(&self) -> Result<Geometry,CommandError> {
-        let mut vertices = Vec::new();
-        vertices.push((self.west,self.south).try_into()?);
-        vertices.push((self.west,self.south+self.height).try_into()?);
-        vertices.push((self.west+self.width,self.south+self.height).try_into()?);
-        vertices.push((self.west+self.width,self.south).try_into()?);
+        let vertices = vec![
+            (self.west,self.south).try_into()?,
+            (self.west,self.south+self.height).try_into()?,
+            (self.west+self.width,self.south+self.height).try_into()?,
+            (self.west+self.width,self.south).try_into()?
+        ];
         create_polygon(&vertices)
     }
 
@@ -467,7 +468,7 @@ pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: &BezierScaleArg) -> 
 
         let bezier = PolyBezier::from_poly_line(&points);
         let mut new_ring = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
-        for point in bezier.to_poly_line(&scale)? {
+        for point in bezier.to_poly_line(scale)? {
             new_ring.add_point_2d(point.to_tuple())
         }
         output.add_geometry(new_ring)?;
@@ -568,13 +569,13 @@ impl PolyBezier {
             },
             (Some(start), None) => {
                 let mut vertices = vec![start.clone()];
-                vertices.extend(line.into_iter().cloned());
+                vertices.extend(line.iter().cloned());
                 let result = Self::from_poly_line(&vertices);
                 result.trim_start()
             },
             (Some(start), Some(end)) => {
                 let mut vertices = vec![start.clone()];
-                vertices.extend(line.into_iter().cloned());
+                vertices.extend(line.iter().cloned());
                 vertices.push(end.clone());
                 let result = Self::from_poly_line(&vertices);
                 result.trim_both()
@@ -699,7 +700,7 @@ impl PolyBezier {
         if let Some(vertex1) = vertices.next() {
             let mut vertex1 = vertex1;
             result.push(vertex1.clone());
-            while let Some(vertex2) = vertices.next() {
+            for vertex2 in vertices {
                 if let Some((c1,c2)) = controls.next() {
                     let curve = adaptive_bezier_curve(
                         Vector2::new(*vertex1.x,*vertex1.y),
@@ -803,21 +804,21 @@ pub(crate) mod namers_pretty_print {
 
     /// This structure pretty prints a JSON value to make it human readable.
     #[derive(Clone, Debug)]
-    pub(crate) struct PrettyFormatter<'a> {
+    pub(crate) struct PrettyFormatter<'indent> {
         current_indent: usize,
         has_value: bool,
         array_nesting: usize,
-        indent: &'a [u8],
+        indent: &'indent [u8],
     }
 
-    impl<'a> PrettyFormatter<'a> {
+    impl<'indent> PrettyFormatter<'indent> {
         /// Construct a pretty printer formatter that defaults to using two spaces for indentation.
         pub(crate) fn new() -> Self {
             PrettyFormatter::with_indent(b"  ")
         }
 
         /// Construct a pretty printer formatter that uses the `indent` string for indentation.
-        pub(crate) fn with_indent(indent: &'a [u8]) -> Self {
+        pub(crate) fn with_indent(indent: &'indent [u8]) -> Self {
             PrettyFormatter {
                 current_indent: 0,
                 has_value: false,
@@ -1093,7 +1094,7 @@ pub(crate) mod point_finder {
                     return true;
                 }
             }
-            return false;
+            false
 
         }
 
@@ -1183,7 +1184,7 @@ pub(crate) mod point_finder {
             search_boundary = self.bounds.clone();
             find_tile!();
             // okay, nothing was found, this is an error.
-            return Err(CommandError::CantFindTileNearPoint);
+            Err(CommandError::CantFindTileNearPoint)
 
         }
 

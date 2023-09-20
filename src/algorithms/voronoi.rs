@@ -60,7 +60,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    pub(crate) fn sort_clockwise(center: &Point, points: &mut Vec<Point>, extent: &Extent, needs_a_trim: &mut bool)  {
+    pub(crate) fn sort_clockwise(center: &Point, points: &mut [Point], extent: &Extent, needs_a_trim: &mut bool)  {
         // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
         // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
         // when angle is equal, the point closer to the center will be lesser.
@@ -253,11 +253,11 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator fo
             },
             VoronoiGeneratorPhase::Started(iter,_) => {
                 let mut result = None;
-                while let Some(value) = iter.next() {
+                for value in iter.by_ref() {
                     // create_voronoi returns none for various reasons if the polygon shouldn't be written. 
                     // If it does that, I have to keep trying. 
                     result = Self::create_voronoi(value.0, value.1,&self.extent,&self.extent_geo).transpose();
-                    if let Some(_) = result {
+                    if result.is_some() {
                         break;
                     }
                 }

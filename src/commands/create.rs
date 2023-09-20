@@ -258,7 +258,7 @@ impl CreateTiles {
     
         progress.announce("Create tiles from voronoi polygons");
 
-        load_tile_layer(target, overwrite, voronois, &limits, progress)    
+        load_tile_layer(target, overwrite, voronois, limits, progress)    
     }
 
 }

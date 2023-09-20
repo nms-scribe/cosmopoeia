@@ -129,7 +129,7 @@ macro_rules! command_help_template {
 macro_rules! subcommand_def {
     (#[doc = $about: literal] $(#[$attr:meta])* $visibility: vis struct $name: ident $body: tt) => {
         #[derive(Args)]
-        #[command(author,help_template = crate::command_help_template!())] 
+        #[command(author,help_template = $crate::command_help_template!())] 
         #[doc = $about]
         $(#[$attr])*
         $visibility struct $name $body

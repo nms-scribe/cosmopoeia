@@ -116,7 +116,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     let mut layer = target.edit_tile_layer()?;
 
     // Find all tiles which share the same vertex.
-    let mut tile_map = layer.read_features().to_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
+    let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
         let ring = tile.geometry.get_geometry(0);
         for i in 0..ring.point_count() as i32 {
             let point: Point = ring.get_point(i).try_into()?;
@@ -140,7 +140,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         for tile in &tiles {
             
             // I can't calculate the angle yet, because I'm still deduplicating any intersections. I'll do that in the next loop.
-            let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).map(|neighbor| *neighbor);
+            let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).copied();
 
             tile_map.try_get_mut(tile)?.neighbor_set.extend(neighbors)
 
@@ -152,7 +152,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         let mut neighbors = Vec::new();
         for neighbor_id in &tile.neighbor_set {
-            let neighbor = tile_map.try_get(&neighbor_id)?;
+            let neighbor = tile_map.try_get(neighbor_id)?;
 
             let neighbor_angle = {
                 let (site_x,site_y) = tile.site.to_tuple();
@@ -192,7 +192,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &D
 
     // find the lowest neighbors
     for (neighbor_fid,_) in entity.neighbors() {
-        let neighbor = tile_map.try_get(&neighbor_fid)?;
+        let neighbor = tile_map.try_get(neighbor_fid)?;
         let neighbor_elevation = neighbor.elevation();
         if let Some(lowest_elevation) = lowest_elevation.as_mut() {
             if neighbor_elevation < *lowest_elevation {
@@ -243,7 +243,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
 
         // it's much faster to union two geometries rather than union them one at a time.
         let mut next_tiles = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-        while let Some(tile) = iterator.next() {
+        for tile in iterator {
             next_tiles.add_geometry(tile?.geometry()?.clone())?;
         }
         progress.start_unknown_endpoint(|| "Uniting tiles.");
@@ -274,7 +274,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let mut polygons = Vec::new();
         let union_polygons = multipolygon_to_polygons(tile_union);
         for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
-            for new_polygon in bezierify_polygon(&polygon,&bezier_scale)? {
+            for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
                 ocean = ocean.difference(&new_polygon).ok_or_else(|| CommandError::GdalDifferenceFailed)?; 
                 if !ocean.is_valid() {
                     // I'm writing to stdout here because the is_valid also writes to stdout
@@ -339,7 +339,7 @@ impl Theme for CultureTheme {
     type Feature<'feature> = CultureFeature<'feature>;
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError> {
-        let culture_id_map = target.edit_cultures_layer()?.read_features().to_named_entities_index::<_,CultureForDissolve>(progress)?;
+        let culture_id_map = target.edit_cultures_layer()?.read_features().into_named_entities_index::<_,CultureForDissolve>(progress)?;
         Ok(Self {
             culture_id_map
         })
@@ -375,7 +375,7 @@ impl Theme for BiomeTheme {
     type Feature<'feature> = BiomeFeature<'feature>;
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError> {
-        let biome_id_map = target.edit_biomes_layer()?.read_features().to_named_entities_index::<_,BiomeForDissolve>(progress)?;
+        let biome_id_map = target.edit_biomes_layer()?.read_features().into_named_entities_index::<_,BiomeForDissolve>(progress)?;
         Ok(Self {
             biome_id_map
         })
@@ -399,7 +399,7 @@ impl Theme for BiomeTheme {
 }
 
 
-pub(crate) struct NationTheme();
+pub(crate) struct NationTheme;
 
 impl Theme for NationTheme {
 
@@ -408,7 +408,7 @@ impl Theme for NationTheme {
     type Feature<'feature> = NationFeature<'feature>;
 
     fn new<Progress: ProgressObserver>(_: &mut WorldMapTransaction, _: &mut Progress) -> Result<Self,CommandError> {
-        Ok(Self())
+        Ok(Self)
     }
 
     fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<Option<u64>, CommandError> {
@@ -429,7 +429,7 @@ impl Theme for NationTheme {
 
 
 
-pub(crate) struct SubnationTheme();
+pub(crate) struct SubnationTheme;
 
 impl Theme for SubnationTheme {
 
@@ -438,7 +438,7 @@ impl Theme for SubnationTheme {
     type Feature<'feature> = SubnationFeature<'feature>;
 
     fn new<Progress: ProgressObserver>(_: &mut WorldMapTransaction, _: &mut Progress) -> Result<Self,CommandError> {
-        Ok(Self())
+        Ok(Self)
     }
 
     fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<Option<u64>, CommandError> {
@@ -467,7 +467,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
     let mut tiles = Vec::new();
 
-    let tile_map = target.edit_tile_layer()?.read_features().to_entities_index_for_each::<_,ThemeType::TileForTheme,_>(|_,tile| {
+    let tile_map = target.edit_tile_layer()?.read_features().into_entities_index_for_each::<_,ThemeType::TileForTheme,_>(|_,tile| {
         tiles.push(tile.clone());
         Ok(())
     },progress)?;
@@ -478,7 +478,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
         } else if tile.shore_distance() == &-1 {
             let mut usable_neighbors = HashMap::new();
             for (neighbor_id,_) in tile.neighbors() {
-                let neighbor = tile_map.try_get(&neighbor_id)?;
+                let neighbor = tile_map.try_get(neighbor_id)?;
                 if let Some(id) = theme.get_theme_id(neighbor)? {
                     match usable_neighbors.get_mut(&id) {
                         None => {
@@ -491,7 +491,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 }
             }
 
-            if usable_neighbors.len() > 0 {
+            if !usable_neighbors.is_empty() {
                 let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).expect("Why would there be no max if we know the list isn't empty?").0;
                 Some((*chosen_value,tile.geometry().clone()))
             } else {
@@ -521,7 +521,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
         let fid = feature.fid()?;
         let geometry = if let Some(geometries) = new_polygon_map.remove(&fid) {
             // it should never be 0 if it's in the map, but since I'm already allowing for empty geographies, might as well check.
-            if geometries.len() > 0 {
+            if !geometries.is_empty() {
                 let mut geometries = geometries.into_iter();
                 let first = geometries.next().expect("Why would next fail if the len > 0?"); 
                 let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;

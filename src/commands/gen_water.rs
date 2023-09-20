@@ -8,15 +8,13 @@ use crate::command_def;
 use crate::world_map::WorldMap;
 use crate::algorithms::water_flow::generate_water_flow;
 use crate::algorithms::water_fill::generate_water_fill;
+use crate::algorithms::water_flow::WaterFlowResult;
 use crate::algorithms::rivers::generate_water_rivers;
 use crate::algorithms::water_distance::generate_water_distance;
 use crate::algorithms::grouping::calculate_grouping;
 use crate::algorithms::tiles::calculate_coastline;
 use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::TileForWaterFill;
-use crate::world_map::TileSchema;
-use crate::world_map::EntityIndex;
 use crate::commands::TargetArg;
 use crate::commands::OverwriteCoastlineArg;
 use crate::commands::OverwriteOceanArg;
@@ -101,7 +99,7 @@ impl Task for Flow {
 }
 
 impl Flow {
-    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(EntityIndex<TileSchema, TileForWaterFill>, Vec<(u64, f64)>), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<WaterFlowResult,CommandError> {
         progress.announce("Calculating water flow");
         generate_water_flow(target, progress)
     }
@@ -137,10 +135,10 @@ impl Task for Lakes {
 
         let mut target = WorldMap::edit(self.target_arg.target)?;
 
-        let (tile_map,tile_queue) = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
+        let water_flow_result = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
         target.with_transaction(|target| {
-            Self::run_with_parameters(tile_map, tile_queue, &self.bezier_scale_arg, &self.buffer_scale_arg, &self.overwrite_lakes_arg, target, progress)
+            Self::run_with_parameters(water_flow_result, &self.bezier_scale_arg, &self.buffer_scale_arg, &self.overwrite_lakes_arg, target, progress)
 
         })?;
 
@@ -149,9 +147,9 @@ impl Task for Lakes {
 }
 
 impl Lakes {
-    fn run_with_parameters<Progress: ProgressObserver>(tile_map: EntityIndex<TileSchema, TileForWaterFill>, tile_queue: Vec<(u64, f64)>, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(water_flow_result: WaterFlowResult, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Filling lakes");
-        generate_water_fill(target, tile_map, tile_queue, lake_bezier_scale, lake_buffer_scale, overwrite_layer, progress)
+        generate_water_fill(target, water_flow_result, lake_bezier_scale, lake_buffer_scale, overwrite_layer, progress)
     }
 }
 
@@ -348,9 +346,9 @@ impl GenWater {
         
             Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, target, progress)?;
 
-            let (tile_map,tile_queue) = Flow::run_with_parameters(target, progress)?;
+            let water_flow_result = Flow::run_with_parameters(target, progress)?;
 
-            Lakes::run_with_parameters(tile_map, tile_queue, bezier_scale, lake_buffer_scale, overwrite_lakes, target, progress)?;
+            Lakes::run_with_parameters(water_flow_result, bezier_scale, lake_buffer_scale, overwrite_lakes, target, progress)?;
 
             Rivers::run_with_parameters(bezier_scale, overwrite_rivers, progress, target)?;
 

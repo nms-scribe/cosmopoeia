@@ -69,7 +69,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                     let mut prev_share_count = vertex_index.get(&prev_vertex).expect("Why wouldn't this key be here if we just inserted it?");
                     let mut current_segment = vec![prev_vertex.clone()];
 
-                    while let Some(vertex) = vertexes.next() {
+                    for vertex in vertexes {
                         let next_vertex = vertex?;
                         let next_share_count = vertex_index.get(&next_vertex).expect("Why wouldn't this key be here if we just inserted it?");
 
@@ -159,7 +159,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
         for line in value {
             // if this is a polygon, the polybezier stuff should automatically be curving based off the end points.
             let bezier = PolyBezier::from_poly_line(line);
-            *line = bezier.to_poly_line(&bezier_scale)?;
+            *line = bezier.to_poly_line(bezier_scale)?;
         }
     }
 
@@ -197,9 +197,9 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     Ok(())
 }
 
-fn find_segment_match(match_segments: &Vec<Vec<Point>>, segment: &Vec<Point>, reverse: bool) -> Option<(Point, usize, bool)> {
+fn find_segment_match(match_segments: &[Vec<Point>], segment: &Vec<Point>, reverse: bool) -> Option<(Point, usize, bool)> {
     for (i,match_segment) in match_segments.iter().enumerate() {
-        if (match_segment.len() > 0) && match_segment.len() == segment.len() {
+        if (!match_segment.is_empty()) && match_segment.len() == segment.len() {
             // search by reversed
             let matched = if reverse {
                 match_segment.iter().eq(segment.iter().rev()) 

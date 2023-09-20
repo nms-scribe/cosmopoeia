@@ -340,7 +340,7 @@ impl Task for Cultures {
         } else {
             
             for culture in &cultures {
-                test_culture(&culture)
+                test_culture(culture)
             }
     
     

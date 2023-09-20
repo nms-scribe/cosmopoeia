@@ -10,7 +10,12 @@ use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
 use super::tiles::find_lowest_neighbors;
 
-pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(EntityIndex<TileSchema,TileForWaterFill>,Vec<(u64,f64)>),CommandError> {
+pub(crate) struct WaterFlowResult  { 
+    pub(crate) tile_map: EntityIndex<TileSchema,TileForWaterFill>, 
+    pub(crate) lake_queue: Vec<(u64,f64)> 
+}
+
+pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<WaterFlowResult,CommandError> {
 
     let mut layer = target.edit_tile_layer()?;
 
@@ -20,7 +25,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let mut tile_list = Vec::new();
     let mut lake_queue = Vec::new();
 
-    let mut tile_map = layer.read_features().to_entities_index_for_each::<_,TileForWaterflow,_>(|fid,tile| {
+    let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForWaterflow,_>(|fid,tile| {
         if !tile.grouping.is_ocean() {
             // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 
             tile_list.push((*fid,tile.elevation));
@@ -52,7 +57,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
                 let neighbor_flow = water_flow/lowest.len() as f64;
                 //println!("flowing {} to {} neighbors",neighbor_flow,lowest.len());
                 for neighbor in &lowest {
-                    let neighbor = tile_map.try_get_mut(&neighbor)?;
+                    let neighbor = tile_map.try_get_mut(neighbor)?;
                     neighbor.water_flow += neighbor_flow;
                 }
                 (0.0,lowest)
@@ -65,7 +70,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
             (water_flow,Vec::new())
         };
 
-        let tile = tile_map.try_get_mut(&fid)?; 
+        let tile = tile_map.try_get_mut(fid)?; 
         tile.water_flow = water_flow;
         tile.water_accumulation += water_accumulation;
         tile.flow_to = flow_to;
@@ -74,7 +79,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing flow.","Flow written.") {
-        if let Some(mut working_feature) = layer.feature_by_id(&fid) {
+        if let Some(mut working_feature) = layer.feature_by_id(fid) {
 
             working_feature.set_water_flow(tile.water_flow)?;
             working_feature.set_water_accumulation(tile.water_accumulation)?;
@@ -86,10 +91,10 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
     }
 
-    Ok((tile_map.into_iter().map(|(k,v)| (k,v.into())).collect(),lake_queue))
-
-
-
+    Ok(WaterFlowResult {
+        tile_map: tile_map.into_iter().map(|(k,v)| (k,v.into())).collect(),
+        lake_queue,
+    })
 
 
 }

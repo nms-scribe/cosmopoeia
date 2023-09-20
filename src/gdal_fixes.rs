@@ -1,7 +1,6 @@
 use gdal::errors::GdalError;
 use gdal::vector::Feature;
 use gdal::vector::Geometry;
-use gdal_sys;
 use std::ffi::CString;
 
 pub(crate) trait FeatureFix {

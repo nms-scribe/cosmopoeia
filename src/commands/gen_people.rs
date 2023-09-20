@@ -123,7 +123,7 @@ impl CreateCultures {
         progress.announce("Generating cultures");
         let cultures = CultureSet::from_files(&cultures_arg.cultures,random,namers)?;
 
-        generate_cultures(target, random, &cultures, namers, &cultures_arg.culture_count, size_variance, river_threshold, overwrite_cultures, progress)
+        generate_cultures(target, random, &cultures, namers, cultures_arg.culture_count, size_variance, river_threshold, overwrite_cultures, progress)
     }
     
 }
@@ -243,7 +243,7 @@ impl CurvifyCultures {
     fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
         progress.announce("Making culture polygons curvy");
     
-        curvify_layer_by_theme::<_,CultureTheme>(target, &bezier_scale, progress)
+        curvify_layer_by_theme::<_,CultureTheme>(target, bezier_scale, progress)
     }
     
 }
