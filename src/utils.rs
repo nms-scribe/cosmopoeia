@@ -28,7 +28,8 @@ use crate::geometry::Polygon;
 use crate::geometry::Point as GeoPoint;
 use crate::geometry::Collection;
 use crate::geometry::GDALGeometryWrapper;
-use crate::geometry::VariantArealGeometry; // TODO: Rename this once we switch to Vector2 for Points.
+use crate::geometry::VariantArealGeometry;
+use std::cmp::Ordering; // TODO: Rename this once we switch to Vector2 for Points.
 
 pub(crate) fn random_number_generator(arg: &RandomSeedArg) -> StdRng {
     let seed = if let Some(seed) = arg.seed {
@@ -240,8 +241,8 @@ impl<Iter: Iterator<Item=Result<GeoPoint,CommandError>>> ToGeometryCollection<Ge
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
 pub(crate) struct Point {
-    pub(crate) x: NotNan<f64>,
-    pub(crate) y: NotNan<f64>
+    x: NotNan<f64>,
+    y: NotNan<f64>
 }
 
 impl Point {
@@ -250,7 +251,7 @@ impl Point {
         (*self.x,*self.y)
     }
 
-    pub(crate) const fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
+    const fn new(x: NotNan<f64>, y: NotNan<f64>) -> Self {
         Self { x, y }
     }
 
@@ -276,8 +277,9 @@ impl Point {
     }
 
     fn abs(&self) -> f64 {
-        // the absolute value of a vector is it's distance from 0,0.
+        // -- the absolute value for a point is the distance from 0, just as the absolute value of an integer is it's distance from 0.
         self.x.hypot(self.y.into_inner())
+        // (x.hypot(y) = (x.powi(2) + y.powi(2)).sqrt();
     }
 
     pub(crate) fn perpendicular(&self, negate_second: bool) -> Self {
@@ -288,13 +290,11 @@ impl Point {
         }
     }
 
-    /// Sometimes you only need the distance for relative comparisons. In that case the actual value doesn't matter and you don't need to find the square root. For any two values, if X > Y, then X^2 > Y^2, and if X = Y, then X^2 = Y^2.
-    pub(crate) fn distance_squared(&self, other: &Self) -> f64 {
-        (other.x - self.x).powi(2) + (other.y - self.y).powi(2)
-    }
-
     pub(crate) fn distance(&self, other: &Self) -> f64 {
-        self.distance_squared(other).sqrt()
+        // FUTURE: Is there some way to improve this by using the hypot function? 
+        (other.x.into_inner() - self.x.into_inner()).hypot(other.y.into_inner() - self.y.into_inner())
+        // (x.hypot(y) = (x.powi(2) + y.powi(2)).sqrt();
+        // (other.x - self.x).hypot(other.y - self.y) = ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt() 
     }
 
     pub(crate) fn middle_point_between(&self, other: &Self) -> Self {
@@ -309,6 +309,105 @@ impl Point {
         GeoPoint::new(self.x.into(), self.y.into())
     }
 
+    pub(crate) fn circumcenter(points: (&Self,&Self,&Self)) -> Point {
+        // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
+
+        let (a,b,c) = points;
+        let d = (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) * 2.0;
+        let d_recip = d.recip();
+        let (ax2,ay2,bx2,by2,cx2,cy2) = ((a.x*a.x),(a.y*a.y),(b.x*b.x),(b.y*b.y),(c.x*c.x),(c.y*c.y));
+        let (ax2_ay2,bx2_by2,cx2_cy2) = (ax2+ay2,bx2+by2,cx2+cy2);
+        let ux = ((ax2_ay2)*(b.y - c.y) + (bx2_by2)*(c.y - a.y) + (cx2_cy2)*(a.y - b.y)) * d_recip;
+        let uy = ((ax2_ay2)*(c.x - b.x) + (bx2_by2)*(a.x - c.x) + (cx2_cy2)*(b.x - a.x)) * d_recip;
+
+        let u: Point = (ux,uy).into();
+
+        u
+
+    }
+
+    pub(crate) fn order_clockwise(a: &Self, b: &Self, center: &Self) -> Ordering
+    {
+
+        let a_run = a.x - center.x;
+        let b_run = b.x - center.x;
+
+        // yes, is_sign_positive does weird things if we have a -0, but I don't think that's possible with simple subtraction
+        // and it would just sort them one way or the other, which I feel is probably the right way anyway.
+        match (a_run.is_sign_positive(),b_run.is_sign_positive()) {
+            (true, false) => {
+                // a is in the east, b is in the west. a is closer to north and less than b.
+                Ordering::Less
+            },
+            (false, true) => {
+                // a is in the west, b is in the east, a is further from north and greater than b.
+                Ordering::Greater
+            },
+            (east, _) => { // both are in the same east-west half
+                let a_rise = a.y - center.y;
+                let b_rise = b.y - center.y;
+
+                match (a_rise.is_sign_positive(),b_rise.is_sign_positive()) {
+                    (true, false) => {
+                        // a is in the north and b is in the south
+                        if east {
+                            // a is in northeast and b is in southeast
+                            Ordering::Less
+                        } else {
+                            // a is in northwest and b is in southwest
+                            Ordering::Greater
+                        }
+                    },
+                    (false, true) => {
+                        // a is in the south and b is in the north, a is further from north
+                        if east {
+                            // a is in the southeast and b is in the northeast
+                            Ordering::Greater
+                        } else {
+                            // a is in southwest and b is in northwest
+                            Ordering::Less
+                        }
+                    },
+                    (_, _) => {
+                        // both are in the same quadrant. Compare the cross-product.
+                        // NOTE: I originally compared the slope, but the stackoverflow accepted solution used something like the following formula 
+                        // and called it a cross-product. Assuming that is the same, it's the same thing as comparing the slope. Why?
+                        // (Yes, I know a mathematician might not need this, but I'll explain my reasoning to future me)
+                        // A slope is a fraction. To compare two fractions, you have to do the same thing that you do when adding fractions:
+                        //   A/B cmp C/D = (A*D)/(B*D) cmp (C*B)/(B*D)
+                        // For a comparison, we can then remove the denominators:
+                        //   (A*D) cmp (B*D) 
+                        // and that's the same thing the solution called a cross-product. 
+                        // So, in order to avoid a divide by 0, I'm going to use that instead of slope.
+                        match ((a_run) * (b_rise)).cmp(&((b_run) * (a_rise))) {
+                            Ordering::Equal => {
+                                // The slopes are the same, compare the distance from center. The shorter distance should be closer to the beginning.
+                                let a_distance = (a_run) * (a_run) + (a_rise) * (a_rise);
+                                let b_distance = (b_run) * (b_run) + (b_rise) * (b_rise);
+                                a_distance.cmp(&b_distance)
+                            },
+                            slope_compare => {
+                                // both are in the same quadrant now, but the slopes are not the same, we can just return the result of slope comparison:
+                                // in the northeast quadrant, a lower positive slope means it is closer to east and further away.
+                                // in the southeast quadrant, a lower negative slope means it is closer to south and further away.
+                                // in the southwest quadrant, a lower positive slope means it is closer to west and further away.
+                                // in the northwest quadrant, a lower negative slope means it is closer to north and further away from the start.
+                                slope_compare
+                            }
+                        }
+
+                    },
+                }
+
+
+            },
+        }
+
+    }
+
+    pub(crate) fn to_ordered_tuple(&self) -> (NotNan<f64>, NotNan<f64>) {
+        (self.x,self.y)
+    }
     
 }
 
@@ -567,7 +666,7 @@ impl PolyBezier {
         let (mut vertex0, mut tangent0) = vertex_tangents.next().expect("This shouldn't happeen because we checked if vertices < 2.");
         let mut controls = Vec::new();
         for (vertex, tangent) in vertex_tangents {
-            // original code: s = abs(p - p0) / 3 -- the absolute value for a point is the distance from 0.
+            // original code: s = abs(p - p0) / 3 
             let s = vertex.subtract(vertex0).abs() / 3.0;
             controls.push((
                 // control point from previous point, on its tangent, 1/3 along the way between the two points
@@ -1067,9 +1166,9 @@ pub(crate) mod point_finder {
                     let mut found = None;
                     for item in self.inner.query(search_boundary) {
                         match found {
-                            None => found = Some((item.1,item.0.distance_squared(point))),
+                            None => found = Some((item.1,item.0.distance(point))),
                             Some(last_found) => {
-                                let this_distance = item.0.distance_squared(point);
+                                let this_distance = item.0.distance(point);
                                 if this_distance < last_found.1 {
                                     found = Some((item.1,this_distance))
                                 }

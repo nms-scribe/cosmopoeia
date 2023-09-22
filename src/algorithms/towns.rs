@@ -331,9 +331,10 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         let (is_port,new_location) = if port_location.is_none() && tile.water_flow > river_threshold.river_threshold {
             let shift = (tile.water_flow / 150.0).min(1.0);
-            let x = if (tile.site.x.into_inner() % 2.0) < 1.0 { tile.site.x + shift } else { tile.site.x - shift };
-            let y = if (tile.site.y.into_inner() % 2.0) < 1.0 { tile.site.y + shift } else { tile.site.y - shift };
-            (false,Some(Point::new(x,y)))
+            let (tile_x,tile_y) = tile.site.to_tuple();
+            let x = if (tile_x % 2.0) < 1.0 { tile_x + shift } else { tile_x - shift };
+            let y = if (tile_y % 2.0) < 1.0 { tile_y + shift } else { tile_y - shift };
+            (false,Some(Point::try_from((x,y))?))
         } else {
             (port_location.is_some(),port_location)
         };

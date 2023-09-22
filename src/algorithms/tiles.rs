@@ -84,7 +84,7 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,Comman
     // bit heavy, so there might be a better way.
     let collected_tiles: Result<Vec<NewTileSite>,CommandError> = generator.watch(progress,"Collecting tiles", "Tiles collected.").collect();
     let mut collected_tiles = collected_tiles?;
-    collected_tiles.sort_by_cached_key(|tile| (ordered_float::OrderedFloat::from(tile.site_x),ordered_float::OrderedFloat::from(tile.site_y)));
+    collected_tiles.sort_by_cached_key(|tile| tile.site.to_ordered_tuple());
 
     for tile in collected_tiles.into_iter().watch(progress,"Writing tiles.","Tiles written.") {
         tiles.add_tile(tile)?;

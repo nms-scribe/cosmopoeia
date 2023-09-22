@@ -1306,8 +1306,7 @@ impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T 
 
 entity!(NewTileSite: Tile {
     geometry: Polygon,
-    site_x: f64, 
-    site_y: f64
+    site: UtilsPoint
 }); 
 
 entity!(TileForCalcNeighbors: Tile {
@@ -1761,6 +1760,8 @@ impl TileLayer<'_,'_> {
     pub(crate) fn add_tile(&mut self, tile: NewTileSite) -> Result<(),CommandError> {
         // tiles are initialized with incomplete definitions in the table. It is a user error to access fields which haven't been assigned yet by running an algorithm before required algorithms are completed.
 
+        let (x,y) = tile.site.to_tuple();
+
         _ = self.add_feature_with_geometry(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
@@ -1768,8 +1769,8 @@ impl TileLayer<'_,'_> {
                 TileSchema::FIELD_ELEVATION_SCALED,
                 TileSchema::FIELD_GROUPING,
             ],&[
-                feature_field_value!(tile.site_x; f64),
-                feature_field_value!(tile.site_y; f64),
+                feature_field_value!(x; f64),
+                feature_field_value!(y; f64),
                 // initial tiles start with 0 elevation, terrain commands will edit this...
                 feature_field_value!(0.0; f64), // FUTURE: Watch that this type stays correct
                 // and scaled elevation starts with 20.

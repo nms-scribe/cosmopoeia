@@ -314,7 +314,8 @@ impl ProcessTerrainTiles for SampleOceanBelowLoaded {
     
         for (_,tile) in tile_map.iter_mut().watch(progress,"Sampling oceans.","Oceans sampled.") {
     
-            let (x,y) = bounds.coords_to_pixels(tile.site.x.into_inner(), tile.site.y.into_inner());
+            let (tile_x,tile_y) = tile.site.to_tuple();
+            let (x,y) = bounds.coords_to_pixels(tile_x, tile_y);
 
             let is_ocean = if let Some(elevation) = band.get_value(x, y) {
                 let is_no_data = match no_data_value {
@@ -378,7 +379,8 @@ impl ProcessTerrainTiles for SampleOceanMaskedLoaded {
     
         for (_,tile) in tile_map.iter_mut().watch(progress,"Sampling oceans.","Oceans sampled.") {
     
-            let (x,y) = bounds.coords_to_pixels(tile.site.x.into_inner(), tile.site.y.into_inner());
+            let (tile_x,tile_y) = tile.site.to_tuple();
+            let (x,y) = bounds.coords_to_pixels(tile_x, tile_y);
 
             let is_ocean = if let Some(elevation) = band.get_value(x, y) {
                 match no_data_value {
@@ -433,9 +435,9 @@ impl ProcessTerrainTiles for SampleElevationLoaded {
     
         for (_,tile) in tile_map.iter_mut().watch(progress,"Sampling elevations.","Elevations sampled.") {
     
-    
-            let (x,y) = bounds.coords_to_pixels(tile.site.x.into_inner(), tile.site.y.into_inner());
-    
+            let (tile_x,tile_y) = tile.site.to_tuple();
+            let (x,y) = bounds.coords_to_pixels(tile_x, tile_y);
+
             if let Some(elevation) = band.get_value(x, y) {
 
                 tile.elevation = *elevation;

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use core::cmp::Ordering;
 
-use ordered_float::NotNan;
 use std::collections::hash_map::IntoIter;
 
 use crate::progress::ProgressObserver;
@@ -42,106 +41,17 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
         })
     }
 
-    pub(crate) fn circumcenter(points: (&Point,&Point,&Point)) -> Point {
-        // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
-
-        let (a,b,c) = points;
-        let d = (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) * 2.0;
-        let d_recip = d.recip();
-        let (ax2,ay2,bx2,by2,cx2,cy2) = ((a.x*a.x),(a.y*a.y),(b.x*b.x),(b.y*b.y),(c.x*c.x),(c.y*c.y));
-        let (ax2_ay2,bx2_by2,cx2_cy2) = (ax2+ay2,bx2+by2,cx2+cy2);
-        let ux = ((ax2_ay2)*(b.y - c.y) + (bx2_by2)*(c.y - a.y) + (cx2_cy2)*(a.y - b.y)) * d_recip;
-        let uy = ((ax2_ay2)*(c.x - b.x) + (bx2_by2)*(a.x - c.x) + (cx2_cy2)*(b.x - a.x)) * d_recip;
-
-        let u: Point = (ux,uy).into();
-
-        u
-
-    }
-
     pub(crate) fn sort_clockwise(center: &Point, points: &mut [Point], extent: &Extent, needs_a_trim: &mut bool)  {
         // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
         // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
         // when angle is equal, the point closer to the center will be lesser.
-
-        let zero: NotNan<f64> = 0.0.try_into().expect("Why wouldn't I be able to turn 0 into a NotNaN?"); // there shouldn't be any error here.
 
         points.sort_by(|a: &Point, b: &Point| -> Ordering
         {
             if !*needs_a_trim {
                 *needs_a_trim = (!extent.contains(a)) || (!extent.contains(b))
             }
-            let a_run = a.x - center.x;
-            let b_run = b.x - center.x;
-
-            match (a_run >= zero,b_run >= zero) {
-                (true, false) => {
-                    // a is in the east, b is in the west. a is closer to north and less than b.
-                    Ordering::Less
-                },
-                (false, true) => {
-                    // a is in the west, b is in the east, a is further from north and greater than b.
-                    Ordering::Greater
-                },
-                (east, _) => { // both are in the same east-west half
-                    let a_rise = a.y - center.y;
-                    let b_rise = b.y - center.y;
-
-                    match (a_rise >= zero,b_rise >= zero) {
-                        (true, false) => {
-                            // a is in the north and b is in the south
-                            if east {
-                                // a is in northeast and b is in southeast
-                                Ordering::Less
-                            } else {
-                                // a is in northwest and b is in southwest
-                                Ordering::Greater
-                            }
-                        },
-                        (false, true) => {
-                            // a is in the south and b is in the north, a is further from north
-                            if east {
-                                // a is in the southeast and b is in the northeast
-                                Ordering::Greater
-                            } else {
-                                // a is in southwest and b is in northwest
-                                Ordering::Less
-                            }
-                        },
-                        (_, _) => {
-                            // both are in the same quadrant. Compare the cross-product.
-                            // NOTE: I originally compared the slope, but the stackoverflow accepted solution used something like the following formula 
-                            // and called it a cross-product. Assuming that is the same, it's the same thing as comparing the slope. Why?
-                            // (Yes, I know a mathematician might not need this, but I'll explain my reasoning to future me)
-                            // A slope is a fraction. To compare two fractions, you have to do the same thing that you do when adding fractions:
-                            //   A/B cmp C/D = (A*D)/(B*D) cmp (C*B)/(B*D)
-                            // For a comparison, we can then remove the denominators:
-                            //   (A*D) cmp (B*D) 
-                            // and that's the same thing the solution called a cross-product. 
-                            // So, in order to avoid a divide by 0, I'm going to use that instead of slope.
-                            match ((a_run) * (b_rise)).cmp(&((b_run) * (a_rise))) {
-                                Ordering::Equal => {
-                                    // The slopes are the same, compare the distance from center. The shorter distance should be closer to the beginning.
-                                    let a_distance = (a_run) * (a_run) + (a_rise) * (a_rise);
-                                    let b_distance = (b_run) * (b_run) + (b_rise) * (b_rise);
-                                    a_distance.cmp(&b_distance)
-                                },
-                                slope_compare => {
-                                    // both are in the same quadrant now, but the slopes are not the same, we can just return the result of slope comparison:
-                                    // in the northeast quadrant, a lower positive slope means it is closer to east and further away.
-                                    // in the southeast quadrant, a lower negative slope means it is closer to south and further away.
-                                    // in the southwest quadrant, a lower positive slope means it is closer to west and further away.
-                                    // in the northwest quadrant, a lower negative slope means it is closer to north and further away from the start.
-                                    slope_compare
-                                }
-                            }
-
-                        },
-                    }
-    
-
-                },
-            }
+            Point::order_clockwise(a, b, center)
 
         });
     
@@ -169,8 +79,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             };
             Ok(Some(NewTileSite {
                 geometry: polygon,
-                site_x: *site.x,
-                site_y: *site.y,
+                site: site.clone()
             }))
         } else {
             // In any case, these would result in either a line or a point, not even a sliver.
@@ -198,7 +107,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                .try_into()
                .map_err(|_| CommandError::VoronoiExpectsTriangles)?;
 
-            let circumcenter = Self::circumcenter((&points[0],&points[1],&points[2]));
+            let circumcenter = Point::circumcenter((&points[0],&points[1],&points[2]));
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {
