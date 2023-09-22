@@ -117,6 +117,9 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
+        // size_hint is supposed to talk about how many remaining, not a range from start to end
+        // but this is still fair, because I don't know how many are remaining and it's too difficult
+        // to estimate that. Also, the results are allowed to be buggy.
         (0,Some(self.estimate_points()))
     }
 }
