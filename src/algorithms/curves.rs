@@ -7,7 +7,7 @@ use crate::errors::CommandError;
 use crate::progress::WatchableIterator;
 use crate::utils::Point;
 use crate::world_map::TypedFeature;
-use crate::utils::beziers::bezierify_points;
+use crate::algorithms::beziers::bezierify_points;
 use crate::commands::BezierScaleArg;
 use crate::world_map::TypedFeatureIterator;
 use crate::geometry::MultiPolygon;

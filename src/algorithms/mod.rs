@@ -2,6 +2,7 @@ pub(crate) mod random_points;
 pub(crate) mod triangles;
 pub(crate) mod voronoi;
 pub(crate) mod terrain;
+pub(crate) mod beziers;
 pub(crate) mod tiles;
 pub(crate) mod climate;
 pub(crate) mod water_flow;

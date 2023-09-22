@@ -3,7 +3,7 @@ use gdal::vector::OGRwkbGeometryType;
 
 use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
-use crate::utils::beziers::bezierify_points;
+use crate::algorithms::beziers::bezierify_points;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
