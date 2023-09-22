@@ -3,6 +3,7 @@ use gdal::vector::OGRwkbGeometryType;
 
 use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
+use crate::utils::beziers::bezierify_points;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
@@ -360,6 +361,24 @@ impl Polygon {
         self.inner.make_valid(&validate_options)?.try_into()
     }
 
+    // NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
+    // made valid, which could turn them into a multi-polygon.
+    pub(crate) fn bezierify(self, scale: f64) -> Result<VariantArealGeometry,CommandError> {
+        let mut rings = Vec::new();
+        for ring in self {
+            let mut points = Vec::new();
+            for point in ring? {
+                points.push(point.try_into()?);
+            }
+
+            let line = bezierify_points(&points, scale)?;
+            rings.push(LinearRing::from_vertices(line.iter().map(|p| p.to_tuple()))?);
+        }
+        let polygon = Polygon::from_rings(rings)?;
+        // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
+        // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
+        polygon.make_valid_default()
+    }
 
 }
 
@@ -479,6 +498,28 @@ impl MultiPolygon {
     }
 
 
+    pub(crate) fn bezierify(self, scale: f64) -> Result<MultiPolygon,CommandError> {
+        let mut polygons = Vec::new();
+        for polygon in self {
+            let mut rings = Vec::new();
+            for ring in polygon? {
+                let mut points = Vec::new();
+                for point in ring? {
+                    points.push(point.try_into()?);
+                }
+                
+                let line = bezierify_points(&points, scale)?;
+                rings.push(LinearRing::from_vertices(line.iter().map(|p| p.to_tuple()))?);
+            }
+            polygons.push(Polygon::from_rings(rings)?);
+        }
+        let result = MultiPolygon::from_polygons(polygons)?;
+        // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
+        // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
+        result.make_valid_default()
+    }
+    
+    
 }
 
 

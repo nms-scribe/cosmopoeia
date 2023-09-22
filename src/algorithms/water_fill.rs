@@ -20,7 +20,6 @@ use crate::world_map::TileForWaterFill;
 use crate::progress::QueueWatcher;
 use crate::geometry::VariantArealGeometry;
 use crate::geometry::MultiPolygon;
-use crate::utils::bezierify_multipolygon;
 use crate::world_map::TypedFeature;
 
 struct Lake {
@@ -468,8 +467,8 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
 pub(crate) fn make_curvy_lakes(lake_geometry: VariantArealGeometry, bezier_scale: &BezierScaleArg, buffer_distance: f64, simplify_tolerance: f64) -> Result<MultiPolygon, CommandError> {
     let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
     // occasionally, the simplification or other tasks turns the lakes into a multipolygon, which is why the lakes layer has to be multipolygon
-    let lake_geometry = lake_geometry.try_into()?;
-    bezierify_multipolygon(lake_geometry, bezier_scale)
+    let lake_geometry: MultiPolygon = lake_geometry.try_into()?;
+    lake_geometry.bezierify(bezier_scale.bezier_scale)
     /*
     // Old code when I was dealing with geometry directly
     let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;

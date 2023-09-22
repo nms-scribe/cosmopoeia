@@ -7,8 +7,6 @@ use ordered_float::FloatIsNan;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand::Rng;
-use adaptive_bezier::adaptive_bezier_curve; 
-use adaptive_bezier::Vector2;
 use colourado::PaletteType;
 use colourado::ColorPalette;
 use colourado::Color;
@@ -21,8 +19,6 @@ use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::commands::RandomSeedArg;
-use crate::commands::BezierScaleArg;
-use crate::geometry::MultiPolygon;
 use crate::geometry::LinearRing;
 use crate::geometry::Polygon;
 use crate::geometry::Point as GeoPoint;
@@ -467,130 +463,97 @@ impl core::ops::Add for &Point {
     }
 }
 
-// NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
-// made valid, which could turn them into a multi-polygon.
-pub(crate) fn bezierify_polygon(polygon: Polygon, scale: &BezierScaleArg) -> Result<VariantArealGeometry,CommandError> {
-    let mut rings = Vec::new();
-    for ring in polygon {
-        let mut points = Vec::new();
-        for point in ring? {
-            points.push(point.try_into()?);
-        }
 
-        let bezier = PolyBezier::from_poly_line(&points);
-        rings.push(LinearRing::from_vertices(bezier.to_poly_line(scale)?.iter().map(Point::to_tuple))?);
-    }
-    let polygon = Polygon::from_rings(rings)?;
-    // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
-    // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-    polygon.make_valid_default()
-}
+pub(crate) mod beziers {
+    use adaptive_bezier::Vector2;
 
+    use adaptive_bezier::adaptive_bezier_curve;
 
-pub(crate) fn bezierify_multipolygon(geometry: MultiPolygon, scale: &BezierScaleArg) -> Result<MultiPolygon,CommandError> {
-    let mut polygons = Vec::new();
-    for polygon in geometry {
-        let mut rings = Vec::new();
-        for ring in polygon? {
-            let mut points = Vec::new();
-            for point in ring? {
-                points.push(point.try_into()?);
-            }
+    use crate::errors::CommandError;
 
-            let bezier = PolyBezier::from_poly_line(&points);
-            rings.push(LinearRing::from_vertices(bezier.to_poly_line(scale)?.iter().map(Point::to_tuple))?);
-        }
-        polygons.push(Polygon::from_rings(rings)?);
-    }
-    let result = MultiPolygon::from_polygons(polygons)?;
-    // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
-    // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-    result.make_valid_default()
-}
+    use super::Point;
 
-
-pub(crate) struct PolyBezier {
-    vertices: Vec<Point>,
-    controls: Vec<(Point,Point)> // this should always have one less item than vertices.
-}
-
-
-impl PolyBezier {
-
-    #[cfg(test)] pub(crate) fn segment_at(&self, index: usize) -> Option<(&Point,&Point,&Point,&Point)> {
-        if index < self.controls.len() {
-            let v1 = &self.vertices[index];
-            let c = &self.controls[index];
-            let v2 = &self.vertices[index + 1];
-            Some((v1,&c.0,&c.1,v2))
-        } else {
-            None
-        }
+    struct PolyBezier {
+        vertices: Vec<Point>,
+        controls: Vec<(Point,Point)> // this should always have one less item than vertices.
     }
 
-    pub(crate) fn trim_end(self) -> Self {
-        let vertices_take = self.vertices.len() - 1;
-        let controls_take = self.controls.len() - 1;
-        Self {
-            vertices: self.vertices.into_iter().take(vertices_take).collect(),
-            controls: self.controls.into_iter().take(controls_take).collect(),
-        }
-    }
+    impl PolyBezier {
 
-    pub(crate) fn trim_start(self) -> Self {
-        Self {
-            vertices: self.vertices.into_iter().skip(1).collect(),
-            controls: self.controls.into_iter().skip(1).collect(),
-        }
-    }
-
-    pub(crate) fn trim_both(self) -> Self {
-        let vertices_take = self.vertices.len() - 1;
-        let controls_take = self.controls.len() - 1;
-        Self {
-            vertices: self.vertices.into_iter().take(vertices_take).skip(1).collect(),
-            controls: self.controls.into_iter().take(controls_take).skip(1).collect(),
-        }
-    }
-
-    // finds a curve from a line where the first points and last points are curved with influence of optional extended points.
-    // The curves created by these end segments are not included in the result.
-    pub(crate) fn from_poly_line_with_phantoms(phantom_start: Option<&Point>, line: &[Point], phantom_end: Option<&Point>) -> Self {
-        match (phantom_start,phantom_end) {
-            (None, None) => Self::from_poly_line(line),
-            (None, Some(end)) => {
-                let mut vertices = line.to_vec();
-                vertices.push(end.clone());
-                let result = Self::from_poly_line(&vertices);
-                result.trim_end()
-            },
-            (Some(start), None) => {
-                let mut vertices = vec![start.clone()];
-                vertices.extend(line.iter().cloned());
-                let result = Self::from_poly_line(&vertices);
-                result.trim_start()
-            },
-            (Some(start), Some(end)) => {
-                let mut vertices = vec![start.clone()];
-                vertices.extend(line.iter().cloned());
-                vertices.push(end.clone());
-                let result = Self::from_poly_line(&vertices);
-                result.trim_both()
-            },
-        }
-
-    }
-
-    pub(crate) fn from_poly_line(vertices: &[Point]) -> Self {
-        if vertices.len() < 2 {
-            return Self {
-                vertices: vertices.to_vec(),
-                controls: Vec::new()
+        #[cfg(test)] pub(crate) fn segment_at(&self, index: usize) -> Option<(&Point,&Point,&Point,&Point)> {
+            if index < self.controls.len() {
+                let v1 = &self.vertices[index];
+                let c = &self.controls[index];
+                let v2 = &self.vertices[index + 1];
+                Some((v1,&c.0,&c.1,v2))
+            } else {
+                None
             }
         }
 
-        // https://math.stackexchange.com/a/4207568
-        /*
+        pub(crate) fn trim_end(self) -> Self {
+            let vertices_take = self.vertices.len() - 1;
+            let controls_take = self.controls.len() - 1;
+            Self {
+                vertices: self.vertices.into_iter().take(vertices_take).collect(),
+                controls: self.controls.into_iter().take(controls_take).collect(),
+            }
+        }
+
+        pub(crate) fn trim_start(self) -> Self {
+            Self {
+                vertices: self.vertices.into_iter().skip(1).collect(),
+                controls: self.controls.into_iter().skip(1).collect(),
+            }
+        }
+
+        pub(crate) fn trim_both(self) -> Self {
+            let vertices_take = self.vertices.len() - 1;
+            let controls_take = self.controls.len() - 1;
+            Self {
+                vertices: self.vertices.into_iter().take(vertices_take).skip(1).collect(),
+                controls: self.controls.into_iter().take(controls_take).skip(1).collect(),
+            }
+        }
+
+        // finds a curve from a line where the first points and last points are curved with influence of optional extended points.
+        // The curves created by these end segments are not included in the result.
+        pub(crate) fn from_poly_line_with_phantoms(phantom_start: Option<&Point>, line: &[Point], phantom_end: Option<&Point>) -> Self {
+            match (phantom_start,phantom_end) {
+                (None, None) => Self::from_poly_line(line),
+                (None, Some(end)) => {
+                    let mut vertices = line.to_vec();
+                    vertices.push(end.clone());
+                    let result = Self::from_poly_line(&vertices);
+                    result.trim_end()
+                },
+                (Some(start), None) => {
+                    let mut vertices = vec![start.clone()];
+                    vertices.extend(line.iter().cloned());
+                    let result = Self::from_poly_line(&vertices);
+                    result.trim_start()
+                },
+                (Some(start), Some(end)) => {
+                    let mut vertices = vec![start.clone()];
+                    vertices.extend(line.iter().cloned());
+                    vertices.push(end.clone());
+                    let result = Self::from_poly_line(&vertices);
+                    result.trim_both()
+                },
+            }
+
+        }
+
+        pub(crate) fn from_poly_line(vertices: &[Point]) -> Self {
+            if vertices.len() < 2 {
+                return Self {
+                    vertices: vertices.to_vec(),
+                    controls: Vec::new()
+                }
+            }
+
+            // https://math.stackexchange.com/a/4207568
+            /*
         STORY: I had a little artifical help from chatgpt to get the initial translation from python code in 
         the SO answer to rust. As an experience, it was like getting help from an idiot who is good at programming 
         and thinks he's an expert. The initial result looked like real code, and seemed to be doing what it
@@ -624,101 +587,208 @@ impl PolyBezier {
         and the number of digits returned, so it was just a matter of precision.
         */
 
-        // Make the normalized tangent vectors
+            // Make the normalized tangent vectors
         
-        // Tangents for interior points are parallel to the lines between the points to either side 
-        // (tangent for point B is parallel to the line between A and B), so we need to pair up
-        // the vertices as p,p+2. This will create n-2 vertices to match up with interior points.
-        let pairs = vertices.iter().zip(vertices.iter().skip(2));
-        // tangents for these pairs are found by subtracting the points
-        let tangents: Vec<Point> = pairs.map(|(u, v)| v.subtract(u)).collect();
+            // Tangents for interior points are parallel to the lines between the points to either side 
+            // (tangent for point B is parallel to the line between A and B), so we need to pair up
+            // the vertices as p,p+2. This will create n-2 vertices to match up with interior points.
+            let pairs = vertices.iter().zip(vertices.iter().skip(2));
+            // tangents for these pairs are found by subtracting the points
+            let tangents: Vec<Point> = pairs.map(|(u, v)| v.subtract(u)).collect();
     
-        // the start and end tangents are from different pairs.
-        let (start,end) = if vertices[0] == vertices[vertices.len() - 1] {
-            // this is a polygonal ring, so the points are the same, and the tangents for
-            // them are the same. This tangent is parallel to a line from the second point to the penultimate point.
-            // ABCDEA => paralell to BE
+            // the start and end tangents are from different pairs.
+            let (start,end) = if vertices[0] == vertices[vertices.len() - 1] {
+                // this is a polygonal ring, so the points are the same, and the tangents for
+                // them are the same. This tangent is parallel to a line from the second point to the penultimate point.
+                // ABCDEA => paralell to BE
+                // No panic, because we checked for vertices < 2 above.
+                let end = vec![vertices[1].subtract(&vertices[vertices.len() - 2])];
+                (end.clone(),end)
+            } else {
+                // otherwise, the start tangent is parallel to a line between the first and second point,
+                // and the end tangent the same between the last and penultimate point.
+                // ABCDE => parallel to AB and DE
+                // start is the difference between the second and first
+                let start = vec![vertices[1].subtract(&vertices[0])];
+                // end is the difference between the last and second-to-last
+                // No panic, because we checked for vertices < 2 above.
+                let end = vec![vertices[vertices.len()-1].subtract(&vertices[vertices.len()-2])];
+                (start,end)
+            };
+    
+            let tangents = start.iter().chain(tangents.iter()).chain(end.iter());
+            // the tangents are normalized -- we just need the direction, not the distance, so this is a unit vector pointing the same direction.
+            let tangents = tangents.map(Point::normalized);
+            let tangents: Vec<Point> = tangents.collect();
+    
+            // Build Bezier curves
+            // zip up the points into pairs with their tangents
+            let mut vertex_tangents = vertices.iter().zip(tangents.iter());
+            // the first one should always be there? 
             // No panic, because we checked for vertices < 2 above.
-            let end = vec![vertices[1].subtract(&vertices[vertices.len() - 2])];
-            (end.clone(),end)
-        } else {
-            // otherwise, the start tangent is parallel to a line between the first and second point,
-            // and the end tangent the same between the last and penultimate point.
-            // ABCDE => parallel to AB and DE
-            // start is the difference between the second and first
-            let start = vec![vertices[1].subtract(&vertices[0])];
-            // end is the difference between the last and second-to-last
-            // No panic, because we checked for vertices < 2 above.
-            let end = vec![vertices[vertices.len()-1].subtract(&vertices[vertices.len()-2])];
-            (start,end)
-        };
+            let (mut vertex0, mut tangent0) = vertex_tangents.next().expect("This shouldn't happeen because we checked if vertices < 2.");
+            let mut controls = Vec::new();
+            for (vertex, tangent) in vertex_tangents {
+                // original code: s = abs(p - p0) / 3 
+                let s = vertex.subtract(vertex0).abs() / 3.0;
+                controls.push((
+                    // control point from previous point, on its tangent, 1/3 along the way between the two points
+                    vertex0.add(&tangent0.multiply(s)),
+                    // control point for the next point, on its tangent, 1/3 along the way
+                    vertex.subtract(&tangent.multiply(s))
+                ));
     
-        let tangents = start.iter().chain(tangents.iter()).chain(end.iter());
-        // the tangents are normalized -- we just need the direction, not the distance, so this is a unit vector pointing the same direction.
-        let tangents = tangents.map(Point::normalized);
-        let tangents: Vec<Point> = tangents.collect();
-    
-        // Build Bezier curves
-        // zip up the points into pairs with their tangents
-        let mut vertex_tangents = vertices.iter().zip(tangents.iter());
-        // the first one should always be there? 
-        // No panic, because we checked for vertices < 2 above.
-        let (mut vertex0, mut tangent0) = vertex_tangents.next().expect("This shouldn't happeen because we checked if vertices < 2.");
-        let mut controls = Vec::new();
-        for (vertex, tangent) in vertex_tangents {
-            // original code: s = abs(p - p0) / 3 
-            let s = vertex.subtract(vertex0).abs() / 3.0;
-            controls.push((
-                // control point from previous point, on its tangent, 1/3 along the way between the two points
-                vertex0.add(&tangent0.multiply(s)),
-                // control point for the next point, on its tangent, 1/3 along the way
-                vertex.subtract(&tangent.multiply(s))
-            ));
-    
-            vertex0 = vertex;
-            tangent0 = tangent;
+                vertex0 = vertex;
+                tangent0 = tangent;
+            }
+            Self { 
+                vertices: vertices.to_vec(), 
+                controls 
+            }
         }
-        Self { 
-            vertices: vertices.to_vec(), 
-            controls 
+
+        pub(crate) fn to_poly_line(&self, scale: f64) -> Result<Vec<Point>,CommandError> {
+            // I don't just want to put equally spaced points, I want what appears to be called an adaptive bezier:
+            // https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html 
+            // I found a Javascript translation of that here: https://github.com/mattdesl/adaptive-bezier-curve, 
+            // I also found a rust translation of that javascript translation (https://crates.io/crates/adaptive-bezier).
+            // I'm not comfortable with it, since it uses it's own vector structure which pulls in a huge library,
+            // but it works, so.... 
+            let mut result = Vec::new();
+            let mut vertices = self.vertices.iter();
+            let mut controls = self.controls.iter();
+            if let Some(vertex1) = vertices.next() {
+                let mut vertex1 = vertex1;
+                result.push(vertex1.clone());
+                for vertex2 in vertices {
+                    if let Some((c1,c2)) = controls.next() {
+                        let curve = adaptive_bezier_curve(
+                            Vector2::new(*vertex1.x,*vertex1.y),
+                            Vector2::new(*c1.x,*c1.y),
+                            Vector2::new(*c2.x,*c2.y),
+                            Vector2::new(*vertex2.x,*vertex2.y),
+                            scale
+                        );
+                        // convert back to points.
+                        for point in curve.iter().take(curve.len() - 2).skip(1) {
+                            result.push((point[0], point[1]).try_into()?);
+                        }
+                    }
+                    result.push(vertex2.clone());
+                    vertex1 = vertex2;
+                }
+
+            };
+
+            Ok(result)
+
         }
+
     }
 
-    pub(crate) fn to_poly_line(&self, scale: &BezierScaleArg) -> Result<Vec<Point>,CommandError> {
-        // I don't just want to put equally spaced points, I want what appears to be called an adaptive bezier:
-        // https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html 
-        // I found a Javascript translation of that here: https://github.com/mattdesl/adaptive-bezier-curve, 
-        // I also found a rust translation of that javascript translation (https://crates.io/crates/adaptive-bezier).
-        // I'm not comfortable with it, since it uses it's own vector structure which pulls in a huge library,
-        // but it works, so.... 
-        let mut result = Vec::new();
-        let mut vertices = self.vertices.iter();
-        let mut controls = self.controls.iter();
-        if let Some(vertex1) = vertices.next() {
-            let mut vertex1 = vertex1;
-            result.push(vertex1.clone());
-            for vertex2 in vertices {
-                if let Some((c1,c2)) = controls.next() {
-                    let curve = adaptive_bezier_curve(
-                        Vector2::new(*vertex1.x,*vertex1.y),
-                        Vector2::new(*c1.x,*c1.y),
-                        Vector2::new(*c2.x,*c2.y),
-                        Vector2::new(*vertex2.x,*vertex2.y),
-                        scale.bezier_scale
-                    );
-                    // convert back to points.
-                    for point in curve.iter().take(curve.len() - 2).skip(1) {
-                        result.push((point[0], point[1]).try_into()?);
-                    }
-                }
-                result.push(vertex2.clone());
-                vertex1 = vertex2;
+    pub(crate) fn bezierify_points(line: &[Point], scale: f64) -> Result<Vec<Point>,CommandError> {
+        let bezier = PolyBezier::from_poly_line(line);
+        bezier.to_poly_line(scale)
+    }
+
+    pub(crate) fn bezierify_points_with_phantoms(before: Option<&Point>, line: &[Point], after: Option<&Point>, scale: f64) -> Result<Vec<Point>,CommandError> {
+        // create the bezier
+        let bezier = PolyBezier::from_poly_line_with_phantoms(before,line,after);
+        // convert that to a polyline.
+        bezier.to_poly_line(scale)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::PolyBezier;
+
+        #[test]
+        fn test_bezier() {
+        
+            let pos = vec![
+                (0.5, 0.5).try_into().unwrap(),
+                (1.0, -0.5).try_into().unwrap(),
+                (1.5, 1.0).try_into().unwrap(),
+                (2.25, 1.1).try_into().unwrap(),
+                (2.6, -0.5).try_into().unwrap(),
+                (3.0, 0.5).try_into().unwrap(),
+            ];
+        
+            let curves = PolyBezier::from_poly_line(&pos);
+        
+            let expected = vec![
+                (
+                    (0.5, 0.5).try_into().unwrap(),
+                    (0.6666666666666666, 0.16666666666666669).try_into().unwrap(),
+                    (0.6666666666666667, -0.6666666666666666).try_into().unwrap(),
+                    (1.0, -0.5).try_into().unwrap(),
+                ),
+                (
+                    (1.0, -0.5).try_into().unwrap(),
+                    (1.4714045207910318, -0.26429773960448416).try_into().unwrap(), 
+                    (1.1755270999091973, 0.5846746878837725).try_into().unwrap(), 
+                    (1.5, 1.0).try_into().unwrap(),
+                ),
+                (
+                    (1.5, 1.0).try_into().unwrap(),
+                    (1.655273081384295, 1.1987495441718978).try_into().unwrap(), 
+                    (2.100850731900237, 1.3033853655905858).try_into().unwrap(), 
+                    (2.25, 1.1).try_into().unwrap(),
+                ),
+                (
+                    (2.25, 1.1).try_into().unwrap(),
+                    (2.572851825487011, 0.6597475106995304).try_into().unwrap(), 
+                    (2.1736888549287925, -0.15895108394303398).try_into().unwrap(), 
+                    (2.6, -0.5).try_into().unwrap(),
+                ),
+                (
+                    (2.6, -0.5).try_into().unwrap(),
+                    (2.8803404821067753, -0.7242723856854201).try_into().unwrap(), 
+                    (2.8666666666666667, 0.16666666666666669).try_into().unwrap(), 
+                    (3.0, 0.5).try_into().unwrap(),
+                )
+            ];
+        
+            let mut i = 0;
+            while let Some(curve) = curves.segment_at(i) {
+                let expected_curve = &expected[i];
+                assert_eq!(curve.0,&expected_curve.0,"At curve {i}, point 0");
+                assert_eq!(curve.1,&expected_curve.1,"At curve {i}, point 1");
+                assert_eq!(curve.2,&expected_curve.2,"At curve {i}, point 2");
+                assert_eq!(curve.3,&expected_curve.3,"At curve {i}, point 3");
+                i += 1;
             }
-
-        };
-
-        Ok(result)
-
+        
+        /* python output:
+        [
+        [
+        (0.500000000000000, 0.500000000000000), 
+        (0.666666666666667, 0.166666666666667), 
+        (0.666666666666667, -0.666666666666667), 
+        (1.00000000000000, -0.500000000000000)
+        ], [
+        (1.47140452079103, -0.264297739604484), 
+        (1.17552709990920, 0.584674687883773), 
+        (1.50000000000000, 1.00000000000000)
+        ], [
+        (1.65527308138430, 1.19874954417190), 
+        (2.10085073190024, 1.30338536559059), 
+        (2.25000000000000, 1.10000000000000)
+        ], [
+        (2.57285182548701, 0.659747510699530), 
+        (2.17368885492879, -0.158951083943034), 
+        (2.60000000000000, -0.500000000000000)
+        ], [
+        (2.88034048210678, -0.724272385685420), 
+        (2.86666666666667, 0.166666666666667), 
+        (3.00000000000000, 0.500000000000000)
+        ]
+        ]
+        */
+        
+        }
+        
+        
     }
 
 }

@@ -405,8 +405,8 @@ These are things that really should be done before release, but they might take 
     -- Won't do because 1) Vector2 is not hashable and 2) the Vector2 used by adaptive_bezier isn't the one I would get on my own.
     [-] Start by using Vector2 as the inner data for the Point structure, and see how much I can simplify things. If that works, then I can switch over to it.
     [-] Once I've got that figured out, see if I can make use of Vector2 from the more up-to-date version of nalgebra
-[ ] Move bezierify code into geometry (after switching to vector2, because then I don't have to retype the "Point" values.)
-[ ] The PolyBezier object shouldn't be shared, instead provide functions for bezierifying the lines.
+[X] Move bezierify code into geometry (after switching to vector2, because then I don't have to retype the "Point" values.)
+[X] The PolyBezier object shouldn't be shared, instead provide functions for bezierifying the lines.
 [ ] Colors are not reproducible with the same seed, can I fix this?
 [ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly, or perhaps weighted by how far the angle is from the degree. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
 [ ] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.

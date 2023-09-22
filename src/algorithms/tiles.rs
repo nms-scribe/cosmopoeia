@@ -49,7 +49,6 @@ use crate::commands::OverwriteTilesArg;
 use crate::commands::OverwriteCoastlineArg;
 use crate::commands::OverwriteOceanArg;
 use crate::commands::BezierScaleArg;
-use crate::utils::bezierify_polygon;
 use crate::geometry::MultiPolygon;
 use crate::geometry::VariantArealGeometry;
 
@@ -259,7 +258,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let mut ocean = ocean;
         let mut polygons = Vec::new();
         for polygon in tile_union.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
-            for new_polygon in bezierify_polygon(polygon?,bezier_scale)? {
+            for new_polygon in polygon?.bezierify(bezier_scale.bezier_scale)? {
                 let new_polygon = new_polygon?;
                 ocean = ocean.difference(&VariantArealGeometry::Polygon(new_polygon.clone()))?;
         

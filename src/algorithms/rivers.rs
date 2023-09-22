@@ -6,7 +6,7 @@ use crate::world_map::TileLayer;
 use crate::world_map::RiverSegmentTo;
 use crate::world_map::RiverSegmentFrom;
 use crate::world_map::NewRiver;
-use crate::utils::PolyBezier;
+use crate::utils::beziers::bezierify_points_with_phantoms;
 use crate::utils::find_curve_making_point;
 use crate::algorithms::tiles::find_tile_site_point;
 use crate::errors::CommandError;
@@ -69,10 +69,10 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 // need previous and next points to give the thingy a curve.
                 let previous_point = find_tile_site_point(previous_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
                 let next_point = find_tile_site_point(next_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));
+
                 // create the bezier
-                let bezier = PolyBezier::from_poly_line_with_phantoms(previous_point.as_ref(),&[start_point,end_point],next_point.as_ref());
-                // convert that to a polyline.
-                let line = bezier.to_poly_line(bezier_scale)?;
+                let line = bezierify_points_with_phantoms(previous_point.as_ref(), &[start_point,end_point], next_point.as_ref(), bezier_scale.bezier_scale)?;
+
                 segments.push((NewRiver {
                     from_tile_id: segment.from,
                     from_type,

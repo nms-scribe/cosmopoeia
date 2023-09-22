@@ -7,7 +7,7 @@ use crate::errors::CommandError;
 use crate::progress::WatchableIterator;
 use crate::utils::Point;
 use crate::world_map::TypedFeature;
-use crate::utils::PolyBezier;
+use crate::utils::beziers::bezierify_points;
 use crate::commands::BezierScaleArg;
 use crate::world_map::TypedFeatureIterator;
 use crate::geometry::MultiPolygon;
@@ -32,8 +32,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     for value in segment_cache.values_mut().watch(progress, "Curvifying line segments.", "Line segments curvified.") {
         for line in value {
             // if this is a polygon, the polybezier stuff should automatically be curving based off the end points.
-            let bezier = PolyBezier::from_poly_line(line);
-            *line = bezier.to_poly_line(bezier_scale)?;
+            *line = bezierify_points(line,bezier_scale.bezier_scale)?;
         }
     }
 
