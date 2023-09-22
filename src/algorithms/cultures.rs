@@ -31,7 +31,7 @@ use crate::world_map::EntityIndex;
 use crate::world_map::LakeSchema;
 use crate::world_map::EntityLookup;
 use crate::world_map::BiomeSchema;
-use crate::utils::generate_colors;
+use crate::algorithms::colors::ColorGenerator;
 use crate::commands::OverwriteCulturesArg;
 use crate::commands::SizeVarianceArg;
 use crate::commands::RiverThresholdArg;
@@ -101,7 +101,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     // I need to avoid duplicate names
     let mut culture_names = HashMap::new();
 
-    let mut colors = generate_colors(culture_count).into_iter();
+    let mut color_generator = ColorGenerator::new(None);
 
     for culture_source in culture_sources {
 
@@ -177,7 +177,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             type_: culture_type,
             expansionism,
             center_tile_id: center.fid,
-            color: colors.next().expect("Why would there not be enough colors if we generated the same number of colors and cultures?")
+            color: color_generator.generate(rng)
         });
         
     }

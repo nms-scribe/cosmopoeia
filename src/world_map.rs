@@ -97,6 +97,23 @@ fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
     from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
 }
 
+fn color_to_string(value: &(u8,u8,u8)) -> String {
+    let (red,green,blue) = value;
+    format!("#{red:02X?}{green:02X?}{blue:02X?}")
+}
+
+fn string_to_color(value: String) -> Result<(u8,u8,u8),CommandError> {
+    let mut colors = (1..=5).step_by(2).flat_map(|n| {
+        let str = &value.get(n..(n+2));
+        str.and_then(|str| u8::from_str_radix(str, 16).ok()) // I'm going to drop the error anyway.
+    });
+    let red = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
+    let green = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
+    let blue = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
+    Ok((red,green,blue))
+
+}
+
 macro_rules! feature_get_field_type {
     (f64) => {
         f64
@@ -146,6 +163,9 @@ macro_rules! feature_get_field_type {
     (culture_type) => {
         CultureType
     };
+    (color) => {
+        (u8,u8,u8)
+    }
 }
 
 macro_rules! feature_set_field_type {
@@ -196,6 +216,9 @@ macro_rules! feature_set_field_type {
     };
     (culture_type) => {
         &CultureType
+    };
+    (color) => {
+        &(u8,u8,u8)
     };
 }
 
@@ -262,6 +285,9 @@ macro_rules! feature_get_field {
     };
     ($self: ident culture_type $feature_name: literal $prop: ident $field: path) => {
         CultureType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+    };
+    ($self: ident color $feature_name: literal $prop: ident $field: path) => {
+        string_to_color(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
 }
 
@@ -330,6 +356,10 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident culture_type $field: path) => {{
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
+    ($self: ident $value: ident color $field: path) => {{
+        Ok($self.feature.set_field_string($field, &color_to_string(&$value))?)
+    }};
+
 }
 
 macro_rules! feature_field_value {
@@ -393,6 +423,9 @@ macro_rules! feature_field_value {
     }};
     ($prop: expr; culture_type) => {{
         Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
+    }};
+    ($prop: expr; color) => {{
+        Some(FieldValue::StringValue(color_to_string(&$prop)))
     }};
 
 }
@@ -487,6 +520,9 @@ macro_rules! get_field_type_for_prop_type {
         OGRFieldType::OFTInteger
     };
     (culture_type) => {
+        OGRFieldType::OFTString
+    };
+    (color) => {
         OGRFieldType::OFTString
     }
 }
@@ -2302,7 +2338,7 @@ layer!(Culture["cultures"]: MultiPolygon {
     #[set(allow(dead_code))] type_: culture_type,
     #[set(allow(dead_code))] expansionism: f64,
     #[set(allow(dead_code))] center_tile_id: id_ref,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] color: string,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] color: color,
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
@@ -2472,7 +2508,7 @@ layer!(Nation["nations"]: MultiPolygon {
     #[set(allow(dead_code))] type_: culture_type,
     #[set(allow(dead_code))] expansionism: f64,
     #[set(allow(dead_code))] capital_town_id: id_ref,
-    #[set(allow(dead_code))] color: string,
+    #[set(allow(dead_code))] color: color,
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
@@ -2493,12 +2529,12 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement: Nation {
 entity!(NationForSubnations: Nation {
     fid: u64,
     capital_town_id: u64,
-    color: String
+    color: (u8,u8,u8)
 });
 
 entity!(NationForEmptySubnations: Nation {
     fid: u64,
-    color: String,
+    color: (u8,u8,u8),
     culture: Option<String>
 });
 
@@ -2524,7 +2560,7 @@ layer!(Subnation["subnations"]: MultiPolygon {
     #[get(allow(dead_code))] #[set(allow(dead_code))] type_: culture_type,
     #[set(allow(dead_code))] seat_town_id: option_id_ref, 
     #[set(allow(dead_code))] nation_id: id_ref, 
-    #[get(allow(dead_code))] #[set(allow(dead_code))] color: string,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] color: color,
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {

@@ -7,7 +7,6 @@ authors = ["N M Sheldon"]
 [dependencies]
 adaptive-bezier = "0.1.0"
 clap = { version = "4.3.11", features = ["derive"] }
-colourado = "0.2.0"
 console = "0.15.7"
 gdal = { version = "0.16.0", features = ["array"] }
 gdal-sys = "0.9.0"
@@ -19,6 +18,7 @@ priority-queue = "1.3.2"
 qutee = "0.1.1"
 rand = "0.8.5"
 rand_distr = "0.4.3"
+random_color = "0.6.1"
 rangemap = "1.4.0"
 ron = "0.8.1"
 serde = { version = "1.0.183", features = ["derive"] }

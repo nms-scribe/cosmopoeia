@@ -7,9 +7,6 @@ use ordered_float::FloatIsNan;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand::Rng;
-use colourado::PaletteType;
-use colourado::ColorPalette;
-use colourado::Color;
 use rand_distr::uniform::SampleUniform;
 use serde::Deserialize;
 use serde::Serialize;
@@ -941,24 +938,6 @@ pub(crate) mod point_finder {
     
 
 }
-
-macro_rules! color_to_u8 {
-    ($color: ident) => {
-        let $color = (($color * u8::MAX as f32).round()) as u8;
-    };
-}
-
-pub(crate) fn generate_colors(count: usize) -> Vec<String> {
-    let palette = ColorPalette::new(count as u32, PaletteType::Pastel, false);
-    palette.colors.into_iter().map(|Color{red, blue, green}| {
-        color_to_u8!(red);
-        color_to_u8!(blue);
-        color_to_u8!(green);
-        format!("#{red:02X?}{blue:02X?}{green:02X?}")
-
-    }).collect()
-}
-
 
 #[derive(Clone)]
 pub enum ArgRange<NumberType> {

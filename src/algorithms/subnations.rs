@@ -63,7 +63,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
 
         let subnation_count = ((nation_towns.len() as f64 * subnation_percentage.subnation_percentage)/100.0).max(2.0).floor() as usize; // at least two must be created
         nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital_town_id)));
-    
+
         for (center_tile,seat) in nation_towns.iter().take(subnation_count) {
             let center_tile_id = center_tile.fid;
             let culture = center_tile.culture.clone();
@@ -77,7 +77,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
                 let namer = Culture::get_namer(culture_data, namers)?;
                 namer.make_state_name(rng)                  
             };
-            let color = nation.color.clone();
+            let color = nation.color;
 
             let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
 

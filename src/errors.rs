@@ -64,7 +64,8 @@ pub enum CommandError {
     LakeDissolveMadeAMultiPolygon,
     CantConvertMultiPolygonToPolygon,
     EmptyLinearRing,
-    UnclosedLinearRing,     
+    UnclosedLinearRing,
+    InvalidValueForColor(String),     
 }
 
 impl Error for CommandError {
@@ -107,6 +108,7 @@ impl Display for CommandError {
             Self::InvalidValueForLakeType(a) => write!(f,"Invalid value ('{a}') for lake type field."),
             Self::InvalidValueForGroupingType(a) => write!(f,"Invalid value ('{a}') for grouping type field."),
             Self::InvalidValueForCultureType(a) => write!(f,"Invalid value ('{a}') for culture type field."),
+            Self::InvalidValueForColor(a) => write!(f,"Invalid value ('{a}') for color field."),
             Self::MissingGlacierBiome => write!(f,"Glacier biome is not specified as criteria in biomes table."),
             Self::MissingWetlandBiome => write!(f,"Wetland biome is not specified as criteria in biomes table."),
             Self::MissingOceanBiome => write!(f,"Ocean biome is not specified as criteria in biomes table."),
