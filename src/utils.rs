@@ -7,11 +7,6 @@ use ordered_float::FloatIsNan;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand::Rng;
-use gdal::vector::Geometry;
-use gdal::vector::Layer;
-use gdal::vector::LayerAccess;
-use gdal::vector::FeatureIterator;
-use gdal::vector::OGRwkbGeometryType;
 use adaptive_bezier::adaptive_bezier_curve; 
 use adaptive_bezier::Vector2;
 use colourado::PaletteType;
@@ -222,44 +217,6 @@ impl Extent {
 
 }
 
-
-pub(crate) struct LayerGeometryIterator<'lifetime> {
-    count: usize,
-    source: FeatureIterator<'lifetime>
-}
-
-impl<'lifetime> LayerGeometryIterator<'lifetime> {
-
-    pub(crate) fn new(source: &'lifetime mut Layer) -> Self {
-        Self {
-            count: source.feature_count() as usize,
-            source: source.features()
-        }
-    }
-
-}
-
-impl Iterator for LayerGeometryIterator<'_> {
-
-    type Item = Result<Geometry,CommandError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(feature) = self.source.next() {
-            if let Some(geometry) = feature.geometry() {
-                Some(Ok(geometry.clone()))
-            } else {
-                Some(Geometry::empty(OGRwkbGeometryType::wkbNone).map_err(Into::into))
-            }
-        } else {
-            None
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0,Some(self.count))
-    }
-    
-}
 
 pub(crate) trait ToGeometryCollection<Geometry: GDALGeometryWrapper> {
 

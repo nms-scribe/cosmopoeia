@@ -36,7 +36,6 @@ use paste::paste;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::utils::LayerGeometryIterator;
 use crate::utils::Point as UtilsPoint; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
 use crate::utils::Extent;
 use crate::utils::title_case::ToTitleCase;
@@ -1097,10 +1096,6 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
 
     pub(crate) fn feature_count(&self) -> usize {
         self.layer.feature_count() as usize
-    }
-
-    pub(crate) fn read_geometries(&mut self) -> LayerGeometryIterator {
-        LayerGeometryIterator::new(&mut self.layer)
     }
 
     fn add_feature_with_geometry(&mut self, geometry: SchemaType::Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {

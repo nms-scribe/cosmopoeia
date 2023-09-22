@@ -16,29 +16,14 @@ use crate::geometry::LinearRing;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let mut vertex_index = HashMap::new();
 
     let mut subject_layer = ThemeType::edit_theme_layer(target)?;
+    let read_features = ThemeType::read_features(&mut subject_layer);
+    let vertex_index = index_vertexes::<ThemeType,_>(read_features, progress)?;
 
-    for multipolygon in subject_layer.read_geometries().watch(progress,"Indexing vertexes.","Vertexes indexed.") {
-        let multipolygon = multipolygon?;
-
-        for i in 0..multipolygon.geometry_count() {
-            let polygon = multipolygon.get_geometry(i);
-            for j in 0..polygon.geometry_count() {
-                let ring = polygon.get_geometry(j);
-                for k in 0..ring.point_count() {
-                    let vertex: Point = ring.get_point(k as i32).try_into()?;
-                    match vertex_index.get_mut(&vertex) {
-                        Some(entry) => *entry += 1,
-                        None => {
-                            _ = vertex_index.insert(vertex, 1);
-                        },
-                    }
-                }
-            }
-        }
-    }
+    // For reasons I don't understand, if I don't do reopen the layer then rust thinks I retain a mutable borrow on subject_layer from the last read_features.
+    // But it shouldn't, because the only thing that leaks from that call is an index of owned Points and integers.
+    let mut subject_layer = ThemeType::edit_theme_layer(target)?;
 
     let mut segment_cache: HashMap<Point, Vec<Vec<Point>>> = HashMap::new();
     let read_features = ThemeType::read_features(&mut subject_layer);
@@ -87,6 +72,28 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
 
 
     Ok(())
+}
+
+fn index_vertexes<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, progress: &mut Progress) -> Result<HashMap<Point, i32>, CommandError> {
+    let mut vertex_index = HashMap::new();
+
+    for multipolygon in read_features.watch(progress,"Indexing vertexes.","Vertexes indexed.").map(|f| f.geometry()) {
+        for polygon in multipolygon? {
+            for ring in polygon? {
+                for vertex in ring? {
+                    let vertex: Point = vertex.try_into()?;
+                    match vertex_index.get_mut(&vertex) {
+                        Some(entry) => *entry += 1,
+                        None => {
+                            _ = vertex_index.insert(vertex, 1);
+                        },
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(vertex_index)
 }
 
 struct UniqueSegment {

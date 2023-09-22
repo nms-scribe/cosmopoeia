@@ -398,12 +398,13 @@ These are things that really should be done before release, but they might take 
    [X] 'world_map.rs' to finish things up
    [X] Fix every identifier that I've appended 2 to, should be all in World_map.
    [-] Make sure to get rid of the None geometry when I've got everything moved over. Have to figure out what to do with the TypedFeature implementation if there are no geometries. Might need another trait to implement there. Or, maybe I do keep a None? It will just raise an error if I try to create it.
-   [ ] bezierify_multipolygon should be able to call bezierify_polygon
+   [-] bezierify_multipolygon should be able to call bezierify_polygon
    [X] make_valid_default should be part of areal_fns!, and should always return a variantarealgeometry.
-[ ] Move bezierify code into geometry
 [ ] size_hint doesn't work the way I thought it did. The result is a range of how many remain instead. Fix it's usage and implementations.
 [ ] Consider converting to the nalgebra::Vector2 type for points.
     [ ] Start by using Vector2 as the inner data for the Point structure, and see how much I can simplify things. If that works, then I can switch over to it.
+[ ] Move bezierify code into geometry
+[ ] The PolyBezier object shouldn't be shared, instead provide functions for bezierifying the lines.
 [ ] Colors are not reproduced, can I fix this?
 [ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly, or perhaps weighted by how far the angle is from the degree. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
 [ ] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.
