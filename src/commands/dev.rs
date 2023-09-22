@@ -32,6 +32,7 @@ use crate::commands::ElevationLimitsArg;
 use crate::commands::RandomSeedArg;
 use crate::commands::OverwriteTilesArg;
 use crate::commands::NamerArg;
+use crate::world_map::TypedFeature;
 
 
 subcommand_def!{
@@ -154,7 +155,7 @@ impl Task for TrianglesFromPoints {
 
         let mut points = target.points_layer()?;
     
-        let mut generator = DelaunayGenerator::new(points.read_geometries().to_geometry_collection(progress)?);
+        let mut generator = DelaunayGenerator::new(points.read_features().map(|f| f.geometry()).to_geometry_collection(progress)?);
     
         progress.announce("Generating delaunay triangles");
 
@@ -205,7 +206,7 @@ impl Task for VoronoiFromTriangles {
         target.with_transaction(|transaction| {
             let mut triangles = transaction.edit_triangles_layer()?;
     
-            let mut generator = VoronoiGenerator::new(triangles.read_geometries(),extent)?;
+            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),extent)?;
     
             progress.announce("Create tiles from voronoi polygons");
         

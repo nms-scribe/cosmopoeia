@@ -91,8 +91,8 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
     let mut segments_layer = target.create_rivers_layer(overwrite_layer)?;
 
     
-    for (river,segment) in segments.iter().watch(progress,"Writing rivers.","Rivers written.") {
-        _ = segments_layer.add_segment(river,segment)?;
+    for (river,segment) in segments.into_iter().watch(progress,"Writing rivers.","Rivers written.") {
+        _ = segments_layer.add_segment(&river,segment.into_iter().map(|p| p.to_tuple()))?;
     }
 
     Ok(())

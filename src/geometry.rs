@@ -1,0 +1,916 @@
+use gdal::vector::Geometry as GDALGeometry;
+use gdal::vector::OGRwkbGeometryType;
+
+use crate::errors::CommandError;
+use crate::gdal_fixes::GeometryFix;
+
+pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
+
+    const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type;
+
+}
+
+macro_rules! non_collection_geometry {
+    ($struct: ident, $geo_type: ident) => {
+
+        #[derive(Clone)]
+        pub(crate) struct $struct {
+            inner: GDALGeometry,
+        }
+
+        impl $struct {
+            // these methods can't be implemented as a trait because they need access to the 'inner' member.
+
+            // private method, use TryFrom to actually try to convert
+            fn try_from_gdal(value: GDALGeometry) -> Result<Self,CommandError> {
+                let found = value.geometry_type();
+                if found == OGRwkbGeometryType::$geo_type {
+                    Ok(Self {
+                        inner: value
+                    })
+                } else {
+                    Err(CommandError::IncorrectGdalGeometryType{ 
+                        expected: OGRwkbGeometryType::$geo_type, 
+                        found
+                    })
+                }
+
+            }
+
+            // internal function for constructing a blank, but empty and therefore incorrect, value which then gets filled in by constructor
+            fn blank() -> Result<Self,CommandError> {
+                let inner = GDALGeometry::empty(OGRwkbGeometryType::$geo_type)?;
+                Ok(Self {
+                    inner
+                })
+            }
+
+        }
+
+
+        impl GDALGeometryWrapper for $struct {
+
+
+            const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::$geo_type;
+
+        }
+        
+        impl TryFrom<GDALGeometry> for $struct {
+
+            type Error = CommandError;
+
+            fn try_from(value: GDALGeometry) -> Result<Self,Self::Error> {
+                Self::try_from_gdal(value)
+            }
+        
+        }
+
+        impl From<$struct> for GDALGeometry {
+
+            fn from(value: $struct) -> GDALGeometry {
+                value.inner
+            }
+        }
+        
+    };
+}
+
+
+
+non_collection_geometry!(Point,wkbPoint);
+
+impl Point {
+
+    pub(crate) fn new(x: f64, y: f64) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        this.inner.add_point_2d((x,y));
+        Ok(this)
+    }
+
+}
+
+non_collection_geometry!(LineString,wkbLineString);
+
+impl LineString {
+
+    pub(crate) fn from_vertices<Items: IntoIterator<Item=(f64,f64)>>(vertices: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for point in vertices {
+            this.push_point(point)
+        }
+        Ok(this)
+    
+    }
+
+    pub(crate) fn get_point(&self, index: usize) -> (f64,f64) {
+        let (x,y,_) = self.inner.get_point(index as i32);
+        (x,y)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.inner.point_count()
+    }
+
+    #[allow(dead_code)] pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn push_point(&mut self, point: (f64,f64)) {
+        self.inner.add_point_2d(point)
+    }
+
+
+
+}
+
+pub(crate) struct LineStringIter {
+    inner: LineString,
+    position: usize
+}
+
+impl Iterator for LineStringIter {
+
+    type Item = (f64,f64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position < self.inner.len() {
+            let result = self.inner.get_point(self.position);
+            self.position += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // This is how size_hint is supposed to work.
+        let count = self.inner.len();
+        let remaining = count - self.position;
+        (remaining,Some(remaining))
+    }
+}
+
+impl IntoIterator for LineString {
+    type Item = (f64,f64);
+
+    type IntoIter = LineStringIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            inner: self,
+            position: 0
+        }
+    }
+}
+
+non_collection_geometry!(LinearRing,wkbLinearRing);
+
+impl LinearRing {
+
+    pub(crate) fn from_vertices<Items: IntoIterator<Item=(f64,f64)>>(vertices: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for point in vertices {
+            this.push_point(point);
+        }
+        if this.is_empty() {
+            // FUTURE: I allow for other empty structures, mostly for cases where a Geometry would be "null", so perhaps
+            // I should allow this. But then, I would need some way of automatically validating.
+            Err(CommandError::EmptyLinearRing)
+        } else {
+            if this.get_point(this.len() - 1) != this.get_point(0) {
+                Err(CommandError::UnclosedLinearRing)
+            } else {
+                Ok(this)
+            }
+        }
+    
+    }
+
+    pub(crate) fn get_point(&self, index: usize) -> (f64,f64) {
+        let (x,y,_) = self.inner.get_point(index as i32);
+        (x,y)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.inner.point_count()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn push_point(&mut self, point: (f64,f64)) {
+        self.inner.add_point_2d(point)
+    }
+
+}
+
+
+pub(crate) struct LinearRingIter {
+    inner: LinearRing,
+    position: usize
+}
+
+impl Iterator for LinearRingIter {
+
+    type Item = (f64,f64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position < self.inner.len() {
+            let result = self.inner.get_point(self.position);
+            self.position += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // This is how size_hint is supposed to work.
+        let count = self.inner.len();
+        let remaining = count - self.position;
+        (remaining,Some(remaining))
+    }
+}
+
+impl IntoIterator for LinearRing {
+    type Item = (f64,f64);
+
+    type IntoIter = LinearRingIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            inner: self,
+            position: 0
+        }
+    }
+}
+
+non_collection_geometry!(Polygon,wkbPolygon);
+
+// While I could put these on some sort of trait, I'd also need to provide some sort of access to inner in that trait,
+// which wouldn't be private, and I don't really want 'inner' to leak. It doesn't belong on wrapper, because it shouldn't be
+// possible to run area on a 2D or less feature. (Union might be different)
+macro_rules! areal_fns {
+    () => {
+        #[allow(dead_code)] // not all implementations use this
+        pub(crate) fn area(&self) -> f64 {
+            self.inner.area()
+        }
+            
+        pub(crate) fn union(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+            if let Some(united) = self.inner.union(&rhs.inner) {
+                let united = if !united.is_valid() {
+                    // I'm writing to stdout here because the is_valid also writes to stdout
+                    // FUTURE: I can't use progress.warning here because it is borrowed for mutable, is there another way?
+                    eprintln!("fixing invalid union");
+                    let mut validate_options = gdal::cpl::CslStringList::new();
+                    validate_options.add_string("METHOD=STRUCTURE")?;
+                    united.make_valid(&validate_options)?
+                } else {
+                    united
+                };
+    
+                Ok(united.try_into()?)
+            } else {
+                Err(CommandError::GdalUnionFailed)
+            }
+    
+        }
+
+        pub(crate) fn buffer(&self, distance: f64, n_quad_segs: u32) -> Result<VariantArealGeometry,CommandError> {
+            self.inner.buffer(distance, n_quad_segs)?.try_into()
+        }
+    
+        pub(crate) fn simplify(&self, tolerance: f64) -> Result<VariantArealGeometry,CommandError> {
+            self.inner.simplify(tolerance)?.try_into()
+        }
+
+        #[allow(dead_code)] // not all implementation use this
+        pub(crate) fn intersection(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+            if let Some(intersected) = self.inner.intersection(&rhs.inner) {
+                // I haven't seen any broken intersections yet, so I'm not checking validity.
+                Ok(intersected.try_into()?)
+            } else {
+                Err(CommandError::GdalIntersectionFailed)
+            }
+    
+        }
+
+        pub(crate) fn difference(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+            if let Some(different) = self.inner.difference(&rhs.inner) {
+                let different = if different.is_valid() {
+                    // I'm writing to stdout here because the is_valid also writes to stdout
+                    // FUTURE: I can't use progress.warning because I've got progress borrowed as mutable. Is there another way?
+                    eprintln!("fixing invalid difference");
+                    let mut validate_options = gdal::cpl::CslStringList::new();
+                    validate_options.add_string("METHOD=STRUCTURE")?;
+                    different.make_valid(&validate_options)?
+                } else {
+                    different
+                };
+
+                Ok(different.try_into()?)
+            } else {
+                Err(CommandError::GdalDifferenceFailed)
+            }
+
+        }
+
+    
+    };
+}
+
+
+impl Polygon {
+
+    pub(crate) fn from_rings<Items: IntoIterator<Item = LinearRing>>(rings: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for ring in rings {
+            this.push_ring(ring)?
+        }
+        Ok(this)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.inner.geometry_count()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn get_ring(&self, index: usize) -> Result<LineString,CommandError> {
+        let ring = self.inner.get_geometry(index);
+        LineString::try_from(ring.clone()) // FUTURE: Unfortunately, GeometryRef is inaccessible, which might mess with performance a little.
+    }
+
+    // For some reason, polygons return LineStrings, but require a LinearRing when building. At least that's what appears to be happening.
+    pub(crate) fn push_ring(&mut self, ring: LinearRing) -> Result<(),CommandError> {
+        Ok(self.inner.add_geometry(ring.into())?)
+    }
+
+    areal_fns!();
+
+    // NOTE: This returns a variant areal feature, since sometimes it returns MultiPolygons
+    pub(crate) fn make_valid_default(&self) -> Result<VariantArealGeometry,CommandError> {
+        // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
+        // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
+        let validate_options = gdal::cpl::CslStringList::new();
+        self.inner.make_valid(&validate_options)?.try_into()
+    }
+
+
+}
+
+
+pub(crate) struct PolygonIter {
+    inner: Polygon,
+    position: usize
+}
+
+impl Iterator for PolygonIter {
+
+    // For some reason, polygons return LineStrings, but require a LinearRing when building. At least that's what appears to be happening.
+    type Item = Result<LineString,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position < self.inner.len() {
+            let result = self.inner.get_ring(self.position);
+            self.position += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // This is how size_hint is supposed to work.
+        let count = self.inner.len();
+        let remaining = count - self.position;
+        (remaining,Some(remaining))
+    }
+}
+
+impl IntoIterator for Polygon {
+    type Item = Result<LineString,CommandError>;
+
+    type IntoIter = PolygonIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            inner: self,
+            position: 0
+        }
+    }
+}
+
+impl TryFrom<MultiPolygon> for Polygon {
+
+    type Error = CommandError;
+
+    fn try_from(value: MultiPolygon) -> Result<Self,Self::Error> {
+        if value.len() == 1 {
+            value.get_polygon(0)
+        } else {
+            Err(CommandError::CantConvertMultiPolygonToPolygon)
+        }
+    }
+}
+
+
+
+
+non_collection_geometry!(MultiPolygon,wkbMultiPolygon);
+
+impl MultiPolygon {
+
+    pub(crate) fn from_polygons<Items: IntoIterator<Item = Polygon>>(polygons: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for polygon in polygons {
+            this.push_polygon(polygon)?
+        }
+        Ok(this)
+    }
+
+    pub(crate) fn from_polygon_results<Items: IntoIterator<Item = Result<Polygon,CommandError>>>(polygons: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for polygon in polygons {
+            this.push_polygon(polygon?)?
+        }
+        Ok(this)
+    }
+
+    pub(crate) fn from_combined<Items: IntoIterator<Item = MultiPolygon>>(multis: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for multi in multis {
+            for polygon in multi {
+                this.push_polygon(polygon?)?
+            }
+        }
+        Ok(this)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.inner.geometry_count()
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn get_polygon(&self, index: usize) -> Result<Polygon,CommandError> {
+        let ring = self.inner.get_geometry(index);
+        Polygon::try_from(ring.clone()) // FUTURE: Unfortunately, GeometryRef is inaccessible, which might mess with performance a little.
+    }
+
+    pub(crate) fn push_polygon(&mut self, polygon: Polygon) -> Result<(),CommandError> {
+        Ok(self.inner.add_geometry(polygon.into())?)
+    }
+
+    areal_fns!();
+
+    // this is different from Polygon::make_valid_default, in that it always returns MultiPolygon, whereas that one could be variant.
+    pub(crate) fn make_valid_default(&self) -> Result<Self,CommandError> {
+        // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
+        // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
+        let validate_options = gdal::cpl::CslStringList::new();
+        self.inner.make_valid(&validate_options)?.try_into()
+    }
+
+
+}
+
+
+pub(crate) struct MultiPolygonIter {
+    inner: MultiPolygon,
+    position: usize
+}
+
+impl Iterator for MultiPolygonIter {
+
+    type Item = Result<Polygon,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position < self.inner.len() {
+            let result = self.inner.get_polygon(self.position);
+            self.position += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // This is how size_hint is supposed to work.
+        let count = self.inner.len();
+        let remaining = count - self.position;
+        (remaining,Some(remaining))
+    }
+}
+
+impl IntoIterator for MultiPolygon {
+    type Item = Result<Polygon,CommandError>;
+
+    type IntoIter = MultiPolygonIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            inner: self,
+            position: 0
+        }
+    }
+}
+
+impl TryFrom<Polygon> for MultiPolygon {
+
+    type Error = CommandError;
+
+    fn try_from(value: Polygon) -> Result<Self,Self::Error> {
+        Self::from_polygons([value])
+    }
+}
+
+
+// At this point I'm not implementing GDALGeometryWrapper for all Collections, just Variant collections.
+// The other ones are more difficult, as I'd have to validate every single geometry in the collection
+// in TryFrom.
+pub(crate) struct Collection<ItemType: GDALGeometryWrapper> {
+    inner: GDALGeometry,
+    _marker: core::marker::PhantomData<ItemType>
+}
+
+impl<ItemType: GDALGeometryWrapper> From<Collection<ItemType>> for GDALGeometry {
+
+    fn from(value: Collection<ItemType>) -> GDALGeometry {
+        value.inner
+    }
+}
+
+impl GDALGeometryWrapper for Collection<VariantGeometry> {
+
+    const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbGeometryCollection;
+
+}
+
+impl TryFrom<GDALGeometry> for Collection<VariantGeometry> {
+
+    type Error = CommandError;
+
+    fn try_from(value: GDALGeometry) -> Result<Self,Self::Error> {
+        Self::try_from_gdal(value)
+    }
+
+}
+
+impl Collection<VariantGeometry> {
+
+    // private method, use TryFrom to actually try to convert
+    fn try_from_gdal(value: GDALGeometry) -> Result<Self,CommandError> {
+        let found = value.geometry_type();
+        if found == OGRwkbGeometryType::wkbGeometryCollection {
+            Ok(Self {
+                inner: value,
+                _marker: core::marker::PhantomData
+            })
+        } else {
+            Err(CommandError::IncorrectGdalGeometryType{ 
+                expected: OGRwkbGeometryType::wkbGeometryCollection, 
+                found
+            })
+        }
+
+    }
+
+}
+
+
+
+impl Collection<Point> {
+
+    pub(crate) fn delaunay_triangulation(&self, tolerance: Option<f64>) -> Result<Collection<Polygon>, CommandError> {
+        let inner = self.inner.delaunay_triangulation(tolerance)?;
+        Collection::reluctantly_try_from_gdal(inner)
+    }
+
+
+}
+
+impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
+
+    // private method, don't use this anywhere, it doesn't check the contents. Use Collection<VariantGeometry>::try_from instead.
+    // I only use it in cases where I know what the geometry is going to be.
+    fn reluctantly_try_from_gdal(value: GDALGeometry) -> Result<Self,CommandError> {
+        let found = value.geometry_type();
+        if found == OGRwkbGeometryType::wkbGeometryCollection {
+            Ok(Self {
+                inner: value,
+                _marker: core::marker::PhantomData
+            })
+        } else {
+            Err(CommandError::IncorrectGdalGeometryType{ 
+                expected: OGRwkbGeometryType::wkbGeometryCollection, 
+                found
+            })
+        }
+
+    }
+
+    pub(crate) fn new() -> Result<Self,CommandError> {
+        let inner = GDALGeometry::empty(OGRwkbGeometryType::wkbGeometryCollection)?;
+        Ok(Self {
+            inner,
+            _marker: core::marker::PhantomData
+        })
+
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn from_geometries<Items: IntoIterator<Item = ItemType>>(geometries: Items) -> Result<Self,CommandError> {
+        let mut inner = GDALGeometry::empty(OGRwkbGeometryType::wkbGeometryCollection)?;
+        for geometry in geometries {
+            inner.add_geometry(geometry.into())?
+        }
+        Ok(Self {
+            inner,
+            _marker: core::marker::PhantomData
+        })
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.inner.geometry_count()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(crate) fn get_item(&self, index: usize) -> Result<ItemType,CommandError> {
+        let geometry = self.inner.get_geometry(index);
+        ItemType::try_from(geometry.clone()) // FUTURE: Unfortunately, GeometryRef is inaccessible, which might mess with performance a little.
+    }
+
+    pub(crate) fn push_item(&mut self, geometry: ItemType) -> Result<(),CommandError> {
+        Ok(self.inner.add_geometry(geometry.into())?)
+    }
+
+}
+
+
+pub(crate) struct CollectionIter<ItemType: GDALGeometryWrapper> {
+    inner: Collection<ItemType>,
+    position: usize
+}
+
+impl<ItemType: GDALGeometryWrapper> Iterator for CollectionIter<ItemType> {
+
+    type Item = Result<ItemType,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position < self.inner.len() {
+            let result = self.inner.get_item(self.position);
+            self.position += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // This is how size_hint is supposed to work.
+        let count = self.inner.len();
+        let remaining = count - self.position;
+        (remaining,Some(remaining))
+    }
+}
+
+impl<ItemType: GDALGeometryWrapper> IntoIterator for Collection<ItemType> {
+    type Item = Result<ItemType,CommandError>;
+
+    type IntoIter = CollectionIter<ItemType>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            inner: self,
+            position: 0
+        }
+    }
+}
+
+macro_rules! impl_variants {
+    ($enum: ty, $variant: ident, $struct: ty) => {
+        impl From<$struct> for $enum {
+
+            fn from(value: $struct) -> Self {
+                Self::$variant(value)
+            }
+
+
+        }
+
+    };
+}
+
+macro_rules! impl_variant_geometry {
+    ($enum: ident { $( $variant: ident( $struct: ty) $([$type: ident])?),*$(,)? }) => {
+                
+        pub(crate) enum $enum {
+            $( $variant($struct)),*
+        }
+
+        impl GDALGeometryWrapper for $enum {
+
+            // If you've got a Variant type, don't use this INTERNAL_TYPE implementation, it probably won't do what you think.
+            const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbUnknown;
+
+        }
+
+        impl TryFrom<GDALGeometry> for $enum {
+            type Error = CommandError;
+
+            fn try_from(value: GDALGeometry) -> Result<Self, Self::Error> {
+                match value.geometry_type() {
+                    $( $( OGRwkbGeometryType::$type => Ok(Self::$variant(<$struct>::try_from(value)?)),)? )*
+                    unknown => Err(CommandError::UnsupportedGdalGeometryType(unknown))
+                }
+            }
+        }
+
+        impl From<$enum> for GDALGeometry {
+            fn from(value: $enum) -> GDALGeometry {
+                match value {
+                    $( $enum::$variant(a) => a.into(), )*
+                }
+            }
+        }
+
+        $(
+            impl_variants!($enum,$variant,$struct);
+        )*
+
+    };
+}
+
+impl_variant_geometry!(VariantGeometry {
+    Point(Point) [wkbPoint],
+    LineString(LineString) [wkbLineString],
+    LinearRing(LinearRing) [wkbLinearRing],
+    Polygon(Polygon) [wkbPolygon],
+    MultiPolygon(MultiPolygon) [wkbMultiPolygon],
+    VariantCollection(Collection<VariantGeometry>) [wkbGeometryCollection],
+    PointCollection(Collection<Point>),
+    LineStringCollection(Collection<LineString>),
+    LinearRingCollection(Collection<LinearRing>),
+    PolygonCollection(Collection<Polygon>),
+    MultiPolygonCollection(Collection<MultiPolygon>),
+    // I can't start to do Collection<Collection> as that would just lead to infinite types.
+});
+
+impl_variant_geometry!(VariantArealGeometry {
+    Polygon(Polygon) [wkbPolygon],
+    MultiPolygon(MultiPolygon) [wkbMultiPolygon],
+});
+
+impl VariantArealGeometry {
+
+    #[allow(dead_code)] // not used, but I feel I should have it.
+    pub(crate) fn area(&self) -> f64 {
+        match self {
+            VariantArealGeometry::Polygon(inner) => inner.area(),
+            VariantArealGeometry::MultiPolygon(inner) => inner.area(),
+        }
+    }
+
+    pub(crate) fn union(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+        match (self,rhs) {
+            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.union(rhs),
+            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => lhs.union(rhs),
+            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.union(&rhs.clone().try_into()?),
+            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => rhs.union(&lhs.clone().try_into()?),
+        }
+    }
+
+    pub(crate) fn difference(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+        match (self,rhs) {
+            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.difference(rhs),
+            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => lhs.difference(rhs),
+            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.difference(&rhs.clone().try_into()?),
+            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => rhs.difference(&lhs.clone().try_into()?),
+        }
+    }
+
+    pub(crate) fn buffer(&self, distance: f64, n_quad_segs: u32) -> Result<Self,CommandError> {
+        match self {
+            VariantArealGeometry::Polygon(lhs) => lhs.buffer(distance,n_quad_segs),
+            VariantArealGeometry::MultiPolygon(lhs) => lhs.buffer(distance,n_quad_segs),
+        }
+    }
+
+    pub(crate) fn simplify(&self, tolerance: f64) -> Result<Self,CommandError> {
+        match self {
+            VariantArealGeometry::Polygon(lhs) => lhs.simplify(tolerance),
+            VariantArealGeometry::MultiPolygon(lhs) => lhs.simplify(tolerance),
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        match self {
+            VariantArealGeometry::Polygon(lhs) => lhs.is_empty(),
+            VariantArealGeometry::MultiPolygon(lhs) => lhs.is_empty(),
+        }
+    }
+
+
+}
+
+
+pub(crate) enum VariantArealGeometryIter {
+    Polygon(Option<Polygon>),
+    MultiPolygon(MultiPolygonIter)
+}
+
+impl Iterator for VariantArealGeometryIter {
+
+    type Item = Result<Polygon,CommandError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Polygon(polygon) => {
+                polygon.take().map(|p| Ok(p))
+            },
+            Self::MultiPolygon(multi) => multi.next()
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Self::Polygon(Some(_)) => (1,Some(1)),
+            Self::Polygon(None) => (0,Some(0)),
+            Self::MultiPolygon(multi) => multi.size_hint()
+        }
+    }
+}
+
+impl IntoIterator for VariantArealGeometry {
+    type Item = Result<Polygon,CommandError>;
+
+    type IntoIter = VariantArealGeometryIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            VariantArealGeometry::Polygon(polygon) => Self::IntoIter::Polygon(Some(polygon)),
+            VariantArealGeometry::MultiPolygon(multi) => Self::IntoIter::MultiPolygon(multi.into_iter()),
+        }
+    }
+}
+
+impl TryFrom<VariantArealGeometry> for MultiPolygon {
+
+    type Error = CommandError;
+
+    fn try_from(value: VariantArealGeometry) -> Result<Self,CommandError> {
+        match value {
+            VariantArealGeometry::Polygon(polygon) => polygon.try_into(),
+            VariantArealGeometry::MultiPolygon(multi) => Ok(multi),
+        }
+    }
+}
+
+impl TryFrom<VariantArealGeometry> for Polygon {
+
+    type Error = CommandError;
+
+    fn try_from(value: VariantArealGeometry) -> Result<Self,CommandError> {
+        match value {
+            VariantArealGeometry::Polygon(polygon) => Ok(polygon),
+            VariantArealGeometry::MultiPolygon(multi) => multi.try_into(),
+        }
+    }
+}
+
+#[derive(Clone)]
+/// This can be used in generics that require a geometry to represent a lack of geometry. It is up to that structure to prevent creating the geometry object.
+pub(crate) struct NoGeometry;
+
+
+impl GDALGeometryWrapper for NoGeometry {
+    // This marks it for use in generic objects so they know not to manipulate the geometry on this one.
+    const INTERNAL_TYPE:gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbNone;
+}
+
+impl TryFrom<GDALGeometry>for NoGeometry {
+    type Error = CommandError;
+
+    fn try_from(_: GDALGeometry) -> Result<Self,Self::Error>{
+        unreachable!("This program should never be creating a 'None' geometry.")
+    }
+
+}
+
+impl From<NoGeometry> for GDALGeometry {
+    fn from(_: NoGeometry) -> GDALGeometry {
+        unreachable!("This program should never be getting a geometry off of 'None' geometry.")
+    }
+
+}

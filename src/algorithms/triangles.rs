@@ -1,14 +1,16 @@
-use gdal::vector::Geometry;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::utils::GeometryGeometryIterator;
 use crate::world_map::WorldMapTransaction;
+use crate::geometry::Collection;
+use crate::geometry::Point;
+use crate::geometry::CollectionIter;
+use crate::geometry::Polygon;
 
 pub(crate) enum DelaunayGeneratorPhase {
-    Unstarted(Geometry),
-    Started(GeometryGeometryIterator),
+    Unstarted(Collection<Point>),
+    Started(CollectionIter<Polygon>),
     Done
 }
 
@@ -19,7 +21,7 @@ pub(crate) struct DelaunayGenerator {
 
 impl DelaunayGenerator {
 
-    pub(crate) fn new(source: Geometry) -> Self {
+    pub(crate) fn new(source: Collection<Point>) -> Self {
         let phase = DelaunayGeneratorPhase::Unstarted(source);
         Self {
             phase
@@ -37,7 +39,7 @@ impl DelaunayGenerator {
             progress.start_unknown_endpoint(|| "Generating triangles.");
             let triangles = source.delaunay_triangulation(None)?;
             progress.finish(|| "Triangles generated.");
-            self.phase = DelaunayGeneratorPhase::Started(GeometryGeometryIterator::new(triangles))
+            self.phase = DelaunayGeneratorPhase::Started(triangles.into_iter())
         }
         Ok(())
     }
@@ -46,7 +48,7 @@ impl DelaunayGenerator {
 
 impl Iterator for DelaunayGenerator {
 
-    type Item = Result<Geometry,CommandError>;
+    type Item = Result<Polygon,CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.phase {
@@ -57,7 +59,7 @@ impl Iterator for DelaunayGenerator {
                 }
             },
             DelaunayGeneratorPhase::Started(iter) => if let Some(value) = iter.next() {
-                Some(Ok(value))
+                Some(value)
             } else {
                 self.phase = DelaunayGeneratorPhase::Done;
                 None
@@ -68,7 +70,7 @@ impl Iterator for DelaunayGenerator {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match &self.phase {
-            DelaunayGeneratorPhase::Unstarted(geometry) => (0,Some(geometry.geometry_count())),
+            DelaunayGeneratorPhase::Unstarted(geometry) => (0,Some(geometry.len())),
             DelaunayGeneratorPhase::Started(iterator) => iterator.size_hint(),
             DelaunayGeneratorPhase::Done => (0,None),
         }
@@ -76,12 +78,12 @@ impl Iterator for DelaunayGenerator {
     }
 }
 
-pub(crate) fn load_triangles_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_triangles_layer<Generator: Iterator<Item=Result<Polygon,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut target = target.create_triangles_layer(overwrite_layer)?;
 
     for triangle in generator.watch(progress,"Writing triangles.","Triangles written.") {
-        _ = target.add_triangle(triangle?.clone())?;
+        _ = target.add_triangle(triangle?)?;
     }
 
     Ok(())

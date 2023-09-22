@@ -294,7 +294,7 @@ To proceed on this, I can break it down into the following steps:
     [X] If I do do that, then I will need to edit the qgs file inside the qgz to remove the use of Inannak in the xml id values.
 [-] Hide the sub-commands from help, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command. I've decided these are going in the wiki instead.
 [X] Clean up and triage TODOs and FUTURE:s into things I must do now, simple things I could do now, and things that can wait until sometime later.
-[ ] Work on "Simple Pre-release Tasks" below
+[X] Work on "Simple Pre-release Tasks" below
 [ ] Work on "Complex Pre-release Tasks" below
 [ ] Documentation
     [ ] Can I set it up so it shows up as a wiki on github?
@@ -390,15 +390,28 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 ## Complex Pre-release tasks
 These are things that really should be done before release, but they might take a bit of work to figure out.
 
+[ ] TypedGeometry -- similar to how I did TypedFeature, a TypedGeometry is a struct that can be created using TryFrom<Geometry>, and TryFrom<GeometryRef> (or two structs?). Each one is a specific type, not an enum, so you don't have to worry about whether a specific geometry supports many polygons, many points, etc. The type tells you.
+   -- Do a search for references to Gdal's Geography type to find all the places that need to be changed first (ignoring things like geometry.rs which need those things)
+   [X] 'algorithms/tiles.rs'
+   [X] 'algorithms/curves.rs' is next.
+   [X] 'utils.rs'
+   [X] 'world_map.rs' to finish things up
+   [X] Fix every identifier that I've appended 2 to, should be all in World_map.
+   [-] Make sure to get rid of the None geometry when I've got everything moved over. Have to figure out what to do with the TypedFeature implementation if there are no geometries. Might need another trait to implement there. Or, maybe I do keep a None? It will just raise an error if I try to create it.
+   [ ] bezierify_multipolygon should be able to call bezierify_polygon
+   [X] make_valid_default should be part of areal_fns!, and should always return a variantarealgeometry.
+[ ] Move bezierify code into geometry
+[ ] size_hint doesn't work the way I thought it did. The result is a range of how many remain instead. Fix it's usage and implementations.
 [ ] Consider converting to the nalgebra::Vector2 type for points.
-[ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
+    [ ] Start by using Vector2 as the inner data for the Point structure, and see how much I can simplify things. If that works, then I can switch over to it.
+[ ] Colors are not reproduced, can I fix this?
+[ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly, or perhaps weighted by how far the angle is from the degree. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
 [ ] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.
 [ ] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps.
 [ ] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
-[ ] Change all 'as' expressions into 'try_into' and 'try_from' calls. That's the preferred method of doing things.
-[ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
 [ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes.
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
+[ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
 
 ## Post-release tasks and feature requests.
 
@@ -448,7 +461,6 @@ These are things that really should be done before release, but they might take 
 [ ] generate_precipitation: why shouldn't there be humidity change across the permafrost. If anything, it should drop a bunch of water on the edges. These might be the start of glaciers.
 [ ] generate_precipitation: shouldn't the evaporation be a multiplier, not an addition? And shouldn't it depend on temperature?
 [ ] grouping::calculate_grouping -- continent/island/isle threshold should depend on the size of the map, not the tile count.
-[ ] TypedGeometry -- similar to how I did TypedFeature, a TypedGeometry is a struct that can be created using TryFrom<Geometry>, and TryFrom<GeometryRef> (or two structs?). Each one is a specific type, not an enum, so you don't have to worry about whether a specific geometry supports many polygons, many points, etc. The type tells you.
 [ ] naming.rs -- there are a bunch of patterns which are removed that should be dependent on the language. Figure out how to make this better.
 [ ] MarkovGenerator::calculate_chain -- should use the chars directly for iterating through the name, instead of collecting into a vec of chars.
 [ ] PointGenerator -- Why does START_Y have to start with 1, but START_X can start with 0?

@@ -27,6 +27,13 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::commands::RandomSeedArg;
 use crate::commands::BezierScaleArg;
+use crate::geometry::MultiPolygon;
+use crate::geometry::LinearRing;
+use crate::geometry::Polygon;
+use crate::geometry::Point as GeoPoint;
+use crate::geometry::Collection;
+use crate::geometry::GDALGeometryWrapper;
+use crate::geometry::VariantArealGeometry; // TODO: Rename this once we switch to Vector2 for Points.
 
 pub(crate) fn random_number_generator(arg: &RandomSeedArg) -> StdRng {
     let seed = if let Some(seed) = arg.seed {
@@ -165,41 +172,44 @@ impl Extent {
 
     }
 
-    pub(crate) fn create_geometry(&self) -> Result<Geometry,CommandError> {
+    pub(crate) fn create_polygon(&self) -> Result<Polygon,CommandError> {
         let vertices = vec![
-            (self.west,self.south).try_into()?,
-            (self.west,self.south+self.height).try_into()?,
-            (self.west+self.width,self.south+self.height).try_into()?,
-            (self.west+self.width,self.south).try_into()?
+            (self.west,self.south),
+            (self.west,self.south+self.height),
+            (self.west+self.width,self.south+self.height),
+            (self.west+self.width,self.south),
+            (self.west,self.south),
         ];
-        create_polygon(&vertices)
+        let ring = LinearRing::from_vertices(vertices)?;
+        Polygon::from_rings([ring])
     }
 
-    pub(crate) fn create_boundary_geometry(&self) -> Result<Geometry, CommandError> {
-        let north = NotNan::try_from(self.north())?;
-        let east = NotNan::try_from(self.east())?;
-        let west = NotNan::try_from(self.west)?;
-        let south = NotNan::try_from(self.south)?;
+    pub(crate) fn create_boundary_geometry(&self) -> Result<VariantArealGeometry, CommandError> {
+        let north = self.north();
+        let east = self.east();
+        let west = self.west;
+        let south = self.south;
         let mut border_points = Vec::new();
-        border_points.push(Point::new(west,south));
+        border_points.push((west,south));
         for y in south.ceil() as usize..north.ceil() as usize {
-            border_points.push(Point::new(west,NotNan::try_from(y as f64)?))
+            border_points.push((west,y as f64))
         }
-        border_points.push(Point::new(west,north));
+        border_points.push((west,north));
         for x in west.ceil() as usize..east.floor() as usize {
-            border_points.push(Point::new(NotNan::try_from(x as f64)?,north))
+            border_points.push((x as f64,north))
         }
-        border_points.push(Point::new(east,north));
+        border_points.push((east,north));
         for y in north.ceil() as usize..south.floor() as usize {
-            border_points.push(Point::new(east,NotNan::try_from(y as f64)?))
+            border_points.push((east,y as f64))
         }
-        border_points.push(Point::new(east,south));
+        border_points.push((east,south));
         for x in east.ceil() as usize..west.floor() as usize {
-            border_points.push(Point::new(NotNan::try_from(x as f64)?,south))
+            border_points.push((x as f64,south))
         }
-        border_points.push(Point::new(west,south));
-        let ocean = create_polygon(&border_points)?;
-        Ok(ocean)
+        border_points.push((west,south));
+        let ring = LinearRing::from_vertices(border_points)?;
+        let ocean = Polygon::from_rings([ring])?;
+        Ok(VariantArealGeometry::Polygon(ocean))
     }    
 
     pub(crate) fn east(&self) -> f64 {
@@ -212,40 +222,6 @@ impl Extent {
 
 }
 
-
-pub(crate) struct GeometryGeometryIterator {
-    geometry: Geometry,
-    index: usize
-
-}
-
-impl GeometryGeometryIterator {
-
-    pub(crate) fn new(geometry: Geometry) -> Self {
-        Self {
-            geometry,
-            index: 0
-        }
-    }
-}
-
-impl Iterator for GeometryGeometryIterator {
-    type Item = Geometry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.geometry.geometry_count() {
-            let a = self.geometry.get_geometry(self.index);
-            self.index += 1;
-            Some(a.clone())
-        } else {
-            None
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0,Some(self.geometry.geometry_count()))
-    }
-}
 
 pub(crate) struct LayerGeometryIterator<'lifetime> {
     count: usize,
@@ -285,23 +261,25 @@ impl Iterator for LayerGeometryIterator<'_> {
     
 }
 
-pub(crate) trait ToGeometryCollection {
+pub(crate) trait ToGeometryCollection<Geometry: GDALGeometryWrapper> {
 
-    fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Geometry,CommandError>;
+    fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Collection<Geometry>,CommandError>;
 }
 
-impl<Iter: Iterator<Item=Result<Geometry,CommandError>>> ToGeometryCollection for Iter {
+// FUTURE: Implement traits so I can just use collect? But then I can't use progress observer.
+impl<Iter: Iterator<Item=Result<GeoPoint,CommandError>>> ToGeometryCollection<GeoPoint> for Iter {
 
-    fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Geometry,CommandError> {
-        let mut result = Geometry::empty(OGRwkbGeometryType::wkbGeometryCollection)?;
-        for geometry in self.watch(progress,"Collecting geometries.","Geometries collected.") {
-            result.add_geometry(geometry?)?;
+    fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Collection<GeoPoint>,CommandError> {
+        let mut result = Collection::new()?;
+        for geometry in self.watch(progress,"Collecting points.","Points collected.") {
+            result.push_item(geometry?)?;
         }
         Ok(result)
     }
 
 
 }
+
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
 pub(crate) struct Point {
@@ -370,11 +348,8 @@ impl Point {
 
     }
 
-    pub(crate) fn create_geometry(&self) -> Result<Geometry,CommandError> {
-        let mut point = Geometry::empty(OGRwkbGeometryType::wkbPoint)?;
-        point.add_point_2d((self.x.into(),self.y.into()));
-        Ok(point)
-
+    pub(crate) fn create_geometry(&self) -> Result<GeoPoint,CommandError> {
+        GeoPoint::new(self.x.into(), self.y.into())
     }
 
     
@@ -436,81 +411,47 @@ impl core::ops::Add for &Point {
     }
 }
 
-pub(crate) fn create_polygon(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
-    // close the polygon if necessary
-    let mut line = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
-    for point in vertices {
-        line.add_point_2d(point.to_tuple())
-    
-    }
-    if vertices.get(0) != vertices.last() {
-        // if the vertices don't link up, then link them.
-        line.add_point_2d(vertices[0].to_tuple())
-    }
-    let mut polygon = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
-    polygon.add_geometry(line)?;
-    Ok(polygon)
-
-}
-
 // NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
-// made valid, which turns them into a multi-polygon, which I then split back into multiple polygons, 
-// hence this returns a vec.
-pub(crate) fn bezierify_polygon(geometry: &Geometry, scale: &BezierScaleArg) -> Result<Vec<Geometry>,CommandError> {
-    let mut output = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
-    for i in 0..geometry.geometry_count() {
-        let ring = geometry.get_geometry(i);
+// made valid, which could turn them into a multi-polygon.
+pub(crate) fn bezierify_polygon(polygon: Polygon, scale: &BezierScaleArg) -> Result<VariantArealGeometry,CommandError> {
+    let mut rings = Vec::new();
+    for ring in polygon {
         let mut points = Vec::new();
-        for j in 0..ring.point_count() {
-            let point = ring.get_point(j as i32).try_into()?;
-            points.push(point)
+        for point in ring? {
+            points.push(point.try_into()?);
         }
 
         let bezier = PolyBezier::from_poly_line(&points);
-        let mut new_ring = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
-        for point in bezier.to_poly_line(scale)? {
-            new_ring.add_point_2d(point.to_tuple())
-        }
-        output.add_geometry(new_ring)?;
+        rings.push(LinearRing::from_vertices(bezier.to_poly_line(scale)?.iter().map(Point::to_tuple))?);
     }
+    let polygon = Polygon::from_rings(rings)?;
     // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
     // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-    let validate_options = gdal::cpl::CslStringList::new();
-    Ok(multipolygon_to_polygons(output.make_valid(&validate_options)?))
+    polygon.make_valid_default()
 }
 
-pub(crate) fn multipolygon_to_polygons(geometry: Geometry) -> Vec<Geometry> {
-    if geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
-        let mut result = Vec::new();
-        for i in 0..geometry.geometry_count() {
-            result.push(geometry.get_geometry(i).clone())
+
+pub(crate) fn bezierify_multipolygon(geometry: MultiPolygon, scale: &BezierScaleArg) -> Result<MultiPolygon,CommandError> {
+    let mut polygons = Vec::new();
+    for polygon in geometry {
+        let mut rings = Vec::new();
+        for ring in polygon? {
+            let mut points = Vec::new();
+            for point in ring? {
+                points.push(point.try_into()?);
+            }
+
+            let bezier = PolyBezier::from_poly_line(&points);
+            rings.push(LinearRing::from_vertices(bezier.to_poly_line(scale)?.iter().map(Point::to_tuple))?);
         }
-        result
-    } else {
-        vec![geometry]
+        polygons.push(Polygon::from_rings(rings)?);
     }
+    let result = MultiPolygon::from_polygons(polygons)?;
+    // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
+    // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
+    result.make_valid_default()
 }
 
-pub(crate) fn force_multipolygon(geometry: Geometry) -> Result<Geometry,CommandError> {
-    if geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
-        Ok(geometry)
-    } else {
-        let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-        new_geometry.add_geometry(geometry)?;
-        Ok(new_geometry)
-    }
-
-}
-
-
-pub(crate) fn create_line(vertices: &Vec<Point>) -> Result<Geometry,CommandError> {
-    let mut line = Geometry::empty(OGRwkbGeometryType::wkbLineString)?;
-    for point in vertices {
-        line.add_point_2d(point.to_tuple());
-    }
-    Ok(line)
-
-}
 
 pub(crate) struct PolyBezier {
     vertices: Vec<Point>,

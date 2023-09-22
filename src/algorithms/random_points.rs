@@ -1,12 +1,11 @@
 use rand::Rng;
-use gdal::vector::Geometry;
 
 use crate::utils::Extent;
-use crate::utils::Point;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
+use crate::geometry::Point;
 
 pub(crate) enum PointGeneratorPhase {
     NortheastInfinity,
@@ -57,8 +56,8 @@ impl<Random: Rng> PointGenerator<Random> {
         ((self.extent.width/self.spacing).floor() as usize * (self.extent.height/self.spacing).floor() as usize) + 4
     }
 
-    pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Geometry,CommandError> {
-        Point::try_from((self.extent.west + x,self.extent.south + y))?.create_geometry()
+    pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Point,CommandError> {
+        Point::new(self.extent.west + x,self.extent.south + y)
     }
 
 
@@ -66,7 +65,7 @@ impl<Random: Rng> PointGenerator<Random> {
 
 impl<Random: Rng> Iterator for PointGenerator<Random> {
 
-    type Item = Result<Geometry,CommandError>;
+    type Item = Result<Point,CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
 
@@ -123,7 +122,7 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
 }
 
 // the points layer is only created and loaded if we're using the dev- commands, so it's not output by the point generator.
-pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Geometry,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_points_layer<Generator: Iterator<Item=Result<Point,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: bool, generator: Generator, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut target_points = target.create_points_layer(overwrite_layer)?;
 

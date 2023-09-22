@@ -1,29 +1,28 @@
 use std::collections::HashMap;
 use core::cmp::Ordering;
 
-use gdal::vector::OGRwkbGeometryType;
 use ordered_float::NotNan;
 use std::collections::hash_map::IntoIter;
-use gdal::vector::Geometry;
 
-use crate::utils::create_polygon;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::NewTileSite;
 use crate::utils::Extent;
 use crate::utils::Point;
 use crate::errors::CommandError;
+use crate::geometry::Polygon;
+use crate::geometry::LinearRing;
 
 
-pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> {
+pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
     Unstarted(GeometryIterator),
     Started(IntoIter<Point,VoronoiInfo>,Option<usize>)
 }
 
-pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> {
+pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
     pub(crate) phase: VoronoiGeneratorPhase<GeometryIterator>,
     pub(crate) extent: Extent,
-    pub(crate) extent_geo: Geometry
+    pub(crate) extent_geo: Polygon
 
 }
 
@@ -31,11 +30,11 @@ pub(crate) struct VoronoiInfo {
     pub(crate) vertices: Vec<Point>,
 }
 
-impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGenerator<GeometryIterator> {
+impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGenerator<GeometryIterator> {
 
     pub(crate) fn new(source: GeometryIterator, extent: Extent) -> Result<Self,CommandError> {
         let phase = VoronoiGeneratorPhase::Unstarted(source);
-        let extent_geo = extent.create_geometry()?;
+        let extent_geo = extent.create_polygon()?;
         Ok(Self {
             phase,
             extent,
@@ -149,7 +148,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
     }
 
-    pub(crate) fn create_voronoi(site: &Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Geometry) -> Result<Option<NewTileSite>,CommandError> {
+    pub(crate) fn create_voronoi(site: &Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Polygon) -> Result<Option<NewTileSite>,CommandError> {
         if (voronoi.vertices.len() >= 3) && extent.contains(site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
@@ -158,16 +157,18 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
             // sort the vertices clockwise to make sure it's a real polygon.
             let mut needs_a_trim = false;
             Self::sort_clockwise(site,&mut vertices,extent,&mut needs_a_trim);
+            // push a copy of the first vertex onto the end.
             vertices.push(vertices[0].clone());
-            let polygon = create_polygon(&vertices)?;
+            let ring = LinearRing::from_vertices(vertices.iter().map(Point::to_tuple))?;
+            let polygon = Polygon::from_rings([ring])?;
             let polygon = if needs_a_trim {
                 // intersection code is not trivial, just let someone else do it.
-                polygon.intersection(extent_geo)
+                polygon.intersection(extent_geo)?.try_into()?
             } else {
-                Some(polygon)
+                polygon
             };
-            Ok(polygon.map(|a| NewTileSite {
-                geometry: a,
+            Ok(Some(NewTileSite {
+                geometry: polygon,
                 site_x: *site.x,
                 site_y: *site.y,
             }))
@@ -186,13 +187,9 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
         for geometry in source.watch(progress,"Generating voronoi.","Voronoi generated.") {
             let geometry = geometry?;
         
-            if geometry.geometry_type() != OGRwkbGeometryType::wkbPolygon {
-                return Err(CommandError::VoronoiExpectsPolygons)
-            }
-        
-            let line = geometry.get_geometry(0); // this should be the outer ring for a triangle.
+            let line = geometry.get_ring(0)?; // this should be the outer ring for a triangle.
 
-            if line.point_count() != 4 { // the line should be a loop, with the first and last elements
+            if line.len() != 4 { // the line should be a loop, with the first and last elements
                 return Err(CommandError::VoronoiExpectsTriangles);
             }
 
@@ -239,7 +236,7 @@ impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> VoronoiGene
 
 }
 
-impl<GeometryIterator: Iterator<Item=Result<Geometry,CommandError>>> Iterator for VoronoiGenerator<GeometryIterator> {
+impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> Iterator for VoronoiGenerator<GeometryIterator> {
 
     type Item = Result<NewTileSite,CommandError>;
 

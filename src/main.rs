@@ -123,6 +123,7 @@ pub(crate) mod errors;
 pub mod commands;
 pub(crate) mod raster;
 pub(crate) mod gdal_fixes;
+pub(crate) mod geometry;
 pub(crate) mod world_map;
 pub(crate) mod utils;
 pub(crate) mod progress;

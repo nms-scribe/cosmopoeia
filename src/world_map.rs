@@ -15,7 +15,6 @@ use gdal::vector::LayerAccess;
 use gdal::vector::OGRwkbGeometryType;
 use gdal::vector::OGRFieldType;
 use gdal::vector::FieldValue;
-use gdal::vector::Geometry;
 use gdal::vector::Layer;
 use gdal::vector::Feature;
 use gdal::vector::FeatureIterator;
@@ -38,9 +37,8 @@ use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::utils::LayerGeometryIterator;
-use crate::utils::Point;
+use crate::utils::Point as UtilsPoint; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
 use crate::utils::Extent;
-use crate::utils::create_line;
 use crate::utils::title_case::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::Namer;
@@ -56,6 +54,12 @@ use crate::commands::OverwriteTownsArg;
 use crate::commands::OverwriteSubnationsArg;
 use crate::commands::OverwriteNationsArg;
 use crate::algorithms::water_flow::WaterFlowResult;
+use crate::geometry::GDALGeometryWrapper;
+use crate::geometry::Point;
+use crate::geometry::Polygon;
+use crate::geometry::LineString;
+use crate::geometry::MultiPolygon;
+use crate::geometry::NoGeometry;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -396,7 +400,7 @@ macro_rules! feature_field_value {
 
 pub(crate) trait Schema {
 
-    const GEOMETRY_TYPE: OGRwkbGeometryType::Type;
+    type Geometry: GDALGeometryWrapper;
 
     const LAYER_NAME: &'static str;
 
@@ -412,9 +416,10 @@ pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data
 
     fn into_feature(self) -> Feature<'data_life>;
 
-    fn geometry(&self) -> Result<&Geometry,CommandError>;
+    fn geometry(&self) -> Result<SchemaType::Geometry,CommandError>;
 
-    fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError>;
+    fn set_geometry(&mut self, value: SchemaType::Geometry) -> Result<(),CommandError>;
+
 
 }
 
@@ -536,7 +541,7 @@ macro_rules! layer {
         paste!{
             impl Schema for [<$name Schema>] {
 
-                const GEOMETRY_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::$geometry_type;
+                type Geometry = $geometry_type;
 
                 const LAYER_NAME: &'static str = $layer_name;
 
@@ -561,13 +566,14 @@ macro_rules! layer {
                     self.feature
                 }
 
-                fn geometry(&self) -> Result<&Geometry,CommandError> { 
-                    self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))
+                fn geometry(&self) -> Result<$geometry_type,CommandError> {
+                    self.feature.geometry().ok_or_else(|| CommandError::MissingGeometry($layer_name))?.clone().try_into()
                 }
-        
-                fn set_geometry(&mut self, geometry: Geometry) -> Result<(),CommandError> { 
-                    Ok(self.feature.set_geometry(geometry)?)
+
+                fn set_geometry(&mut self, value: $geometry_type) -> Result<(),CommandError> {
+                    Ok(self.feature.set_geometry(value.into())?)
                 }
+
             }
         }
             
@@ -591,6 +597,7 @@ macro_rules! layer {
                     }
             
                 )*
+
             }
 
         }
@@ -612,7 +619,7 @@ macro_rules! layer {
 
                 $(#[$add_struct_attr])*
                 // I've marked entity as possibly not used because some calls have no fields and it won't be assigned.          
-                fn add_struct(&mut self, _entity: &[<New $name>], geometry: Option<Geometry>) -> Result<u64,CommandError> {
+                fn add_struct(&mut self, _entity: &[<New $name>], geometry: Option<<[<$name Schema>] as Schema>::Geometry>) -> Result<u64,CommandError> {
                     let field_names = [
                         $(paste!{
                             [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
@@ -622,7 +629,7 @@ macro_rules! layer {
                         $(feature_field_value!(_entity.$prop; $prop_type)),*
                     ];
                     if let Some(geometry) = geometry {
-                        self.add_feature(geometry, &field_names, &field_values)
+                        self.add_feature_with_geometry(geometry, &field_names, &field_values)
                     } else {
                         self.add_feature_without_geometry(&field_names, &field_values)
                     }
@@ -1040,8 +1047,8 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         let srs = SpatialRef::from_epsg(4326)?;
         let layer = dataset.create_layer(LayerOptions {
             name: SchemaType::LAYER_NAME,
-            ty: SchemaType::GEOMETRY_TYPE,
-            srs: if SchemaType::GEOMETRY_TYPE == OGRwkbGeometryType::wkbNone {
+            ty: SchemaType::Geometry::INTERNAL_TYPE,
+            srs: if SchemaType::Geometry::INTERNAL_TYPE == OGRwkbGeometryType::wkbNone {
                 // A few layers, such as properties, aren't actually supposed to hold any geography.
                 // Okay, just properties so far...
                 None
@@ -1096,10 +1103,10 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         LayerGeometryIterator::new(&mut self.layer)
     }
 
-    fn add_feature(&mut self, geometry: Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
+    fn add_feature_with_geometry(&mut self, geometry: SchemaType::Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
         // I dug out the source to get this. I wanted to be able to return the feature being created.
         let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
-        feature.set_geometry(geometry)?;
+        feature.set_geometry(geometry.into())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
                 feature.set_field(field, value)?;
@@ -1110,7 +1117,6 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         feature.create(&self.layer)?;
         feature.fid().ok_or_else(|| CommandError::MissingField("fid"))
     }
-
 
     fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
         // This function is used for lookup tables, like biomes.
@@ -1131,28 +1137,39 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
 
 }
 
-layer!(Point["points"]: wkbPoint {});
+layer!(Point["points"]: Point {});
 
 
 impl PointLayer<'_,'_> {
 
-    pub(crate) fn add_point(&mut self, point: Geometry) -> Result<u64,CommandError> {
+    pub(crate) fn add_point(&mut self, point: Point) -> Result<u64,CommandError> {
 
         self.add_struct(&NewPoint {  }, Some(point))
     
     }
 
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<PointSchema,PointFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
+
 }
 
-layer!(Triangle["triangles"]: wkbPolygon {});
+layer!(Triangle["triangles"]: Polygon {});
 
 impl TriangleLayer<'_,'_> {
 
-    pub(crate) fn add_triangle(&mut self, geo: Geometry) -> Result<u64,CommandError> {
+    pub(crate) fn add_triangle(&mut self, geo: Polygon) -> Result<u64,CommandError> {
 
         self.add_struct(&NewTriangle {  }, Some(geo))
         
     }
+
+    // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
+    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<TriangleSchema,TriangleFeature> {
+        TypedFeatureIterator::from(self.layer.features())
+    }
+
 
 
 }
@@ -1194,7 +1211,7 @@ impl TryFrom<String> for Grouping {
     }
 }
 
-layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: wkbPolygon {
+layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     /// longitude of the node point for the tile's voronoi
     #[set(allow(dead_code))] site_x: f64,
     /// latitude of the node point for the tile's voronoi
@@ -1257,8 +1274,8 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: wkbPolygon {
 
 impl TileFeature<'_> {
 
-    pub(crate) fn site(&self) -> Result<Point,CommandError> {
-        Ok(Point::try_from((self.site_x()?,self.site_y()?))?)
+    pub(crate) fn site(&self) -> Result<UtilsPoint,CommandError> {
+        Ok(UtilsPoint::try_from((self.site_x()?,self.site_y()?))?)
     }
 
 }
@@ -1276,7 +1293,7 @@ pub(crate) trait TileWithElevation: Entity<TileSchema> {
 }
 
 pub(crate) trait TileWithGeometry: Entity<TileSchema> {
-    fn geometry(&self) -> &Geometry;
+    fn geometry(&self) -> &Polygon;
 }
 
 pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
@@ -1293,19 +1310,19 @@ impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T 
 
 
 entity!(NewTileSite: Tile {
-    geometry: Geometry,
+    geometry: Polygon,
     site_x: f64, 
     site_y: f64
 }); 
 
 entity!(TileForCalcNeighbors: Tile {
-    geometry: Geometry,
-    site: Point,
+    geometry: Polygon,
+    site: UtilsPoint,
     neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
 });
 
 entity!(TileForTerrain: Tile {
-    site: Point, 
+    site: UtilsPoint, 
     elevation: f64,
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
@@ -1418,7 +1435,7 @@ entity!(TileForRiverConnect: Tile {
 });
 
 entity!(TileForWaterDistance: Tile {
-    site: Point,
+    site: UtilsPoint,
     grouping: Grouping, 
     neighbors: Vec<(u64,i32)>,
     water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
@@ -1454,7 +1471,7 @@ entity!(TileForPopulationNeighbor: Tile {
 
 entity!(TileForCultureGen: Tile {
     fid: u64,
-    site: Point,
+    site: UtilsPoint,
     population: i32,
     habitability: f64,
     shore_distance: i32,
@@ -1470,7 +1487,7 @@ entity!(TileForCultureGen: Tile {
 
 pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity because we add in data from other layers.
     pub(crate) fid: u64,
-    pub(crate) site: Point,
+    pub(crate) site: UtilsPoint,
     pub(crate) habitability: f64,
     pub(crate) shore_distance: i32,
     pub(crate) elevation_scaled: i32,
@@ -1536,16 +1553,16 @@ entity!(TileForCultureExpand: Tile {
 entity!(TileForTowns: Tile {
     fid: u64,
     habitability: f64,
-    site: Point,
+    site: UtilsPoint,
     culture: Option<String>,
     grouping_id: u64
 });
 
 entity!(TileForTownPopulation: Tile {
     fid: u64,
-    geometry: Geometry,
+    geometry: Polygon,
     habitability: f64,
-    site: Point,
+    site: UtilsPoint,
     grouping_id: u64,
     harbor_tile_id: Option<u64>,
     water_count: Option<i32>,
@@ -1557,15 +1574,15 @@ entity!(TileForTownPopulation: Tile {
 
 impl TileForTownPopulation {
 
-    pub(crate) fn find_middle_point_between(&self, other: &Self) -> Result<Point,CommandError> {
-        let self_ring = self.geometry.get_geometry(0);
-        let other_ring = other.geometry.get_geometry(0);
-        let other_vertices = other_ring.get_point_vec();
-        let mut common_vertices = self_ring.get_point_vec();
+    pub(crate) fn find_middle_point_between(&self, other: &Self) -> Result<UtilsPoint,CommandError> {
+        let self_ring = self.geometry.get_ring(0)?;
+        let other_ring = other.geometry.get_ring(0)?;
+        let other_vertices: Vec<_> = other_ring.into_iter().collect();
+        let mut common_vertices: Vec<_> = self_ring.into_iter().collect();
         common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
         common_vertices.retain(|p| other_vertices.contains(p));
         if common_vertices.len() == 2 {
-            let point1: Point = (common_vertices[0].0,common_vertices[0].1).try_into()?;
+            let point1: UtilsPoint = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
             Ok(point1.middle_point_between(&point2))
         } else {
@@ -1632,13 +1649,13 @@ entity!(TileForSubnationNormalize: Tile {
 
 entity!(TileForCultureDissolve: Tile {
     culture: Option<String>,
-    geometry: Geometry,
+    geometry: Polygon,
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32
 });
 
 impl TileWithGeometry for TileForCultureDissolve {
-    fn geometry(&self) -> &Geometry {
+    fn geometry(&self) -> &Polygon {
         &self.geometry
     }
 }
@@ -1657,13 +1674,14 @@ impl TileWithNeighbors for TileForCultureDissolve {
 
 entity!(TileForBiomeDissolve: Tile {
     biome: String,
-    geometry: Geometry,
+    geometry: Polygon,
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32
 });
 
 impl TileWithGeometry for TileForBiomeDissolve {
-    fn geometry(&self) -> &Geometry {
+
+    fn geometry(&self) -> &Polygon {
         &self.geometry
     }
 }
@@ -1682,13 +1700,13 @@ impl TileWithNeighbors for TileForBiomeDissolve {
 
 entity!(TileForNationDissolve: Tile {
     nation_id: Option<u64>,
-    geometry: Geometry,
+    geometry: Polygon,
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32
 });
 
 impl TileWithGeometry for TileForNationDissolve {
-    fn geometry(&self) -> &Geometry {
+    fn geometry(&self) -> &Polygon {
         &self.geometry
     }
 }
@@ -1707,13 +1725,13 @@ impl TileWithNeighbors for TileForNationDissolve {
 
 entity!(TileForSubnationDissolve: Tile {
     subnation_id: Option<u64>,
-    geometry: Geometry,
+    geometry: Polygon,
     neighbors: Vec<(u64,i32)>,
     shore_distance: i32
 });
 
 impl TileWithGeometry for TileForSubnationDissolve {
-    fn geometry(&self) -> &Geometry {
+    fn geometry(&self) -> &Polygon {
         &self.geometry
     }
 }
@@ -1748,7 +1766,7 @@ impl TileLayer<'_,'_> {
     pub(crate) fn add_tile(&mut self, tile: NewTileSite) -> Result<(),CommandError> {
         // tiles are initialized with incomplete definitions in the table. It is a user error to access fields which haven't been assigned yet by running an algorithm before required algorithms are completed.
 
-        _ = self.add_feature(tile.geometry,&[
+        _ = self.add_feature_with_geometry(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
                 TileSchema::FIELD_ELEVATION,
@@ -1865,7 +1883,7 @@ impl From<&RiverSegmentTo> for String {
 }
 
 
-layer!(River["rivers"]: wkbLineString {
+layer!(River["rivers"]: LineString {
     // clippy doesn't understand why I'm using 'from_*' here.
     #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_tile_id: id_ref,
     #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_type: river_segment_from,
@@ -1878,8 +1896,8 @@ layer!(River["rivers"]: wkbLineString {
 
 impl RiverLayer<'_,'_> {
 
-    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, line: &Vec<Point>) -> Result<u64,CommandError> {
-        let geometry = create_line(line)?;
+    pub(crate) fn add_segment<Items: IntoIterator<Item=(f64,f64)>>(&mut self, new_river: &NewRiver, line: Items) -> Result<u64,CommandError> {
+        let geometry = LineString::from_vertices(line)?;
         self.add_struct(new_river, Some(geometry))
     }
 
@@ -1911,7 +1929,7 @@ impl TryFrom<String> for LakeType {
     }
 }
 
-layer!(Lake["lakes"]: wkbMultiPolygon {
+layer!(Lake["lakes"]: MultiPolygon {
     #[get(allow(dead_code))] #[set(allow(dead_code))] elevation: f64,
     #[set(allow(dead_code))] type_: lake_type,
     #[get(allow(dead_code))] #[set(allow(dead_code))] flow: f64,
@@ -1939,7 +1957,7 @@ entity!(LakeForTownPopulation: Lake {
 
 impl LakeLayer<'_,'_> {
 
-    pub(crate) fn add_lake(&mut self, lake: &NewLake, geometry: Geometry) -> Result<u64,CommandError> {
+    pub(crate) fn add_lake(&mut self, lake: &NewLake, geometry: MultiPolygon) -> Result<u64,CommandError> {
         self.add_struct(lake, Some(geometry))
     }
 
@@ -1993,7 +2011,7 @@ pub(crate) struct BiomeMatrix {
     pub(crate) wetland: String
 }
 
-layer!(Biome["biomes"]: wkbMultiPolygon {
+layer!(Biome["biomes"]: MultiPolygon {
     #[set(allow(dead_code))] name: string,
     #[set(allow(dead_code))] habitability: i32,
     #[set(allow(dead_code))] criteria: biome_criteria,
@@ -2282,7 +2300,7 @@ impl TryFrom<String> for CultureType {
     }
 }
 
-layer!(Culture["cultures"]: wkbMultiPolygon {
+layer!(Culture["cultures"]: MultiPolygon {
     #[set(allow(dead_code))] name: string,
     #[set(allow(dead_code))] namer: string,
     #[set(allow(dead_code))] type_: culture_type,
@@ -2393,7 +2411,7 @@ impl CultureLayer<'_,'_> {
 
 }
 
-layer!(Town["towns"]: wkbPoint {
+layer!(Town["towns"]: Point {
     #[set(allow(dead_code))] name: string,
     #[set(allow(dead_code))] culture: option_string,
     #[set(allow(dead_code))] is_capital: bool,
@@ -2405,8 +2423,8 @@ layer!(Town["towns"]: wkbPoint {
 
 impl TownFeature<'_> {
 
-    pub(crate) fn move_to(&mut self, new_location: &Point) -> Result<(),CommandError> {
-        Ok(self.feature.set_geometry(new_location.create_geometry()?)?)
+    pub(crate) fn move_to(&mut self, new_location: &UtilsPoint) -> Result<(),CommandError> {
+        Ok(self.feature.set_geometry(new_location.create_geometry()?.into())?)
     }
 
 }
@@ -2438,7 +2456,7 @@ entity!(TownForEmptySubnations: Town {
 
 impl TownLayer<'_,'_> {
 
-    pub(crate) fn add_town(&mut self, town: &NewTown, geometry: Geometry) -> Result<u64,CommandError> {
+    pub(crate) fn add_town(&mut self, town: &NewTown, geometry: Point) -> Result<u64,CommandError> {
         self.add_struct(town, Some(geometry))
     }
 
@@ -2451,7 +2469,7 @@ impl TownLayer<'_,'_> {
 }
 
 
-layer!(Nation["nations"]: wkbMultiPolygon {
+layer!(Nation["nations"]: MultiPolygon {
     #[set(allow(dead_code))] name: string,
     #[set(allow(dead_code))] culture: option_string,
     #[set(allow(dead_code))] center_tile_id: id_ref, 
@@ -2503,7 +2521,7 @@ impl NationLayer<'_,'_> {
 
 }
 
-layer!(Subnation["subnations"]: wkbMultiPolygon {
+layer!(Subnation["subnations"]: MultiPolygon {
     #[set(allow(dead_code))] name: string,
     #[get(allow(dead_code))] #[set(allow(dead_code))] culture: option_string,
     #[set(allow(dead_code))] center_tile_id: id_ref,
@@ -2544,23 +2562,23 @@ impl SubnationLayer<'_,'_> {
 
 }
 
-layer!(Coastline["coastlines"]: wkbPolygon  {
+layer!(Coastline["coastlines"]: Polygon  {
 });
 
 impl CoastlineLayer<'_,'_> {
 
-    pub(crate) fn add_land_mass(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
+    pub(crate) fn add_land_mass(&mut self, geometry: Polygon) -> Result<u64, CommandError> {
         self.add_struct(&NewCoastline {  }, Some(geometry))
     }
 
 }
 
-layer!(Ocean["oceans"]: wkbPolygon {
+layer!(Ocean["oceans"]: Polygon {
 });
 
 impl OceanLayer<'_,'_> {
 
-    pub(crate) fn add_ocean(&mut self, geometry: Geometry) -> Result<u64, CommandError> {
+    pub(crate) fn add_ocean(&mut self, geometry: Polygon) -> Result<u64, CommandError> {
         self.add_struct(&NewOcean {  }, Some(geometry))
     }
 
@@ -2568,7 +2586,7 @@ impl OceanLayer<'_,'_> {
 
 /*
 // Uncomment this stuff if you need to add a line layer for playing around with something.
-feature!(Line["lines"]: wkbLineString {
+feature!(Line["lines"]: LineString {
 });
 
 pub(crate) type LineLayer<'layer,'feature> = MapLayer<'layer,'feature,LineSchema,LineFeature<'feature>>;
@@ -2582,7 +2600,7 @@ impl LineLayer<'_,'_> {
 }
 */
 
-layer!(Property["properties"]: wkbNone {
+layer!(Property["properties"]: NoGeometry {
     #[set(allow(dead_code))] name: string,
     value: string,
 });

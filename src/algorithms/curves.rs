@@ -1,8 +1,5 @@
 use std::collections::HashMap;
 
-use gdal::vector::Geometry;
-use gdal::vector::OGRwkbGeometryType;
-
 use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
 use crate::algorithms::tiles::Theme;
@@ -13,6 +10,9 @@ use crate::world_map::TypedFeature;
 use crate::utils::PolyBezier;
 use crate::commands::BezierScaleArg;
 use crate::world_map::TypedFeatureIterator;
+use crate::geometry::MultiPolygon;
+use crate::geometry::Polygon;
+use crate::geometry::LinearRing;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -55,12 +55,12 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     let layer = ThemeType::edit_theme_layer(target)?;
 
     for multipolygon in polygon_segments.map.iter().watch(progress, "Writing reshaped polygons.", "Reshaped polygons written.") {
-        let mut multipolygon_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
+        let mut polygons = Vec::new();
         let (fid,multipolygon) = multipolygon;
         for polygon in multipolygon {
-            let mut polygon_geometry = Geometry::empty(OGRwkbGeometryType::wkbPolygon)?;
+            let mut rings = Vec::new();
             for ring in polygon {
-                let mut ring_geometry = Geometry::empty(OGRwkbGeometryType::wkbLinearRing)?;
+                let mut points = Vec::new();
 
                 for UniqueSegment { point,index,reversed } in ring {
                     let mut line = segment_cache.get(point).expect("Why wouldn't this key be here if we just inserted it?")[*index].clone();
@@ -68,14 +68,17 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                         line.reverse();
                     }
                     for new_point in line {
-                        ring_geometry.add_point_2d(new_point.to_tuple());
+                        points.push(new_point.to_tuple());
                     }
                         
                 }
-                polygon_geometry.add_geometry(ring_geometry)?;
+                let ring_geometry = LinearRing::from_vertices(points)?;
+                rings.push(ring_geometry);
             }
-            multipolygon_geometry.add_geometry(polygon_geometry)?;
+            let polygon_geometry = Polygon::from_rings(rings)?;
+            polygons.push(polygon_geometry);
         }
+        let multipolygon_geometry = MultiPolygon::from_polygons(polygons)?;
         let mut feature = layer.try_feature_by_id(*fid)?;
         feature.set_geometry(multipolygon_geometry)?;
         layer.update_feature(feature)?;
@@ -104,20 +107,18 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
         let mut polygons = Vec::new();
 
         // each feature is a multipolygon, so iterate through polygons
-        for polygon_index in 0..multipolygon.geometry_count() {
-            let polygon = multipolygon.get_geometry(polygon_index);
+        for polygon in multipolygon {
             let mut rings = Vec::new();
 
             // iterate through rings on polygon
-            for ring_index in 0..polygon.geometry_count() {
-                let ring = polygon.get_geometry(ring_index);
+            for ring in polygon? {
 
                 let mut segments = Vec::new();
 
                 // convert the vertexes in the ring to points -- not that they have to be points, but they do have to be NotNaN, so this is good enough.
-                let mut vertexes = (0..ring.point_count()).map(|i| {
+                let mut vertexes = ring?.into_iter().map(|p| Point::try_from(p))/*.map(|i| {
                     ring.get_point(i as i32).try_into()
-                });
+                })*/;
 
                 if let Some(vertex) = vertexes.next() {
                     let mut prev_vertex = vertex?;

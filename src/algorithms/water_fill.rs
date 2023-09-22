@@ -1,10 +1,6 @@
 use std::collections::HashSet;
 use std::collections::HashMap;
 
-use gdal::vector::OGRwkbGeometryType;
-use gdal::vector::Geometry;
-
-use crate::utils::bezierify_polygon;
 use crate::world_map::NewLake;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
@@ -13,7 +9,6 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
 use crate::world_map::TileLayer;
 use crate::world_map::LakeType;
-use crate::world_map::TypedFeature;
 use crate::commands::OverwriteLakesArg;
 use crate::commands::BezierScaleArg;
 use crate::commands::LakeBufferScaleArg;
@@ -23,6 +18,10 @@ use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
 use crate::world_map::TileForWaterFill;
 use crate::progress::QueueWatcher;
+use crate::geometry::VariantArealGeometry;
+use crate::geometry::MultiPolygon;
+use crate::utils::bezierify_multipolygon;
+use crate::world_map::TypedFeature;
 
 struct Lake {
     elevation: f64,
@@ -37,24 +36,16 @@ struct Lake {
 
 impl Lake {
 
-    pub(crate) fn dissolve_tiles(&self, layer: &mut TileLayer<'_,'_>) -> Result<Geometry,CommandError> {
+    pub(crate) fn dissolve_tiles(&self, layer: &mut TileLayer<'_,'_>) -> Result<VariantArealGeometry,CommandError> {
 
         let mut tiles = self.contained_tiles.iter();
         let first_tile = layer.try_feature_by_id(*tiles.next().expect("Someone called dissolve_tiles on a Lake that didn't have any tiles."))?;
-        let mut lake_geometry = first_tile.geometry()?.clone();
+        let mut lake_geometry = first_tile.geometry()?.into();
         
         for tile in tiles {
             let tile = layer.try_feature_by_id(*tile)?; 
-            let tile = tile.geometry()?; 
-            lake_geometry = tile.union(&lake_geometry).ok_or_else(|| CommandError::GdalUnionFailed)?; 
-            if !lake_geometry.is_valid() {
-                // I'm writing to stdout here because the is_valid also writes to stdout
-                // FUTURE: I can't use progress.warning here because it is borrowed for mutable, is there another way?
-                eprintln!("fixing invalid union");
-                let mut validate_options = gdal::cpl::CslStringList::new();
-                validate_options.add_string("METHOD=STRUCTURE")?;
-                lake_geometry = lake_geometry.make_valid(&validate_options)?
-            }
+            let tile: VariantArealGeometry = tile.geometry()?.into(); 
+            lake_geometry = tile.union(&lake_geometry)?;
     
         }
         Ok(lake_geometry)
@@ -474,9 +465,13 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
     }
 }
 
-pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: &BezierScaleArg, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
+pub(crate) fn make_curvy_lakes(lake_geometry: VariantArealGeometry, bezier_scale: &BezierScaleArg, buffer_distance: f64, simplify_tolerance: f64) -> Result<MultiPolygon, CommandError> {
     let lake_geometry = simplify_lake_geometry(lake_geometry,buffer_distance,simplify_tolerance)?;
-    // occasionally, the simplification turns the lakes into a multipolygon, which is why the lakes layer has to be multipolygon
+    // occasionally, the simplification or other tasks turns the lakes into a multipolygon, which is why the lakes layer has to be multipolygon
+    let lake_geometry = lake_geometry.try_into()?;
+    bezierify_multipolygon(lake_geometry, bezier_scale)
+    /*
+    // Old code when I was dealing with geometry directly
     let mut new_geometry = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
     if lake_geometry.geometry_type() == OGRwkbGeometryType::wkbMultiPolygon {
         for i in 0..lake_geometry.geometry_count() {
@@ -493,10 +488,11 @@ pub(crate) fn make_curvy_lakes(lake_geometry: Geometry, bezier_scale: &BezierSca
     };
 
     Ok(new_geometry)
+    */
 }
 
 
-pub(crate) fn simplify_lake_geometry(lake_geometry: Geometry, buffer_distance: f64, simplify_tolerance: f64) -> Result<Geometry, CommandError> {
+pub(crate) fn simplify_lake_geometry(lake_geometry: VariantArealGeometry, buffer_distance: f64, simplify_tolerance: f64) -> Result<VariantArealGeometry, CommandError> {
     let lake_geometry = if buffer_distance == 0.0 {
         lake_geometry
     } else {
@@ -507,7 +503,7 @@ pub(crate) fn simplify_lake_geometry(lake_geometry: Geometry, buffer_distance: f
         let mut simplified = lake_geometry.simplify(simplify_tolerance)?;
         // There have been occasions where the geometry gets simplified out of existence, which makes the polygon_to_vertices function
         // print out error messages. This loop decreases simplification until the geometry works.
-        while simplified.geometry_count() == 0 {
+        while simplified.is_empty() {
             simplify_tolerance -= 0.05;
             if simplify_tolerance <= 0.0 {
                 simplified = lake_geometry;

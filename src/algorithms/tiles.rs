@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use gdal::vector::OGRwkbGeometryType;
-use gdal::vector::Geometry;
 use rand::Rng;
 
 use crate::world_map::WorldMapTransaction;
@@ -15,11 +13,7 @@ use crate::world_map::TypedFeature;
 use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TileLayer;
 use crate::utils::Point;
-use crate::utils::bezierify_polygon;
-use crate::utils::multipolygon_to_polygons;
-use crate::gdal_fixes::GeometryFix;
 use crate::world_map::TileForCultureDissolve;
-use crate::utils::force_multipolygon;
 use crate::world_map::CultureForDissolve;
 use crate::world_map::TileWithGeometry;
 use crate::world_map::TileWithShoreDistance;
@@ -55,6 +49,9 @@ use crate::commands::OverwriteTilesArg;
 use crate::commands::OverwriteCoastlineArg;
 use crate::commands::OverwriteOceanArg;
 use crate::commands::BezierScaleArg;
+use crate::utils::bezierify_polygon;
+use crate::geometry::MultiPolygon;
+use crate::geometry::VariantArealGeometry;
 
 
 pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -117,9 +114,9 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
     // Find all tiles which share the same vertex.
     let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
-        let ring = tile.geometry.get_geometry(0);
-        for i in 0..ring.point_count() as i32 {
-            let point: Point = ring.get_point(i).try_into()?;
+        let ring = tile.geometry.get_ring(0);
+        for point in ring? {
+            let point: Point = point.try_into()?;
             match point_tile_index.get_mut(&point) {
                 None => {
                     _ = point_tile_index.insert(point, HashSet::from([*fid]));
@@ -239,25 +236,14 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
 
     let tile_union = if let Some(tile) = iterator.next() {
-        let first_tile = tile?.geometry()?.clone(); 
+        let first_tile: MultiPolygon = tile?.geometry()?.try_into()?; 
 
         // it's much faster to union two geometries rather than union them one at a time.
-        let mut next_tiles = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-        for next_tile in iterator {
-            next_tiles.add_geometry(next_tile?.geometry()?.clone())?;
-        }
+        let next_tiles = MultiPolygon::from_polygon_results(iterator.map(|f| Ok(f?.geometry()?)))?;
+
         progress.start_unknown_endpoint(|| "Uniting tiles.");
 
-        let tile_union = first_tile.union(&next_tiles).ok_or_else(|| CommandError::GdalUnionFailed)?;
-        let tile_union = if tile_union.is_valid() {
-            tile_union
-        } else {
-            // I'm writing to stdout here because the is_valid also writes to stdout
-            progress.warning(||"fixing invalid union");
-            let mut validate_options = gdal::cpl::CslStringList::new();
-            validate_options.add_string("METHOD=STRUCTURE")?;
-            tile_union.make_valid(&validate_options)?
-        };
+        let tile_union = first_tile.union(&next_tiles)?;
         progress.finish(|| "Tiles united.");
         Some(tile_union)
     } else {
@@ -272,18 +258,10 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     let (land_polygons,ocean) = if let Some(tile_union) = tile_union {
         let mut ocean = ocean;
         let mut polygons = Vec::new();
-        let union_polygons = multipolygon_to_polygons(tile_union);
-        for polygon in union_polygons.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
-            for new_polygon in bezierify_polygon(&polygon,bezier_scale)? {
-                ocean = ocean.difference(&new_polygon).ok_or_else(|| CommandError::GdalDifferenceFailed)?; 
-                if !ocean.is_valid() {
-                    // I'm writing to stdout here because the is_valid also writes to stdout
-                    // FUTURE: I can't use progress.warning because I've got progress borrowed as mutable. Is there another way?
-                    eprintln!("fixing invalid difference");
-                    let mut validate_options = gdal::cpl::CslStringList::new();
-                    validate_options.add_string("METHOD=STRUCTURE")?;
-                    ocean = ocean.make_valid(&validate_options)?
-                };
+        for polygon in tile_union.into_iter().watch(progress,"Making coastlines curvy.","Coastlines are curvy.") {
+            for new_polygon in bezierify_polygon(polygon?,bezier_scale)? {
+                let new_polygon = new_polygon?;
+                ocean = ocean.difference(&VariantArealGeometry::Polygon(new_polygon.clone()))?;
         
                 polygons.push(new_polygon);
             }
@@ -294,8 +272,6 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     };
 
 
-    let ocean_polygons = multipolygon_to_polygons(ocean);
-
     let mut coastline_layer = target.create_coastline_layer(overwrite_coastline)?;
     if let Some(land_polygons) = land_polygons {
         for polygon in land_polygons.into_iter().watch(progress, "Writing land masses.", "Land masses written.") {
@@ -304,8 +280,8 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     }
 
     let mut ocean_layer = target.create_ocean_layer(overwrite_ocean)?;
-    for polygon in ocean_polygons.into_iter().watch(progress, "Writing oceans.", "Oceans written.") {
-        _ = ocean_layer.add_ocean(polygon)?;
+    for polygon in ocean.into_iter().watch(progress, "Writing oceans.", "Oceans written.") {
+        _ = ocean_layer.add_ocean(polygon?)?;
     }
 
     Ok(())
@@ -313,7 +289,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
 
 pub(crate) trait Theme: Sized {
 
-    type ThemeSchema: Schema;
+    type ThemeSchema: Schema<Geometry = MultiPolygon>;
     type TileForTheme: Entity<TileSchema> + TileWithGeometry + TileWithShoreDistance + TileWithNeighbors + Clone + for<'feature> TryFrom<TileFeature<'feature>,Error=CommandError>;
     type Feature<'feature>: NamedFeature<'feature,Self::ThemeSchema>;
 
@@ -473,8 +449,8 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
     },progress)?;
 
     for tile in tiles.into_iter().watch(progress, "Gathering tiles.", "Tiles gathered.") {
-        let mapping: Option<(u64,_)> = if let Some(id) = theme.get_theme_id(&tile)? {
-            Some((id,tile.geometry().clone()))
+        let mapping: Option<(u64,MultiPolygon)> = if let Some(id) = theme.get_theme_id(&tile)? {
+            Some((id,tile.geometry().clone().try_into()?))
         } else if tile.shore_distance() == &-1 {
             let mut usable_neighbors = HashMap::new();
             for (neighbor_id,_) in tile.neighbors() {
@@ -495,7 +471,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 None
             } else {
                 let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).expect("Why would there be no max if we know the list isn't empty?").0;
-                Some((*chosen_value,tile.geometry().clone()))
+                Some((*chosen_value,tile.geometry().clone().try_into()?))
             }
         } else {
             None
@@ -520,35 +496,22 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
     for feature in ThemeType::read_features(&mut polygon_layer).watch(progress, "Dissolving tiles.", "Tiles dissolved.") {
         let fid = feature.fid()?;
         let geometry = if let Some(geometries) = new_polygon_map.remove(&fid) {
-            // it should never be 0 if it's in the map, but since I'm already allowing for empty geographies, might as well check.
+            // it should never be empty if it's in the map, but since I'm already allowing for empty geographies, might as well check.
             if geometries.is_empty() {
                 empty_features.push((fid,feature.get_name()?));
-                Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?            
+                MultiPolygon::from_polygons([])?
             } else {
                 let mut geometries = geometries.into_iter();
                 let first = geometries.next().expect("Why would next fail if the len > 0?"); 
-                let mut remaining = Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?;
-                for geometry in geometries {
-                    remaining.add_geometry(geometry)?;
-                }
-                let united = first.union(&remaining).ok_or_else(|| CommandError::GdalUnionFailed)?;
-                let united = force_multipolygon(united)?;
-                if united.is_valid() {
-                    united
-                } else {
-                    // I'm writing to stdout here because the is_valid also writes to stdout
-                    // FUTURE: I can't use the progress.warning because it is borrowed for mutable, is there another way?
-                    eprintln!("fixing invalid feature {fid}");
-                    let mut validate_options = gdal::cpl::CslStringList::new();
-                    validate_options.add_string("METHOD=STRUCTURE")?;
-                    united.make_valid(&validate_options)?
-                }
+                let remaining = MultiPolygon::from_combined(geometries)?;
+
+                first.union(&remaining)?.try_into()?
             }
         } else {
             empty_features.push((fid,feature.get_name()?));
             // An empty multipolygon appears to be the answer, at the very least I no longer get the null geometry pointer
             // errors in the later ones.
-            Geometry::empty(OGRwkbGeometryType::wkbMultiPolygon)?
+            MultiPolygon::from_polygons([])?
         };
 
         changed_features.push((fid,geometry));

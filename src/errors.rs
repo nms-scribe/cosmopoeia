@@ -4,6 +4,7 @@ use core::fmt::Display;
 pub(crate) use gdal::errors::GdalError;
 use gdal::raster::GdalDataType;
 use ordered_float::FloatIsNan;
+use gdal::vector::geometry_type_to_name;
 
 pub(crate) use clap::error::Error as ArgumentError;
 
@@ -56,7 +57,14 @@ pub enum CommandError {
     TilePreferenceDivideMissingData,
     TilePreferenceAddMissingData,
     GdalUnionFailed,
+    GdalIntersectionFailed,
     GdalDifferenceFailed,
+    UnsupportedGdalGeometryType(u32),
+    IncorrectGdalGeometryType{ expected: u32, found: u32},
+    LakeDissolveMadeAMultiPolygon,
+    CantConvertMultiPolygonToPolygon,
+    EmptyLinearRing,
+    UnclosedLinearRing,     
 }
 
 impl Error for CommandError {
@@ -135,6 +143,13 @@ impl Display for CommandError {
             Self::TilePreferenceAddMissingData => write!(f,"Tile preference addition in culture set needs at least one term"),
             Self::GdalUnionFailed => write!(f,"Gdal union operation returned null"),
             Self::GdalDifferenceFailed => write!(f,"Gdal difference operation returned null"),
+            Self::GdalIntersectionFailed => write!(f,"Gdal intersection operation returned null"),
+            Self::UnsupportedGdalGeometryType(a) => write!(f,"Unsupported gdal geometry type '{}'",geometry_type_to_name(*a)),
+            Self::IncorrectGdalGeometryType { expected, found } => write!(f,"Expected geometry type '{}', found '{}'.",geometry_type_to_name(*expected),geometry_type_to_name(*found)),
+            Self::LakeDissolveMadeAMultiPolygon => write!(f,"While attempting to dissolve lake tiles, a multipolygon was created instead of a polygon."),
+            Self::CantConvertMultiPolygonToPolygon => write!(f,"Attempted to convert a multi-polygon with more than one polygon into a simple polygon."),
+            Self::EmptyLinearRing => write!(f,"Attempted to create an empty ring for a polygon."),
+            Self::UnclosedLinearRing => write!(f,"Attempted to create an unclosed polygon ring.")
         }
     }
 }
