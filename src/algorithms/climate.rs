@@ -1,8 +1,9 @@
+use std::collections::HashSet;
+
 use angular_units::Deg;
 use angular_units::Angle;
 
 use crate::entity;
-use crate::entity_field_assign;
 use crate::world_map::TileFeature;
 use crate::world_map::Entity;
 use crate::world_map::TileForWinds;
@@ -16,6 +17,7 @@ use crate::world_map::TileSchema;
 use crate::commands::TemperatureRangeArg;
 use crate::commands::WindsArg;
 use crate::commands::PrecipitationArg;
+use crate::progress::WatchableQueue;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, temperatures: &TemperatureRangeArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -91,70 +93,86 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
     Ok(())
 }
 
-pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut WorldMapTransaction, precipitation_arg: &PrecipitationArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    // Algorithm borrowed from AFMG with some modifications, most importantly I don't have a grid, so I follow the paths of the wind to neighbors.
 
-    const MAX_PASSABLE_ELEVATION: i32 = 85; 
+#[derive(Clone)]
+pub(crate) struct PrecipitationFactors {
+    lat_modifier: f64,
+    max_precipitation: f64
+}
+
+impl PrecipitationFactors {
 
     // Bands of rain at different latitudes, like the ITCZ
     const LATITUDE_MODIFIERS: [f64; 18] = [4.0, 2.0, 2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 2.0, 2.0, 1.0, 1.0, 1.0, 0.5];
 
+    fn from_tile_feature(feature: &TileFeature) -> Result<Self,CommandError> {
+        let site_y = feature.site_y()?;
+        let lat_band = ((site_y.abs() - 1.0) / 5.0).floor() as usize;
+        let lat_modifier = Self::LATITUDE_MODIFIERS[lat_band];
+        let max_precipitation = 120.0 * lat_modifier;
+        Ok(PrecipitationFactors {
+            lat_modifier,
+            max_precipitation
+        })
+
+    }
+}
+
+entity!(TileDataForPrecipitation: Tile {
+    elevation: f64,
+    wind: Deg<f64>, 
+    grouping: Grouping, 
+    neighbors: Vec<(u64,Deg<f64>)>,
+    temperature: f64,
+    precipitation: f64 = |_| {
+        Ok::<_,CommandError>(0.0)
+    },
+    factors: PrecipitationFactors = PrecipitationFactors::from_tile_feature
+});
+
+
+
+pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut WorldMapTransaction, precipitation_arg: &PrecipitationArg, progress: &mut Progress) -> Result<(),CommandError> {
+
     let mut layer = target.edit_tile_layer()?;
 
-    // I believe what this does is scale the moisture scale correctly to the size of the map. Otherwise, I don't know.
-    let cells_number_modifier = (layer.feature_count() as f64 / 10000.0).powf(0.25);
-    let prec_input_modifier = precipitation_arg.precipitation_factor as f64/100.0;
-    let modifier = cells_number_modifier * prec_input_modifier;
+    let precipitation_modifier = precipitation_arg.precipitation_factor as f64/100.0;
 
-    entity!(TileDataForPrecipitation: Tile {
-        elevation_scaled: i32, 
-        wind: Deg<f64>, 
-        grouping: Grouping, 
-        neighbors: Vec<(u64,Deg<f64>)>,
-        temperature: f64,
-        precipitation: f64 = |_| {
-            Ok::<_,CommandError>(0.0)
-        },
-        lat_modifier: f64 = |feature: &TileFeature| {
-            let site_y = entity_field_assign!(feature site_y f64);
-            let lat_band = ((site_y.abs() - 1.0) / 5.0).floor() as usize;
-            let lat_modifier = LATITUDE_MODIFIERS[lat_band];
-            Ok::<_,CommandError>(lat_modifier)
-        }
-    });
-
+        
     // I need to trace the data across the map, so I can't just do quick read and writes to the database.
     let mut tile_map = layer.read_features().into_entities_index::<_,TileDataForPrecipitation>(progress)?;
 
+    let mut visited = HashSet::new();
+
     // I can't work on the tiles map while also iterating it, so I have to copy the keys
-    let mut working_tiles: Vec<u64> = tile_map.keys().copied().collect();
+    let mut working_queue: Vec<(u64,Option<f64>,u64)> = tile_map.keys().map(|id| (*id,None,*id)).collect();
     // The order of the tiles changes the results, so make sure they are always in the same order to 
     // keep the results reproducible. I know this seems OCD, but it's important if anyone wants
     // to test things.
-    working_tiles.sort();
-    let working_tiles = working_tiles;
+    working_queue.sort_by_key(|(id,_,_)| *id);
+    let mut working_queue = working_queue.watch_queue(progress,"Tracing winds.","Winds traced.");
 
-    for start_fid in working_tiles.iter().watch(progress,"Tracing winds.","Winds traced.") {
-        let tile = tile_map.try_get(start_fid)?.clone();
-        let max_prec = 120.0 * tile.lat_modifier;
-        let mut humidity = max_prec - tile.elevation_scaled as f64;
+    while let Some((tile_id,humidity,start_id)) = working_queue.pop() {
+        let mut tile = tile_map.try_get(&tile_id)?.clone(); // I'm cloning so I can make some changes without messing with the original.
+        let humidity = if let Some(humidity) = humidity {
+            humidity
+        } else if tile.grouping.is_ocean() {
+            // humidity is only picked up over the ocean
+            precipitation_modifier * tile.factors.max_precipitation
+        } else {
+            // add a modicum of precipitation
+            (precipitation_modifier * tile.factors.max_precipitation) / 20.0
+        };
 
-        let mut current = tile;
-        let mut current_fid = *start_fid;
-        let mut visited = vec![current_fid];
-
-        loop {
-            if humidity < 0.0 {
-                // there is no humidity left to work with.
-                break;
-            }
+        if humidity > 0.0 {
+            // push humidity onto the neighbor tiles and then process them.
 
             // find neighbor closest to wind direction
-            let mut best_neighbor: Option<(_,_)> = None;
-            for (fid,direction) in &current.neighbors {
+            let mut best_neighbors = Vec::new();
+            for (fid,direction) in &tile.neighbors {
                 // calculate angle difference
-                let angle_diff = Deg((direction.scalar() - current.wind.scalar()).abs());
+                let angle_diff = Deg((direction.scalar() - tile.wind.scalar()).abs());
                 // if the difference is greater than half a turn, it's actually reflected
                 let angle_diff = if angle_diff > Deg::half_turn() {
                     angle_diff.reflect_x()
@@ -163,98 +181,52 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                 };
             
                 // if the angle difference is greater than 45, it's not going the right way, so don't even bother with this one.
-                if angle_diff < Deg(45.0) {
-                    if let Some(better_neighbor) = best_neighbor {
-                        if better_neighbor.1 > angle_diff {
-                            best_neighbor = Some((*fid,angle_diff));
-                        }
-
-                    } else {
-                        best_neighbor = Some((*fid,angle_diff));
-                    }
-
+                if angle_diff < Deg(30.0) {
+                    best_neighbors.push(*fid)
                 }
 
             }
 
-            let next = if let Some((next_fid,_)) = best_neighbor {
-                if visited.contains(&next_fid) {
-                    // we've reached one we've already visited, I don't want to go in circles.
-                    None
-                } else {
-                    // visit it so we don't do this one again.
-                    visited.push(next_fid);
-                    Some((next_fid,tile_map.try_get(&next_fid)?.clone()))
-                }
+            if best_neighbors.is_empty() {
+                // otherwise there were no other neighbors in the wind direction, so drop the remaining humidity here.
+                // (I don't know why this would happen on a global world)
+                tile.precipitation += humidity;
+
+                let real_current = tile_map.try_get_mut(&tile_id)?; 
+                real_current.precipitation = tile.precipitation;
 
             } else {
-                None
-            };
+                // spread the humidity amongst them... FUTURE: Should I wait it for the more direct tiles?
+                let humidity = humidity/best_neighbors.len() as f64;
 
-            if let Some((next_fid,mut next)) = next {
-                if current.temperature >= -5.0 { // no humidity change across permafrost? 'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
-                    if current.grouping.is_ocean() {
-                        if next.grouping.is_ocean() {
-                            // add more humidity
-                            humidity = 5.0f64.mul_add(current.lat_modifier, humidity).max(max_prec);
-                            // precipitation over water cells
-                            current.precipitation += 5.0 * modifier;
-                        } else {
-                            // coastal precipitation
-                            // NOTE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
-                            // necessary considering it's the only randomness I would use, and nothing else is randomized.
-                            next.precipitation += (humidity / 15.0).max(1.0);
-                        }
-                    } else {
-                        let is_passable = next.elevation_scaled < MAX_PASSABLE_ELEVATION;
-                        let precipitation = if is_passable {
-                            // precipitation under normal conditions
-                            let normal_loss = (humidity / (10.0 * current.lat_modifier)).max(1.0);
-                            // difference in height
-                            let diff = (next.elevation_scaled - current.elevation_scaled).max(0) as f64;
-                            // additional modifier for high elevation of mountains
-                            let elev_modifier = (next.elevation_scaled as f64 / 70.0).powi(2);
-                            (normal_loss + diff + elev_modifier).clamp(1.0,humidity.max(1.0))
-                        } else {
-                            humidity
-                        };
-                        current.precipitation = precipitation;
-                        // sometimes precipitation evaporates
-                        humidity = if is_passable {
-                            // FUTURE: I feel like this evaporation was supposed to be a multiplier not an addition. Not much is evaporating.
-                            // FUTURE: Shouldn't it also depend on temperature?
-                            let evaporation = if precipitation > 1.5 { 1.0 } else { 0.0 };
-                            (humidity - precipitation + evaporation).clamp(0.0,max_prec)
-                        } else {
-                            0.0
-                        };
-
+                for next_fid in best_neighbors {
+                    if visited.contains(&(start_id,next_fid)) {
+                        continue;
+                        // we've reached one we've already visited, I don't want to go in circles.
                     }
+    
+                    // visit it so we don't do this one again.
+                    _ = visited.insert((start_id,next_fid));
+    
+                    let mut next = tile_map.try_get(&next_fid)?.clone(); // I'm cloning so I can make some changes without messing with the original.
 
-                    let real_current = tile_map.try_get_mut(&current_fid)?;
-                    real_current.precipitation = current.precipitation;
-
+                    let humidity = precipitate(&mut tile, &mut next, humidity, precipitation_modifier)?;
+    
+                    let real_current = tile_map.try_get_mut(&tile_id)?;
+                    real_current.precipitation = tile.precipitation;
+            
                     let real_next = tile_map.try_get_mut(&next_fid)?;
                     real_next.precipitation = next.precipitation;
-
+            
+                    working_queue.push((next_fid,Some(humidity),start_id));
+    
                 }
-
-                current_fid = next_fid;
-                current = next;
-            } else {
-                if current.grouping.is_ocean() {
-                    // precipitation over water cells
-                    current.precipitation += 5.0 * modifier;
-                } else {
-                    current.precipitation = humidity;
-                }
-
-                let real_current = tile_map.try_get_mut(&current_fid)?; 
-                real_current.precipitation = current.precipitation;
-
-                break;
 
             }
+
+
+        } else {
+            // there is no humidity left to work with.
         }
 
     }
@@ -271,4 +243,52 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     }
 
     Ok(())
+}
+
+fn precipitate(tile: &mut TileDataForPrecipitation, next: &mut TileDataForPrecipitation, humidity: f64, precipitation_modifier: f64) -> Result<f64, CommandError> {
+
+    // Many of these calculations were taken from AFMG and I don't know where they got that.
+    // I would love if someone could give me some better calculations, as I feel there are some things missing here:
+    // - temperature change should increase precipitation (and might be the real reason for the coastal precipitation)
+    // - elevation precipitation should be based on the difference in elevation, not the elevation scaled.
+
+
+    let humidity = if tile.temperature >= -5.0 { 
+        if tile.grouping.is_ocean() {
+            if next.grouping.is_ocean() {
+                // precipitation over water cells
+                tile.precipitation += 5.0 * precipitation_modifier;
+                // add more humidity
+                5.0f64.mul_add(tile.factors.lat_modifier, humidity).max(next.factors.max_precipitation)
+            } else {
+                // coastal precipitation
+                // NOTE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
+                // necessary considering it's the only randomness I would use, and nothing else is randomized.
+                next.precipitation += (humidity / 15.0).max(1.0);
+                // humidity doesn't change.
+                humidity
+            }
+        } else {
+            // precipitation under normal conditions
+            let normal_loss = (humidity / (10.0 * tile.factors.lat_modifier)).max(1.0);
+            // difference in height
+            let diff = (next.elevation - tile.elevation).max(0.0)/100 as f64;
+            // additional modifier for high elevation of mountains
+            let elev_modifier = (next.elevation/700.0).powi(2);
+            let precipitation = (normal_loss + diff + elev_modifier).clamp(1.0,humidity.max(1.0));
+
+            tile.precipitation += precipitation;
+            // sometimes precipitation evaporates
+            // FUTURE: Shouldn't this depend on temperature?
+            let evaporation = if precipitation > 1.5 { 1.0 } else { 0.0 };
+            (humidity - precipitation + evaporation).clamp(0.0,tile.factors.max_precipitation)
+        }
+
+    } else {
+        
+        // FUTURE: no humidity change across permafrost? 'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
+        humidity
+    };
+
+    Ok(humidity)
 }

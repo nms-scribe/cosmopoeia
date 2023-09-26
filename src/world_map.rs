@@ -1000,16 +1000,16 @@ impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> IntoIterator for E
 #[macro_export]
 /// Used by `entity!` to generate expression for assigning to an entity field.
 macro_rules! entity_field_assign {
-    ($feature: ident geometry $type: ty) => {
+    ($feature: ident geometry) => {
         $feature.geometry()?.clone()
     };
-    ($feature: ident fid $type: ty) => {
+    ($feature: ident fid) => {
         $feature.fid()?
     };
-    ($feature: ident $field: ident $type: ty) => {
+    ($feature: ident $field: ident) => {
         $feature.$field()?
     };
-    ($feature: ident $field: ident $type: ty = $function: expr) => {
+    ($feature: ident $field: ident = $function: expr) => {
         $function(&$feature)?
     };
 }
@@ -1021,7 +1021,7 @@ macro_rules! entity_from_data {
         #[allow(clippy::redundant_closure_call)] // I need to use a closure to call the expression from inside the macro, so it's not redundant.
         Ok($name {
             $(
-                $field: $crate::entity_field_assign!($feature $field $type $(= $function)?)
+                $field: $crate::entity_field_assign!($feature $field $(= $function)?)
             ),*
         })
     }};
