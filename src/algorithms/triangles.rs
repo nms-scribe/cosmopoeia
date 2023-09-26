@@ -21,7 +21,7 @@ pub(crate) struct DelaunayGenerator {
 
 impl DelaunayGenerator {
 
-    pub(crate) fn new(source: Collection<Point>) -> Self {
+    pub(crate) const fn new(source: Collection<Point>) -> Self {
         let phase = DelaunayGeneratorPhase::Unstarted(source);
         Self {
             phase

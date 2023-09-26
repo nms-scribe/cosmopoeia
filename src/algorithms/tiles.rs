@@ -238,7 +238,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         let first_tile: MultiPolygon = tile?.geometry()?.try_into()?; 
 
         // it's much faster to union two geometries rather than union them one at a time.
-        let next_tiles = MultiPolygon::from_polygon_results(iterator.map(|f| Ok(f?.geometry()?)))?;
+        let next_tiles = MultiPolygon::from_polygon_results(iterator.map(|f| f?.geometry()))?;
 
         progress.start_unknown_endpoint(|| "Uniting tiles.");
 

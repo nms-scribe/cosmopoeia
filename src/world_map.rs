@@ -98,19 +98,19 @@ fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
     from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
 }
 
-fn color_to_string(value: &Rgb<u8>) -> String {
+fn color_to_string(value: Rgb<u8>) -> String {
     let (red,green,blue) = (value.red(),value.green(),value.blue());
     format!("#{red:02X?}{green:02X?}{blue:02X?}")
 }
 
-fn string_to_color(value: String) -> Result<Rgb<u8>,CommandError> {
+fn string_to_color(value: &str) -> Result<Rgb<u8>,CommandError> {
     let mut colors = (1..=5).step_by(2).flat_map(|n| {
         let str = &value.get(n..(n+2));
-        str.and_then(|str| u8::from_str_radix(str, 16).ok()) // I'm going to drop the error anyway.
+        str.and_then(|astr| u8::from_str_radix(astr, 16).ok()) // I'm going to drop the error anyway.
     });
-    let red = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
-    let green = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
-    let blue = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
+    let red = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned()))?;
+    let green = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned()))?;
+    let blue = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned()))?;
     Ok(Rgb::new(red,green,blue))
 
 }
@@ -219,7 +219,7 @@ macro_rules! feature_set_field_type {
         &CultureType
     };
     (color) => {
-        &Rgb<u8>
+        Rgb<u8>
     };
 }
 
@@ -288,7 +288,7 @@ macro_rules! feature_get_field {
         CultureType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident color $feature_name: literal $prop: ident $field: path) => {
-        string_to_color(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+        string_to_color(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
 }
 
@@ -358,7 +358,7 @@ macro_rules! feature_set_field {
         Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
     }};
     ($self: ident $value: ident color $field: path) => {{
-        Ok($self.feature.set_field_string($field, &color_to_string(&$value))?)
+        Ok($self.feature.set_field_string($field, &color_to_string($value))?)
     }};
 
 }
@@ -426,7 +426,7 @@ macro_rules! feature_field_value {
         Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
     }};
     ($prop: expr; color) => {{
-        Some(FieldValue::StringValue(color_to_string(&$prop)))
+        Some(FieldValue::StringValue(color_to_string($prop)))
     }};
 
 }

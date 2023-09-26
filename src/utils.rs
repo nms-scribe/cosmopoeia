@@ -1,6 +1,7 @@
 use core::hash::Hash;
 use core::str::FromStr;
 use core::fmt::Display;
+use core::cmp::Ordering; 
 
 use ordered_float::NotNan;
 use ordered_float::FloatIsNan;
@@ -23,7 +24,6 @@ use crate::geometry::Point as GeoPoint;
 use crate::geometry::Collection;
 use crate::geometry::GDALGeometryWrapper;
 use crate::geometry::VariantArealGeometry;
-use std::cmp::Ordering; // TODO: Rename this once we switch to Vector2 for Points.
 
 pub(crate) fn random_number_generator(arg: &RandomSeedArg) -> StdRng {
     let seed = if let Some(seed) = arg.seed {
@@ -307,7 +307,7 @@ impl Point {
         GeoPoint::new(self.x.into(), self.y.into())
     }
 
-    pub(crate) fn circumcenter(points: (&Self,&Self,&Self)) -> Point {
+    pub(crate) fn circumcenter(points: (&Self,&Self,&Self)) -> Self {
         // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
 
         let (a,b,c) = points;
@@ -318,9 +318,7 @@ impl Point {
         let ux = ((ax2_ay2)*(b.y - c.y) + (bx2_by2)*(c.y - a.y) + (cx2_cy2)*(a.y - b.y)) * d_recip;
         let uy = ((ax2_ay2)*(c.x - b.x) + (bx2_by2)*(a.x - c.x) + (cx2_cy2)*(b.x - a.x)) * d_recip;
 
-        let u: Point = (ux,uy).into();
-
-        u
+        (ux,uy).into()
 
     }
 
@@ -403,7 +401,7 @@ impl Point {
 
     }
 
-    pub(crate) fn to_ordered_tuple(&self) -> (NotNan<f64>, NotNan<f64>) {
+    pub(crate) const fn to_ordered_tuple(&self) -> (NotNan<f64>, NotNan<f64>) {
         (self.x,self.y)
     }
 

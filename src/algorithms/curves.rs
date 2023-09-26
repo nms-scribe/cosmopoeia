@@ -17,9 +17,9 @@ use crate::geometry::LinearRing;
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-    let mut subject_layer = ThemeType::edit_theme_layer(target)?;
-    let read_features = ThemeType::read_theme_features(&mut subject_layer);
-    let vertex_index = index_vertexes::<ThemeType,_>(read_features, progress)?;
+    let mut index_subject_layer = ThemeType::edit_theme_layer(target)?;
+    let index_features = ThemeType::read_theme_features(&mut index_subject_layer);
+    let vertex_index = index_vertexes::<ThemeType,_>(index_features, progress)?;
 
     // For reasons I don't understand, if I don't do reopen the layer then rust thinks I retain a mutable borrow on subject_layer from the last read_features.
     // But it shouldn't, because the only thing that leaks from that call is an index of owned Points and integers.
@@ -122,7 +122,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                 let mut segments = Vec::new();
 
                 // convert the vertexes in the ring to points -- not that they have to be points, but they do have to be NotNaN, so this is good enough.
-                let mut vertexes = ring?.into_iter().map(|p| Point::try_from(p))/*.map(|i| {
+                let mut vertexes = ring?.into_iter().map(Point::try_from)/*.map(|i| {
                     ring.get_point(i as i32).try_into()
                 })*/;
 

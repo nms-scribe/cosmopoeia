@@ -489,20 +489,20 @@ pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(t
     }
 
     // This will become an input to the generator so we can generate colors within the same ranges as the nations.
-    let hue_range_split = RandomColorGenerator::split_hue_range_for_color_set(None, nation_color_index.len());
+    let hue_range_split = RandomColorGenerator::split_hue_range_for_color_set(&None, nation_color_index.len());
 
     let mut nation_color_generator_index = HashMap::new();
 
     for (fid,entity) in nation_color_index.into_iter().watch(progress, "Generating colors.", "Colors generated.") {
         //let generator = RandomColorGenerator::from_rgb(&entity.color,Some(Luminosity::Light));
-        let generator = RandomColorGenerator::from_rgb_in_split_hue_range(&entity.color,&hue_range_split,Some(Luminosity::Light));
+        let generator = RandomColorGenerator::from_rgb_in_split_hue_range(entity.color,&hue_range_split,Some(Luminosity::Light));
         _ = nation_color_generator_index.insert(fid, generator.generate_colors(entity.subnation_count, rng).into_iter());
     }
 
     for subnation in subnations.into_iter().watch(progress, "Assigning colors.", "Colors assigned.") {
         let generator = nation_color_generator_index.get_mut(&subnation.nation_id).expect("This was just added to the map, so it should still be there.");
         let mut feature = subnations_layer.try_feature_by_id(subnation.fid)?;
-        feature.set_color(&generator.next().expect("There should have been enough colors generated for everybody."))?;
+        feature.set_color(generator.next().expect("There should have been enough colors generated for everybody."))?;
         subnations_layer.update_feature(feature)?;
 
     }

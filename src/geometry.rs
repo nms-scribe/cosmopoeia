@@ -4,6 +4,7 @@ use gdal::vector::OGRwkbGeometryType;
 use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
 use crate::algorithms::beziers::bezierify_points;
+use crate::utils::Point as UtilsPoint;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
@@ -177,12 +178,10 @@ impl LinearRing {
             // FUTURE: I allow for other empty structures, mostly for cases where a Geometry would be "null", so perhaps
             // I should allow this. But then, I would need some way of automatically validating.
             Err(CommandError::EmptyLinearRing)
+        } else if this.get_point(this.len() - 1) != this.get_point(0) {
+            Err(CommandError::UnclosedLinearRing)
         } else {
-            if this.get_point(this.len() - 1) != this.get_point(0) {
-                Err(CommandError::UnclosedLinearRing)
-            } else {
-                Ok(this)
-            }
+            Ok(this)
         }
     
     }
@@ -372,9 +371,9 @@ impl Polygon {
             }
 
             let line = bezierify_points(&points, scale)?;
-            rings.push(LinearRing::from_vertices(line.iter().map(|p| p.to_tuple()))?);
+            rings.push(LinearRing::from_vertices(line.iter().map(UtilsPoint::to_tuple))?);
         }
-        let polygon = Polygon::from_rings(rings)?;
+        let polygon = Self::from_rings(rings)?;
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
         // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
         polygon.make_valid_default()
@@ -460,7 +459,7 @@ impl MultiPolygon {
         Ok(this)
     }
 
-    pub(crate) fn from_combined<Items: IntoIterator<Item = MultiPolygon>>(multis: Items) -> Result<Self,CommandError> {
+    pub(crate) fn from_combined<Items: IntoIterator<Item = Self>>(multis: Items) -> Result<Self,CommandError> {
         let mut this = Self::blank()?;
         for multi in multis {
             for polygon in multi {
@@ -498,7 +497,7 @@ impl MultiPolygon {
     }
 
 
-    pub(crate) fn bezierify(self, scale: f64) -> Result<MultiPolygon,CommandError> {
+    pub(crate) fn bezierify(self, scale: f64) -> Result<Self,CommandError> {
         let mut polygons = Vec::new();
         for polygon in self {
             let mut rings = Vec::new();
@@ -509,11 +508,11 @@ impl MultiPolygon {
                 }
                 
                 let line = bezierify_points(&points, scale)?;
-                rings.push(LinearRing::from_vertices(line.iter().map(|p| p.to_tuple()))?);
+                rings.push(LinearRing::from_vertices(line.iter().map(UtilsPoint::to_tuple))?);
             }
             polygons.push(Polygon::from_rings(rings)?);
         }
-        let result = MultiPolygon::from_polygons(polygons)?;
+        let result = Self::from_polygons(polygons)?;
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
         // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
         result.make_valid_default()
@@ -583,7 +582,7 @@ pub(crate) struct Collection<ItemType: GDALGeometryWrapper> {
 
 impl<ItemType: GDALGeometryWrapper> From<Collection<ItemType>> for GDALGeometry {
 
-    fn from(value: Collection<ItemType>) -> GDALGeometry {
+    fn from(value: Collection<ItemType>) -> Self {
         value.inner
     }
 }
@@ -818,47 +817,47 @@ impl VariantArealGeometry {
     #[allow(dead_code)] // not used, but I feel I should have it.
     pub(crate) fn area(&self) -> f64 {
         match self {
-            VariantArealGeometry::Polygon(inner) => inner.area(),
-            VariantArealGeometry::MultiPolygon(inner) => inner.area(),
+            Self::Polygon(inner) => inner.area(),
+            Self::MultiPolygon(inner) => inner.area(),
         }
     }
 
-    pub(crate) fn union(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+    pub(crate) fn union(&self, rhs: &Self) -> Result<Self,CommandError> {
         match (self,rhs) {
-            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.union(rhs),
-            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => lhs.union(rhs),
-            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.union(&rhs.clone().try_into()?),
-            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => rhs.union(&lhs.clone().try_into()?),
+            (Self::Polygon(lhs), Self::Polygon(rhs)) => lhs.union(rhs),
+            (Self::MultiPolygon(lhs), Self::MultiPolygon(rhs)) => lhs.union(rhs),
+            (Self::MultiPolygon(lhs), Self::Polygon(rhs)) => lhs.union(&rhs.clone().try_into()?),
+            (Self::Polygon(lhs), Self::MultiPolygon(rhs)) => rhs.union(&lhs.clone().try_into()?),
         }
     }
 
-    pub(crate) fn difference(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+    pub(crate) fn difference(&self, rhs: &Self) -> Result<Self,CommandError> {
         match (self,rhs) {
-            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.difference(rhs),
-            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => lhs.difference(rhs),
-            (VariantArealGeometry::MultiPolygon(lhs), VariantArealGeometry::Polygon(rhs)) => lhs.difference(&rhs.clone().try_into()?),
-            (VariantArealGeometry::Polygon(lhs), VariantArealGeometry::MultiPolygon(rhs)) => rhs.difference(&lhs.clone().try_into()?),
+            (Self::Polygon(lhs), Self::Polygon(rhs)) => lhs.difference(rhs),
+            (Self::MultiPolygon(lhs), Self::MultiPolygon(rhs)) => lhs.difference(rhs),
+            (Self::MultiPolygon(lhs), Self::Polygon(rhs)) => lhs.difference(&rhs.clone().try_into()?),
+            (Self::Polygon(lhs), Self::MultiPolygon(rhs)) => rhs.difference(&lhs.clone().try_into()?),
         }
     }
 
     pub(crate) fn buffer(&self, distance: f64, n_quad_segs: u32) -> Result<Self,CommandError> {
         match self {
-            VariantArealGeometry::Polygon(lhs) => lhs.buffer(distance,n_quad_segs),
-            VariantArealGeometry::MultiPolygon(lhs) => lhs.buffer(distance,n_quad_segs),
+            Self::Polygon(lhs) => lhs.buffer(distance,n_quad_segs),
+            Self::MultiPolygon(lhs) => lhs.buffer(distance,n_quad_segs),
         }
     }
 
     pub(crate) fn simplify(&self, tolerance: f64) -> Result<Self,CommandError> {
         match self {
-            VariantArealGeometry::Polygon(lhs) => lhs.simplify(tolerance),
-            VariantArealGeometry::MultiPolygon(lhs) => lhs.simplify(tolerance),
+            Self::Polygon(lhs) => lhs.simplify(tolerance),
+            Self::MultiPolygon(lhs) => lhs.simplify(tolerance),
         }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         match self {
-            VariantArealGeometry::Polygon(lhs) => lhs.is_empty(),
-            VariantArealGeometry::MultiPolygon(lhs) => lhs.is_empty(),
+            Self::Polygon(lhs) => lhs.is_empty(),
+            Self::MultiPolygon(lhs) => lhs.is_empty(),
         }
     }
 
@@ -878,7 +877,7 @@ impl Iterator for VariantArealGeometryIter {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Polygon(polygon) => {
-                polygon.take().map(|p| Ok(p))
+                polygon.take().map(Ok)
             },
             Self::MultiPolygon(multi) => multi.next()
         }
@@ -900,8 +899,8 @@ impl IntoIterator for VariantArealGeometry {
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            VariantArealGeometry::Polygon(polygon) => Self::IntoIter::Polygon(Some(polygon)),
-            VariantArealGeometry::MultiPolygon(multi) => Self::IntoIter::MultiPolygon(multi.into_iter()),
+            Self::Polygon(polygon) => Self::IntoIter::Polygon(Some(polygon)),
+            Self::MultiPolygon(multi) => Self::IntoIter::MultiPolygon(multi.into_iter()),
         }
     }
 }
@@ -950,7 +949,7 @@ impl TryFrom<GDALGeometry>for NoGeometry {
 }
 
 impl From<NoGeometry> for GDALGeometry {
-    fn from(_: NoGeometry) -> GDALGeometry {
+    fn from(_: NoGeometry) -> Self {
         unreachable!("This program should never be getting a geometry off of 'None' geometry.")
     }
 
