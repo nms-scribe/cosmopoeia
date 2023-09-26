@@ -415,9 +415,8 @@ These are things that really should be done before release, but they might take 
         to apply the colors.
         [X] In addition to that, we still need to be able to specify the spacing based on an axis.
     [X] I may need to extract code from random color crate to make my own, I think. Or find a better crate.
-[ ] Use angular_units for directions and other things...
-[ ] The angular_units thing seems to have an ordered_floats trait involved. Is this the same as the one we're using? Or should I switch to it?
-[ ] Run clippy again.
+[X] Use angular_units for directions and other things...
+[X] Run clippy again.
 [ ] climate::generate_precipitation -- I think this will be improved if instead of just sending precipitation to one tile, I send it to all tiles within about 20-25 degrees of the wind direction. I'll have less of those "snake arms" that I see now. Split up the precipitation evenly, or perhaps weighted by how far the angle is from the degree. -- This would require switching to a queue thing like I did for water flow. -- but then we don't have the 'visited' set to check against. If a circle passes over water, it will infinite loop. What if I have a counter that decrements instead, stopping when we hit zero and passed along to the queue.
 [ ] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.
 [ ] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps.

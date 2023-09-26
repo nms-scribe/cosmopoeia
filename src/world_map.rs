@@ -33,6 +33,8 @@ use ron::to_string as to_ron_string;
 use ron::from_str as from_ron_str;
 use paste::paste;
 use prisma::Rgb;
+use angular_units::Deg;
+use angular_units::Angle;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -81,11 +83,11 @@ fn string_to_id_list(value: String) -> Result<Vec<u64>,CommandError> {
     from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdList(value))   
 }
 
-fn neighbor_directions_to_string(value: &Vec<(u64,i32)>) -> String {
+fn neighbor_directions_to_string(value: &Vec<(u64,Deg<f64>)>) -> String {
     to_ron_string(value).expect("Why would serialization fail on a list of number pairs?")
 }
 
-fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,i32)>,CommandError> {
+fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,Deg<f64>)>,CommandError> {
     from_ron_str(&value).map_err(|_| CommandError::InvalidValueForNeighborDirections(value))   
 }
 
@@ -135,7 +137,7 @@ macro_rules! feature_get_field_type {
         Option<i32> // this is the same because everything's an option, the option tag only means it can accept options
     };
     (neighbor_directions) => {
-        Vec<(u64,i32)>
+        Vec<(u64,Deg<f64>)>
     };
     (id_list) => {
         Vec<u64>
@@ -166,6 +168,9 @@ macro_rules! feature_get_field_type {
     };
     (color) => {
         Rgb<u8>
+    };
+    (angle) => {
+        Deg<f64>
     }
 }
 
@@ -189,7 +194,7 @@ macro_rules! feature_set_field_type {
         bool
     };
     (neighbor_directions) => {
-        &Vec<(u64,i32)>
+        &Vec<(u64,Deg<f64>)>
     };
     (id_list) => {
         &Vec<u64>
@@ -221,6 +226,9 @@ macro_rules! feature_set_field_type {
     (color) => {
         Rgb<u8>
     };
+    (angle) => {
+        Deg<f64>
+    }
 }
 
 macro_rules! feature_get_required {
@@ -289,6 +297,9 @@ macro_rules! feature_get_field {
     };
     ($self: ident color $feature_name: literal $prop: ident $field: path) => {
         string_to_color(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+    };
+    ($self: ident angle $feature_name: literal $prop: ident $field: path) => {
+        Ok(Deg(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?))
     };
 }
 
@@ -360,6 +371,11 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident color $field: path) => {{
         Ok($self.feature.set_field_string($field, &color_to_string($value))?)
     }};
+    ($self: ident $value: ident angle $field: path) => {
+        // The NotNan thing verifies that the value is not NaN, which would be treated as null.
+        // This can help me catch math problems early...
+        Ok($self.feature.set_field_double($field, NotNan::try_from($value.scalar())?.into_inner())?)
+    };
 
 }
 
@@ -427,6 +443,9 @@ macro_rules! feature_field_value {
     }};
     ($prop: expr; color) => {{
         Some(FieldValue::StringValue(color_to_string($prop)))
+    }};
+    ($prop: expr; angle) => {{
+        Some(FieldValue::RealValue($prop.scalar()))
     }};
 
 }
@@ -525,6 +544,9 @@ macro_rules! get_field_type_for_prop_type {
     };
     (color) => {
         OGRFieldType::OFTString
+    };
+    (angle) => {
+        OGRFieldType::OFTInteger
     }
 }
 
@@ -1262,7 +1284,7 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     /// average annual temperature of tile in imaginary units
     temperature: f64,
     /// roughly estimated average wind direction for tile
-    wind: i32,
+    wind: angle,
     /// average annual precipitation of tile in imaginary units
     precipitation: f64,
     /// amount of water flow through tile in imaginary units
@@ -1314,7 +1336,7 @@ impl TileFeature<'_> {
 
 pub(crate) trait TileWithNeighbors: Entity<TileSchema> {
 
-    fn neighbors(&self) -> &Vec<(u64,i32)>;
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)>;
 
 }
 
@@ -1356,7 +1378,7 @@ entity!(TileForTerrain: Tile {
     site: UtilsPoint, 
     elevation: f64,
     grouping: Grouping, 
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     // 'old' values so the algorithm can check if it's changed.
     old_elevation: f64 = TileFeature::elevation,
     old_grouping: Grouping = TileFeature::grouping
@@ -1389,7 +1411,7 @@ entity!(TileForWaterflow: Tile {
     elevation: f64, 
     flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
     grouping: Grouping, 
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     precipitation: f64, // not in TileForWaterFill
     temperature: f64,
     water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
@@ -1398,7 +1420,7 @@ entity!(TileForWaterflow: Tile {
 
 impl TileWithNeighbors for TileForWaterflow {
 
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
         &self.neighbors
     }
 
@@ -1419,7 +1441,7 @@ entity!(TileForWaterFill: Tile {
     flow_to: Vec<u64>, // Initialized to blank in TileForWaterFlow
     grouping: Grouping, 
     lake_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()), // Not in TileForWaterFlow
     temperature: f64,
     water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
@@ -1444,7 +1466,7 @@ impl From<TileForWaterflow> for TileForWaterFill {
 }
 
 impl TileWithNeighbors for TileForWaterFill {
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
         &self.neighbors
     }
 
@@ -1468,7 +1490,7 @@ entity!(TileForRiverConnect: Tile {
 entity!(TileForWaterDistance: Tile {
     site: UtilsPoint,
     grouping: Grouping, 
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
     closest_water_tile_id: Option<u64> = |_| Ok::<_,CommandError>(None)
 });
@@ -1477,7 +1499,7 @@ entity!(TileForWaterDistance: Tile {
 entity!(TileForGroupingCalc: Tile {
     grouping: Grouping,
     lake_id: Option<u64>,
-    neighbors: Vec<(u64,i32)>
+    neighbors: Vec<(u64,Deg<f64>)>
 });
 
 entity!(TileForPopulation: Tile {
@@ -1572,7 +1594,7 @@ entity!(TileForCultureExpand: Tile {
     biome: String,
     grouping: Grouping,
     water_flow: f64,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     lake_id: Option<u64>,
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
@@ -1630,7 +1652,7 @@ entity!(TileForNationExpand: Tile {
     biome: String,
     grouping: Grouping,
     water_flow: f64,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     lake_id: Option<u64>,
     culture: Option<String>,
     nation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
@@ -1638,7 +1660,7 @@ entity!(TileForNationExpand: Tile {
 
 entity!(TileForNationNormalize: Tile {
     grouping: Grouping,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     town_id: Option<u64>,
     nation_id: Option<u64>
 });
@@ -1652,7 +1674,7 @@ entity!(TileForSubnations: Tile {
 });
 
 entity!(TileForSubnationExpand: Tile {
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     grouping: Grouping,
     shore_distance: i32,
     elevation_scaled: i32,
@@ -1661,7 +1683,7 @@ entity!(TileForSubnationExpand: Tile {
 });
 
 entity!(TileForEmptySubnations: Tile {
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     shore_distance: i32,
     nation_id: Option<u64>,
     subnation_id: Option<u64>,
@@ -1672,7 +1694,7 @@ entity!(TileForEmptySubnations: Tile {
 });
 
 entity!(TileForSubnationNormalize: Tile {
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     town_id: Option<u64>,
     nation_id: Option<u64>,
     subnation_id: Option<u64>
@@ -1681,7 +1703,7 @@ entity!(TileForSubnationNormalize: Tile {
 entity!(TileForCultureDissolve: Tile {
     culture: Option<String>,
     geometry: Polygon,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     shore_distance: i32
 });
 
@@ -1698,7 +1720,7 @@ impl TileWithShoreDistance for TileForCultureDissolve {
 }
 
 impl TileWithNeighbors for TileForCultureDissolve {
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
         &self.neighbors
     }
 }
@@ -1706,7 +1728,7 @@ impl TileWithNeighbors for TileForCultureDissolve {
 entity!(TileForBiomeDissolve: Tile {
     biome: String,
     geometry: Polygon,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     shore_distance: i32
 });
 
@@ -1724,7 +1746,7 @@ impl TileWithShoreDistance for TileForBiomeDissolve {
 }
 
 impl TileWithNeighbors for TileForBiomeDissolve {
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
         &self.neighbors
     }
 }
@@ -1732,7 +1754,7 @@ impl TileWithNeighbors for TileForBiomeDissolve {
 entity!(TileForNationDissolve: Tile {
     nation_id: Option<u64>,
     geometry: Polygon,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     shore_distance: i32
 });
 
@@ -1749,7 +1771,7 @@ impl TileWithShoreDistance for TileForNationDissolve {
 }
 
 impl TileWithNeighbors for TileForNationDissolve {
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
         &self.neighbors
     }
 }
@@ -1757,7 +1779,7 @@ impl TileWithNeighbors for TileForNationDissolve {
 entity!(TileForSubnationDissolve: Tile {
     subnation_id: Option<u64>,
     geometry: Polygon,
-    neighbors: Vec<(u64,i32)>,
+    neighbors: Vec<(u64,Deg<f64>)>,
     shore_distance: i32
 });
 
@@ -1774,7 +1796,7 @@ impl TileWithShoreDistance for TileForSubnationDissolve {
 }
 
 impl TileWithNeighbors for TileForSubnationDissolve {
-    fn neighbors(&self) -> &Vec<(u64,i32)> {
+    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
         &self.neighbors
     }
 }

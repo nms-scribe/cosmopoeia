@@ -19,6 +19,7 @@ checksum = "4f1c36cde4b75aa8518ad38880fdc7b649d7bf22b359a296964756e2319d598d"
 dependencies = [
  "approx 0.3.2",
  "num-traits",
+ "serde",
 ]
 
 [[package]]

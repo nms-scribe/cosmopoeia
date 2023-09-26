@@ -6,7 +6,7 @@ authors = ["N M Sheldon"]
 
 [dependencies]
 adaptive-bezier = "0.1.0"
-angular-units = "0.2.4"
+angular-units = { version = "0.2.4", features = ["serde"] }
 clap = { version = "4.3.11", features = ["derive"] }
 console = "0.15.7"
 gdal = { version = "0.16.0", features = ["array"] }

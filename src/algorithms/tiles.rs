@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use rand::Rng;
+use angular_units::Deg;
+use angular_units::Angle;
 
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -155,13 +157,14 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                 let (neighbor_site_x,neighbor_site_y) = neighbor.site.to_tuple();
 
                 // needs to be clockwise, from the north, with a value from 0..360
+
                 // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-                let counter_clockwise_from_east = ((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round();
+                let counter_clockwise_from_east = Deg(((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round());
                 // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-                let clockwise_from_north = 450.0 - counter_clockwise_from_east; 
-                // And then, to get the values in the range from 0..360, mod it.
-                let clamped = clockwise_from_north % 360.0;
-                clamped.floor() as i32
+                let clockwise_from_north = Deg(450.0) - counter_clockwise_from_east; 
+
+                // And, the Deg structure allows me to normalize it
+                clockwise_from_north.normalize()
             };
 
             neighbors.push((*neighbor_id,neighbor_angle))

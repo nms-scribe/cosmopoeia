@@ -1,3 +1,5 @@
+use angular_units::Deg;
+use angular_units::Angle;
 
 use crate::entity;
 use crate::entity_field_assign;
@@ -74,7 +76,7 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for feature in features.iter().watch(progress,"Generating winds.","Winds generated.") {
 
-        let wind_dir = winds.get(&ordered_float::OrderedFloat(feature.site_y)).copied().unwrap_or(90) as i32;
+        let wind_dir = Deg(winds.get(&ordered_float::OrderedFloat(feature.site_y)).copied().unwrap_or(90) as f64);
  
         if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
             working_feature.set_wind(wind_dir)?;
@@ -107,9 +109,9 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
     entity!(TileDataForPrecipitation: Tile {
         elevation_scaled: i32, 
-        wind: i32, 
+        wind: Deg<f64>, 
         grouping: Grouping, 
-        neighbors: Vec<(u64,i32)>,
+        neighbors: Vec<(u64,Deg<f64>)>,
         temperature: f64,
         precipitation: f64 = |_| {
             Ok::<_,CommandError>(0.0)
@@ -152,15 +154,16 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
             let mut best_neighbor: Option<(_,_)> = None;
             for (fid,direction) in &current.neighbors {
                 // calculate angle difference
-                let angle_diff = (direction - current.wind).abs();
-                let angle_diff = if angle_diff > 180 {
-                    360 - angle_diff
+                let angle_diff = Deg((direction.scalar() - current.wind.scalar()).abs());
+                // if the difference is greater than half a turn, it's actually reflected
+                let angle_diff = if angle_diff > Deg::half_turn() {
+                    angle_diff.reflect_x()
                 } else {
                     angle_diff
                 };
             
                 // if the angle difference is greater than 45, it's not going the right way, so don't even bother with this one.
-                if angle_diff < 45 {
+                if angle_diff < Deg(45.0) {
                     if let Some(better_neighbor) = best_neighbor {
                         if better_neighbor.1 > angle_diff {
                             best_neighbor = Some((*fid,angle_diff));
