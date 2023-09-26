@@ -298,7 +298,7 @@ pub(crate) trait Theme: Sized {
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
 
-    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature;
+    fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature;
 
 
 }
@@ -332,7 +332,7 @@ impl Theme for CultureTheme {
         target.edit_cultures_layer()        
     }
 
-    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, CultureSchema, CultureFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+    fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, CultureSchema, CultureFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
         layer.read_features()
     }
     
@@ -365,7 +365,7 @@ impl Theme for BiomeTheme {
         target.edit_biomes_layer()        
     }
 
-    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, BiomeSchema, BiomeFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+    fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, BiomeSchema, BiomeFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
         layer.read_features()
     }
 
@@ -394,7 +394,7 @@ impl Theme for NationTheme {
         target.edit_nations_layer()        
     }
 
-    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, NationSchema, NationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+    fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, NationSchema, NationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
         layer.read_features()
     }
 
@@ -424,7 +424,7 @@ impl Theme for SubnationTheme {
         target.edit_subnations_layer()        
     }
 
-    fn read_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, SubnationSchema, SubnationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
+    fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, SubnationSchema, SubnationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
         layer.read_features()
     }
 
@@ -478,9 +478,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
         if let Some((key,geometry)) = mapping {
             match new_polygon_map.get_mut(&key) {
-                None => {
-                    _ = new_polygon_map.insert(key, vec![geometry]);
-                },
+                None => _ = new_polygon_map.insert(key, vec![geometry]),
                 Some(entry) => entry.push(geometry),
             }
         }
@@ -492,7 +490,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
     let mut changed_features = Vec::new();
 
-    for feature in ThemeType::read_features(&mut polygon_layer).watch(progress, "Dissolving tiles.", "Tiles dissolved.") {
+    for feature in ThemeType::read_theme_features(&mut polygon_layer).watch(progress, "Dissolving tiles.", "Tiles dissolved.") {
         let fid = feature.fid()?;
         let geometry = if let Some(geometries) = new_polygon_map.remove(&fid) {
             // it should never be empty if it's in the map, but since I'm already allowing for empty geographies, might as well check.
@@ -517,6 +515,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
     }
 
+    // reinitialize to avoid a mutable/immutable borrowing conflict
     let edit_polygon_layer = ThemeType::edit_theme_layer(target)?;
 
     for (fid,geometry) in changed_features.into_iter().watch(progress, "Writing geometries.", "Geometries written.") {

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use ordered_float::OrderedFloat;
 use rand::Rng;
 use priority_queue::PriorityQueue;
+use prisma::Rgb;
 
 use crate::world_map::TileForNationNormalize;
 use crate::world_map::TownForNationNormalize;
@@ -26,19 +27,18 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchablePriorityQueue;
 use crate::world_map::EntityLookup;
-use crate::algorithms::colors::ColorGenerator;
+use crate::algorithms::colors::RandomColorGenerator;
 use crate::commands::OverwriteNationsArg;
 use crate::commands::SizeVarianceArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::ExpansionFactorArg;
+use super::colors::Luminosity;
 
 pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_layer: &OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut towns = target.edit_towns_layer()?;
 
     let mut nations = Vec::new();
-
-    let mut color_generator = ColorGenerator::new(None);
 
     for town in towns.read_features().into_entities::<TownForNations>().watch(progress,"Reading towns.","Towns read.") {
         let (_,town) = town?;
@@ -58,10 +58,17 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
                 type_,
                 expansionism,
                 capital_town_id,
-                color: color_generator.generate(rng)
+                color: Rgb::new(0,0,0)
             })
 
         }
+    }
+
+    let mut colors = RandomColorGenerator::new(None,Some(Luminosity::Light)).generate_colors(nations.len(), rng).into_iter();
+
+    for nation in nations.iter_mut().watch(progress, "Assigning colors.", "Colors assigned") {
+        nation.color = colors.next().expect("There should have been just as many colors as there were nations.");
+
     }
 
     let mut nations_layer = target.create_nations_layer(overwrite_layer)?;

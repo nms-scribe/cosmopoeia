@@ -15,6 +15,7 @@ use crate::algorithms::subnations::generate_subnations;
 use crate::algorithms::subnations::expand_subnations;
 use crate::algorithms::subnations::fill_empty_subnations;
 use crate::algorithms::subnations::normalize_subnations;
+use crate::algorithms::subnations::assign_subnation_colors;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
 use crate::algorithms::tiles::SubnationTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
@@ -233,6 +234,49 @@ impl Normalize {
 
 
 subcommand_def!{
+    /// Generates background population of tiles
+    #[command(hide=true)]
+    pub struct AssignColors {
+
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
+
+        #[clap(flatten)]
+        pub random_seed_arg: RandomSeedArg,
+
+
+    }
+}
+
+impl Task for AssignColors {
+
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+
+
+        let mut target = WorldMap::edit(self.target_arg.target)?;
+
+        let mut random = random_number_generator(&self.random_seed_arg);
+
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(transaction, &mut random, progress)
+        })?;
+
+        target.save(progress)
+
+    }
+}
+
+impl AssignColors {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction<'_>, rng: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+        progress.announce("Assigning colors to subnations");
+    
+        assign_subnation_colors(target, rng, progress)
+    }
+    
+}
+
+
+subcommand_def!{
     /// Generates polygons in cultures layer
     #[command(hide=true)]
     pub struct Dissolve {
@@ -318,6 +362,7 @@ command_def!{
         Expand,
         FillEmpty,
         Normalize,
+        AssignColors,
         Dissolve,
         Curvify
     }
@@ -400,6 +445,8 @@ impl GenSubnations {
             FillEmpty::run_with_parameters(random, culture_lookup, loaded_namers, subnation_percentage, transaction, progress)?;
 
             Normalize::run_with_parameters(transaction, progress)?;
+
+            AssignColors::run_with_parameters(transaction, random, progress)?;
 
             Dissolve::run_with_parameters(transaction, progress)?;
 

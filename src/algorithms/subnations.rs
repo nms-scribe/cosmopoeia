@@ -18,6 +18,7 @@ use crate::world_map::CultureType;
 use crate::world_map::TileForSubnations;
 use crate::world_map::NationForSubnations;
 use crate::world_map::TownForSubnations;
+use crate::world_map::NationForSubnationColors;
 use crate::errors::CommandError;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMapTransaction;
@@ -32,6 +33,9 @@ use crate::world_map::EntityLookup;
 use crate::world_map::SubnationForNormalize;
 use crate::commands::OverwriteSubnationsArg;
 use crate::commands::SubnationPercentArg;
+use crate::algorithms::colors::RandomColorGenerator;
+use super::colors::Luminosity;
+use crate::world_map::SubnationForColors;
 
 
 pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_layer: &OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
@@ -239,6 +243,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
     let mut next_subnation_id = 0..;
 
     for nation in nations.into_iter().watch(progress,"Creating and placing subnations.","Subnations created and placed.") {
+
         if let Some(mut nation_tiles) = tiles_by_nation.remove(&nation.fid) {
             while let Some((tile_id,_)) = nation_tiles.pop() {
                 let tile = tile_map.try_get(&tile_id)?;
@@ -253,7 +258,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                 let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
 
                 let nation_id = nation.fid;
-                let color = nation.color.clone();
+                let color = nation.color;
 
 
                 let subnation = SubnationForPlacement {
@@ -468,4 +473,39 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
 
     Ok(()) 
+}
+
+pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, progress: &mut Progress) -> Result<(),CommandError> {
+
+    let mut nation_color_index = target.edit_nations_layer()?.read_features().into_entities_index::<_,NationForSubnationColors>(progress)?;
+
+    let mut subnations_layer = target.edit_subnations_layer()?;
+    
+    let subnations = subnations_layer.read_features().into_entities_vec::<_,SubnationForColors>(progress)?;
+
+    for subnation in subnations.iter().watch(progress, "Counting subnations.", "Subnations counted.") {
+        let nation = subnation.nation_id;
+        nation_color_index.try_get_mut(&nation)?.subnation_count += 1;
+    }
+
+    // This will become an input to the generator so we can generate colors within the same ranges as the nations.
+    let hue_range_split = RandomColorGenerator::split_hue_range_for_color_set(None, nation_color_index.len());
+
+    let mut nation_color_generator_index = HashMap::new();
+
+    for (fid,entity) in nation_color_index.into_iter().watch(progress, "Generating colors.", "Colors generated.") {
+        //let generator = RandomColorGenerator::from_rgb(&entity.color,Some(Luminosity::Light));
+        let generator = RandomColorGenerator::from_rgb_in_split_hue_range(&entity.color,&hue_range_split,Some(Luminosity::Light));
+        _ = nation_color_generator_index.insert(fid, generator.generate_colors(entity.subnation_count, rng).into_iter());
+    }
+
+    for subnation in subnations.into_iter().watch(progress, "Assigning colors.", "Colors assigned.") {
+        let generator = nation_color_generator_index.get_mut(&subnation.nation_id).expect("This was just added to the map, so it should still be there.");
+        let mut feature = subnations_layer.try_feature_by_id(subnation.fid)?;
+        feature.set_color(&generator.next().expect("There should have been enough colors generated for everybody."))?;
+        subnations_layer.update_feature(feature)?;
+
+    }
+
+    Ok(())
 }

@@ -32,6 +32,7 @@ use serde::Deserialize;
 use ron::to_string as to_ron_string;
 use ron::from_str as from_ron_str;
 use paste::paste;
+use prisma::Rgb;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -97,12 +98,12 @@ fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
     from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
 }
 
-fn color_to_string(value: &(u8,u8,u8)) -> String {
-    let (red,green,blue) = value;
+fn color_to_string(value: &Rgb<u8>) -> String {
+    let (red,green,blue) = (value.red(),value.green(),value.blue());
     format!("#{red:02X?}{green:02X?}{blue:02X?}")
 }
 
-fn string_to_color(value: String) -> Result<(u8,u8,u8),CommandError> {
+fn string_to_color(value: String) -> Result<Rgb<u8>,CommandError> {
     let mut colors = (1..=5).step_by(2).flat_map(|n| {
         let str = &value.get(n..(n+2));
         str.and_then(|str| u8::from_str_radix(str, 16).ok()) // I'm going to drop the error anyway.
@@ -110,7 +111,7 @@ fn string_to_color(value: String) -> Result<(u8,u8,u8),CommandError> {
     let red = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
     let green = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
     let blue = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.clone()))?;
-    Ok((red,green,blue))
+    Ok(Rgb::new(red,green,blue))
 
 }
 
@@ -164,7 +165,7 @@ macro_rules! feature_get_field_type {
         CultureType
     };
     (color) => {
-        (u8,u8,u8)
+        Rgb<u8>
     }
 }
 
@@ -218,7 +219,7 @@ macro_rules! feature_set_field_type {
         &CultureType
     };
     (color) => {
-        &(u8,u8,u8)
+        &Rgb<u8>
     };
 }
 
@@ -2529,13 +2530,18 @@ entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement: Nation {
 entity!(NationForSubnations: Nation {
     fid: u64,
     capital_town_id: u64,
-    color: (u8,u8,u8)
+    color: Rgb<u8>
 });
 
 entity!(NationForEmptySubnations: Nation {
     fid: u64,
-    color: (u8,u8,u8),
+    color: Rgb<u8>,
     culture: Option<String>
+});
+
+entity!(NationForSubnationColors: Nation {
+    color: Rgb<u8>,
+    subnation_count: usize = |_| Ok::<_,CommandError>(0) // to be filled in by algorithm
 });
 
 impl NationLayer<'_,'_> {
@@ -2578,6 +2584,11 @@ entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement: Subnation {
 entity!(SubnationForNormalize: Subnation {
     center_tile_id: u64,
     seat_town_id: Option<u64>
+});
+
+entity!(SubnationForColors: Subnation {
+    fid: u64,
+    nation_id: u64
 });
 
 impl SubnationLayer<'_,'_> {

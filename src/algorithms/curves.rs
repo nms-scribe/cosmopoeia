@@ -18,7 +18,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
 
 
     let mut subject_layer = ThemeType::edit_theme_layer(target)?;
-    let read_features = ThemeType::read_features(&mut subject_layer);
+    let read_features = ThemeType::read_theme_features(&mut subject_layer);
     let vertex_index = index_vertexes::<ThemeType,_>(read_features, progress)?;
 
     // For reasons I don't understand, if I don't do reopen the layer then rust thinks I retain a mutable borrow on subject_layer from the last read_features.
@@ -26,7 +26,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     let mut subject_layer = ThemeType::edit_theme_layer(target)?;
 
     let mut segment_cache: HashMap<Point, Vec<Vec<Point>>> = HashMap::new();
-    let read_features = ThemeType::read_features(&mut subject_layer);
+    let read_features = ThemeType::read_theme_features(&mut subject_layer);
     let polygon_segments = break_segments::<ThemeType,_>(read_features, &vertex_index, &mut segment_cache, progress)?;
 
     for value in segment_cache.values_mut().watch(progress, "Curvifying line segments.", "Line segments curvified.") {
