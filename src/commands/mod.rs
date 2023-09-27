@@ -282,9 +282,9 @@ impl WindsArg {
 #[derive(Args)]
 pub struct PrecipitationArg {
 
-    #[arg(long,default_value="100")]
-    /// Amount of global moisture on a scale of 0-500
-    pub precipitation_factor: u16,
+    #[arg(long,default_value="1")]
+    /// Amount of global moisture on a scale of 0-5
+    pub precipitation_factor: f64,
 
 }
 

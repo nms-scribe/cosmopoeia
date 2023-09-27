@@ -137,7 +137,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
 
     let mut layer = target.edit_tile_layer()?;
 
-    let precipitation_modifier = precipitation_arg.precipitation_factor as f64/100.0;
+    let precipitation_modifier = precipitation_arg.precipitation_factor;
 
         
     // I need to trace the data across the map, so I can't just do quick read and writes to the database.
@@ -159,10 +159,11 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
             humidity
         } else if tile.grouping.is_ocean() {
             // humidity is only picked up over the ocean
-            precipitation_modifier * tile.factors.max_precipitation
+            precipitation_modifier * 5.0 * tile.factors.max_precipitation
         } else {
-            // add a modicum of precipitation
-            (precipitation_modifier * tile.factors.max_precipitation) / 20.0
+            // a small amount of additional humidity on land
+            precipitation_modifier
+            //(precipitation_modifier * tile.factors.max_precipitation) / 100.0
         };
 
         if humidity > 0.0 {
@@ -181,7 +182,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                 };
             
                 // if the angle difference is greater than 45, it's not going the right way, so don't even bother with this one.
-                if angle_diff < Deg(30.0) {
+                if angle_diff < Deg(45.0) {
                     best_neighbors.push(*fid)
                 }
 
@@ -190,7 +191,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
             if best_neighbors.is_empty() {
                 // otherwise there were no other neighbors in the wind direction, so drop the remaining humidity here.
                 // (I don't know why this would happen on a global world)
-                tile.precipitation += humidity;
+                tile.precipitation = (tile.precipitation + humidity).min(tile.factors.max_precipitation);
 
                 let real_current = tile_map.try_get_mut(&tile_id)?; 
                 real_current.precipitation = tile.precipitation;
@@ -210,7 +211,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     
                     let mut next = tile_map.try_get(&next_fid)?.clone(); // I'm cloning so I can make some changes without messing with the original.
 
-                    let humidity = precipitate(&mut tile, &mut next, humidity, precipitation_modifier)?;
+                    let humidity = precipitate(&mut tile, &mut next, humidity)?;
     
                     let real_current = tile_map.try_get_mut(&tile_id)?;
                     real_current.precipitation = tile.precipitation;
@@ -245,50 +246,75 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     Ok(())
 }
 
-fn precipitate(tile: &mut TileDataForPrecipitation, next: &mut TileDataForPrecipitation, humidity: f64, precipitation_modifier: f64) -> Result<f64, CommandError> {
+fn precipitate(tile: &mut TileDataForPrecipitation, next: &mut TileDataForPrecipitation, humidity: f64) -> Result<f64, CommandError> {
 
     // Many of these calculations were taken from AFMG and I don't know where they got that.
-    // I would love if someone could give me some better calculations, as I feel there are some things missing here:
+    // FUTURE: I would love if someone could give me some better calculations, as I feel there are some things missing here compared to what I learned in school.
+    // - The max_precipitation factor seems wrong. It should be a max_humidity, and once you go over that it becomes precipitation... i.e. dewpoint.
+    //   - said max_humidity should depend on temperature and elevation.
     // - temperature change should increase precipitation (and might be the real reason for the coastal precipitation)
     // - elevation precipitation should be based on the difference in elevation, not the elevation scaled.
 
 
-    let humidity = if tile.temperature >= -5.0 { 
+    let (tile_precipitation,humidity) = if tile.temperature >= -5.0 { 
         if tile.grouping.is_ocean() {
             if next.grouping.is_ocean() {
-                // precipitation over water cells
-                tile.precipitation += 5.0 * precipitation_modifier;
-                // add more humidity
-                5.0f64.mul_add(tile.factors.lat_modifier, humidity).max(next.factors.max_precipitation)
+                (
+                    // precipitation over water cells, not that it's going to change our climates at all...
+                    5.0,
+                    // add more humidity 
+                    5.0f64.mul_add(tile.factors.lat_modifier, humidity)//.max(next.factors.max_precipitation)
+                )
             } else {
                 // coastal precipitation
+                // we don't subtract this from regular humidity
                 // NOTE: The AFMG code uses a random number between 10 and 20 instead of 15. I didn't feel like this was
                 // necessary considering it's the only randomness I would use, and nothing else is randomized.
                 next.precipitation += (humidity / 15.0).max(1.0);
-                // humidity doesn't change.
-                humidity
+
+                (
+                    // no precipitation on this cell
+                    0.0,
+                    // humidity doesn't change.
+                    humidity
+                )
             }
         } else {
             // precipitation under normal conditions
-            let normal_loss = (humidity / (10.0 * tile.factors.lat_modifier)).max(1.0);
+            let normal_loss = humidity / (10.0 * tile.factors.lat_modifier);
             // difference in height
             let diff = (next.elevation - tile.elevation).max(0.0)/100 as f64;
             // additional modifier for high elevation of mountains
             let elev_modifier = (next.elevation/700.0).powi(2);
-            let precipitation = (normal_loss + diff + elev_modifier).clamp(1.0,humidity.max(1.0));
+            let precipitation = (normal_loss + diff + elev_modifier).min(humidity);
 
-            tile.precipitation += precipitation;
             // sometimes precipitation evaporates
             // FUTURE: Shouldn't this depend on temperature?
-            let evaporation = if precipitation > 1.5 { 1.0 } else { 0.0 };
-            (humidity - precipitation + evaporation).clamp(0.0,tile.factors.max_precipitation)
+            let evaporation = if precipitation > 1.5 { precipitation.min(10.0) } else { 0.0 };
+
+            (
+                precipitation,
+                (humidity - precipitation + evaporation)
+            )
         }
 
     } else {
         
-        // FUTURE: no humidity change across permafrost? 'm not sure this is right. There should still be precipitation in the cold, and if there's a bunch of humidity it should all precipitate in the first cell, shouldn't it?
-        humidity
+        // FUTURE: no humidity change across permafrost? I'm not sure this is right. I know it gets too cold to snow sometimes, but there should be some precipitation, or there are no glaciers.
+        (0.0,humidity)
+    };
+
+    let humidity = {
+        tile.precipitation += tile_precipitation;
+        if tile.precipitation > tile.factors.max_precipitation {
+            let extra = (tile.precipitation - tile.factors.max_precipitation).min(tile_precipitation);
+            tile.precipitation -= extra;
+            humidity + extra
+        } else {
+            humidity
+        }
     };
 
     Ok(humidity)
 }
+
