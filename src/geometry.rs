@@ -299,7 +299,7 @@ macro_rules! areal_fns {
 
         pub(crate) fn difference(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
             if let Some(different) = self.inner.difference(&rhs.inner) {
-                let different = if different.is_valid() {
+                let different = if !different.is_valid() {
                     // I'm writing to stdout here because the is_valid also writes to stdout
                     // FUTURE: I can't use progress.warning because I've got progress borrowed as mutable. Is there another way?
                     eprintln!("fixing invalid difference");
