@@ -1588,7 +1588,6 @@ impl TileForCulturePrefSorting<'_> {
 
 
 entity!(TileForCultureExpand: Tile {
-    population: i32,
     shore_distance: i32,
     elevation_scaled: i32,
     biome: String,
@@ -1678,7 +1677,6 @@ entity!(TileForSubnations: Tile {
 
 entity!(TileForSubnationExpand: Tile {
     neighbors: Vec<(u64,Deg<f64>)>,
-    grouping: Grouping,
     shore_distance: i32,
     elevation_scaled: i32,
     nation_id: Option<u64>,
@@ -1693,7 +1691,6 @@ entity!(TileForEmptySubnations: Tile {
     shore_distance: i32,
     nation_id: Option<u64>,
     subnation_id: Option<u64>,
-    grouping: Grouping,
     town_id: Option<u64>,
     population: i32,
     culture: Option<String>,

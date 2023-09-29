@@ -378,10 +378,9 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                 };
 
                 if replace_culture {
-                    if neighbor.population > 0 {
-                        place_cultures.push((*neighbor_id,culture.name.clone()));
-                        // even if we don't place the culture, because people can't live here, it will still spread.
-                    }
+                    // even if there's no population in the tile, if we can spread to it, mark it as the cultures.
+                    // Otherwise, we get some "empty" areas around lakes.
+                    place_cultures.push((*neighbor_id,culture.name.clone()));
                     _ = costs.insert(*neighbor_id, total_cost);
 
                     queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), Reverse(total_cost));

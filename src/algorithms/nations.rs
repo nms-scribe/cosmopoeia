@@ -177,10 +177,8 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
                 };
 
                 if replace_nation {
-                    if !neighbor.grouping.is_ocean() { 
-                        place_nations.push((*neighbor_id,nation.fid));
-                        // even if we don't place the culture, because people can't live here, it will still spread.
-                    }
+                    // place the nation even if there is no population or something.
+                    place_nations.push((*neighbor_id,nation.fid));
                     _ = costs.insert(*neighbor_id, total_cost);
 
                     queue.push((*neighbor_id, nation.clone(), nation_biome.clone()), Reverse(total_cost));
@@ -283,7 +281,7 @@ pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type
         CultureType::Lake => if neighbor.lake_id.is_some() {
             // low lake crossing penalty for lake cultures
             10.0
-        } else if neighbor.grouping.is_water() {
+        } else if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // general sea/lake crossing penalty
             1000.0
         } else if neighbor.elevation_scaled >= 67 {
@@ -295,7 +293,7 @@ pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type
         } else {
             0.0
         },
-        CultureType::Naval => if neighbor.grouping.is_water() {
+        CultureType::Naval => if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // low water crossing penalty
             300.0
         } else if neighbor.elevation_scaled >= 67 {
@@ -307,7 +305,7 @@ pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type
         } else {
             0.0
         },
-        CultureType::Highland => if neighbor.grouping.is_water() {
+        CultureType::Highland => if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // general sea/lake corssing penalty
             1000.0
         } else if neighbor.elevation_scaled < 62 {
@@ -320,7 +318,7 @@ pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type
         CultureType::Nomadic |
         CultureType::Generic |
         CultureType::River |
-        CultureType::Hunting => if neighbor.grouping.is_water() {
+        CultureType::Hunting => if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // general sea/lake corssing penalty
             1000.0
         } else if neighbor.elevation_scaled >= 67 {

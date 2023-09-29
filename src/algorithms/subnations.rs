@@ -148,9 +148,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                 };
 
                 if replace_subnation {
-                    if !neighbor.grouping.is_ocean() { // this is also true for nations.
-                        place_subnations.push((*neighbor_id,subnation.fid));
-                    }
+                    place_subnations.push((*neighbor_id,subnation.fid));
                     _ = costs.insert(*neighbor_id, total_cost);
                     queue.push((*neighbor_id,subnation.clone()), Reverse(total_cost));
                 } // else we can't expand into this tile, and this line of spreading ends here.
@@ -206,8 +204,6 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
         100
     } else if neighbor.elevation_scaled >= 50 {
         30
-    } else if neighbor.grouping.is_water() {
-        100
     } else {
         10
     } as f64;
@@ -329,9 +325,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                             };
         
                             if replace_subnation {
-                                if !neighbor.grouping.is_ocean() { 
-                                    _ = tile_subnation_changes.insert(*neighbor_id, subnation.fid);
-                                }
+                                _ = tile_subnation_changes.insert(*neighbor_id, subnation.fid);
                                 _ = nation_tiles.remove(neighbor_id);
                                 _ = costs.insert(*neighbor_id, total_cost);
                                 _ = queue.push(*neighbor_id, Reverse(total_cost));
