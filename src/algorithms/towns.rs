@@ -47,7 +47,7 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
 
     let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, town_counts.capital_count, progress);
 
-    let towns = place_towns(rng, &mut tiles, &extent, &town_counts.town_count, tiles_layer.feature_count(), &capitals_finder, progress)?;
+    let towns = place_towns(rng, &mut tiles, &extent, capitals.len(), &town_counts.town_count, &capitals_finder, progress)?;
 
     // write the towns
 
@@ -88,14 +88,14 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
     Ok(())
 }
 
-pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, town_count: &Option<usize>, total_tiles_count: usize, capitals_finder: &PointFinder, progress: &mut Progress) -> Result<Vec<(ScoredTileForTowns, bool)>,CommandError> {
+pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Random, tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, placed_capital_count: usize, town_count: &Option<usize>, capitals_finder: &PointFinder, progress: &mut Progress) -> Result<Vec<(ScoredTileForTowns, bool)>,CommandError> {
     let mut towns_finder;
     let mut town_cultures;
     let mut towns;
 
     let town_count = if let Some(town_count) = town_count {
         if town_count > &tiles.len() {
-            let reduced_town_count = tiles.len();
+            let reduced_town_count = tiles.len() - placed_capital_count;
             if tiles.is_empty() {
                 progress.warning(|| "There aren't enough populated cells left to generate any towns.")
             } else {
@@ -106,7 +106,13 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             *town_count
         }
     } else {
-        tiles.len().div_euclid(5).div_euclid((total_tiles_count as f64 / 10000.0).powf(0.8).round() as usize)
+        let map_size = extent.width * extent.height;
+        let town_count = (map_size/100.0).floor() as usize;
+        let town_count = town_count.min(tiles.len() - placed_capital_count);
+        if town_count == 0 {
+            progress.warning(|| "There aren't enough populated cells to generate towns.")
+        }
+        town_count
     };
 
     let mut spacing = (extent.width + extent.height) / 150.0 / ((town_count as f64).powf(0.7)/66.0);
@@ -161,22 +167,32 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     Ok(towns)
 }
 
-pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: usize, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
+pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: Option<usize>, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
     let mut capitals_finder;
     let mut capitals;
     let mut capital_cultures;
 
 
-    let capital_count = if tiles.len() < (capital_count * 10) {
-        let fixed_capital_count = tiles.len().div_euclid(10);
-        if fixed_capital_count == 0 {
-            progress.warning(|| "There aren't enough populated cells to generate national capitals. Other towns will still be generated.")
+    let capital_count = if let Some(capital_count) = capital_count {
+        if tiles.len() < capital_count {
+            let fixed_capital_count = tiles.len();
+            if fixed_capital_count == 0 {
+                progress.warning(|| "There aren't enough populated cells to generate national capitals.")
+            } else {
+                progress.warning(|| format!("There aren't enough populated cells to generate the requested number of national capitals. Only {fixed_capital_count} capitals will be generated."))
+            }
+            fixed_capital_count
         } else {
-            progress.warning(|| format!("There aren't enough populated cells to generate the requested number of national capitals. Only {fixed_capital_count} capitals will be generated."))
+            capital_count
         }
-        fixed_capital_count
     } else {
-        capital_count
+        let map_size = extent.width * extent.height;
+        let generated_capital_count = (map_size/1000.0).floor() as usize;
+        let generated_capital_count = generated_capital_count.min(tiles.len());
+        if generated_capital_count == 0 {
+            progress.warning(|| "There aren't enough populated cells to generate national capitals.")
+        }
+        generated_capital_count
     };
 
     let mut spacing = (extent.width + extent.height) / 2.0 / capital_count as f64;

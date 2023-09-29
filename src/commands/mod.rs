@@ -352,7 +352,7 @@ pub struct CulturesGenArg {
     /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
     pub cultures: Vec<PathBuf>,
 
-    #[arg(long,default_value("10"))]
+    #[arg(long,default_value("15"))]
     /// The number of cultures to generate
     pub culture_count: usize,
 
@@ -371,12 +371,12 @@ pub struct SubnationPercentArg {
 
 #[derive(Args)]
 pub struct TownCountsArg {
-    #[arg(long,default_value="20")]
-    /// The number of national capitals to create
-    pub capital_count: usize,
+    #[arg(long)]
+    /// The number of national capitals to create. If not specified 1 capital will be generated for every 1,000 square degrees of the world, subject to habitability and tile count limits.
+    pub capital_count: Option<usize>,
 
     #[arg(long)]
-    /// The number of non-capital towns to create
+    /// The number of non-capital towns to create. If not specified, 1 town will be generated for every 100 square degrees, subject to habitability and tile count limits.
     pub town_count: Option<usize>,
 
 

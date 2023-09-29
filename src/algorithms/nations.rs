@@ -100,7 +100,12 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let mut capitals = HashSet::new();
 
-    let max_expansion_cost = OrderedFloat::from((tiles.feature_count() as f64 / 2.0) * limit_factor.expansion_factor);
+    let tile_size = tiles.estimate_average_tile_area()?;
+
+    // This is how far the nations will be able to spread.
+    // This is a arbitrary number, it basically limits the size of the nation to about 5,000 "square degrees" (half the size of a culture). Although once
+    // I get sherical directions and areas, I'll want to revisit this.
+    let max_expansion_cost = OrderedFloat::from(5000.0/tile_size * limit_factor.expansion_factor);
 
     for nation in nations {
 
@@ -154,9 +159,10 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
             let shore_cost = get_shore_cost(neighbor, &nation.type_);
 
-            let cell_cost = OrderedFloat::from((culture_cost + population_cost + biome_cost + height_cost + river_cost + shore_cost).max(0.0)) / nation.expansionism;
+            let cell_cost = OrderedFloat::from((culture_cost + population_cost + biome_cost + height_cost + river_cost + shore_cost).max(0.0) * neighbor.area) / nation.expansionism;
 
             let total_cost = priority.0 + OrderedFloat::from(10.0) + cell_cost;
+
 
             if total_cost <= max_expansion_cost {
 
@@ -195,6 +201,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
 
     }
+
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing nations.","Nations written.") {
 

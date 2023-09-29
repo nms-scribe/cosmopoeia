@@ -423,9 +423,21 @@ These are things that really should be done before release, but they might take 
     [X] Unfortunately, I did not save it. So I'll have to recreate it using another method.
 [X] Test the precipitation with larger and smaller numbers of tiles.
 [X] Go back and relook at biomes, there are way too many "wetlands". Maybe that's what's happened to my grassland?
-[ ] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps.
+[X] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps. And maybe that's all I have to do?
+[X] Capital_count default should depend on the size of the map.
+    [X] After calculations based on the older areas, there should be about 1 for 1,000 square degrees that the world covers. Limited by habitability, of course.
 [ ] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
 [ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes.
+    The algorithm would work a lot like the flow algorithm, starting at the highest elevations and moving down. For each tile:
+    [ ] The tile entity tracks a temporary "soil" field.
+    [ ] Take a certain amount of elevation from the tile and add it to the soil field, representing weathering.
+    [ ] Find the lowest neighbor and calculate the grade of the slope to that neighbor.
+    [ ] Based on that slope, calculate a percentage which is higher the more of a slope there is. 
+        I could just use percent grade, or just rise/run as a ratio. This would give me 100% loss on 45 degrees, however, and I feel that might be a little extensive. Halving it would give me 100% at about 63 degrees, quartering it is somewhere in the 70s. 
+    [ ] Multiply that percentage by the value of soil on that tile (keep in mind this includes soil added from higher tiles)
+    [ ] Subtract that amount of soil from the tile and add it to the lowest neighbor tile.
+    [ ] Once every tile has been iterated, go back and add that soil to the tile's elevation, (and update elevation_scaled? Unless that's done automatically by the terrain processor)
+    [ ] Input includes: amount to weather on every tile (which could be random), and possibly a number of iterations, which I don't think a random value would benefit. I might want a factor which defines how to calculate the percent based on slope, but I'm not certain right now how that's calculated anyway.
 [ ] Add a branching option to the water flow operation:
     [ ] Allow Branches --- current system
     [ ] Avoid Branches -- when the elevation is the same, pick only one in a reproducible manner

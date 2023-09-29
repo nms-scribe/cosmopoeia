@@ -307,8 +307,12 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     // empty hashmap of tile ids
     let mut costs = HashMap::new();
 
+    let tile_size = tiles.estimate_average_tile_area()?;
+
     // This is how far the cultures will be able to spread.
-    let max_expansion_cost = OrderedFloat::from(tiles.feature_count() as f64 * 0.6 * limit_factor.expansion_factor);
+    // This is a arbitrary number, it basically limits the size of the culture to about 10,000 "square degrees". Although once
+    // I get sherical directions and areas, I'll want to revisit this.
+    let max_expansion_cost = OrderedFloat::from(10000.0/tile_size * limit_factor.expansion_factor);
 
     let mut culture_centers = HashSet::new();
     

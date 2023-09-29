@@ -105,9 +105,9 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
 
 pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, subnation_percentage: &SubnationPercentArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let max = subnation_max_cost(rng, subnation_percentage.subnation_percentage);
-
     let mut tile_layer = target.edit_tile_layer()?;
+
+    let max = subnation_max_cost(rng, tile_layer.estimate_average_tile_area()?, subnation_percentage.subnation_percentage);
 
     let mut tile_map = tile_layer.read_features().into_entities_index::<_,TileForSubnationExpand>(progress)?;
 
@@ -181,11 +181,17 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
     Ok(())
 }
 
-pub(crate) fn subnation_max_cost<Random: Rng>(rng: &mut Random, subnation_percentage: f64) -> f64 {
+pub(crate) fn subnation_max_cost<Random: Rng>(rng: &mut Random, estimated_tile_area: f64, subnation_percentage: f64) -> f64 {
+
+    // This is how far the nations will be able to spread.
+    // This is a arbitrary number, it basically limits the size of the nation to about 5,000 "square degrees" (half the size of a culture). Although once
+    // I get sherical directions and areas, I'll want to revisit this.
+    let max_expansion_cost = (500.0/estimated_tile_area).max(5.0);
+
     if (subnation_percentage - 100.0).abs() < f64::EPSILON {
-        1000.0
+        max_expansion_cost
     } else {
-        Normal::new(20.0f64,5.0f64).expect("Why would these constants fail if they naver have before?").sample(rng).clamp(5.0,100.0) * subnation_percentage.sqrt()
+        Normal::new(max_expansion_cost/5.0,5.0f64).expect("Why would these constants fail if they naver have before?").sample(rng).clamp(5.0,max_expansion_cost) * subnation_percentage.sqrt()
     }
 }
 
@@ -205,15 +211,15 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
     } else {
         10
     } as f64;
-    let total_cost = priority.0 + elevation_cost;
+    let total_cost = priority.0 + elevation_cost * neighbor.area;
     Some(total_cost)
 }
 
 pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let max = subnation_max_cost(rng, subnation_percentage.subnation_percentage);
-
     let mut tile_layer = target.edit_tile_layer()?;
+
+    let max = subnation_max_cost(rng, tile_layer.estimate_average_tile_area()?, subnation_percentage.subnation_percentage);
 
     let mut tiles_by_nation = HashMap::new();
 
@@ -308,7 +314,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                             continue; // don't leave nation
                         }
 
-                        let total_cost = priority.0 + 10.0;                        
+                        let total_cost = priority.0 + 10.0 * neighbor.area;                        
                             
                         if total_cost.0 <= max {
         

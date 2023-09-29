@@ -1655,7 +1655,10 @@ entity!(TileForNationExpand: Tile {
     neighbors: Vec<(u64,Deg<f64>)>,
     lake_id: Option<u64>,
     culture: Option<String>,
-    nation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
+    nation_id: Option<u64> = |_| Ok::<_,CommandError>(None),
+    area: f64 = |feature: &TileFeature| {
+        Ok::<_,CommandError>(feature.geometry()?.area())
+    },
 });
 
 entity!(TileForNationNormalize: Tile {
@@ -1679,7 +1682,10 @@ entity!(TileForSubnationExpand: Tile {
     shore_distance: i32,
     elevation_scaled: i32,
     nation_id: Option<u64>,
-    subnation_id: Option<u64> = |_| Ok::<_,CommandError>(None)
+    subnation_id: Option<u64> = |_| Ok::<_,CommandError>(None),
+    area: f64 = |feature: &TileFeature| {
+        Ok::<_,CommandError>(feature.geometry()?.area())
+    },
 });
 
 entity!(TileForEmptySubnations: Tile {
@@ -1690,7 +1696,10 @@ entity!(TileForEmptySubnations: Tile {
     grouping: Grouping,
     town_id: Option<u64>,
     population: i32,
-    culture: Option<String>
+    culture: Option<String>,
+    area: f64 = |feature: &TileFeature| {
+        Ok::<_,CommandError>(feature.geometry()?.area())
+    },
 });
 
 entity!(TileForSubnationNormalize: Tile {
@@ -1848,6 +1857,7 @@ impl TileLayer<'_,'_> {
         Ok((width,height))
     }
 
+    /// Gets average tile area in "square degrees" by dividing the width * height of the map by the number of tiles.
     pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
         let (width,height) = self.get_layer_size()?;
         let tiles = self.feature_count();
