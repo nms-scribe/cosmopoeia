@@ -283,7 +283,7 @@ impl WindsArg {
 pub struct PrecipitationArg {
 
     #[arg(long,default_value="1")]
-    /// Amount of global moisture on a scale of 0-5
+    /// Amount of global moisture on a scale of roughly 0-5, but there is no limit
     pub precipitation_factor: f64,
 
 }

@@ -422,7 +422,7 @@ These are things that really should be done before release, but they might take 
 [X] Play around with the temperature interpolation function in climate::generate_temperatures. I had some data figured out a long time ago with real-world interpolation. Hopefully I still have that around. Also, possibly calculate four seasonal curves and then take the average of those for the results.
     [X] Unfortunately, I did not save it. So I'll have to recreate it using another method.
 [X] Test the precipitation with larger and smaller numbers of tiles.
-[ ] Go back and relook at biomes, there are way too many "wetlands". Maybe that's what's happened to my grassland?
+[X] Go back and relook at biomes, there are way too many "wetlands". Maybe that's what's happened to my grassland?
 [ ] Cultures and nations spread much further then they should on my world-sized map. I'm not sure the limit_factor actually changes much. One thing I do need to change is add the area of the tile as a factor in determining expansion cost, to make sure that they expand less on smaller scale maps.
 [ ] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
 [ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes.

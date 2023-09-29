@@ -45,8 +45,8 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
     entity!(BiomeSource: Tile {
         fid: u64,
         temperature: f64,
-        elevation_scaled: i32,
         water_flow: f64,
+        precipitation: f64,
         // TODO: Why am I initializing it like this? That should be the default initialization, no?
         lake_id: Option<u64> = TileFeature::lake_id,
         grouping: Grouping
@@ -61,18 +61,30 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         } else if tile.temperature < -5.0 {
             biomes.glacier.clone()
         } else {
-            let water_flow_scaled = tile.water_flow;
             // is it a wetland?
-            if ((tile.temperature > -2.0) && // no wetlands in colder environments... that seems odd and unlikely (Alaska is full of wetlands)
-                // FUTURE: AFMG assumed that if the land was below 25 it was near the coast. That seems inaccurate and I'm not sure what the point of
-                // that is: it requires *more* water to make the coast a wetland? Maybe the problem is basing it off of waterflow instead of precipitation.
-                (((water_flow_scaled > 40.0) && (tile.elevation_scaled < 25)) ||
-                ((water_flow_scaled > 24.0) && (tile.elevation_scaled > 24) && (tile.elevation_scaled < 60)))) || 
-                matches!(tile.lake_id.map(|id| lake_map.try_get(&(id)).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
+            if (tile.water_flow > 400.0) || 
+               matches!(tile.lake_id.map(|id| lake_map.try_get(&(id)).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
                 biomes.wetland.clone()
             } else {
-                let moisture_band = ((water_flow_scaled/5.0).floor() as usize).min(4); // 0-4
-                // Math.min(Math.max(20 - temperature, 0), 25)
+                // The original calculation favored deserts too much
+                //let moisture_band = ((tile.precipitation/5.0).floor() as usize).min(4); // 0-4
+                // FUTURE: A better climate modelling system, with less ambiguous precipitation units and seasonal values
+                // would allow me to use the Koppen Climate system here, which would also change how biomes are defined.
+                let moisture_band = if tile.precipitation < 1.0 {
+                    0
+                } else if tile.precipitation < 2.0 {
+                    1
+                } else {
+                    let level = (tile.precipitation/20.0).floor() as usize;
+                    if level <= 2 {
+                        2
+                    } else if level <= 3 {
+                        3
+                    } else {
+                        4
+                    }
+                };
+
                 let temperature_band = ((20.0 - tile.temperature).max(0.0).floor() as usize).min(25);
                 biomes.matrix[moisture_band][temperature_band].clone()
             }
@@ -89,6 +101,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         }
 
     }
+
 
     Ok(())
 
