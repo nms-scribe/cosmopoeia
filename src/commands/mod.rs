@@ -198,11 +198,11 @@ pub struct BezierScaleArg {
 #[derive(Args)]
 pub struct TemperatureRangeArg {
         /// The rough temperature (in celsius) at the equator
-        #[arg(long,default_value="25",allow_hyphen_values=true)]
+        #[arg(long,default_value="27",allow_hyphen_values=true)]
         pub equator_temp: i8,
 
         /// The rough temperature (in celsius) at the poles
-        #[arg(long,default_value="-15",allow_hyphen_values=true)]
+        #[arg(long,default_value="-30",allow_hyphen_values=true)]
         pub polar_temp: i8,
 
 }
