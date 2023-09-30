@@ -360,6 +360,27 @@ impl LoadTerrainTask for Smooth {
 
 }
 
+subcommand_def!{
+    /// Runs an erosion process on the map
+    #[derive(Deserialize,Serialize)]
+    pub struct Erode {
+        #[arg(default_value="1000")]
+        /// Maximum amount of "soil" in meters to weather off of the elevation before erosion (Actual amount calculated based on slope)
+        pub weathering_amount: f64,
+
+        #[arg(default_value="10")]
+        pub iterations: usize
+    }
+}
+
+impl LoadTerrainTask for Erode {
+
+    fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
+        Ok(vec![TerrainTask::Erode(self)])
+    }
+
+}
+
 
 subcommand_def!{
 
@@ -514,6 +535,7 @@ pub enum Command {
     Add(Add),
     Multiply(Multiply),
     Smooth(Smooth),
+    Erode(Erode),
     SeedOcean(SeedOcean),
     FillOcean(FillOcean),
     FloodOcean(FloodOcean),
@@ -544,6 +566,7 @@ impl Command {
             Self::Add(params) => params.load_terrain_task(random,progress),
             Self::Multiply(params) => params.load_terrain_task(random,progress),
             Self::Smooth(params) => params.load_terrain_task(random,progress),
+            Self::Erode(params) => params.load_terrain_task(random,progress),
             Self::SeedOcean(params) => params.load_terrain_task(random,progress),
             Self::FillOcean(params) => params.load_terrain_task(random,progress),
             Self::FloodOcean(params) => params.load_terrain_task(random,progress),

@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::collections::HashSet;
+use core::cmp::Reverse;
 
 use rand::Rng;
+use ordered_float::OrderedFloat;
+use angular_units::Deg;
 
 use crate::errors::CommandError;
 use crate::world_map::EntityIndex;
@@ -32,9 +35,11 @@ use crate::commands::terrain::Invert;
 use crate::commands::terrain::InvertAxes;
 use crate::commands::terrain::Add;
 use crate::commands::terrain::Smooth;
+use crate::commands::terrain::Erode;
 use crate::commands::terrain::SeedOcean;
 use crate::commands::terrain::FloodOcean;
 use crate::commands::terrain::FillOcean;
+use crate::entity;
 
 
 enum RelativeHeightTruncation {
@@ -956,6 +961,141 @@ impl ProcessTerrainTiles for Smooth {
     }
 }
 
+impl ProcessTerrainTiles for Erode {
+
+    fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+        
+        entity!(TileForSoil: Tile {
+            site: Point,
+            elevation: f64, 
+            neighbors: Vec<(u64,Deg<f64>)>,
+            soil: f64 = |_| Ok::<_,CommandError>(0.0)
+        });
+
+        let mut tile_list = Vec::new();
+
+        let weathering_amount = self.weathering_amount;
+
+        progress.announce(&format!("Eroding {weathering_amount} of elevation {} time(s).",self.iterations));
+
+        // The number of iterations that might need to be done make using a single progress bar more useful
+        progress.start_known_endpoint(|| ("Weathering and eroding.",tile_map.len() * 2 * self.iterations));
+        let mut update_count = 0;
+
+        let mut soil_map = EntityIndex::from_iter(tile_map.iter().map(|(fid,tile)| {
+            update_count += 1;
+            progress.update(|| update_count);
+
+            let elevation = tile.elevation - weathering_amount;
+            tile_list.push(*fid);
+            (*fid,TileForSoil {
+                site: tile.site.clone(),
+                neighbors: tile.neighbors.clone(),
+                elevation,
+                soil: weathering_amount
+            })
+        }));
+        
+
+        for iteration in 0..self.iterations {
+
+            // sort by elevation, with highest at the top;
+            tile_list.sort_by_cached_key(|fid| {
+                let entity = soil_map.try_get(fid).expect("How could there be a key that's not in the soil map?");
+                Reverse(OrderedFloat(entity.elevation + entity.soil))
+            });
+
+
+            for fid in tile_list.iter() {
+                update_count += 1;
+                progress.update(|| update_count);
+    
+                let entity = soil_map.try_get(&fid)?;
+
+                // this is very similar to algorithms::tiles::find_lowest_elevation, but 1) I need to include soil in the result and 2) I'm more interested in steepness than depth.
+                let mut steepest_neighbors = Vec::new();
+                let mut steepest_grade = None;
+
+                // find the lowest neighbors
+                for (neighbor_fid,_) in &entity.neighbors {
+                    let neighbor = soil_map.try_get(&neighbor_fid)?;
+                    let neighbor_elevation = neighbor.elevation;
+                    let rise = (entity.elevation + entity.soil) - (neighbor_elevation + neighbor.soil);
+                    if rise > 0.0 {
+                        // the meridian distance (between two degrees latitude) on a sphere with the mean radius of Earth is 111.2km.
+                        // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
+                        // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
+                        let run = entity.site.distance(&neighbor.site) * 111200.0;
+                        // grade is just percent slope, or rise over run as a fraction.
+                        let grade = rise/run;
+                        if let Some(steepest_grade) = steepest_grade.as_mut() {
+                            if grade > *steepest_grade {
+                                *steepest_grade = grade;
+                                steepest_neighbors = vec![*neighbor_fid];
+                            } else if (grade - *steepest_grade).abs() < f64::EPSILON {
+                                steepest_neighbors.push(*neighbor_fid)
+                            }
+                        } else {
+                            steepest_grade = Some(grade);
+                            steepest_neighbors = vec![*neighbor_fid];
+                        }
+
+                    }
+
+                };
+
+                if let Some(steepest_grade) = steepest_grade {
+
+
+                    // Grade is a percent. The following shifts all the soil if it's only 45 degrees, but this is much less likely than you'd think.
+                    let shift_soil = (steepest_grade * entity.soil).min(entity.soil);
+                    
+                    soil_map.try_get_mut(&fid)?.soil -= shift_soil;
+
+                    let shift_soil = shift_soil / steepest_neighbors.len() as f64;
+
+                    for neighbor_id in steepest_neighbors {
+                        soil_map.try_get_mut(&neighbor_id)?.soil += shift_soil;
+                    }
+
+                } // otherwise, no lower neighbors were found, so just leave any soil there.
+
+
+            }
+
+            if iteration < self.iterations - 1 {
+                // re-weather for next iteration
+
+                for fid in tile_list.iter() {
+                    update_count += 1;
+                    progress.update(|| update_count);
+
+                    let entity = soil_map.try_get_mut(fid)?;
+                    // apply soil from previous iteration to elevation, and subtract the weathering amount
+                    entity.elevation = (entity.elevation + entity.soil) - weathering_amount;
+                    // now subtract the weathering amount
+                    entity.soil = weathering_amount;
+                }
+    
+            }
+
+
+        }
+
+        progress.finish(|| "Eroded.");
+
+        for (fid,changed) in soil_map.into_iter().watch(progress, "Applying elevations back to tiles.", "Elevations applied.") {
+            let tile = tile_map.try_get_mut(&fid)?;
+            tile.elevation = changed.elevation + changed.soil;
+        }
+
+        Ok(())
+
+        
+
+
+    }
+}
 
 
 impl ProcessTerrainTilesWithPointIndex for SeedOcean {
@@ -1137,6 +1277,7 @@ pub(crate) enum TerrainTask {
     Add(Add),
     Multiply(Multiply),
     Smooth(Smooth),
+    Erode(Erode),
     SeedOcean(SeedOcean),
     FillOcean(FillOcean),
     FloodOcean(FloodOcean),
@@ -1255,6 +1396,7 @@ impl TerrainTask {
             Self::Add(params) => params.requires_point_index(),
             Self::Multiply(params) => params.requires_point_index(),
             Self::Smooth(params) => params.requires_point_index(),
+            Self::Erode(params) => params.requires_point_index(),
             Self::SeedOcean(params) => params.requires_point_index(),
             Self::FillOcean(params) => params.requires_point_index(),
             Self::FloodOcean(params) => params.requires_point_index(),
@@ -1276,6 +1418,7 @@ impl TerrainTask {
             Self::Add(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
             Self::Multiply(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
             Self::Smooth(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
+            Self::Erode(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
             Self::SeedOcean(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
             Self::FillOcean(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
             Self::FloodOcean(params) => params.process_terrain_tiles(rng,limits,tile_map,progress),
@@ -1297,6 +1440,7 @@ impl TerrainTask {
             Self::Add(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),
             Self::Multiply(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),
             Self::Smooth(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),
+            Self::Erode(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),
             Self::SeedOcean(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),
             Self::FillOcean(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),
             Self::FloodOcean(params) => params.process_terrain_tiles_with_point_index(rng,limits,point_index,tile_map,progress),

@@ -851,6 +851,11 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         }
     }
 
+    pub(crate) fn from_iter<Iter: Iterator<Item = (u64,EntityType)>>(iter: Iter) -> Self {
+        let inner = IndexMap::from_iter(iter);
+        Self::from(inner)
+    }
+
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn try_get(&self, key: &u64) -> Result<&EntityType,CommandError> {
         self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
@@ -901,8 +906,6 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         }
 
     }
-
-
 
 }
 
@@ -1067,7 +1070,7 @@ macro_rules! entity {
         }
 
         paste::paste!{
-            impl Entity<[<$layer Schema>]> for $name {
+            impl $crate::world_map::Entity<[<$layer Schema>]> for $name {
 
             }
     
@@ -1075,11 +1078,11 @@ macro_rules! entity {
         }
 
         paste::paste!{
-            impl TryFrom<[<$layer Feature>]<'_>> for $name {
+            impl TryFrom<$crate::world_map::[<$layer Feature>]<'_>> for $name {
 
                 type Error = CommandError;
     
-                fn try_from(value: [<$layer Feature>]) -> Result<Self,Self::Error> {
+                fn try_from(value: $crate::world_map::[<$layer Feature>]) -> Result<Self,Self::Error> {
                     $crate::entity_from_data!($name value, $($field: $type $(= $function)?),*)
                 }
             }
@@ -1394,6 +1397,7 @@ impl TileForTerrain {
         self.grouping != self.old_grouping
     }
 }
+
 
 entity!(TileForTemperatures: Tile {
     fid: u64, 

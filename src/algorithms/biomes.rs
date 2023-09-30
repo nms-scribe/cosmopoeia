@@ -1,7 +1,6 @@
 use crate::entity;
 use crate::world_map::TypedFeature;
 use crate::world_map::TileFeature;
-use crate::world_map::Entity;
 use crate::world_map::BiomeMatrix;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;

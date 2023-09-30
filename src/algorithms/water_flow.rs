@@ -36,7 +36,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     },progress)?;
     
     // sort tile list so the highest is first.
-    tile_list.sort_by(|(_,a),(_,b)| 
+    tile_list.sort_by(|(_,a),(_,b)| // FUTURE: could use sort by key if I conver the values to OrderedFloats.
         if a > b {
             Ordering::Less
         } else if a < b {

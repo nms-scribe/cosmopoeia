@@ -427,21 +427,29 @@ These are things that really should be done before release, but they might take 
 [X] Capital_count default should depend on the size of the map.
     [X] After calculations based on the older areas, there should be about 1 for 1,000 square degrees that the world covers. Limited by habitability, of course.
 [X] Make cultures, nations, subnations fill lake tiles even if there is no population. I mean, I already allow them to spread through those tiles, but the tiles have to be marked with the culture to make sure there aren't weird holes in spots. At least get them out to -2. This just applies to lakes, I think.
-[ ] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes.
+[X] Okay, with the creation of a generated map, I am surprised to find a *lot* more basins than I expected. I just assumed my original Inannak just had a lot of craters. Maybe I do need to force rivers to flow out of sinks in certain situtations. I would also be okay with an 'erosion' terrain processor that cuts higher elevations down by moving things to lower slopes.
     The algorithm would work a lot like the flow algorithm, starting at the highest elevations and moving down. For each tile:
-    [ ] The tile entity tracks a temporary "soil" field.
-    [ ] Take a certain amount of elevation from the tile and add it to the soil field, representing weathering.
-    [ ] Find the lowest neighbor and calculate the grade of the slope to that neighbor.
-    [ ] Based on that slope, calculate a percentage which is higher the more of a slope there is. 
+    * The tile entity tracks a temporary "soil" field.
+    * Take a certain amount of elevation from the tile and add it to the soil field, representing weathering.
+    * Find the lowest neighbor and calculate the grade of the slope to that neighbor.
+    * Based on that slope, calculate a percentage which is higher the more of a slope there is. 
         I could just use percent grade, or just rise/run as a ratio. This would give me 100% loss on 45 degrees, however, and I feel that might be a little extensive. Halving it would give me 100% at about 63 degrees, quartering it is somewhere in the 70s. 
-    [ ] Multiply that percentage by the value of soil on that tile (keep in mind this includes soil added from higher tiles)
-    [ ] Subtract that amount of soil from the tile and add it to the lowest neighbor tile.
-    [ ] Once every tile has been iterated, go back and add that soil to the tile's elevation, (and update elevation_scaled? Unless that's done automatically by the terrain processor)
-    [ ] Input includes: amount to weather on every tile (which could be random), and possibly a number of iterations, which I don't think a random value would benefit. I might want a factor which defines how to calculate the percent based on slope, but I'm not certain right now how that's calculated anyway.
+    * Multiply that percentage by the value of soil on that tile (keep in mind this includes soil added from higher tiles)
+    * Subtract that amount of soil from the tile and add it to the lowest neighbor tile.
+    * Once every tile has been iterated, go back and add that soil to the tile's elevation, (and update elevation_scaled? Unless that's done automatically by the terrain processor)
+    * Input includes: amount to weather on every tile (which could be random), and possibly a number of iterations, which I don't think a random value would benefit. I might want a factor which defines how to calculate the percent based on slope, but I'm not certain right now how that's calculated anyway.
 [ ] Add a branching option to the water flow operation:
     [ ] Allow Branches --- current system
     [ ] Avoid Branches -- when the elevation is the same, pick only one in a reproducible manner
     [ ] Allow Branches on Flat Land -- allow branches if the elevation is the same and the flow_from elevation is very close to that elevation
+[ ] In tiles::calculate_tile_neighbors, I can also get some additional data, which can be utilized elsewhere:
+     * figure out if a tile is on the edge of a map -- and use this in water_flow and precipitation to prevent just dumping everything on the edge.
+     * find neighbors on the other side of the map, if the extents are -180-180 longitude
+     * make all polar tiles neighbors, if they reach 90 latitude
+     * keep in mind there are two different options: the tile is on the edge of the map, but the map wraps around, or the tile is on the edge and the world continues beyond the map. We still need to know whether it's on the edge or not for some algorithms (such as dissolving/curvifying the coastline and other shapes), even if it's a wrap-around. We would also need to know whether a neighbor lay beyond the edge in some of those cases, because we don't want to dissolve across the edge of the map, or the map could render incorrectly in some projections.
+    [ ] If we have edges calculated in calculate_tile_neighbors, then water_fill should take note of that and take appropriate action so there aren't any weird lakes along the edges.
+    [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
+    [ ] Coastlines, and possibly some other thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge.
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 [ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
 
@@ -461,13 +469,16 @@ These are things that really should be done before release, but they might take 
     [ ] If I can make the culture and biomes more configurable, then I can get rid of the 'supports_nomadic' and 'supports_hunting' fields on biomes.
 [ ] Consider adding a 'status' property to the properties table, which specifies the last step completed during building. This can then be checked before running an algorithm to add some hope that the database is in the correct state. So, instead of getting a missing field error when running biomes before water, we get an immediate error that a step hasn't been completed.
     [ ] The status property would also make it easier to automatically finish a processing based on the last step completed. This makes 'regen' type commands easier -- you can just modify the biomes, set the status to biome, and go on from there.
+    [ ] For that matter, there might also be an option to "bring it up" to a given status from whatever status it is, or from scratch.
 [ ] Convert at least some of the algorithms into objects, with tile_maps and other preparations loaded in the constructor, and then various steps as methods. It would be nice if I could get it to similar patterns as the Terrain Processors, perhaps even implementing a load trait for the command arg structs and a run trait for the returned object.
 [ ] Gdal has a nasty habit of printing out warnings and errors while processing. Is there any way to turn that off and turn them into actual errors?
 [ ] rethink biome values so that they are more customizable. Right now there's a lot of hard-coded functionality, especially related to the TilePreference enum and culture/nation expansion algorithms.
-[ ] Subnation colors should be variations on the nation colors, not all the same.
+[ ] In fact, a better climate generation scheme. I need seasonal values for temperature and precipitation. I need "accurate" precipitation equations to produce precipitation in mm/day or something like that.
+    [ ] One thought on precipitation is to base it off of humidity being percent humidity, and if the humidity is pushed into a tile with different temperature and pressure (elevation), that percent changes, and if it goes above 100, we get precipiation. But how much?
+    [ ] A better climate generation scheme would allow me to generate climates based on precipitation and temperature ranges (by season). It might be possible to use that for biomes instead.
 [ ] Need a FillEmpty task on Cultures, just like provinces. Once cultures are generated, there should be no populated tiles that aren't part of a culture of some sort, even if I just have a 'wildlands' culture or something like that.
     [ ] If everything has cultures, then there shouldn't be any place which doesn't have one, in which case I will no longer need the default_namer argument on various commands.
-[ ] Is there anyway to create a function that will let me do the cost expansion algorithm with just a few closures for customization?
+[ ] Is there any way to create a function that will let me do the cost expansion algorithm with just a few closures for customization?
 [ ] cultures::get_shore_cost and nations::get_shore_cost -- Lake and Naval have a penalty for going past -2 shore_distance. That doesn't seem right. Meanwhile, every other culture type gets a 0 for that area. 
 [ ] naming::NamerLoadObsever::start_known_endpoint -- either make the count required to produce a progress bar configurable, or find a way of popping it up only if the code is taking longer than half a second or so
 [ ] A lot of stuff where I'm opening a layer for editing, I'm only actually reading it. Unfortunately, the layer still has to be mutable in order to iterate features, but is there any way to open it read only? What if that would fix the problem that I patched with the 'reedit' function?
@@ -476,27 +487,16 @@ These are things that really should be done before release, but they might take 
 [ ] AddRange::process_terrain_tiles_with_point_index and same in AddStrait -- Instead of processing separate queues in batches, I might be able to pass the next height_delta into the queue when I push the item on the queue. Then I can keep using the same queue, and can more easily add a queue_watcher.
 [ ] Come up with a better algorithm for AddStrait (see note in function)
     [ ] If I don't rethink AddStrait completely, I feel like the exp in AddStrait creates straits that are too deep. Since I'm not utilizing elevation_scale for these, the values may be off.
-[ ] In tiles::calculate_tile_neighbors, I can also get some additional data, which can be utilized elsewhere:
-     * figure out if a tile is on the edge of a map -- and use this in water_flow and precipitation to prevent just dumping everything on the edge.
-     * find neighbors on the other side of the map, if in sphere_mode.
-     * make all polar tiles neighbors, if in sphere mode.
-     * keep in mind there are two different options: the tile is on the edge of the map, but the map wraps around, or the tile is on the edge and the world continues beyond the map. We still need to know whether it's on the edge or not for some algorithms (such as dissolving/curvifying the coastline and other shapes), even if it's a wrap-around. We would also need to know whether a neighbor lay beyond the edge in some of those cases, because we don't want to dissolve across the edge of the map, or the map could render incorrectly in some projections.
-    [ ] If we have edges calculated in calculate_tile_neighbors, then water_fill should take note of that and take appropriate action so there aren't any weird lakes along the edges.
-    [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
-    [ ] Coastlines, and possibly some other thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge.
+[ ] A few "tectonic" patterns for terrain processing tasks: "Colliding Plates", "Mid-Ocean Ridge", "Transform Fault" I could get as far as generating plates, but I'm not sure I need that.
 [ ] Consider moving the stuff for the grouping algorithm into calculate_coastline (which is also spreading through the tiles) and fill_lakes (which it would be simple to change grouping to lake, but I'm not sure about island_lake).
 [ ] Certain culture types, such as Nomadic, shouldn't generate towns, or at least generate fewer towns. 
 [ ] Consider allowing the Point, Delaunay and Voronoi generators to have a reference to the progressbar instance to update progress. This comes up because of the one part where the DelauneyGenerator has to pass an empty progress observer to the start method if not started ahead of time.
 [ ] Look at smoothing algorithm and figure out what that fr property is supposed to be doing. If anything, replace with a real smoothing algorithm that just uses a weighted average.
-[ ] apply_biomes: figure out if I'm using appropriate criteria to make a wetland.
-[ ] generate_precipitation: MAX_PASSABLE_ELEVATION doesn't seem right. Instead, the elevation change should drop the precipitation, not the elevation itself. (i.e. if we go from 60 to 85 it will drop more precipitation than 84 to 85)
-[ ] generate_precipitation: why shouldn't there be humidity change across the permafrost. If anything, it should drop a bunch of water on the edges. These might be the start of glaciers.
-[ ] generate_precipitation: shouldn't the evaporation be a multiplier, not an addition? And shouldn't it depend on temperature?
 [ ] grouping::calculate_grouping -- continent/island/isle threshold should depend on the size of the map, not the tile count.
 [ ] naming.rs -- there are a bunch of patterns which are removed that should be dependent on the language. Figure out how to make this better.
 [ ] MarkovGenerator::calculate_chain -- should use the chars directly for iterating through the name, instead of collecting into a vec of chars.
 [ ] PointGenerator -- Why does START_Y have to start with 1, but START_X can start with 0?
-[ ] terrain::Invert -- the algorithm is a little slow, but also it's not a true invert, which would involve actually moving the geometry of the tiles (but that's not available in the terrain processing toolkit)
+[ ] terrain::Invert -- the algorithm is a little slow, but also it's not a true invert, which would involve actually moving the geometry of the tiles (but that's not available in the terrain processing toolkit, I would have to add that)
 [ ] After curving, towns which are along the coastline will sometimes be in the ocean. May need to deal with that.
 [ ] Technically, since lakes have an inset, it should be possible to have population on a lake tile, along the coast. But, if a town is set there, it has to be placed outside of the lake.
 [ ] There's a double link that needs to be maintained with towns: the town has a tile_id, and the tiles have a town_id. If towns are randomly regenerated, I'm not sure if the old town_ids in the tiles are then cleared out.

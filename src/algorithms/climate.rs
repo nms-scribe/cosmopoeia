@@ -5,7 +5,6 @@ use angular_units::Angle;
 
 use crate::entity;
 use crate::world_map::TileFeature;
-use crate::world_map::Entity;
 use crate::world_map::TileForWinds;
 use crate::world_map::TileForTemperatures;
 use crate::errors::CommandError;
