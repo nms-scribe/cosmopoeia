@@ -438,10 +438,8 @@ These are things that really should be done before release, but they might take 
     * Subtract that amount of soil from the tile and add it to the lowest neighbor tile.
     * Once every tile has been iterated, go back and add that soil to the tile's elevation, (and update elevation_scaled? Unless that's done automatically by the terrain processor)
     * Input includes: amount to weather on every tile (which could be random), and possibly a number of iterations, which I don't think a random value would benefit. I might want a factor which defines how to calculate the percent based on slope, but I'm not certain right now how that's calculated anyway.
-[ ] Add a branching option to the water flow operation:
-    [ ] Allow Branches --- current system
-    [ ] Avoid Branches -- when the elevation is the same, pick only one in a reproducible manner
-    [ ] Allow Branches on Flat Land -- allow branches if the elevation is the same and the flow_from elevation is very close to that elevation
+[ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
+[ ] I should be able to share code for next tile between dissolve and water flow. First, perhaps water flow should be using steepness instead of elevation difference? Second, I can use closures for the values and then I don't have to have the trait implementations.
 [ ] In tiles::calculate_tile_neighbors, I can also get some additional data, which can be utilized elsewhere:
      * figure out if a tile is on the edge of a map -- and use this in water_flow and precipitation to prevent just dumping everything on the edge.
      * find neighbors on the other side of the map, if the extents are -180-180 longitude
@@ -451,16 +449,20 @@ These are things that really should be done before release, but they might take 
     [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
     [ ] Coastlines, and possibly some other thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge.
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
-[ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
-
-## Post-release tasks and feature requests.
-
 [ ] Turn on the following clippies and figure out how to deal with them:
     #![warn(clippy::arithmetic_side_effects)]
     #![warn(clippy::as_conversions)]
     #![warn(clippy::indexing_slicing)]
     #![warn(clippy::float_arithmetic)]
     #![warn(clippy::cargo_common_metadata)]
+
+
+## Post-release tasks and feature requests.
+
+[ ] Add a branching option to the water flow operation:
+    [ ] Allow Branches --- current system
+    [ ] Avoid Branches -- when the elevation is the same, pick only one in a reproducible manner
+    [ ] Allow Branches on Flat Land -- allow branches if the elevation is the same and the flow_from elevation is very close to that elevation
 [ ] Add a spheremode option which causes points to be generated at higher spacing at higher latitudes and changes how distance and area are calculated where that's important.
     [ ] RasterBounds::pixels_to_coords and coords_to_pixels -- make sure these are calculated correctly for spheremode
     [ ] I may need to bring in my own delaunay algorithm. First, I wouldn't need to collect points into a geometry. But second, when I add sphere_mode, the changes to the distance formula might change. Third, I might be able to remove an array collection step in there, before generating voronoi. Not sure.

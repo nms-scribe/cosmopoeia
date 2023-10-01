@@ -1343,12 +1343,6 @@ pub(crate) trait TileWithNeighbors: Entity<TileSchema> {
 
 }
 
-pub(crate) trait TileWithElevation: Entity<TileSchema> {
-
-    fn elevation(&self) -> &f64;
-
-}
-
 pub(crate) trait TileWithGeometry: Entity<TileSchema> {
     fn geometry(&self) -> &Polygon;
 }
@@ -1357,13 +1351,6 @@ pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
     fn shore_distance(&self) -> &i32;
 }
 
-pub(crate) trait TileWithNeighborsElevation: TileWithNeighbors + TileWithElevation {
-
-}
-
-impl<T: TileWithNeighbors + TileWithElevation> TileWithNeighborsElevation for T {
-
-}
 
 
 entity!(NewTileSite: Tile {
@@ -1422,21 +1409,6 @@ entity!(TileForWaterflow: Tile {
     water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
 });
 
-impl TileWithNeighbors for TileForWaterflow {
-
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
-        &self.neighbors
-    }
-
-}
-
-impl TileWithElevation for TileForWaterflow {
-
-    fn elevation(&self) -> &f64 {
-        &self.elevation
-    }
-}
-
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
 // just use a different function because it's based on a trait. I could take this one out
 // of the macro and figure something out, but this is easier.
@@ -1466,21 +1438,6 @@ impl From<TileForWaterflow> for TileForWaterFill {
             outlet_from: Vec::new(),
             lake_id: None
         }
-    }
-}
-
-impl TileWithNeighbors for TileForWaterFill {
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
-        &self.neighbors
-    }
-
-
-}
-
-impl TileWithElevation for TileForWaterFill {
-
-    fn elevation(&self) -> &f64 {
-        &self.elevation
     }
 }
 

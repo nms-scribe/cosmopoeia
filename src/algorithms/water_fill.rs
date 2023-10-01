@@ -12,7 +12,7 @@ use crate::world_map::LakeType;
 use crate::commands::OverwriteLakesArg;
 use crate::commands::BezierScaleArg;
 use crate::commands::LakeBufferScaleArg;
-use crate::algorithms::tiles::find_lowest_neighbors;
+use crate::algorithms::tiles::find_lowest_tile;
 use super::water_flow::WaterFlowResult;
 use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
@@ -140,8 +140,8 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
             let flow_to = &tile.flow_to;
             if flow_to.is_empty() {
-                // we need to recalculate to find the lowest neighbors that we can assume are above:
-                let (_,lowest_elevation) = find_lowest_neighbors(tile,&tile_map)?;
+                // we need to recalculate to find the lowest neighbors for this area:
+                let (_,lowest_elevation) = find_lowest_tile(tile,&tile_map,|t| t.elevation, |t| &t.neighbors)?;
 
                 // assuming that succeeded, we can create a new lake now.
                 if let Some(lowest_elevation) = lowest_elevation {

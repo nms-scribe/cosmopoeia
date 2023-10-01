@@ -8,7 +8,7 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
-use super::tiles::find_lowest_neighbors;
+use super::tiles::find_lowest_tile;
 
 pub(crate) struct WaterFlowResult  { 
     pub(crate) tile_map: EntityIndex<TileSchema,TileForWaterFill>, 
@@ -49,7 +49,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     for (fid,elevation) in tile_list.iter().watch(progress,"Calculating initial flow.","Flow calculated.") {
         let entity = tile_map.try_get(fid)?;
         let water_flow = entity.water_flow + entity.precipitation / cells_number_modifier;
-        let (lowest,lowest_elevation) = find_lowest_neighbors(entity,&tile_map)?;
+        let (lowest,lowest_elevation) = find_lowest_tile(entity,&tile_map,|t| t.elevation, |t| &t.neighbors)?;
 
         let (water_accumulation,flow_to) = if let Some(lowest_elevation) = lowest_elevation {
 

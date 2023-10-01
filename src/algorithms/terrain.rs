@@ -40,6 +40,7 @@ use crate::commands::terrain::SeedOcean;
 use crate::commands::terrain::FloodOcean;
 use crate::commands::terrain::FillOcean;
 use crate::entity;
+use crate::algorithms::tiles::find_lowest_tile;
 
 
 enum RelativeHeightTruncation {
@@ -1012,51 +1013,34 @@ impl ProcessTerrainTiles for Erode {
     
                 let entity = soil_map.try_get(&fid)?;
 
-                // this is very similar to algorithms::tiles::find_lowest_elevation, but 1) I need to include soil in the result and 2) I'm more interested in steepness than depth.
-                let mut steepest_neighbors = Vec::new();
-                let mut steepest_grade = None;
+                // this is very similar to algorithms::tiles::find_flowingest_tile, but 1) I need to include soil in the result and 2) I'm more interested in steepness than depth and 3) Even if I even used the closures to replace the elevation with steepness somehow, I'm looking at the highest levels instead.
+                let (steepest_neighbors,steepest_grade) = find_lowest_tile(entity, &soil_map, |t| {
+                    // calculate it backwards, because the algorithm finds the lowest value.
+                    let rise = (t.elevation + t.soil) - (entity.elevation + entity.soil);
+                    // the meridian distance (between two degrees latitude) on a sphere with the mean radius of Earth is 111.2km.
+                    // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
+                    // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
+                    let run = entity.site.distance(&t.site) * 111200.0;
+                    rise/run
+                }, |t| &t.neighbors)?;
 
-                // find the lowest neighbors
-                for (neighbor_fid,_) in &entity.neighbors {
-                    let neighbor = soil_map.try_get(&neighbor_fid)?;
-                    let neighbor_elevation = neighbor.elevation;
-                    let rise = (entity.elevation + entity.soil) - (neighbor_elevation + neighbor.soil);
-                    if rise > 0.0 {
-                        // the meridian distance (between two degrees latitude) on a sphere with the mean radius of Earth is 111.2km.
-                        // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
-                        // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
-                        let run = entity.site.distance(&neighbor.site) * 111200.0;
-                        // grade is just percent slope, or rise over run as a fraction.
-                        let grade = rise/run;
-                        if let Some(steepest_grade) = steepest_grade.as_mut() {
-                            if grade > *steepest_grade {
-                                *steepest_grade = grade;
-                                steepest_neighbors = vec![*neighbor_fid];
-                            } else if (grade - *steepest_grade).abs() < f64::EPSILON {
-                                steepest_neighbors.push(*neighbor_fid)
-                            }
-                        } else {
-                            steepest_grade = Some(grade);
-                            steepest_neighbors = vec![*neighbor_fid];
+                if let Some(steepest_grade) = steepest_grade {
+                    // remember, the algorithm returned the *lowest*, so the one we're after is actually less than zero.
+                    if steepest_grade < 0.0 {
+
+                        // Grade is a percent. The following shifts all the soil if it's only 45 degrees, but this is much less likely than you'd think.
+                        let shift_soil = (steepest_grade.abs() * entity.soil).min(entity.soil);
+                        
+                        soil_map.try_get_mut(&fid)?.soil -= shift_soil;
+
+                        let shift_soil = shift_soil / steepest_neighbors.len() as f64;
+
+                        for neighbor_id in steepest_neighbors {
+                            soil_map.try_get_mut(&neighbor_id)?.soil += shift_soil;
                         }
 
                     }
 
-                };
-
-                if let Some(steepest_grade) = steepest_grade {
-
-
-                    // Grade is a percent. The following shifts all the soil if it's only 45 degrees, but this is much less likely than you'd think.
-                    let shift_soil = (steepest_grade * entity.soil).min(entity.soil);
-                    
-                    soil_map.try_get_mut(&fid)?.soil -= shift_soil;
-
-                    let shift_soil = shift_soil / steepest_neighbors.len() as f64;
-
-                    for neighbor_id in steepest_neighbors {
-                        soil_map.try_get_mut(&neighbor_id)?.soil += shift_soil;
-                    }
 
                 } // otherwise, no lower neighbors were found, so just leave any soil there.
 

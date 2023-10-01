@@ -12,7 +12,6 @@ use crate::errors::CommandError;
 use crate::world_map::NewTileSite;
 use crate::world_map::TileForCalcNeighbors;
 use crate::world_map::TypedFeature;
-use crate::world_map::TileWithNeighborsElevation;
 use crate::world_map::TileLayer;
 use crate::utils::Point;
 use crate::world_map::TileForCultureDissolve;
@@ -185,14 +184,14 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 }
 
 
-pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &Data, tile_map: &EntityIndex<TileSchema,Data>) -> Result<(Vec<u64>, Option<f64>),CommandError> {
+pub(crate) fn find_lowest_tile<Data: Entity<TileSchema>, GetElevation: Fn(&Data) -> f64, GetNeighbors: Fn(&Data) -> &Vec<(u64,Deg<f64>)>>(entity: &Data, tile_map: &EntityIndex<TileSchema,Data>, elevation: GetElevation, neighbors: GetNeighbors) -> Result<(Vec<u64>, Option<f64>),CommandError> {
     let mut lowest = Vec::new();
     let mut lowest_elevation = None;
 
     // find the lowest neighbors
-    for (neighbor_fid,_) in entity.neighbors() {
+    for (neighbor_fid,_) in neighbors(entity) {
         let neighbor = tile_map.try_get(neighbor_fid)?;
-        let neighbor_elevation = neighbor.elevation();
+        let neighbor_elevation = elevation(neighbor);
         if let Some(lowest_elevation) = lowest_elevation.as_mut() {
             if neighbor_elevation < *lowest_elevation {
                 *lowest_elevation = neighbor_elevation;
@@ -206,7 +205,7 @@ pub(crate) fn find_lowest_neighbors<Data: TileWithNeighborsElevation>(entity: &D
         }
 
     }
-    Ok((lowest,lowest_elevation.copied()))
+    Ok((lowest,lowest_elevation))
 
 }
 
