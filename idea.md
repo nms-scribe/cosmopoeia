@@ -455,8 +455,8 @@ These are things that really should be done before release, but they might take 
     [X] If we have edges calculated in calculate_tile_neighbors, then water_fill should take note of that and take appropriate action so there aren't any weird lakes along the edges.
     [X] Need to fix calculation of TileForTownPopulation::find_middle_point_between, because these neighbors won't necessarily share vertices.
         I can just put it on the "extent edge" of the tile if the neighbor is across map.
-    [ ] Now, work on the polar tiles.
-        [ ] I feel like the easiest way is to just not have any neighbors at all for the south and north directions. This does two things:
+    [X] Now, work on the polar tiles.
+        [X] I feel like the easiest way is to just not have any neighbors at all for the south and north directions. This does two things:
             1) I don't have to do anything anywhere
             2) It keeps features from flowing into the poles, which can make the map look weird even under an appropriate projection.
     [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.

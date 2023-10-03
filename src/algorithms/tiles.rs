@@ -246,20 +246,51 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     
         }
 
-        let edge = match (wraps_latitudinally,&tile.edge) {
-            (_, None) => None,
-            (true, Some(edge)) => match edge {
-                // don't add "OffMap" neighbors for east and west
-                Edge::North |
-                Edge::South => Some(edge.clone()),
-                Edge::East |
-                Edge::West => None, 
-                Edge::Northwest |
-                Edge::Northeast => Some(Edge::North),
-                Edge::Southeast |
-                Edge::Southwest => Some(Edge::South),
-            },
-            (false, Some(edge)) => Some(edge.clone()),
+        // recalculate edge for the purposes of creating OffMap tiles
+        // wrapping edges (east and west) should not have OffMap tiles because they already have CrossMap tiles.
+        // polar edges (north and south) should not have OffMap tiles in order to keep features from extending to the poles, which can make things look weird.
+        let edge: Option<Edge> = match (wraps_latitudinally,reaches_north_pole,reaches_south_pole,&tile.edge) {
+            (_, _, _, None) => None, // there was no edge in the first place
+
+            // wraps_latitudinally, reaches_north_pole and reaches_south_pole
+            (true, true, true, Some(_)) => None, // all items being true means there are no OffMap tiles
+
+            // wraps_latitudinally and reaches_north_pole, so only have OffMap tiles for the south
+            (true, true, false, Some(Edge::North | Edge::East | Edge::West | Edge::Northwest | Edge::Northeast)) => None,
+            (true, true, false, Some(Edge::South | Edge::Southeast | Edge::Southwest)) => Some(Edge::South),
+
+            // wraps_latitudinally and reaches_south_pole, so only OffMap tiles for the north
+            (true, false, true, Some(Edge::South | Edge::East | Edge::West | Edge::Southeast | Edge::Southwest)) => None,
+            (true, false, true, Some(Edge::North | Edge::Northwest | Edge::Northeast)) => Some(Edge::North),
+
+            // wraps_latitudinally and that's it, so OffMap tiles for north and south only
+            (true, false, false, Some(Edge::East | Edge::West)) => None,
+            (true, false, false, Some(Edge::North | Edge::Northwest | Edge::Northeast)) => Some(Edge::North),
+            (true, false, false, Some(Edge::South | Edge::Southeast | Edge::Southwest)) => Some(Edge::South),
+
+            // reaches_north_pole and reaches_south_pole, so OffMap tiles for east and west only
+            (false, true, true, Some(Edge::North | Edge::South)) => None,
+            (false, true, true, Some(Edge::Northeast | Edge::Southeast | Edge::East)) => Some(Edge::East),
+            (false, true, true, Some(Edge::Northwest | Edge::Southwest | Edge::West)) => Some(Edge::West),
+
+            // reaches_north_pole, so OffMap tiles for east, west, south and south corners
+            (false, true, false, Some(Edge::North)) => None,
+            (false, true, false, Some(Edge::Northeast | Edge::East)) => Some(Edge::East),
+            (false, true, false, Some(Edge::Northwest | Edge::West)) => Some(Edge::West),
+            (false, true, false, Some(edge @ Edge::South | 
+                                      edge @ Edge::Southeast | 
+                                      edge @ Edge::Southwest)) => Some(edge.clone()),
+
+            // reaches_south_pole, so OffMap tiles for east, west and north corners
+            (false, false, true, Some(Edge::South)) => None,
+            (false, false, true, Some(Edge::Southeast | Edge::East)) => Some(Edge::East),
+            (false, false, true, Some(Edge::Southwest | Edge::West)) => Some(Edge::West),
+            (false, false, true, Some(edge @ Edge::North | 
+                                      edge @ Edge::Northwest | 
+                                      edge @ Edge::Northeast)) => Some(edge.clone()),
+
+            // no wrapping or poles at all, so edges are all as originally calculated
+            (false, false, false, Some(edge)) => Some(edge.clone()),
         };
 
 
