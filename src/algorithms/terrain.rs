@@ -5,7 +5,6 @@ use core::cmp::Reverse;
 
 use rand::Rng;
 use ordered_float::OrderedFloat;
-use angular_units::Deg;
 
 use crate::errors::CommandError;
 use crate::world_map::EntityIndex;
@@ -41,6 +40,8 @@ use crate::commands::terrain::FloodOcean;
 use crate::commands::terrain::FillOcean;
 use crate::entity;
 use crate::algorithms::tiles::find_lowest_tile;
+use crate::world_map::NeighborAndDirection;
+use crate::world_map::Neighbor;
 
 
 enum RelativeHeightTruncation {
@@ -491,16 +492,22 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
             while let Some(tile_id) = queue.pop_front() {
                 let tile = tile_map.try_get(&tile_id)?;
                 let last_change = *change_map.get(&tile_id).expect("How could there be something in the queue if it wasn't added to this map?"); 
-                for (neighbor_id,_) in &tile.neighbors {
-                    if change_map.contains_key(neighbor_id) {
-                        continue;
-                    }
+                for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
-                    let neighbor_height_delta = last_change.powf(parameters.blob_power) * (rng.gen_range(0.0..0.2) + 0.9);
-                    _ = change_map.insert(*neighbor_id, neighbor_height_delta);
-                    if neighbor_height_delta > 1.0 { 
-                        queue.push_back(*neighbor_id)
-                    }
+                    match neighbor_id {
+                        Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                            if change_map.contains_key(neighbor_id) {
+                                continue;
+                            }
+
+                            let neighbor_height_delta = last_change.powf(parameters.blob_power) * (rng.gen_range(0.0..0.2) + 0.9);
+                            _ = change_map.insert(*neighbor_id, neighbor_height_delta);
+                            if neighbor_height_delta > 1.0 { 
+                                queue.push_back(*neighbor_id)
+                            }
+                        }
+                        Neighbor::OffMap(_) => (),
+                    } // else it's off the map
 
                 }
             }
@@ -568,12 +575,17 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                 spread_count += 1;
                 for tile_id in frontier {
                     tile_map.try_get_mut(&tile_id)?.elevation += (height_delta * (rng.gen_range(0.0..0.3) + 0.85)).copysign(sign);
-                    for (neighbor_id,_) in &tile_map.try_get(&tile_id)?.neighbors {
-                        if !used.contains(neighbor_id) {
-                            queue.push(*neighbor_id);
-                            _ = used.insert(*neighbor_id);
-                        }
+                    for NeighborAndDirection(neighbor_id,_) in &tile_map.try_get(&tile_id)?.neighbors {
+                        match neighbor_id {
+                            Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                                if !used.contains(neighbor_id) {
+                                    queue.push(*neighbor_id);
+                                    _ = used.insert(*neighbor_id);
+                                }
 
+                            }
+                            Neighbor::OffMap(_) => (),
+                        } // else ignore off the map
                     }
                 }
                 height_delta = height_delta.powf(parameters.line_power) - 1.0;
@@ -592,15 +604,20 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                     let current = tile_map.try_get(&current_id)?;
                     let current_elevation = current.elevation;
                     let mut min_elevation = None;
-                    for (neighbor_id,_) in &current.neighbors {
-                        let neighbor = tile_map.try_get(neighbor_id)?;
-                        let elevation = neighbor.elevation;
-                        match min_elevation {
-                            None => min_elevation = Some((*neighbor_id,elevation)),
-                            Some((_,prev_elevation)) => if elevation < prev_elevation {
-                                min_elevation = Some((*neighbor_id,elevation))
+                    for NeighborAndDirection(neighbor_id,_) in &current.neighbors {
+                        match neighbor_id {
+                            Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                                let neighbor = tile_map.try_get(neighbor_id)?;
+                                let elevation = neighbor.elevation;
+                                match min_elevation {
+                                    None => min_elevation = Some((*neighbor_id,elevation)),
+                                    Some((_,prev_elevation)) => if elevation < prev_elevation {
+                                        min_elevation = Some((*neighbor_id,elevation))
+                                    }
+                                }
                             }
-                        }
+                            Neighbor::OffMap(_) => (),
+                        } // else ignore off the map
                     }
                     if let Some((min_tile_id,elevation)) = min_elevation {
                         tile_map.try_get_mut(&min_tile_id)?.elevation = current_elevation.mul_add(2.0, elevation.copysign(sign)) / 3.0;
@@ -632,23 +649,28 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
         let mut min = f64::INFINITY;
         let cur_tile = tile_map.try_get(&cur_id)?;
         // basically, find the neighbor that is closest to the end
-        for (neighbor_id,_) in &cur_tile.neighbors {
-            if used.contains(neighbor_id) {
-                continue;
-            }
+        for NeighborAndDirection(neighbor_id,_) in &cur_tile.neighbors {
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                    if used.contains(neighbor_id) {
+                        continue;
+                    }
 
-            let neighbor_tile = tile_map.try_get(neighbor_id)?;
-            let diff = end_tile.site.distance(&neighbor_tile.site);
-            let diff = if rng.gen_bool(jagged_probability) {
-                // every once in a while, make the neighbor seem closer, to create more jagged ridges.
-                diff / 2.0
-            } else {
-                diff
-            };
-            if diff < min {
-                min = diff;
-                cur_id = *neighbor_id;
-            }
+                    let neighbor_tile = tile_map.try_get(neighbor_id)?;
+                    let diff = end_tile.site.distance(&neighbor_tile.site);
+                    let diff = if rng.gen_bool(jagged_probability) {
+                        // every once in a while, make the neighbor seem closer, to create more jagged ridges.
+                        diff / 2.0
+                    } else {
+                        diff
+                    };
+                    if diff < min {
+                        min = diff;
+                        cur_id = *neighbor_id;
+                    }
+                }
+                Neighbor::OffMap(_) => (),
+            } // else ignore off the map
         }
         if min.is_infinite() { // no neighbors at all were found?
             break;
@@ -750,12 +772,17 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
                     new_elevation = parameters.expanse_above_sea_level.mul_add(0.5, parameters.elevations.min_elevation);
                 }
 
-                for (neighbor_id,_) in &tile.neighbors {
-                    if used.contains(neighbor_id) {
-                        continue;
-                    }
-                    _ = used.insert(*neighbor_id);
-                    next_queue.push(*neighbor_id);
+                for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+                    match neighbor_id {
+                        Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                            if used.contains(neighbor_id) {
+                                continue;
+                            }
+                            _ = used.insert(*neighbor_id);
+                            next_queue.push(*neighbor_id);
+                        }
+                        Neighbor::OffMap(_) => (),
+                    } // else ignore off the map
                 }
 
                 tile_map.try_get_mut(tile_id)?.elevation = new_elevation;
@@ -940,9 +967,14 @@ impl ProcessTerrainTiles for Smooth {
 
         for (fid,tile) in tile_map.iter().watch(progress, "Finding averages.", "Averages found.") {
             let mut heights = vec![tile.elevation];
-            for (neighbor_id,_) in &tile.neighbors {
-                let neighbor = tile_map.try_get(neighbor_id)?;
-                heights.push(neighbor.elevation);
+            for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+                match neighbor_id {
+                    Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                        let neighbor = tile_map.try_get(neighbor_id)?;
+                        heights.push(neighbor.elevation);
+                    }
+                    Neighbor::OffMap(_) => (),
+                } // ignore off the map
             }
             let average = heights.iter().sum::<f64>()/heights.len() as f64;
             let new_height = if (self.fr - 1.0).abs() < f64::EPSILON {
@@ -969,7 +1001,7 @@ impl ProcessTerrainTiles for Erode {
         entity!(TileForSoil: Tile {
             site: Point,
             elevation: f64, 
-            neighbors: Vec<(u64,Deg<f64>)>,
+            neighbors: Vec<NeighborAndDirection>,
             soil: f64 = |_| Ok::<_,CommandError>(0.0)
         });
 
@@ -1015,13 +1047,25 @@ impl ProcessTerrainTiles for Erode {
 
                 // this is very similar to algorithms::tiles::find_flowingest_tile, but 1) I need to include soil in the result and 2) I'm more interested in steepness than depth and 3) Even if I even used the closures to replace the elevation with steepness somehow, I'm looking at the highest levels instead.
                 let (steepest_neighbors,steepest_grade) = find_lowest_tile(entity, &soil_map, |t| {
-                    // calculate it backwards, because the algorithm finds the lowest value.
-                    let rise = (t.elevation + t.soil) - (entity.elevation + entity.soil);
-                    // the meridian distance (between two degrees latitude) on a sphere with the mean radius of Earth is 111.2km.
-                    // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
-                    // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
-                    let run = entity.site.distance(&t.site) * 111200.0;
-                    rise/run
+                    match t {
+                        Some((t,across_map)) => {
+                            // calculate it backwards, because the algorithm finds the lowest value.
+                            let rise = (t.elevation + t.soil) - (entity.elevation + entity.soil);
+                            // the meridian distance (between two degrees latitude) on a sphere with the mean radius of Earth is 111.2km.
+                            // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
+                            // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
+                            let run = if across_map {
+                                entity.site.distance(&t.site.across_antimeridian(&entity.site))
+                            } else {
+                                entity.site.distance(&t.site)
+                            } * 111200.0;
+                            rise/run
+                        },
+                        // else the tile is off the map. I feel like the best results will be found if off-the-map is assumed to be
+                        // the same level. If there are lower places around, then we won't go here, but if there is soil coming in
+                        // then it can pile up here.
+                        None => 0.0,
+                    }
                 }, |t| &t.neighbors)?;
 
                 if let Some(steepest_grade) = steepest_grade {
@@ -1036,7 +1080,12 @@ impl ProcessTerrainTiles for Erode {
                         let shift_soil = shift_soil / steepest_neighbors.len() as f64;
 
                         for neighbor_id in steepest_neighbors {
-                            soil_map.try_get_mut(&neighbor_id)?.soil += shift_soil;
+                            match neighbor_id {
+                                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                                    soil_map.try_get_mut(&neighbor_id)?.soil += shift_soil;
+                                }
+                                Neighbor::OffMap(_) => (),
+                            } // else just let it fall off the map
                         }
 
                     }
@@ -1107,20 +1156,25 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
             while !found {
                 let mut diff = 0.0;
                 let mut found_downslope = false;
-                for (neighbor_id,_) in &seed.neighbors {
-                    let neighbor = tile_map.try_get(neighbor_id)?;
-                    if neighbor.elevation < seed.elevation {
-                        let neighbor_diff = seed.elevation - neighbor.elevation;
-                        if neighbor_diff > diff {
-                            found_downslope = true;
-                            diff = neighbor_diff;
-                            seed_id = *neighbor_id;
-                            seed = neighbor;
-                            if seed.elevation < 0.0 {
-                                found = true;
+                for NeighborAndDirection(neighbor_id,_) in &seed.neighbors {
+                    match neighbor_id {
+                        Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                            let neighbor = tile_map.try_get(neighbor_id)?;
+                            if neighbor.elevation < seed.elevation {
+                                let neighbor_diff = seed.elevation - neighbor.elevation;
+                                if neighbor_diff > diff {
+                                    found_downslope = true;
+                                    diff = neighbor_diff;
+                                    seed_id = *neighbor_id;
+                                    seed = neighbor;
+                                    if seed.elevation < 0.0 {
+                                        found = true;
+                                    }
+                                }
                             }
                         }
-                    }
+                        Neighbor::OffMap(_) => (),
+                    } // ignore off the map
                 }
                 if found {
                     // found one that was below sea level
@@ -1162,10 +1216,16 @@ impl ProcessTerrainTiles for FloodOcean {
 
         macro_rules! queue_neighbors {
             ($tile: ident, $queue: ident) => {
-                for (neighbor_id,_) in &$tile.neighbors {
-                    let neighbor = tile_map.try_get(&neighbor_id)?;
-                    if (neighbor.elevation < 0.0) && !matches!(neighbor.grouping,Grouping::Ocean) {
-                        $queue.push(*neighbor_id)
+                for NeighborAndDirection(neighbor_id,_) in &$tile.neighbors {
+                    match neighbor_id {
+                        Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                            let neighbor = tile_map.try_get(&neighbor_id)?;
+                            if (neighbor.elevation < 0.0) && !matches!(neighbor.grouping,Grouping::Ocean) {
+                                $queue.push(*neighbor_id)
+                            }
+        
+                        } // else it's off the map and unknowable
+                        Neighbor::OffMap(_) => ()
                     }
                 }
                 

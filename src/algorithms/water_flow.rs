@@ -9,6 +9,7 @@ use crate::progress::WatchableIterator;
 use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
 use super::tiles::find_lowest_tile;
+use crate::world_map::Neighbor;
 
 pub(crate) struct WaterFlowResult  { 
     pub(crate) tile_map: EntityIndex<TileSchema,TileForWaterFill>, 
@@ -49,7 +50,13 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     for (fid,elevation) in tile_list.iter().watch(progress,"Calculating initial flow.","Flow calculated.") {
         let entity = tile_map.try_get(fid)?;
         let water_flow = entity.water_flow + entity.precipitation / cells_number_modifier;
-        let (lowest,lowest_elevation) = find_lowest_tile(entity,&tile_map,|t| t.elevation, |t| &t.neighbors)?;
+        let (lowest,lowest_elevation) = find_lowest_tile(entity,&tile_map,|t| {
+            match t {
+                Some((t,_)) => t.elevation,
+                // water always flows off the map
+                None => f64::NEG_INFINITY,
+            }
+        }, |t| &t.neighbors)?;
 
         let (water_accumulation,flow_to) = if let Some(lowest_elevation) = lowest_elevation {
 
@@ -57,8 +64,13 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
                 let neighbor_flow = water_flow/lowest.len() as f64;
                 //println!("flowing {} to {} neighbors",neighbor_flow,lowest.len());
                 for neighbor in &lowest {
-                    let neighbor = tile_map.try_get_mut(neighbor)?;
-                    neighbor.water_flow += neighbor_flow;
+                    match neighbor {
+                        Neighbor::Tile(neighbor) | Neighbor::CrossMap(neighbor,_) => {
+                            let neighbor = tile_map.try_get_mut(neighbor)?;
+                            neighbor.water_flow += neighbor_flow;
+                        }
+                        Neighbor::OffMap(_) => (),
+                    } // else it just disappears off the map
                 }
                 (0.0,lowest)
             } else {

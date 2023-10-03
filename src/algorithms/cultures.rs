@@ -37,6 +37,8 @@ use crate::commands::OverwriteCulturesArg;
 use crate::commands::SizeVarianceArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::ExpansionFactorArg;
+use crate::world_map::NeighborAndDirection;
+use crate::world_map::Neighbor;
 
 impl CultureType {
 
@@ -281,6 +283,8 @@ fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
     // NOTE: While I could use some sort of quadtree/point-distance index, I don't feel like I'm going to deal with enough cultures
     // at any one point to worry about that.
     for point in point_vec {
+        // FUTURE: This won't return true if the point's are across the antimeridian from each other, but I'm not sure how often this will
+        // be a problem.
         if point.distance(new_point) < spacing {
             return true;
         }
@@ -338,71 +342,81 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         
         let tile = tile_map.try_get(&tile_id)?;
 
-        for (neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+            
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
 
-            if culture_centers.contains(neighbor_id) {
-                // don't overwrite a culture center
-                continue;
-            }
+                    if culture_centers.contains(neighbor_id) {
+                        // don't overwrite a culture center
+                        continue;
+                    }
 
-            let neighbor = tile_map.try_get(neighbor_id)?;
+                    let neighbor = tile_map.try_get(neighbor_id)?;
 
-            let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
+                    let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
 
-            let biome_cost = get_biome_cost(&culture_biome,neighbor_biome,&culture.type_);
+                    let biome_cost = get_biome_cost(&culture_biome,neighbor_biome,&culture.type_);
 
-            // NOTE: AFMG Had a line that looked very much like this one. I don't know if that was what was intended or not, but
-            // from my view, this will always return 0.
-            // let biome_change_cost = if neighbor_biome == biome_map.get(&neighbor.biome) { 0 } else { 20 };
+                    // NOTE: AFMG Had a line that looked very much like this one. I don't know if that was what was intended or not, but
+                    // from my view, this will always return 0.
+                    // let biome_change_cost = if neighbor_biome == biome_map.get(&neighbor.biome) { 0 } else { 20 };
 
-            let height_cost = get_height_cost(neighbor, &culture.type_);
+                    let height_cost = get_height_cost(neighbor, &culture.type_);
 
-            let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &culture.type_);
+                    let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &culture.type_);
 
-            let type_cost = get_shore_cost(neighbor, &culture.type_);
+                    let type_cost = get_shore_cost(neighbor, &culture.type_);
 
-            let cell_cost = OrderedFloat::from(biome_cost /* + biome_change_cost */ + height_cost + river_cost + type_cost) / culture.expansionism;
+                    let cell_cost = OrderedFloat::from(biome_cost /* + biome_change_cost */ + height_cost + river_cost + type_cost) / culture.expansionism;
 
-            let total_cost = priority.0 + cell_cost;
+                    let total_cost = priority.0 + cell_cost;
 
-            if total_cost <= max_expansion_cost {
+                    if total_cost <= max_expansion_cost {
 
-                // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
-                // then I can place or replace the culture with this one. This will remove cultures that were previously
-                // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
-                // may still be spreading, don't worry).
-                let replace_culture = if let Some(neighbor_cost) = costs.get(neighbor_id) {
-                    &total_cost < neighbor_cost
-                } else {
-                    true
-                };
+                        // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
+                        // then I can place or replace the culture with this one. This will remove cultures that were previously
+                        // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
+                        // may still be spreading, don't worry).
+                        let replace_culture = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                            &total_cost < neighbor_cost
+                        } else {
+                            true
+                        };
 
-                if replace_culture {
-                    // even if there's no population in the tile, if we can spread to it, mark it as the cultures.
-                    // Otherwise, we get some "empty" areas around lakes.
-                    place_cultures.push((*neighbor_id,culture.name.clone()));
-                    _ = costs.insert(*neighbor_id, total_cost);
+                        if replace_culture {
+                            // even if there's no population in the tile, if we can spread to it, mark it as the cultures.
+                            // Otherwise, we get some "empty" areas around lakes.
+                            place_cultures.push((*neighbor_id,culture.name.clone()));
+                            _ = costs.insert(*neighbor_id, total_cost);
 
-                    queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), Reverse(total_cost));
+                            queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), Reverse(total_cost));
 
-                } // else we can't expand into this tile, and this line of spreading ends here.
-            } else {
-                // else we can't make it into this tile, so give up.
+                        } // else we can't expand into this tile, and this line of spreading ends here.
+                    } else {
+                        // else we can't make it into this tile, so give up.
 
-                // FUTURE: If you ever need to debug cultures that seem to stop too early...
-                //if ["Roman I","Roman II","Roman IV"].contains(&culture.name.as_str()) {
-                //    println!("Culture {}",culture.name);
-                //    println!("   priority {}",priority);
-                //    println!("   culture biome {}",culture_biome);
-                //    println!("   neighbor biome {}",neighbor_biome.name);
-                //    println!("   biome_cost {}",biome_cost);
-                //    println!("   height_cost {}",height_cost);
-                //    println!("   river_cost {}",river_cost);
-                //    println!("   type_cost {}",type_cost);
-                //    println!("   total_cost {}",total_cost);
-                //}
-    
-    
+                        // FUTURE: If you ever need to debug cultures that seem to stop too early...
+                        //if ["Roman I","Roman II","Roman IV"].contains(&culture.name.as_str()) {
+                        //    println!("Culture {}",culture.name);
+                        //    println!("   priority {}",priority);
+                        //    println!("   culture biome {}",culture_biome);
+                        //    println!("   neighbor biome {}",neighbor_biome.name);
+                        //    println!("   biome_cost {}",biome_cost);
+                        //    println!("   height_cost {}",height_cost);
+                        //    println!("   river_cost {}",river_cost);
+                        //    println!("   type_cost {}",type_cost);
+                        //    println!("   total_cost {}",total_cost);
+                        //}
+        
+        
+                    }
+
+                }
+                Neighbor::OffMap(_) => {
+                    // the neighbor is off the map. While it's possible the culture might extend, I can't map it. I'll just assume that
+                    // it's a free-for-all out there beyond.
+                }
             }
 
 

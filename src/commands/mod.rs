@@ -395,7 +395,6 @@ pub struct LakeBufferScaleArg {
 macro_rules! overwrite_arg {
     ($layer: ident) => {
         paste!{
-            // TODO: Check documentation for this
             #[derive(Args)]
             pub struct [<Overwrite $layer:camel Arg>] {
                 #[arg(long)]

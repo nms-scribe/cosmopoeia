@@ -11,6 +11,8 @@ use crate::utils::Point;
 use crate::errors::CommandError;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
+use crate::utils::Edge;
+use crate::geometry::GDALGeometryWrapper;
 
 
 pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
@@ -41,44 +43,71 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
         })
     }
 
-    pub(crate) fn sort_clockwise(center: &Point, points: &mut [Point], extent: &Extent, needs_a_trim: &mut bool)  {
-        // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
-        // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
-        // when angle is equal, the point closer to the center will be lesser.
-
-        points.sort_by(|a: &Point, b: &Point| -> Ordering
-        {
-            if !*needs_a_trim {
-                *needs_a_trim = (!extent.contains(a)) || (!extent.contains(b))
-            }
-            Point::order_clockwise(a, b, center)
-
-        });
-    
-
-    }
-
     pub(crate) fn create_voronoi(site: &Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Polygon) -> Result<Option<NewTileSite>,CommandError> {
         if (voronoi.vertices.len() >= 3) && extent.contains(site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
             // to clip the edges.
             let mut vertices = voronoi.vertices;
-            // sort the vertices clockwise to make sure it's a real polygon.
-            let mut needs_a_trim = false;
-            Self::sort_clockwise(site,&mut vertices,extent,&mut needs_a_trim);
+
+            // figure out if it lay off the edge of the map:
+            let mut edge: Option<Edge> = None;
+            for point in &vertices {
+                if let Some(point_edge) = extent.is_off_edge(&point) {
+                    if let Some(previous_edge) = edge {
+                        edge = Some(point_edge.combine_with(previous_edge)?);
+                    } else {
+                        edge = Some(point_edge)
+                    }
+                } // else keep previous edge
+
+            }
+
+            // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
+            // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
+            // when angle is equal, the point closer to the center will be lesser.
+            vertices.sort_by(|a: &Point, b: &Point| -> Ordering
+            {
+                Point::order_clockwise(a, b, site)
+            });
+
             // push a copy of the first vertex onto the end.
             vertices.push(vertices[0].clone());
             let ring = LinearRing::from_vertices(vertices.iter().map(Point::to_tuple))?;
             let polygon = Polygon::from_rings([ring])?;
-            let polygon = if needs_a_trim {
+            let polygon = if edge.is_some() {
                 // intersection code is not trivial, just let someone else do it.
                 polygon.intersection(extent_geo)?.try_into()?
             } else {
                 polygon
             };
+
+            // there were some false positives for the diagonal edges, these need to be fixed, and it's best done now.
+            // This will usually only apply to eight or ten, so it's a small task.
+            let edge = if let Some(corner) = &edge {
+                match corner {
+                    Edge::Northeast |
+                    Edge::Southeast |
+                    Edge::Southwest |
+                    Edge::Northwest => {
+                        let bounds = polygon.get_envelope();
+                        let edge = extent.is_extent_on_edge(&bounds)?;
+                        edge
+                    },
+                    Edge::North |
+                    Edge::East |
+                    Edge::South |
+                    Edge::West => edge
+                    
+                }
+
+            } else {
+                edge
+            };
+
             Ok(Some(NewTileSite {
                 geometry: polygon,
+                edge,
                 site: site.clone()
             }))
         } else {

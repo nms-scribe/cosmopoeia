@@ -28,6 +28,7 @@ use crate::world_map::EntityLookup;
 use crate::commands::OverwriteTownsArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::TownCountsArg;
+use crate::world_map::Neighbor;
 
 pub(crate) struct ScoredTileForTowns {
     pub(crate) tile: TileForTowns,
@@ -276,6 +277,7 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
     }
 
     let mut tile_layer = target.edit_tile_layer()?;
+    let extent = tile_layer.get_extent()?;
 
     let tile_map = tile_layer.read_features().into_entities_index::<_,TileForTownPopulation>(progress)?;
 
@@ -294,34 +296,46 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
         let tile = tile_map.try_get(&(town.tile_id))?;
 
         // figure out if it's a port
-        let port_location = if let Some(closest_water) = tile.harbor_tile_id {
-            let harbor = tile_map.try_get(&(closest_water))?;
+        let port_location = if let Some(closest_water) = &tile.harbor_tile_id {
+            match closest_water {
+                neighbor @ Neighbor::Tile(closest_water) |
+                neighbor @ Neighbor::CrossMap(closest_water, _) => {
+                    let harbor = tile_map.try_get(&(closest_water))?;
 
-            // add it to the map of towns by feature for removing port status later.
-            match coastal_towns.get_mut(&harbor.grouping_id) {
-                None => _ = coastal_towns.insert(harbor.grouping_id, vec![town.fid]),
-                Some(entry) => entry.push(town.fid),
+                    // add it to the map of towns by feature for removing port status later.
+                    match coastal_towns.get_mut(&harbor.grouping_id) {
+                        None => _ = coastal_towns.insert(harbor.grouping_id, vec![town.fid]),
+                        Some(entry) => entry.push(town.fid),
+                    }
+        
+                    // no ports if the water is frozen
+                    if harbor.temperature > 0.0 {
+                        let on_large_water = if let Some(lake_id) = harbor.lake_id {
+                            // don't make it a port if the lake is only 1 tile big
+                            let lake = lake_map.try_get(&(lake_id))?;
+                            lake.size > 1
+                        } else {
+                            harbor.grouping.is_ocean()
+                        };
+        
+                        // it's a port if it's on the large water and either it's a capital or has a good harbor (only one water tile next to it)
+                        if on_large_water && (town.is_capital || matches!(tile.water_count,Some(1))) {
+                            match neighbor {
+                                Neighbor::Tile(_) => Some(tile.find_middle_point_between(harbor)?),
+                                Neighbor::CrossMap(_, edge) => Some(tile.find_middle_point_on_edge(edge,&extent)?),
+                                Neighbor::OffMap(_) => unreachable!("`neighbor` was only matched with Tile and CrossMap."),
+                            }
+                            
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }                    
+                },
+                Neighbor::OffMap(_) => unreachable!("Why would there be an offmap harbor?"),
             }
 
-            // no ports if the water is frozen
-            if harbor.temperature > 0.0 {
-                let on_large_water = if let Some(lake_id) = harbor.lake_id {
-                    // don't make it a port if the lake is only 1 tile big
-                    let lake = lake_map.try_get(&(lake_id))?;
-                    lake.size > 1
-                } else {
-                    harbor.grouping.is_ocean()
-                };
-
-                // it's a port if it's on the large water and either it's a capital or has a good harbor (only one water tile next to it)
-                if on_large_water && (town.is_capital || matches!(tile.water_count,Some(1))) {
-                    Some(tile.find_middle_point_between(harbor)?)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
 
         } else {
             None

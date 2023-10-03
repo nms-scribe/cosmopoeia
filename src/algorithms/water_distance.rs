@@ -10,6 +10,8 @@ use crate::progress::WatchablePriorityQueue;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::TileForWaterDistance;
 use crate::errors::CommandError;
+use crate::world_map::NeighborAndDirection;
+use crate::world_map::Neighbor;
 
 pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -37,26 +39,37 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let tile = tile_map.try_get(&fid)?;
         let is_land = !tile.grouping.is_water();
 
-        for (neighbor_fid,_) in &tile.neighbors {
-            let neighbor = tile_map.try_get(neighbor_fid)?;
-            if is_land && (neighbor.grouping.is_water()) {
+        for NeighborAndDirection(neighbor_fid,_) in &tile.neighbors {
+            match neighbor_fid {
+                neighbor_tile @ Neighbor::Tile(neighbor_fid) | neighbor_tile @ Neighbor::CrossMap(neighbor_fid,_) => {
+                    let neighbor = tile_map.try_get(neighbor_fid)?;
+                    if is_land && (neighbor.grouping.is_water()) {
+    
+                        on_shore = true;
+                        let neighbor_water_distance = match neighbor_tile {
+                            Neighbor::Tile(_) => tile.site.distance(&neighbor.site),
+                            Neighbor::CrossMap(_, _) => tile.site.distance(&neighbor.site.across_antimeridian(&tile.site)),
+                            Neighbor::OffMap(_) => unreachable!("neighbor_tile should only be set if Tile or CrossMap"),
+                        };
 
-                on_shore = true;
-                let neighbor_water_distance = tile.site.distance(&neighbor.site);
-                if let Some(old_water_distance) = water_distance {
-                    if neighbor_water_distance < old_water_distance {
-                        water_distance = Some(neighbor_water_distance);
-                        closest_water = Some(*neighbor_fid);
+                        if let Some(old_water_distance) = water_distance {
+                            if neighbor_water_distance < old_water_distance {
+                                water_distance = Some(neighbor_water_distance);
+                                closest_water = Some(neighbor_tile.clone());
+                            }
+                        } else {
+                            water_distance = Some(neighbor_water_distance);
+                            closest_water = Some(neighbor_tile.clone());
+                        }
+                        *water_count.get_or_insert(0) += 1;
+                    } else if !is_land && !neighbor.grouping.is_water() {
+    
+                        on_shore = true;
                     }
-                } else {
-                    water_distance = Some(neighbor_water_distance);
-                    closest_water = Some(*neighbor_fid);
                 }
-                *water_count.get_or_insert(0) += 1;
-            } else if !is_land && !neighbor.grouping.is_water() {
+                Neighbor::OffMap(_) => (),
+            } // else ignore off the map, it's as if there were no neighbors
 
-                on_shore = true;
-            }
         }
 
         let edit_tile = tile_map.try_get_mut(&fid)?;
@@ -82,20 +95,25 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     while let Some((fid,priority)) = land_queue.pop() {
 
         let tile = tile_map.try_get(&fid)?;
-        for (neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
 
-            let cost = priority.0 + 1;
+                    let cost = priority.0 + 1;
 
-            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(neighbor_id) {
-                &cost < neighbor_cost
-            } else {
-                true
-            };
+                    let replace_distance = if let Some(neighbor_cost) = shore_distances.get(neighbor_id) {
+                        &cost < neighbor_cost
+                    } else {
+                        true
+                    };
 
-            if replace_distance {
-                _ = shore_distances.insert(*neighbor_id,cost);
-                land_queue.push(*neighbor_id, Reverse(cost));
-            }
+                    if replace_distance {
+                        _ = shore_distances.insert(*neighbor_id,cost);
+                        land_queue.push(*neighbor_id, Reverse(cost));
+                    }
+                }
+                Neighbor::OffMap(_) => (),
+            } // else ignore off-the-map as if there were no tile
 
         }
 
@@ -106,20 +124,25 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     while let Some((fid,priority)) = water_queue.pop() {
 
         let tile = tile_map.try_get(&fid)?;
-        for (neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
-            let cost = priority.0 + 1;
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                    let cost = priority.0 + 1;
 
-            let replace_distance = if let Some(neighbor_cost) = shore_distances.get(neighbor_id) {
-                &cost < neighbor_cost
-            } else {
-                true
-            };
+                    let replace_distance = if let Some(neighbor_cost) = shore_distances.get(neighbor_id) {
+                        &cost < neighbor_cost
+                    } else {
+                        true
+                    };
 
-            if replace_distance {
-                _ = shore_distances.insert(*neighbor_id,-cost);
-                water_queue.push(*neighbor_id, Reverse(cost));
-            }
+                    if replace_distance {
+                        _ = shore_distances.insert(*neighbor_id,-cost);
+                        water_queue.push(*neighbor_id, Reverse(cost));
+                    }
+                }
+                Neighbor::OffMap(_) => (),
+            } // else ignore off-the-map as if there were no tile
 
         }
 
@@ -130,7 +153,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut feature = tiles.try_feature_by_id(fid)?;
         let shore_distance = shore_distances.remove(&fid).expect("Why wouldn't this value have been generated for the tile?");
         feature.set_shore_distance(shore_distance)?;
-        feature.set_harbor_tile_id(tile.closest_water_tile_id)?;
+        feature.set_harbor_tile_id(&tile.closest_water_tile_id)?;
         feature.set_water_count(tile.water_count)?;
         tiles.update_feature(feature)?;
 

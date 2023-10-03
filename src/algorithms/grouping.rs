@@ -6,6 +6,8 @@ use crate::world_map::WorldMapTransaction;
 use crate::world_map::TileForGroupingCalc;
 use crate::world_map::Grouping;
 use crate::errors::CommandError;
+use crate::world_map::NeighborAndDirection;
+use crate::world_map::Neighbor;
 
 pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -38,17 +40,23 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
             _ = ocean.insert(fid);
 
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
-            while let Some((neighbor_fid,_)) = neighbors.pop() {
-                if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
-                    if neighbor.grouping.is_ocean() {
-                        // it's part of the same group
-                        _ = ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
-                        neighbors.extend(neighbor.neighbors.iter());
-                        _ = table.try_remove(&neighbor_fid)?;
-                        group.push(neighbor_fid);
-                    }
+            while let Some(NeighborAndDirection(neighbor_fid,_)) = neighbors.pop() {
+                match neighbor_fid {
+                    Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
+                        if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
+                            if neighbor.grouping.is_ocean() {
+                                // it's part of the same group
+                                _ = ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
+                                neighbors.extend(neighbor.neighbors.iter().cloned());
+                                _ = table.try_remove(&neighbor_fid)?;
+                                group.push(neighbor_fid);
+                            }
+        
+                        } // else it's been processed already, either in this group or in another group
     
-                } // else it's been processed already, either in this group or in another group
+                    }
+                    Neighbor::OffMap(_) => (),
+                } // else it's off the map, I'm not interested in it.
     
             }
 
@@ -59,22 +67,27 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
             let is_lake = tile.lake_id;
     
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
-            while let Some((neighbor_fid,_)) = neighbors.pop() {
-                if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
-                    if neighbor.grouping.is_ocean() {
-                        // it's not part of the group, but we now know this body is next to the ocean
-                        found_ocean_neighbor = true
-                    } else if is_lake == neighbor.lake_id {
-                        // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
-                        neighbors.extend(neighbor.neighbors.iter());
-                        _ = table.try_remove(&neighbor_fid)?;
-                        group.push(neighbor_fid);
+            while let Some(NeighborAndDirection(neighbor_fid,_)) = neighbors.pop() {
+                match neighbor_fid {
+                    Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_)=> {
+                        if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
+                            if neighbor.grouping.is_ocean() {
+                                // it's not part of the group, but we now know this body is next to the ocean
+                                found_ocean_neighbor = true
+                            } else if is_lake == neighbor.lake_id {
+                                // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
+                                neighbors.extend(neighbor.neighbors.iter().cloned());
+                                _ = table.try_remove(&neighbor_fid)?;
+                                group.push(neighbor_fid);
+                            }
+        
+                        } else if ocean.contains(&neighbor_fid) {
+                            // the reason it's not found is because it was already processed as an ocean, so, we know this body is next to the ocean.
+                            found_ocean_neighbor = true;
+                        } // else it's been processed already, either in this group or in another group
                     }
-    
-                } else if ocean.contains(&neighbor_fid) {
-                    // the reason it's not found is because it was already processed as an ocean, so, we know this body is next to the ocean.
-                    found_ocean_neighbor = true;
-                } // else it's been processed already, either in this group or in another group
+                    Neighbor::OffMap(_) => (),
+                } // else it's off the map and I'm not interested.
     
             }
 

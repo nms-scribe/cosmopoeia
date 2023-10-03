@@ -7,6 +7,7 @@ use ordered_float::FloatIsNan;
 use gdal::vector::geometry_type_to_name;
 
 pub(crate) use clap::error::Error as ArgumentError;
+use crate::utils::Edge;
 
 #[derive(Debug)]
 pub enum CommandError {
@@ -65,7 +66,12 @@ pub enum CommandError {
     CantConvertMultiPolygonToPolygon,
     EmptyLinearRing,
     UnclosedLinearRing,
-    InvalidValueForColor(String),     
+    InvalidValueForColor(String),
+    InvalidTileEdge(Edge,Edge),
+    InvalidValueForNeighbor(String),
+    InvalidValueForNeighborList(String),
+    InvalidValueForEdge(String),
+    CantFindMiddlePointOnEdge(u64, Edge, usize),     
 }
 
 impl Error for CommandError {
@@ -100,8 +106,10 @@ impl Display for CommandError {
             Self::MissingGeometry(a) => write!(f,"While loading data, a record had no geometry in '{a}'"),
             Self::MissingFeature(layer, id) => write!(f,"Layer '{layer}' has no feature id '{id}'"),
             Self::InvalidValueForIdList(a) => write!(f,"Invalid value ('{a}') found for id_list field."),
-            Self::InvalidValueForNeighborDirections(a) => write!(f,"Invalid value ('{a}') found for neighbors field"),
+            Self::InvalidValueForNeighborList(a) => write!(f,"Invalid value ('{a}') found for neighbor_list field."),
+            Self::InvalidValueForNeighborDirections(a) => write!(f,"Invalid value ('{a}') found for tile neighbors field"),
             Self::InvalidValueForIdRef(a) => write!(f,"Invalid value ('{a}') an id reference field"),
+            Self::InvalidValueForNeighbor(a) => write!(f,"Invalid value ('{a}') a tile neighbor field"),
             Self::InvalidValueForSegmentFrom(a) => write!(f,"Invalid value ('{a}') found for river from_type field."),
             Self::InvalidValueForSegmentTo(a) => write!(f,"Invalid value ('{a}') found for river to_type field."),
             Self::InvalidBiomeMatrixValue(a) => write!(f,"Invalid value ('{a}') for biome matrix field."),
@@ -109,6 +117,7 @@ impl Display for CommandError {
             Self::InvalidValueForGroupingType(a) => write!(f,"Invalid value ('{a}') for grouping type field."),
             Self::InvalidValueForCultureType(a) => write!(f,"Invalid value ('{a}') for culture type field."),
             Self::InvalidValueForColor(a) => write!(f,"Invalid value ('{a}') for color field."),
+            Self::InvalidValueForEdge(a) => write!(f,"Invalid value ('{a}') for map edge field."),
             Self::MissingGlacierBiome => write!(f,"Glacier biome is not specified as criteria in biomes table."),
             Self::MissingWetlandBiome => write!(f,"Wetland biome is not specified as criteria in biomes table."),
             Self::MissingOceanBiome => write!(f,"Ocean biome is not specified as criteria in biomes table."),
@@ -128,6 +137,11 @@ impl Display for CommandError {
                 0 => write!(f,"Can't find middle point between tiles {a} and {b}. No matching points found."),
                 1 => write!(f,"Can't find middle point between tiles {a} and {b}. One matching point found."),
                 len => write!(f,"Can't find middle point between tiles {a} and {b}. {len} matching points found, need 2."),
+            },
+            Self::CantFindMiddlePointOnEdge(a, b, len) => match len {
+                0 => write!(f,"Can't find middle point between tiles {a} on edge '{b:?}'. No matching points found."),
+                1 => write!(f,"Can't find middle point between tiles {a} on edge '{b:?}'. One matching point found."),
+                len => write!(f,"Can't find middle point between tiles {a} on edge '{b:?}'. {len} matching points found, need 2."),
             },
             Self::RasterDatasetRequired => write!(f,"a raster file is required"),
             Self::UnsupportedRasterSourceBand(a) => write!(f,"raster source band type ({a}) is not supported"),
@@ -151,7 +165,8 @@ impl Display for CommandError {
             Self::LakeDissolveMadeAMultiPolygon => write!(f,"While attempting to dissolve lake tiles, a multipolygon was created instead of a polygon."),
             Self::CantConvertMultiPolygonToPolygon => write!(f,"Attempted to convert a multi-polygon with more than one polygon into a simple polygon."),
             Self::EmptyLinearRing => write!(f,"Attempted to create an empty ring for a polygon."),
-            Self::UnclosedLinearRing => write!(f,"Attempted to create an unclosed polygon ring.")
+            Self::UnclosedLinearRing => write!(f,"Attempted to create an unclosed polygon ring."),
+            Self::InvalidTileEdge(a,b) => write!(f,"A tile was calculated to be on a conflicting edges ('{a:?}' and '{b:?}') of the map. Perhaps the tile count is too small.")
         }
     }
 }

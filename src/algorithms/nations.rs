@@ -33,6 +33,8 @@ use crate::commands::SizeVarianceArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::ExpansionFactorArg;
 use super::colors::Luminosity;
+use crate::world_map::NeighborAndDirection;
+use crate::world_map::Neighbor;
 
 pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, size_variance: &SizeVarianceArg, overwrite_layer: &OverwriteNationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -131,64 +133,70 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     
         let tile = tile_map.try_get(&tile_id)?;
 
-        for (neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+
+                    if capitals.contains(neighbor_id) {
+                        continue; // don't overwrite capital cells
+                    }
+    
+                    let neighbor = tile_map.try_get(neighbor_id)?;
+    
+                    let culture_cost = if tile.culture == neighbor.culture {-9.0} else { 100.0 };
+    
+                    let population_cost = if neighbor.grouping.is_water() { 
+                        0.0
+                    } else if neighbor.habitability > 0.0 {
+                        (20.0 - neighbor.habitability).max(0.0)
+                    } else {
+                        5000.0
+                    };
+    
+                    let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
+    
+                    let biome_cost = get_biome_cost(&nation_biome,neighbor_biome,&nation.type_);
+    
+                    let height_cost = get_height_cost(neighbor, &nation.type_);
+    
+                    let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &nation.type_);
+    
+                    let shore_cost = get_shore_cost(neighbor, &nation.type_);
+    
+                    let cell_cost = OrderedFloat::from((culture_cost + population_cost + biome_cost + height_cost + river_cost + shore_cost).max(0.0) * neighbor.area) / nation.expansionism;
+    
+                    let total_cost = priority.0 + OrderedFloat::from(10.0) + cell_cost;
+    
+    
+                    if total_cost <= max_expansion_cost {
+    
+                        // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
+                        // then I can place or replace the culture with this one. This will remove cultures that were previously
+                        // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
+                        // may still be spreading, don't worry).
+                        let replace_nation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                            &total_cost < neighbor_cost
+                        } else {
+                            true
+                        };
+    
+                        if replace_nation {
+                            // place the nation even if there is no population or something.
+                            place_nations.push((*neighbor_id,nation.fid));
+                            _ = costs.insert(*neighbor_id, total_cost);
+    
+                            queue.push((*neighbor_id, nation.clone(), nation_biome.clone()), Reverse(total_cost));
+    
+                        } // else we can't expand into this tile, and this line of spreading ends here.
+                    } else {
+                        // else we can't make it into this tile, so give up.    
+    
+                    }                
+                }
+                Neighbor::OffMap(_) => (),
+            } // else it's off the map where it's a free-for-all
         
-            if capitals.contains(neighbor_id) {
-                continue; // don't overwrite capital cells
-            }
-
-            let neighbor = tile_map.try_get(neighbor_id)?;
-
-            let culture_cost = if tile.culture == neighbor.culture {-9.0} else { 100.0 };
-
-            let population_cost = if neighbor.grouping.is_water() { 
-                0.0
-            } else if neighbor.habitability > 0.0 {
-                (20.0 - neighbor.habitability).max(0.0)
-            } else {
-                5000.0
-            };
-
-            let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
-
-            let biome_cost = get_biome_cost(&nation_biome,neighbor_biome,&nation.type_);
-
-            let height_cost = get_height_cost(neighbor, &nation.type_);
-
-            let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &nation.type_);
-
-            let shore_cost = get_shore_cost(neighbor, &nation.type_);
-
-            let cell_cost = OrderedFloat::from((culture_cost + population_cost + biome_cost + height_cost + river_cost + shore_cost).max(0.0) * neighbor.area) / nation.expansionism;
-
-            let total_cost = priority.0 + OrderedFloat::from(10.0) + cell_cost;
-
-
-            if total_cost <= max_expansion_cost {
-
-                // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
-                // then I can place or replace the culture with this one. This will remove cultures that were previously
-                // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
-                // may still be spreading, don't worry).
-                let replace_nation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
-                    &total_cost < neighbor_cost
-                } else {
-                    true
-                };
-
-                if replace_nation {
-                    // place the nation even if there is no population or something.
-                    place_nations.push((*neighbor_id,nation.fid));
-                    _ = costs.insert(*neighbor_id, total_cost);
-
-                    queue.push((*neighbor_id, nation.clone(), nation_biome.clone()), Reverse(total_cost));
-
-                } // else we can't expand into this tile, and this line of spreading ends here.
-            } else {
-                // else we can't make it into this tile, so give up.    
-
-            }
-
 
         }
 
@@ -386,30 +394,37 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
         let mut adversaries = HashMap::new();
         let mut adversary_count = 0;
         let mut buddy_count = 0;
-        for (neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
-            let neighbor = tile_map.try_get(neighbor_id)?;
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                    let neighbor = tile_map.try_get(neighbor_id)?;
 
-            if let Some(town_id) = neighbor.town_id {
-                let town = town_index.try_get(&(town_id))?;
-                if town.is_capital {
-                    dont_overwrite = true; // don't overwrite near capital
-                    break;
+                    if let Some(town_id) = neighbor.town_id {
+                        let town = town_index.try_get(&(town_id))?;
+                        if town.is_capital {
+                            dont_overwrite = true; // don't overwrite near capital
+                            break;
+                        }
+                    }
+    
+                    if !neighbor.grouping.is_water() {
+                        if neighbor.nation_id == tile.nation_id {
+                            buddy_count += 1;
+                        } else {
+                            if let Some(count) = adversaries.get(&neighbor.nation_id) {
+                                _ = adversaries.insert(neighbor.nation_id, count + 1);
+                            } else {
+                                _ = adversaries.insert(neighbor.nation_id, 1);
+                            };
+                            adversary_count += 1;
+                        }
+                    }
+    
                 }
-            }
+                Neighbor::OffMap(_) => (),
+            } // else its off the map and I'm not interested
 
-            if !neighbor.grouping.is_water() {
-                if neighbor.nation_id == tile.nation_id {
-                    buddy_count += 1;
-                } else {
-                    if let Some(count) = adversaries.get(&neighbor.nation_id) {
-                        _ = adversaries.insert(neighbor.nation_id, count + 1);
-                    } else {
-                        _ = adversaries.insert(neighbor.nation_id, 1);
-                    };
-                    adversary_count += 1;
-                }
-            }
 
         }
 

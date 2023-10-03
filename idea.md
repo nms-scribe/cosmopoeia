@@ -438,16 +438,35 @@ These are things that really should be done before release, but they might take 
     * Subtract that amount of soil from the tile and add it to the lowest neighbor tile.
     * Once every tile has been iterated, go back and add that soil to the tile's elevation, (and update elevation_scaled? Unless that's done automatically by the terrain processor)
     * Input includes: amount to weather on every tile (which could be random), and possibly a number of iterations, which I don't think a random value would benefit. I might want a factor which defines how to calculate the percent based on slope, but I'm not certain right now how that's calculated anyway.
-[ ] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
-[ ] I should be able to share code for next tile between dissolve and water flow. First, perhaps water flow should be using steepness instead of elevation difference? Second, I can use closures for the values and then I don't have to have the trait implementations.
-[ ] In tiles::calculate_tile_neighbors, I can also get some additional data, which can be utilized elsewhere:
-     * figure out if a tile is on the edge of a map -- and use this in water_flow and precipitation to prevent just dumping everything on the edge.
-     * find neighbors on the other side of the map, if the extents are -180-180 longitude
-     * make all polar tiles neighbors, if they reach 90 latitude
-     * keep in mind there are two different options: the tile is on the edge of the map, but the map wraps around, or the tile is on the edge and the world continues beyond the map. We still need to know whether it's on the edge or not for some algorithms (such as dissolving/curvifying the coastline and other shapes), even if it's a wrap-around. We would also need to know whether a neighbor lay beyond the edge in some of those cases, because we don't want to dissolve across the edge of the map, or the map could render incorrectly in some projections.
-    [ ] If we have edges calculated in calculate_tile_neighbors, then water_fill should take note of that and take appropriate action so there aren't any weird lakes along the edges.
+[X] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
+[ ] Edges and Wrapping
+    [X] Handle tiles that point to edges
+    [X] Calculate edges for tiles in voronoi generation
+    [X] Go back and find the 'if let Neighbor::Tile' and turn them into matches, so we can add more neighbor types, which we will in a bit
+    [X] In tiles::calculate_tile_neighbors, add an "Edge" neighbor if the tile is on the edge of the map.
+    [X] Test with both worlds before continuing
+    [ ] Revisit tiles::calculate_tile_neighbors: Except if the extents are "full world" extents, then need to calculate neighbors across the extents:
+        [X] Such neighbors will be special "Wrapped" neighbors instead of Tile enum, which contains the 'id' and the edge.
+        [X] East-west neighbors match if their 'edge' points would be on the edge of the other.
+            [X] Neighbor directions have to be calculated over the edge of the map, not across to the other side.
+            [X] I may need to do the same with distances.
+    [X] Will have to deal with rivers that cross the map.
+    [X] figure out if a tile is on the edge of a map -- and use this in water_flow and precipitation to prevent just dumping everything on the edge.
+    [X] If we have edges calculated in calculate_tile_neighbors, then water_fill should take note of that and take appropriate action so there aren't any weird lakes along the edges.
+    [X] Need to fix calculation of TileForTownPopulation::find_middle_point_between, because these neighbors won't necessarily share vertices.
+        I can just put it on the "extent edge" of the tile if the neighbor is across map.
+    [ ] Now, work on the polar tiles.
+        [ ] I feel like the easiest way is to just not have any neighbors at all for the south and north directions. This does two things:
+            1) I don't have to do anything anywhere
+            2) It keeps features from flowing into the poles, which can make the map look weird even under an appropriate projection.
     [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
-    [ ] Coastlines, and possibly some other thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge.
+    [ ] Coastlines and the thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge. Although, I might be able to just do an intersection with the extents.
+[ ] Remove ToGeometryCollection?
+[ ] Can tile.outlet_from now become an Option<u64>?
+[ ] Play around with a simple serializer for the field data. The idea is a macro that outputs code like below, so you have to write the names of every field exactly, and the compilation will fail if you don't. This is not as good as a proc macro, but I will have control.
+    ```
+    let Foo{ field_a, field_b } = value
+    ```
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 [ ] Turn on the following clippies and figure out how to deal with them:
     #![warn(clippy::arithmetic_side_effects)]

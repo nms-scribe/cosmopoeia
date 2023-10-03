@@ -5,10 +5,13 @@ use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
 use crate::algorithms::beziers::bezierify_points;
 use crate::utils::Point as UtilsPoint;
+use crate::utils::Extent;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
     const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type;
+
+    fn get_envelope(&self) -> Extent;
 
 }
 
@@ -54,6 +57,17 @@ macro_rules! non_collection_geometry {
 
 
             const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::$geo_type;
+
+            fn get_envelope(&self) -> Extent {
+                let envelope = self.inner.envelope();
+                Extent {
+                    south: envelope.MinY,
+                    west: envelope.MinX,
+                    width: envelope.MaxX - envelope.MinX,
+                    height: envelope.MaxY - envelope.MinY
+                }
+            }
+
 
         }
         
@@ -163,6 +177,38 @@ impl IntoIterator for LineString {
             position: 0
         }
     }
+}
+
+non_collection_geometry!(MultiLineString,wkbMultiLineString);
+
+impl MultiLineString {
+
+
+    pub(crate) fn from_lines<Items: IntoIterator<Item = Result<LineString,CommandError>>>(lines: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for line in lines {
+            this.push_line(line?)?
+        }
+        Ok(this)
+    }
+
+    #[allow(dead_code)] pub(crate) fn len(&self) -> usize {
+        self.inner.geometry_count()
+    }
+
+    #[allow(dead_code)] pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[allow(dead_code)] pub(crate) fn get_line(&self, index: usize) -> Result<LineString,CommandError> {
+        let line = self.inner.get_geometry(index);
+        LineString::try_from(line.clone()) // FUTURE: Unfortunately, GeometryRef is inaccessible, which might mess with performance a little.
+    }
+
+    pub(crate) fn push_line(&mut self, line: LineString) -> Result<(),CommandError> {
+        Ok(self.inner.add_geometry(line.into())?)
+    }
+
 }
 
 non_collection_geometry!(LinearRing,wkbLinearRing);
@@ -591,6 +637,17 @@ impl GDALGeometryWrapper for Collection<VariantGeometry> {
 
     const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbGeometryCollection;
 
+    fn get_envelope(&self) -> Extent {
+        let envelope = self.inner.envelope();
+        Extent {
+            south: envelope.MinY,
+            west: envelope.MinX,
+            width: envelope.MaxX - envelope.MinX,
+            height: envelope.MaxY - envelope.MinY
+        }
+    }
+
+
 }
 
 impl TryFrom<GDALGeometry> for Collection<VariantGeometry> {
@@ -632,7 +689,6 @@ impl Collection<Point> {
         let inner = self.inner.delaunay_triangulation(tolerance)?;
         Collection::reluctantly_try_from_gdal(inner)
     }
-
 
 }
 
@@ -694,6 +750,18 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
     pub(crate) fn push_item(&mut self, geometry: ItemType) -> Result<(),CommandError> {
         Ok(self.inner.add_geometry(geometry.into())?)
     }
+
+    fn get_envelope(&self) -> Extent {
+        let envelope = self.inner.envelope();
+        Extent {
+            south: envelope.MinY,
+            west: envelope.MinX,
+            width: envelope.MaxX - envelope.MinX,
+            height: envelope.MaxY - envelope.MinY
+        }
+    }
+
+
 
 }
 
@@ -763,6 +831,13 @@ macro_rules! impl_variant_geometry {
 
             // If you've got a Variant type, don't use this INTERNAL_TYPE implementation, it probably won't do what you think.
             const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbUnknown;
+
+            fn get_envelope(&self) -> Extent {
+                match self {
+                    $( $enum::$variant(a) => a.get_envelope(), )*
+                }
+            }
+
 
         }
 
@@ -937,6 +1012,12 @@ pub(crate) struct NoGeometry;
 impl GDALGeometryWrapper for NoGeometry {
     // This marks it for use in generic objects so they know not to manipulate the geometry on this one.
     const INTERNAL_TYPE:gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbNone;
+
+    fn get_envelope(&self) -> Extent {
+        unreachable!("This program should never be getting extent for 'None' geometry.")
+    }
+
+    
 }
 
 impl TryFrom<GDALGeometry>for NoGeometry {

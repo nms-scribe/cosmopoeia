@@ -10,6 +10,7 @@ use crate::world_map::TileForPopulationNeighbor;
 use crate::world_map::LakeType;
 use crate::world_map::LakeForPopulation;
 use crate::commands::RiverThresholdArg;
+use crate::world_map::Neighbor;
 
 pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: &RiverThresholdArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -63,24 +64,31 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                         suitability += 15.0 // estuaries are liked
                     }
                     if let Some(water_cell) = tile.harbor_tile_id {
-                        let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(water_cell)?;
-                        if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id)).transpose()?.map(|l| &l.type_) {
-                            match lake_type {
-                                LakeType::Fresh => suitability += 30.0,
-                                LakeType::Salt => suitability += 10.0,
-                                LakeType::Frozen => suitability += 1.0,
-                                LakeType::Pluvial => suitability -= 2.0,
-                                LakeType::Dry => suitability -= 5.0,
-                                LakeType::Marsh => suitability += 5.0,
-                            }
-                        } else if water_cell.grouping.is_ocean() {
-                            suitability += 5.0;
-                            if tile.water_count == Some(1) { // let pattern unecessary
-                                // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which
-                                // probably makes a good harbor.
-                                suitability += 20.0
-                            }
-                        }
+                        match water_cell {
+                            Neighbor::Tile(water_cell) | Neighbor::CrossMap(water_cell, _) => {
+                                let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(water_cell)?;
+                                if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id)).transpose()?.map(|l| &l.type_) {
+                                    match lake_type {
+                                        LakeType::Fresh => suitability += 30.0,
+                                        LakeType::Salt => suitability += 10.0,
+                                        LakeType::Frozen => suitability += 1.0,
+                                        LakeType::Pluvial => suitability -= 2.0,
+                                        LakeType::Dry => suitability -= 5.0,
+                                        LakeType::Marsh => suitability += 5.0,
+                                    }
+                                } else if water_cell.grouping.is_ocean() {
+                                    suitability += 5.0;
+                                    if tile.water_count == Some(1) { // let pattern unecessary
+                                        // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which
+                                        // probably makes a good harbor.
+                                        suitability += 20.0
+                                    }
+                                }
+        
+                            },
+                            Neighbor::OffMap(_) => unreachable!("Why would there be a harbor_tile_id with an OffMap neighbor?"), // FUTURE: I'm not sure if this should ever happen
+                        };
+                            
 
                     }
                 }

@@ -11,7 +11,7 @@ Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage f
 #![warn(unused_lifetimes)] // As did this
 #![warn(trivial_numeric_casts)] // This caught some 'as' statements which were leftover from a previous refactor
 #![warn(unreachable_pub)] // This caught some 'pub' declarations that weren't necessary
-#![warn(unused_crate_dependencies)] // This hasn't caught anything yet, but I do want to be told if I need to get rid of a crate.
+#![warn(unused_crate_dependencies)] // This is useful for those times when you bring in a crate, then get rid of it when you realize it's the wrong solution.
 #![warn(meta_variable_misuse)] // This caught a macro kleene-operator difference between definition and implementation, it might catch some other things
 #![warn(unused_macro_rules)] // This caught some macro branches that weren't followed after a refactor
 #![warn(unused_qualifications)] // This caught a few bits of code that looked bad

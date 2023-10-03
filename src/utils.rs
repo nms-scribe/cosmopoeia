@@ -2,6 +2,8 @@ use core::hash::Hash;
 use core::str::FromStr;
 use core::fmt::Display;
 use core::cmp::Ordering; 
+use core::ops::Sub;
+use core::ops::Add;
 
 use ordered_float::NotNan;
 use ordered_float::FloatIsNan;
@@ -12,6 +14,7 @@ use rand_distr::uniform::SampleUniform;
 use serde::Deserialize;
 use serde::Serialize;
 use adaptive_bezier::Vector2;
+use angular_units::Deg;
 
 
 use crate::errors::CommandError;
@@ -162,6 +165,59 @@ impl Extent {
 
     }
 
+    pub(crate) fn is_extent_on_edge(&self, extent: &Self) -> Result<Option<Edge>,CommandError> {
+        let north = extent.north();
+        let east = extent.east();
+        let mut edge: Option<Edge> = None;
+        for (x,y) in [(extent.west,extent.south),(extent.west,north),(east,north),(east,extent.south)] {
+            if let Some(point_edge) = self.is_tuple_on_edge(x,y) {
+                if let Some(previous_edge) = edge {
+                    edge = Some(point_edge.combine_with(previous_edge)?);
+                } else {
+                    edge = Some(point_edge)
+                }
+            } // else keep previous edge
+        }
+        Ok(edge)
+    }
+
+    pub(crate) fn is_tuple_on_edge(&self, x: f64, y: f64) -> Option<Edge> {
+        let x_order = if x <= self.west {
+            Ordering::Less
+        } else if x >= (self.east()) {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        };
+
+        let y_order = if y <= self.south {
+            Ordering::Less
+        } else if y >= (self.north()) {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        };
+
+        match (x_order,y_order) {
+            (Ordering::Less, Ordering::Less) => Some(Edge::Southwest),
+            (Ordering::Less, Ordering::Equal) => Some(Edge::West),
+            (Ordering::Less, Ordering::Greater) => Some(Edge::Northwest),
+            (Ordering::Equal, Ordering::Less) => Some(Edge::South),
+            (Ordering::Equal, Ordering::Equal) => None,
+            (Ordering::Equal, Ordering::Greater) => Some(Edge::North),
+            (Ordering::Greater, Ordering::Less) => Some(Edge::Southeast),
+            (Ordering::Greater, Ordering::Equal) => Some(Edge::East),
+            (Ordering::Greater, Ordering::Greater) => Some(Edge::Northeast),
+        }
+    }
+
+    pub(crate) fn is_off_edge(&self, point: &Point) -> Option<Edge> {
+        let (x,y) = point.to_tuple();
+        self.is_tuple_on_edge(x, y)
+
+        
+    }
+
     pub(crate) fn create_polygon(&self) -> Result<Polygon,CommandError> {
         let vertices = vec![
             (self.west,self.south),
@@ -210,6 +266,18 @@ impl Extent {
         self.south + self.height
     }
 
+    pub(crate) fn wraps_latitudinally(&self) -> bool {
+        self.width == 360.0
+    }
+
+    pub(crate) fn reaches_south_pole(&self) -> bool {
+        self.south == -90.0
+    }
+
+    pub(crate) fn reaches_north_pole(&self) -> bool {
+        self.north() == 90.0
+    }
+
 }
 
 
@@ -231,6 +299,119 @@ impl<Iter: Iterator<Item=Result<GeoPoint,CommandError>>> ToGeometryCollection<Ge
 
 
 }
+
+#[derive(Serialize,Deserialize,Clone,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
+pub enum Edge {
+    North,
+    Northeast,
+    East,
+    Southeast,
+    South,
+    Southwest,
+    West,
+    Northwest
+}
+
+impl Edge {
+    
+    pub(crate) fn combine_with(&self, edge: Self) -> Result<Self,CommandError> {
+        match (&edge,self) {
+            (Self::North, Self::Northeast) |
+            (Self::Northeast, Self::North) |
+            (Self::East, Self::North) |
+            (Self::East, Self::Northeast) |
+            (Self::Northeast, Self::East) |
+            (Self::North, Self::East) => Ok(Self::Northeast),
+            (Self::North, Self::West) |
+            (Self::West, Self::Northwest) |
+            (Self::Northwest, Self::North) |
+            (Self::Northwest, Self::West) |
+            (Self::West, Self::North) |
+            (Self::North, Self::Northwest) => Ok(Self::Northwest),
+            (Self::East, Self::South) |
+            (Self::Southeast, Self::East) |
+            (Self::Southeast, Self::South) |
+            (Self::South, Self::East) |
+            (Self::South, Self::Southeast) |
+            (Self::East, Self::Southeast) => Ok(Self::Southeast),
+            (Self::South, Self::West) |
+            (Self::Southwest, Self::South) |
+            (Self::Southwest, Self::West) |
+            (Self::West, Self::Southwest) |
+            (Self::West, Self::South) |
+            (Self::South, Self::Southwest) => Ok(Self::Southwest),
+            (Self::North, Self::North) |
+            (Self::Northeast, Self::Northeast) |
+            (Self::East, Self::East) |
+            (Self::Southeast, Self::Southeast) |
+            (Self::South, Self::South) |
+            (Self::Southwest, Self::Southwest) |
+            (Self::West, Self::West) |
+            (Self::Northwest, Self::Northwest) => Ok(edge),
+            (Self::North, Self::Southeast) |
+            (Self::North, Self::South) |
+            (Self::North, Self::Southwest) |
+            (Self::Northeast, Self::Southeast) |
+            (Self::Northeast, Self::South) |
+            (Self::Northeast, Self::Southwest) |
+            (Self::Northeast, Self::West) |
+            (Self::Northeast, Self::Northwest) |
+            (Self::East, Self::Southwest) |
+            (Self::East, Self::West) |
+            (Self::East, Self::Northwest) |
+            (Self::Southeast, Self::North) |
+            (Self::Southeast, Self::Northeast) |
+            (Self::Southeast, Self::Southwest) |
+            (Self::Southeast, Self::West) |
+            (Self::Southeast, Self::Northwest) |
+            (Self::South, Self::North) |
+            (Self::South, Self::Northeast) |
+            (Self::South, Self::Northwest) |
+            (Self::Southwest, Self::North) |
+            (Self::Southwest, Self::Northeast) |
+            (Self::Southwest, Self::East) |
+            (Self::Southwest, Self::Southeast) |
+            (Self::Southwest, Self::Northwest) |
+            (Self::West, Self::Northeast) |
+            (Self::West, Self::East) |
+            (Self::West, Self::Southeast) |
+            (Self::Northwest, Self::Northeast) |
+            (Self::Northwest, Self::East) |
+            (Self::Northwest, Self::Southeast) |
+            (Self::Northwest, Self::South) |
+            (Self::Northwest, Self::Southwest) => Err(CommandError::InvalidTileEdge(edge,self.clone()))
+        }
+
+    }
+
+    pub(crate) fn direction(&self) -> Deg<f64> {
+        // needs to be clockwise, from the north, with a value from 0..360
+        match self {
+            Edge::North => Deg(0.0),
+            Edge::Northeast => Deg(45.0),
+            Edge::East => Deg(90.0),
+            Edge::Southeast => Deg(135.0),
+            Edge::South => Deg(180.0),
+            Edge::Southwest => Deg(225.0),
+            Edge::West => Deg(270.0),
+            Edge::Northwest => Deg(315.0),
+        }
+    }
+
+    pub(crate) fn contains(&self, p: &(f64, f64), extent: &Extent) -> bool {
+        match self {
+            Edge::North => p.1 == extent.north(),
+            Edge::Northeast => p.1 == extent.north() || p.0 == extent.east(),
+            Edge::East => p.0 == extent.east(),
+            Edge::Southeast => p.1 == extent.south || p.0 == extent.east(),
+            Edge::South => p.1 == extent.south,
+            Edge::Southwest => p.1 == extent.south || p.0 == extent.west,
+            Edge::West => p.0 == extent.west,
+            Edge::Northwest => p.1 == extent.north() || p.0 == extent.west,
+        }
+    }
+}
+
 
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
@@ -411,6 +592,106 @@ impl Point {
         // The easiest way I can think of is basically to base it off of whether the integral part of a value is even.
         self.x.rem_euclid(2.0) < 1.0
     }
+
+    pub(crate) fn to_edge(&self, extents: &Extent, edge: &Edge) -> Result<Self,CommandError> {
+        let (x,y) = match edge {
+            Edge::North => (self.x,NotNan::try_from(extents.north())?),
+            Edge::Northeast => (NotNan::try_from(extents.east())?,NotNan::try_from(extents.north())?),
+            Edge::East => (NotNan::try_from(extents.east())?,self.y),
+            Edge::Southeast => (NotNan::try_from(extents.east())?,NotNan::try_from(extents.south)?),
+            Edge::South => (self.x,NotNan::try_from(extents.south)?),
+            Edge::Southwest => (NotNan::try_from(extents.west)?,NotNan::try_from(extents.south)?),
+            Edge::West => (NotNan::try_from(extents.west)?,self.y),
+            Edge::Northwest => (NotNan::try_from(extents.west)?,NotNan::try_from(extents.north())?),
+        };
+        Ok(Self {
+            x,
+            y
+        })
+    }
+
+    pub(crate) fn longitude_across_antimeridian<Float>(source_x: Float, relative_x: Float) -> Float 
+    where Float: PartialOrd + Sub<f64, Output = Float> + Add<f64, Output = Float> {
+        if source_x > relative_x {
+            // it's across to the west, on the far east longitudes, so shift it around to the west
+            source_x - 360.0
+        } else {
+            // otherwise it's across to the east, so shift it around to the east
+            source_x + 360.0
+        }
+    }
+
+    pub(crate) fn across_antimeridian(&self, relative_to: &Self) -> Self {
+        Self {
+            x: Self::longitude_across_antimeridian(self.x, relative_to.x),
+            y: self.y
+        }
+    }
+
+    pub(crate) fn clip_point_vec_across_antimeridian(line: Vec<Self>, extent: &Extent) -> Result<Vec<Vec<Self>>,CommandError> {
+
+        #[derive(PartialEq)]
+        enum Location {
+            ToWest,
+            InExtent,
+            ToEast,
+        }
+
+        let west = NotNan::new(extent.west)?;
+        let east = NotNan::new(extent.east())?;
+
+        let fix_point = |point: &Self, location: &Location| {
+            match location {
+                Location::ToWest => Self {
+                    x: point.x + 360.0,
+                    y: point.y
+                },
+                Location::InExtent => point.clone(),
+                Location::ToEast => Self {
+                    x: point.x - 360.0,
+                    y: point.y
+                },
+            }
+        };
+
+
+        let get_location = |point: &Self| {
+            if point.x < west {
+                Location::ToWest
+            } else if point.x > east {
+                Location::ToEast
+            } else {
+                Location::InExtent
+            }
+
+        };
+
+
+        let mut result = Vec::new();
+        let mut segment = Vec::new();
+
+        let mut line = line.into_iter();
+        if let Some(mut previous) = line.next() {
+            let mut previous_location = get_location(&previous);
+            segment.push(fix_point(&previous,&previous_location));
+            for next in line {
+                let next_location = get_location(&next);
+                if next_location != previous_location {
+                    let mid_point = previous.middle_point_between(&next);
+                    segment.push(fix_point(&mid_point,&previous_location));
+                    result.push(segment);
+                    segment = Vec::new();
+                    segment.push(fix_point(&mid_point,&next_location));
+                }
+                segment.push(fix_point(&next,&next_location));
+                previous = next;
+                previous_location = next_location;
+            }
+        }
+        result.push(segment);
+
+        Ok(result)
+    }
     
 }
 
@@ -448,7 +729,7 @@ impl TryFrom<(f64,f64)> for Point {
     }
 }
 
-impl core::ops::Sub for &Point {
+impl Sub for &Point {
     type Output = Point;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -459,7 +740,7 @@ impl core::ops::Sub for &Point {
     }
 }
 
-impl core::ops::Add for &Point {
+impl Add for &Point {
     type Output = Point;
 
     fn add(self, rhs: Self) -> Self::Output {

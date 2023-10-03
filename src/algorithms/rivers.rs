@@ -8,7 +8,6 @@ use crate::world_map::RiverSegmentFrom;
 use crate::world_map::NewRiver;
 use crate::algorithms::beziers::bezierify_points_with_phantoms;
 use crate::algorithms::beziers::find_curve_making_point;
-use crate::algorithms::tiles::find_tile_site_point;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -16,10 +15,15 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
 use crate::commands::OverwriteRiversArg;
 use crate::commands::BezierScaleArg;
+use crate::world_map::Neighbor;
+use crate::world_map::MapLayer;
+use crate::world_map::TileSchema;
+use crate::world_map::TileFeature;
+use crate::utils::Point;
 
 pub(crate) struct RiverSegment {
     pub(crate) from: u64,
-    pub(crate) to: u64,
+    pub(crate) to: Neighbor,
     pub(crate) to_flow: f64,
     pub(crate) from_lake: bool,
 }
@@ -43,6 +47,7 @@ fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) 
 pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, overwrite_layer: &OverwriteRiversArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.edit_tile_layer()?;
+    let extents = tiles.get_extent()?;
 
     let mut segments = Vec::new();
 
@@ -60,31 +65,104 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
             continue;
         }
 
-        if let (Some(from_tile),Some(to_tile)) = (tiles.feature_by_id(segment.from),tiles.feature_by_id(segment.to)) {
-            let from_lake = from_tile.lake_id()?;
-            let to_lake = to_tile.lake_id()?;
-            if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
-                let start_point = from_tile.site()?;
-                let end_point = to_tile.site()?;
+        let from_tile_id = segment.from;
+        let to_flow = segment.to_flow;
+        let from_tile = tiles.try_feature_by_id(from_tile_id)?;
+        let start_point = from_tile.site()?;
+
+
+    
+        let new_river_data = match &segment.to {
+            end_tile @ Neighbor::Tile(segment_to) | end_tile @ Neighbor::CrossMap(segment_to,_)=> {
+                let across_map = match end_tile {
+                    Neighbor::Tile(_) => false,
+                    Neighbor::CrossMap(_, _) => true,
+                    Neighbor::OffMap(_) => unreachable!("tile matched Tile and CrossMap only"),
+                };
+
+                let to_tile = tiles.try_feature_by_id(*segment_to)?;
+                let from_lake = from_tile.lake_id()?;
+                let to_lake = to_tile.lake_id()?;
+                let to_tile_id = Neighbor::Tile(*segment_to);
+
+                if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
+
+                    let end_point = if across_map {
+                        // if we're going across the map, then the end_point needs to be converted to antimeridian
+                        to_tile.site()?.across_antimeridian(&start_point)
+                    } else {
+                        to_tile.site()?
+                    };
+
+                    // need previous and next points to give the thingy a curve.
+                    let previous_point = generate_previous_segment_point(previous_tile, &tiles, &end_point, &start_point)?;
+
+                    let next_point = {
+                        if let Some(next_tile) = next_tile {
+                            match next_tile {
+                                Neighbor::Tile(next_tile) => if across_map {
+                                    // the next one is also across the antimeridian, so move it over here for line drawing purposes
+                                    tiles.try_feature_by_id(next_tile)?.site()?.across_antimeridian(&start_point)
+                                } else {
+                                    // next tile is just here...
+                                    tiles.try_feature_by_id(next_tile)?.site()?
+                                },
+                                Neighbor::CrossMap(next_tile,_) => if across_map {
+                                    // for this one, we've crossed the map twice now, so keep this one the same.
+                                    tiles.try_feature_by_id(next_tile)?.site()?
+                                } else {
+                                    // Need to shift the point back across the map
+                                    let neighbor_site = tiles.try_feature_by_id(next_tile)?.site()?;
+                                    neighbor_site.across_antimeridian(&end_point)
+                                },
+                                Neighbor::OffMap(edge) => if across_map {
+                                    // This is going to be to the wrong edge, so shift it back across the map
+                                    end_point.to_edge(&extents,&edge)?.across_antimeridian(&start_point)
+                                } else {
+                                    end_point.to_edge(&extents,&edge)?
+                                },
+                            }
+                        } else {
+                            find_curve_making_point(&start_point,&end_point)
+                        }
+                    };
+
+                    Some((to_tile_id,previous_point,end_point,next_point))
+
+                } else {
+                    None
+                }
+            },
+            Neighbor::OffMap(edge) => {
+                
+                let end_point = start_point.to_edge(&extents,edge)?;
                 // need previous and next points to give the thingy a curve.
-                let previous_point = find_tile_site_point(previous_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&end_point,&start_point)));
-                let next_point = find_tile_site_point(next_tile, &tiles)?.or_else(|| Some(find_curve_making_point(&start_point,&end_point)));
+                let previous_point = generate_previous_segment_point(previous_tile, &tiles, &end_point, &start_point)?;
+                let next_point = find_curve_making_point(&start_point,&end_point);
+                
+                let to_tile_id = Neighbor::OffMap(edge.clone());
 
-                // create the bezier
-                let line = bezierify_points_with_phantoms(previous_point.as_ref(), &[start_point,end_point], next_point.as_ref(), bezier_scale.bezier_scale)?;
+                Some((to_tile_id,previous_point,end_point,next_point))
+            },
+            
+        };
 
-                segments.push((NewRiver {
-                    from_tile_id: segment.from,
-                    from_type,
-                    from_flow,
-                    to_tile_id: segment.to,
-                    to_type,
-                    to_flow: segment.to_flow
-                },line))
-
-            } // I don't want to add segments that are going between tiles in the same lake. As that can create weird arms in lakes with concave sides
+        if let Some((to_tile_id,previous_point,end_point,next_point)) = new_river_data {
+            // create the bezier
+            let line = bezierify_points_with_phantoms(Some(&previous_point), &[start_point,end_point], Some(&next_point), bezier_scale.bezier_scale)?;
+            let lines = Point::clip_point_vec_across_antimeridian(line,&extents)?;
+            segments.push((NewRiver {
+                from_tile_id,
+                from_type,
+                from_flow,
+                to_tile_id,
+                to_type,
+                to_flow
+            },lines));
 
         }
+
+
 
     }
 
@@ -92,12 +170,22 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
 
     
     for (river,segment) in segments.into_iter().watch(progress,"Writing rivers.","Rivers written.") {
-        _ = segments_layer.add_segment(&river,segment.into_iter().map(|p| p.to_tuple()))?;
+        _ = segments_layer.add_segment(&river,segment)?;
     }
 
     Ok(())
 
 }
+
+fn generate_previous_segment_point<'feature>(previous_tile: Option<u64>, tiles: &MapLayer<'_, 'feature, TileSchema, TileFeature<'feature>>, end_point: &Point, start_point: &Point) -> Result<Point, CommandError> {
+    Ok(if let Some(x) = previous_tile {
+        tiles.try_feature_by_id(x)?.site()?
+    } else {
+        find_curve_making_point(end_point,start_point)
+    })
+}
+
+
 
 pub(crate) fn generate_water_river_from_type(segment: &Rc<RiverSegment>, tile_from_index: &HashMap<u64, Vec<Rc<RiverSegment>>>, tile_to_index: &HashMap<u64, Vec<Rc<RiverSegment>>>) -> (RiverSegmentFrom, Option<u64>, f64) {
     // a segment starts with branching if more than one segment starts at the same point.
@@ -153,46 +241,52 @@ pub(crate) fn generate_water_river_from_type(segment: &Rc<RiverSegment>, tile_fr
     (from_type, previous_tile, from_flow)
 }
 
-pub(crate) fn generate_water_river_to_type(segment: &Rc<RiverSegment>, tile_to_index: &HashMap<u64, Vec<Rc<RiverSegment>>>, tile_from_index: &HashMap<u64, Vec<Rc<RiverSegment>>>) -> (RiverSegmentTo, Option<u64>) {
-    // a segment ends with a confluence if more than one segment ends at the same to point.
-    let ends_with_confluence = {
-        if let Some(tile) = tile_to_index.get(&segment.to) {
-            tile.len() > 1
-        } else {
-            false
+pub(crate) fn generate_water_river_to_type(segment: &Rc<RiverSegment>, tile_to_index: &HashMap<u64, Vec<Rc<RiverSegment>>>, tile_from_index: &HashMap<u64, Vec<Rc<RiverSegment>>>) -> (RiverSegmentTo, Option<Neighbor>) {
+    match segment.to {
+        Neighbor::Tile(segment_to) | Neighbor::CrossMap(segment_to,_) => {
+            // a segment ends with a confluence if more than one segment ends at the same to point.
+            let ends_with_confluence = {
+                if let Some(tile) = tile_to_index.get(&segment_to) {
+                    tile.len() > 1
+                } else {
+                    false
+                }
+            };
+
+            // Get start and end topological types, as well as potential previous and next tiles for curve manipulation.
+
+            let (to_type,next_tile) = match tile_from_index.get(&segment_to) {
+                // I am looking for what other segments come from the end of this segment.
+                // if no other segments, then it's a mouth
+                // if 1 segment, then it's continuing, Except it could be a confluence if multiple others go to that same point
+                // if >1 segments, then it's branching, But it could be a branching confluence if multiple others go to that same point
+                Some(list) => match list.len() {
+                    0 => (RiverSegmentTo::Mouth,None), // if it ends with a mouth, then it isn't a confluence even if other segments end here.
+                    1 => {
+                        let next_tile = Some(list[0].to.clone());
+                        if ends_with_confluence {
+                            (RiverSegmentTo::Confluence,next_tile)
+                        } else {
+                            (RiverSegmentTo::Continuing,next_tile)
+                        }
+                    },
+                    _ => {
+                        let (next_tile,_) = find_flowingest_tile(list);
+                        if ends_with_confluence {
+                            (RiverSegmentTo::BranchingConfluence,Some(next_tile.to.clone()))
+                        } else {
+                            (RiverSegmentTo::Branch,Some(next_tile.to.clone()))
+                        }
+
+                    }
+                },
+                None => (RiverSegmentTo::Mouth,None),
+            };
+            (to_type, next_tile)
         }
-    };
+        Neighbor::OffMap(_) => (RiverSegmentTo::Continuing,Some(segment.to.clone())),
+    }
 
-    // Get start and end topological types, as well as potential previous and next tiles for curve manipulation.
-
-    let (to_type,next_tile) = match tile_from_index.get(&segment.to) {
-        // I am looking for what other segments come from the end of this segment.
-        // if no other segments, then it's a mouth
-        // if 1 segment, then it's continuing, Except it could be a confluence if multiple others go to that same point
-        // if >1 segments, then it's branching, But it could be a branching confluence if multiple others go to that same point
-        Some(list) => match list.len() {
-            0 => (RiverSegmentTo::Mouth,None), // if it ends with a mouth, then it isn't a confluence even if other segments end here.
-            1 => {
-                let next_tile = Some(list[0].to);
-                if ends_with_confluence {
-                    (RiverSegmentTo::Confluence,next_tile)
-                } else {
-                    (RiverSegmentTo::Continuing,next_tile)
-                }
-            },
-            _ => {
-                let (next_tile,_) = find_flowingest_tile(list);
-                if ends_with_confluence {
-                    (RiverSegmentTo::BranchingConfluence,Some(next_tile.to))
-                } else {
-                    (RiverSegmentTo::Branch,Some(next_tile.to))
-                }
-
-            }
-        },
-        None => (RiverSegmentTo::Mouth,None),
-    };
-    (to_type, next_tile)
 }
 
 struct CleanedAndIndexedSegments {
@@ -229,7 +323,7 @@ fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_cle
                 let duplicate = segment_clean_queue.pop().expect("Why would pop fail if we just found a value with last?");
                 let merged = Rc::from(RiverSegment {
                     from: segment.from,
-                    to: segment.to,
+                    to: segment.to.clone(),
                     to_flow: segment.to_flow.max(duplicate.to_flow),
                     from_lake: segment.from_lake || duplicate.from_lake, // if one is from a lake, then both are from a lake
                 });
@@ -247,12 +341,18 @@ fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_cle
             },
             Some(entry) => entry.push(segment.clone()),
         };
-        match tile_to_index.get_mut(&segment.to) {
-            None => {
-                _ = tile_to_index.insert(segment.to,vec![segment.clone()]);
-            },
-            Some(entry) => entry.push(segment.clone()),
-        };
+        match segment.to {
+            Neighbor::Tile(segment_to) | Neighbor::CrossMap(segment_to,_)=> {
+                match tile_to_index.get_mut(&segment_to) {
+                    None => {
+                        _ = tile_to_index.insert(segment_to,vec![segment.clone()]);
+                    },
+                    Some(entry) => entry.push(segment.clone()),
+                };
+            }
+            // don't add to 'to' index if it leads off the map. Those don't necessarily go to the same point.
+            Neighbor::OffMap(_) => (),
+        }
         segment_draw_queue.push(segment);
 
     }
@@ -274,7 +374,7 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
             let flow_to_len = tile.flow_to.len() as f64;
             result.push(Rc::from(RiverSegment {
                 from: fid,
-                to: *flow_to,
+                to: flow_to.clone(),
                 to_flow: tile.water_flow/flow_to_len,
                 from_lake: false,
             }))
@@ -283,7 +383,7 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
             // get the flow for the outlet from the current tile?
             result.push(Rc::from(RiverSegment {
                 from: *outlet_from,
-                to: fid,
+                to: Neighbor::Tile(fid),
                 to_flow: tile.water_flow,
                 from_lake: true,
             }));

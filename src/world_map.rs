@@ -29,8 +29,8 @@ use indexmap::map::IterMut as IndexIterMut;
 use indexmap::map::IntoIter as IndexIntoIter;
 use serde::Serialize;
 use serde::Deserialize;
-use ron::to_string as to_ron_string;
-use ron::from_str as from_ron_str;
+use serde_json::to_string as to_json_string;
+use serde_json::from_str as from_json_str;
 use paste::paste;
 use prisma::Rgb;
 use angular_units::Deg;
@@ -62,6 +62,8 @@ use crate::geometry::Polygon;
 use crate::geometry::LineString;
 use crate::geometry::MultiPolygon;
 use crate::geometry::NoGeometry;
+use crate::utils::Edge;
+use crate::geometry::MultiLineString;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -75,29 +77,125 @@ use crate::geometry::NoGeometry;
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
+// What I really want is a serialization format that uses identifiers instead of Strings. RON should work in theory, but it didn''t support [untagged] enums for deserialization. So, this is a sort of hack, it's only intended for single-word enums, definitely not for any textual values.
+fn to_json_string_nq<Value: Serialize>(value: &Value) -> Result<String,serde_json::Error> {
+    let string = to_json_string(value)?;
+    Ok(string.trim_matches('"').to_owned())
+}
+
+// see to_json_string_nq
+fn from_json_str_nq<Value>(string: &str) -> Result<Value,serde_json::Error> where Value: for<'a> Deserialize<'a> {
+    let value = from_json_str(&format!("\"{string}\""))?;
+    Ok(value)
+}
+
 fn id_list_to_string(value: &Vec<u64>) -> String {
-    to_ron_string(value).expect("Why would serialization fail on a list of numbers?") 
+    to_json_string(value).expect("Why would serialization fail on a list of numbers?") 
 }
 
 fn string_to_id_list(value: String) -> Result<Vec<u64>,CommandError> {
-    from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdList(value))   
+    from_json_str(&value).map_err(|_| CommandError::InvalidValueForIdList(value))   
 }
 
-fn neighbor_directions_to_string(value: &Vec<(u64,Deg<f64>)>) -> String {
-    to_ron_string(value).expect("Why would serialization fail on a list of number pairs?")
+
+#[allow(variant_size_differences)] // Not sure how else to build this enum
+#[derive(Clone,Serialize,Deserialize,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
+#[serde(untagged)]
+pub(crate) enum Neighbor {
+    OffMap(Edge),
+    Tile(u64),
+    CrossMap(u64, Edge),
 }
 
-fn string_to_neighbor_directions(value: String) -> Result<Vec<(u64,Deg<f64>)>,CommandError> {
-    from_ron_str(&value).map_err(|_| CommandError::InvalidValueForNeighborDirections(value))   
+mod test {
+
+    use serde::Serialize;
+    use serde::Deserialize;
+    use super::Edge;
+
+    #[allow(variant_size_differences)] // Not sure how else to build this enum
+    #[derive(Clone,Deserialize,Serialize,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
+    #[serde(untagged)]
+    pub(crate) enum Neighbor {
+        OffMap(Edge),
+        Tile(u64),
+    }
+
+    #[test]
+    fn test_neighbor_serde() {
+
+        use serde_json::to_string;
+        use serde_json::from_str;
+
+        let a = Neighbor::OffMap(Edge::North);
+        let b = Neighbor::Tile(78);
+        let c = Neighbor::OffMap(Edge::Southwest);
+
+        let d = to_string(&a).unwrap();
+        let e = to_string(&b).unwrap();
+        let f = to_string(&c).unwrap();
+
+        assert_eq!(d,"\"North\"");
+        assert_eq!(e,"78");
+        assert_eq!(f,"\"Southwest\"");
+
+        let g: Neighbor = from_str(&d).unwrap();
+        let h: Neighbor = from_str(&e).unwrap();
+        let i: Neighbor = from_str(&f).unwrap();
+
+        assert_eq!(a,g);
+        assert_eq!(b,h);
+        assert_eq!(c,i);
+
+        
+
+    }
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)] // Although it seems like it would be more efficient, the call to to_ron_string just references it again anyway.
+fn neighbor_to_string(value: &Neighbor) -> String {
+    to_json_string(value).expect("Why would serialization fail on a f64?")
+}
+
+fn string_to_neighbor(value: String) -> Result<Neighbor,CommandError> {
+    from_json_str(&value).map_err(|_| CommandError::InvalidValueForNeighbor(value))
+}
+
+fn neighbor_list_to_string(value: &Vec<Neighbor>) -> String {
+    to_json_string(value).expect("Why would serialization fail on a list of simple enums?") 
+}
+
+fn string_to_neighbor_list(value: String) -> Result<Vec<Neighbor>,CommandError> {
+    from_json_str(&value).map_err(|_| CommandError::InvalidValueForNeighborList(value))   
+}
+
+
+
+#[derive(Clone,Serialize,Deserialize)]
+pub(crate) struct NeighborAndDirection(pub(crate) Neighbor,pub(crate) Deg<f64>);
+
+fn neighbor_directions_to_string(value: &Vec<NeighborAndDirection>) -> String {
+    to_json_string(value).expect("Why would serialization fail on a list of number pairs?")
+}
+
+fn string_to_neighbor_directions(value: String) -> Result<Vec<NeighborAndDirection>,CommandError> {
+    from_json_str(&value).map_err(|_| CommandError::InvalidValueForNeighborDirections(value))   
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // Although it seems like it would be more efficient, the call to to_json_string just references it again anyway.
 fn id_ref_to_string(value: &u64) -> String {
-    to_ron_string(value).expect("Why would serialization fail on a f64?") 
+    to_json_string(value).expect("Why would serialization fail on a f64?") 
 }
 
 fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
-    from_ron_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
+    from_json_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
+}
+
+fn edge_to_string(value: &Edge) -> String {
+    to_json_string_nq(value).expect("Why would serialization fail on a simple enum?")
+}
+
+fn string_to_edge(value: String) -> Result<Edge,CommandError> {
+    from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForEdge(value))
 }
 
 fn color_to_string(value: Rgb<u8>) -> String {
@@ -124,6 +222,12 @@ macro_rules! feature_get_field_type {
     (id_ref) => {
         u64
     };
+    (neighbor) => {
+        Neighbor
+    };
+    (option_neighbor) => {
+        Option<Neighbor>
+    };
     (i32) => {
         i32
     };
@@ -137,10 +241,13 @@ macro_rules! feature_get_field_type {
         Option<i32> // this is the same because everything's an option, the option tag only means it can accept options
     };
     (neighbor_directions) => {
-        Vec<(u64,Deg<f64>)>
+        Vec<NeighborAndDirection>
     };
     (id_list) => {
         Vec<u64>
+    };
+    (neighbor_list) => {
+        Vec<Neighbor>
     };
     (river_segment_from) => {
         RiverSegmentFrom
@@ -171,7 +278,11 @@ macro_rules! feature_get_field_type {
     };
     (angle) => {
         Deg<f64>
+    };
+    (option_edge) => {
+        Option<Edge>
     }
+
 }
 
 macro_rules! feature_set_field_type {
@@ -180,6 +291,12 @@ macro_rules! feature_set_field_type {
     };
     (id_ref) => {
         u64
+    };
+    (neighbor) => {
+        &Neighbor
+    };
+    (option_neighbor) => {
+        &Option<Neighbor>
     };
     (option_id_ref) => {
         Option<u64>
@@ -194,10 +311,13 @@ macro_rules! feature_set_field_type {
         bool
     };
     (neighbor_directions) => {
-        &Vec<(u64,Deg<f64>)>
+        &Vec<NeighborAndDirection>
     };
     (id_list) => {
         &Vec<u64>
+    };
+    (neighbor_list) => {
+        &Vec<Neighbor>
     };
     (river_segment_from) => {
         &RiverSegmentFrom
@@ -228,7 +348,10 @@ macro_rules! feature_set_field_type {
     };
     (angle) => {
         Deg<f64>
-    }
+    };
+    (option_edge) => {
+        &Option<Edge>
+    };
 }
 
 macro_rules! feature_get_required {
@@ -243,6 +366,12 @@ macro_rules! feature_get_field {
     };
     ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
         string_to_id_ref(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+    };
+    ($self: ident neighbor $feature_name: literal $prop: ident $field: path) => {
+        string_to_neighbor(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+    };
+    ($self: ident option_neighbor $feature_name: literal $prop: ident $field: path) => {
+        $self.feature.field_as_string_by_name($field)?.map(|a| string_to_neighbor(a)).transpose()
     };
     ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
         $self.feature.field_as_string_by_name($field)?.map(|a| string_to_id_ref(a)).transpose()
@@ -261,6 +390,9 @@ macro_rules! feature_get_field {
     };
     ($self: ident id_list $feature_name: literal $prop: ident $field: path) => {
         string_to_id_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+    };
+    ($self: ident neighbor_list $feature_name: literal $prop: ident $field: path) => {
+        string_to_neighbor_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident river_segment_from $feature_name: literal $prop: ident $field: path) => {
         RiverSegmentFrom::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
@@ -301,6 +433,10 @@ macro_rules! feature_get_field {
     ($self: ident angle $feature_name: literal $prop: ident $field: path) => {
         Ok(Deg(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?))
     };
+    ($self: ident option_edge $feature_name: literal $prop: ident $field: path) => {
+        $self.feature.field_as_string_by_name($field)?.map(|a| string_to_edge(a)).transpose()
+    };
+
 }
 
 macro_rules! feature_set_field {
@@ -322,6 +458,16 @@ macro_rules! feature_set_field {
     ($self: ident $value: ident id_ref $field: path) => {
         Ok($self.feature.set_field_string($field, &id_ref_to_string(&$value))?)
     };
+    ($self: ident $value: ident neighbor $field: path) => {
+        Ok($self.feature.set_field_string($field, &neighbor_to_string(&$value))?)
+    };
+    ($self: ident $value: ident option_neighbor $field: path) => {
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_string($field, &neighbor_to_string(&value))?)
+        } else {
+            Ok($self.feature.set_field_null($field)?)
+        }
+    };
     ($self: ident $value: ident option_id_ref $field: path) => {
         if let Some(value) = $value {
             Ok($self.feature.set_field_string($field, &id_ref_to_string(&value))?)
@@ -338,6 +484,10 @@ macro_rules! feature_set_field {
     }};
     ($self: ident $value: ident id_list $field: path) => {{
         let neighbors = id_list_to_string($value);
+        Ok($self.feature.set_field_string($field, &neighbors)?)
+    }};
+    ($self: ident $value: ident neighbor_list $field: path) => {{
+        let neighbors = neighbor_list_to_string($value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
     ($self: ident $value: ident river_segment_from $field: path) => {{
@@ -376,6 +526,13 @@ macro_rules! feature_set_field {
         // This can help me catch math problems early...
         Ok($self.feature.set_field_double($field, NotNan::try_from($value.scalar())?.into_inner())?)
     };
+    ($self: ident $value: ident option_edge $field: path) => {
+        if let Some(value) = $value {
+            Ok($self.feature.set_field_string($field, &edge_to_string(&value))?)
+        } else {
+            Ok($self.feature.set_field_null($field)?)
+        }
+    };
 
 }
 
@@ -406,12 +563,26 @@ macro_rules! feature_field_value {
     ($prop: expr; id_list) => {
         Some(FieldValue::StringValue(id_list_to_string(&$prop)))
     };
+    ($prop: expr; neighbor_list) => {
+        Some(FieldValue::StringValue(neighbor_list_to_string(&$prop)))
+    };
     ($prop: expr; neighbor_directions) => {
         Some(FieldValue::StringValue(neighbor_directions_to_string(&$prop)))
     };
     ($prop: expr; id_ref) => {
         // store id_ref as a string so I can use u64, as fields only support i64
         Some(FieldValue::StringValue(id_ref_to_string(&$prop)))
+    };
+    ($prop: expr; neighbor) => {
+        // store id_ref as a string so I can use u64, as fields only support i64
+        Some(FieldValue::StringValue(neighbor_to_string(&$prop)))
+    };
+    ($prop: expr; option_neighbor) => {
+        if let Some(value) = &$prop {
+            Some(FieldValue::StringValue(neighbor_to_string(&value)))
+        } else {
+            None
+        }
     };
     ($prop: expr; river_segment_from) => {{
         Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
@@ -447,6 +618,13 @@ macro_rules! feature_field_value {
     ($prop: expr; angle) => {{
         Some(FieldValue::RealValue($prop.scalar()))
     }};
+    ($prop: expr; option_edge) => {
+        if let Some(value) = &$prop {
+            Some(FieldValue::StringValue(edge_to_string(&value)))
+        } else {
+            None
+        }
+    };
 
 }
 
@@ -506,10 +684,19 @@ macro_rules! get_field_type_for_prop_type {
     (id_ref) => {
         OGRFieldType::OFTString
     };
+    (neighbor) => {
+        OGRFieldType::OFTString
+    };
+    (option_neighbor) => {
+        OGRFieldType::OFTString
+    };
     (option_id_ref) => {
         OGRFieldType::OFTString
     };
     (id_list) => {
+        OGRFieldType::OFTString
+    };
+    (neighbor_list) => {
         OGRFieldType::OFTString
     };
     (option_i32) => {
@@ -547,6 +734,9 @@ macro_rules! get_field_type_for_prop_type {
     };
     (angle) => {
         OGRFieldType::OFTInteger
+    };
+    (option_edge) => {
+        OGRFieldType::OFTString
     }
 }
 
@@ -1256,7 +1446,7 @@ impl Grouping {
 
 impl From<&Grouping> for String {
     fn from(value: &Grouping) -> Self {
-        to_ron_string(&value).expect("Why would serialization fail on a basic enum?")
+        to_json_string_nq(&value).expect("Why would serialization fail on a basic enum?")
     }
 }
 
@@ -1264,7 +1454,7 @@ impl TryFrom<String> for Grouping {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForGroupingType(value))
+        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForGroupingType(value))
     }
 }
 
@@ -1297,11 +1487,11 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
     lake_id: option_id_ref,
     /// id of neighboring tile which water flows to
-    flow_to: id_list,
+    flow_to: neighbor_list,
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
     shore_distance: i32,
     /// If this is a land tile neighboring a water body, this is the id of the closest tile
-    harbor_tile_id: option_id_ref,
+    harbor_tile_id: option_neighbor,
     /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
     water_count: option_i32,
     /// The biome for this tile
@@ -1325,6 +1515,8 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     outlet_from: id_list,
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
     neighbors: neighbor_directions,
+    /// A value indicating whether the tile is on the edge of the map
+    #[set(allow(dead_code))] edge: option_edge,
 
 });
 
@@ -1339,7 +1531,7 @@ impl TileFeature<'_> {
 
 pub(crate) trait TileWithNeighbors: Entity<TileSchema> {
 
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)>;
+    fn neighbors(&self) -> &Vec<NeighborAndDirection>;
 
 }
 
@@ -1355,20 +1547,23 @@ pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
 
 entity!(NewTileSite: Tile {
     geometry: Polygon,
-    site: UtilsPoint
+    site: UtilsPoint,
+    edge: Option<Edge>
 }); 
 
 entity!(TileForCalcNeighbors: Tile {
     geometry: Polygon,
+    edge: Option<Edge>,
     site: UtilsPoint,
-    neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
+    neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new()),
+    cross_neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
 });
 
 entity!(TileForTerrain: Tile {
     site: UtilsPoint, 
     elevation: f64,
     grouping: Grouping, 
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     // 'old' values so the algorithm can check if it's changed.
     old_elevation: f64 = TileFeature::elevation,
     old_grouping: Grouping = TileFeature::grouping
@@ -1400,9 +1595,9 @@ entity!(TileForWinds: Tile {
 
 entity!(TileForWaterflow: Tile {
     elevation: f64, 
-    flow_to: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()),
+    flow_to: Vec<Neighbor> = |_| Ok::<_,CommandError>(Vec::new()),
     grouping: Grouping, 
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     precipitation: f64, // not in TileForWaterFill
     temperature: f64,
     water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
@@ -1414,10 +1609,10 @@ entity!(TileForWaterflow: Tile {
 // of the macro and figure something out, but this is easier.
 entity!(TileForWaterFill: Tile {
     elevation: f64, 
-    flow_to: Vec<u64>, // Initialized to blank in TileForWaterFlow
+    flow_to: Vec<Neighbor>, // Initialized to blank in TileForWaterFlow
     grouping: Grouping, 
     lake_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()), // Not in TileForWaterFlow
     temperature: f64,
     water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
@@ -1444,23 +1639,23 @@ impl From<TileForWaterflow> for TileForWaterFill {
 
 entity!(TileForRiverConnect: Tile {
     water_flow: f64,
-    flow_to: Vec<u64>,
+    flow_to: Vec<Neighbor>,
     outlet_from: Vec<u64>
 });
 
 entity!(TileForWaterDistance: Tile {
     site: UtilsPoint,
     grouping: Grouping, 
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
-    closest_water_tile_id: Option<u64> = |_| Ok::<_,CommandError>(None)
+    closest_water_tile_id: Option<Neighbor> = |_| Ok::<_,CommandError>(None)
 });
 
 
 entity!(TileForGroupingCalc: Tile {
     grouping: Grouping,
     lake_id: Option<u64>,
-    neighbors: Vec<(u64,Deg<f64>)>
+    neighbors: Vec<NeighborAndDirection>
 });
 
 entity!(TileForPopulation: Tile {
@@ -1472,7 +1667,7 @@ entity!(TileForPopulation: Tile {
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
-    harbor_tile_id: Option<u64>,
+    harbor_tile_id: Option<Neighbor>,
     lake_id: Option<u64>
 });
 
@@ -1492,7 +1687,7 @@ entity!(TileForCultureGen: Tile {
     elevation_scaled: i32,
     biome: String,
     water_count: Option<i32>,
-    harbor_tile_id: Option<u64>,
+    harbor_tile_id: Option<Neighbor>,
     grouping: Grouping,
     water_flow: f64,
     temperature: f64
@@ -1518,14 +1713,20 @@ impl TileForCulturePrefSorting<'_> {
     pub(crate) fn from<'biomes>(tile: TileForCultureGen, tiles: &TileLayer, biomes: &'biomes EntityLookup<BiomeSchema,BiomeForCultureGen>, lakes: &EntityIndex<LakeSchema,LakeForCultureGen>) -> Result<TileForCulturePrefSorting<'biomes>,CommandError> {
         let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
-            let closest_water = closest_water;
-            let closest_water = tiles.try_feature_by_id(closest_water)?;
-            if let Some(lake_id) = closest_water.lake_id()? {
-                let lake_id = lake_id;
-                let lake = lakes.try_get(&lake_id)?;
-                Some(lake.size)
-            } else {
-                None
+            match closest_water {
+                Neighbor::Tile(closest_water) => {
+                    let closest_water = tiles.try_feature_by_id(closest_water)?;
+                    if let Some(lake_id) = closest_water.lake_id()? {
+                        let lake_id = lake_id;
+                        let lake = lakes.try_get(&lake_id)?;
+                        Some(lake.size)
+                    } else {
+                        None
+                    }
+       
+                },
+                Neighbor::CrossMap(_, _) => todo!(),
+                Neighbor::OffMap(_) => unreachable!("Why on earth would the closest_water be off the map?"),
             }
         } else {
             None
@@ -1554,7 +1755,7 @@ entity!(TileForCultureExpand: Tile {
     biome: String,
     grouping: Grouping,
     water_flow: f64,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     lake_id: Option<u64>,
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
@@ -1577,7 +1778,7 @@ entity!(TileForTownPopulation: Tile {
     habitability: f64,
     site: UtilsPoint,
     grouping_id: u64,
-    harbor_tile_id: Option<u64>,
+    harbor_tile_id: Option<Neighbor>,
     water_count: Option<i32>,
     temperature: f64,
     lake_id: Option<u64>,
@@ -1603,6 +1804,25 @@ impl TileForTownPopulation {
         }
 
     }
+
+    pub(crate) fn find_middle_point_on_edge(&self, edge: &Edge, extent: &Extent) -> Result<UtilsPoint,CommandError> {
+        let self_ring = self.geometry.get_ring(0)?;
+        let mut common_vertices: Vec<_> = self_ring.into_iter().collect();
+        common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
+        common_vertices.retain(|p| edge.contains(p,extent));
+        if common_vertices.len() > 2 {
+            // NOTE: There will be a problem in cases where the edge is NE,NW,SE,SW, as there are likely going to 
+            // be 3 points at least. However, this shouldn't happen since there shouldn't be any cross-map tiles in
+            // those directions.
+            let point1: UtilsPoint = (common_vertices[0].0,common_vertices[0].1).try_into()?;
+            let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
+            Ok(point1.middle_point_between(&point2))
+        } else {
+            Err(CommandError::CantFindMiddlePointOnEdge(self.fid,edge.clone(),common_vertices.len()))
+        }
+
+    }
+
 }
 
 entity!(TileForNationExpand: Tile {
@@ -1612,7 +1832,7 @@ entity!(TileForNationExpand: Tile {
     biome: String,
     grouping: Grouping,
     water_flow: f64,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     lake_id: Option<u64>,
     culture: Option<String>,
     nation_id: Option<u64> = |_| Ok::<_,CommandError>(None),
@@ -1623,7 +1843,7 @@ entity!(TileForNationExpand: Tile {
 
 entity!(TileForNationNormalize: Tile {
     grouping: Grouping,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     town_id: Option<u64>,
     nation_id: Option<u64>
 });
@@ -1637,7 +1857,7 @@ entity!(TileForSubnations: Tile {
 });
 
 entity!(TileForSubnationExpand: Tile {
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32,
     elevation_scaled: i32,
     nation_id: Option<u64>,
@@ -1648,7 +1868,7 @@ entity!(TileForSubnationExpand: Tile {
 });
 
 entity!(TileForEmptySubnations: Tile {
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32,
     nation_id: Option<u64>,
     subnation_id: Option<u64>,
@@ -1661,7 +1881,7 @@ entity!(TileForEmptySubnations: Tile {
 });
 
 entity!(TileForSubnationNormalize: Tile {
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     town_id: Option<u64>,
     nation_id: Option<u64>,
     subnation_id: Option<u64>
@@ -1670,7 +1890,7 @@ entity!(TileForSubnationNormalize: Tile {
 entity!(TileForCultureDissolve: Tile {
     culture: Option<String>,
     geometry: Polygon,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32
 });
 
@@ -1687,7 +1907,7 @@ impl TileWithShoreDistance for TileForCultureDissolve {
 }
 
 impl TileWithNeighbors for TileForCultureDissolve {
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
+    fn neighbors(&self) -> &Vec<NeighborAndDirection> {
         &self.neighbors
     }
 }
@@ -1695,7 +1915,7 @@ impl TileWithNeighbors for TileForCultureDissolve {
 entity!(TileForBiomeDissolve: Tile {
     biome: String,
     geometry: Polygon,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32
 });
 
@@ -1713,7 +1933,7 @@ impl TileWithShoreDistance for TileForBiomeDissolve {
 }
 
 impl TileWithNeighbors for TileForBiomeDissolve {
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
+    fn neighbors(&self) -> &Vec<NeighborAndDirection> {
         &self.neighbors
     }
 }
@@ -1721,7 +1941,7 @@ impl TileWithNeighbors for TileForBiomeDissolve {
 entity!(TileForNationDissolve: Tile {
     nation_id: Option<u64>,
     geometry: Polygon,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32
 });
 
@@ -1738,7 +1958,7 @@ impl TileWithShoreDistance for TileForNationDissolve {
 }
 
 impl TileWithNeighbors for TileForNationDissolve {
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
+    fn neighbors(&self) -> &Vec<NeighborAndDirection> {
         &self.neighbors
     }
 }
@@ -1746,7 +1966,7 @@ impl TileWithNeighbors for TileForNationDissolve {
 entity!(TileForSubnationDissolve: Tile {
     subnation_id: Option<u64>,
     geometry: Polygon,
-    neighbors: Vec<(u64,Deg<f64>)>,
+    neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32
 });
 
@@ -1763,7 +1983,7 @@ impl TileWithShoreDistance for TileForSubnationDissolve {
 }
 
 impl TileWithNeighbors for TileForSubnationDissolve {
-    fn neighbors(&self) -> &Vec<(u64,Deg<f64>)> {
+    fn neighbors(&self) -> &Vec<NeighborAndDirection> {
         &self.neighbors
     }
 }
@@ -1791,12 +2011,14 @@ impl TileLayer<'_,'_> {
         _ = self.add_feature_with_geometry(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
+                TileSchema::FIELD_EDGE,
                 TileSchema::FIELD_ELEVATION,
                 TileSchema::FIELD_ELEVATION_SCALED,
                 TileSchema::FIELD_GROUPING,
             ],&[
                 feature_field_value!(x; f64),
                 feature_field_value!(y; f64),
+                feature_field_value!(tile.edge; option_edge),
                 // initial tiles start with 0 elevation, terrain commands will edit this...
                 feature_field_value!(0.0; f64), // FUTURE: Watch that this type stays correct
                 // and scaled elevation starts with 20.
@@ -1870,14 +2092,14 @@ impl TryFrom<String> for RiverSegmentFrom {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForSegmentFrom(value))
+        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForSegmentFrom(value))
     }
 }
 
 impl From<&RiverSegmentFrom> for String {
 
     fn from(value: &RiverSegmentFrom) -> Self {
-        to_ron_string(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1894,24 +2116,24 @@ impl TryFrom<String> for RiverSegmentTo {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForSegmentTo(value))
+        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForSegmentTo(value))
     }
 }
 
 impl From<&RiverSegmentTo> for String {
 
     fn from(value: &RiverSegmentTo) -> Self {
-        to_ron_string(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
 
-layer!(River["rivers"]: LineString {
+layer!(River["rivers"]: MultiLineString {
     // clippy doesn't understand why I'm using 'from_*' here.
     #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_tile_id: id_ref,
     #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_type: river_segment_from,
     #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_flow: f64,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] to_tile_id: id_ref,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] to_tile_id: neighbor,
     #[get(allow(dead_code))] #[set(allow(dead_code))] to_type: river_segment_to,
     #[get(allow(dead_code))] #[set(allow(dead_code))] to_flow: f64,
 });
@@ -1919,8 +2141,11 @@ layer!(River["rivers"]: LineString {
 
 impl RiverLayer<'_,'_> {
 
-    pub(crate) fn add_segment<Items: IntoIterator<Item=(f64,f64)>>(&mut self, new_river: &NewRiver, line: Items) -> Result<u64,CommandError> {
-        let geometry = LineString::from_vertices(line)?;
+    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, lines: Vec<Vec<UtilsPoint>>) -> Result<u64,CommandError> {
+        let lines = lines.into_iter().map(|line| {
+            LineString::from_vertices(line.into_iter().map(|p| p.to_tuple()))
+        });
+        let geometry = MultiLineString::from_lines(lines)?;
         self.add_struct(new_river, Some(geometry))
     }
 
@@ -1940,7 +2165,7 @@ pub(crate) enum LakeType {
 impl From<&LakeType> for String {
 
     fn from(value: &LakeType) -> Self {
-        to_ron_string(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -1948,7 +2173,7 @@ impl TryFrom<String> for LakeType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForLakeType(value))
+        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForLakeType(value))
     }
 }
 
@@ -2005,14 +2230,14 @@ impl TryFrom<String> for BiomeCriteria {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_ron_str(&value).map_err(|_| CommandError::InvalidBiomeMatrixValue(value))
+        from_json_str(&value).map_err(|_| CommandError::InvalidBiomeMatrixValue(value))
     }
 }
 
 impl From<&BiomeCriteria> for String {
 
     fn from(value: &BiomeCriteria) -> Self {
-        to_ron_string(value).expect("Why would serialization fail on an enum with no weird structs?") // there shouldn't be any reason to have an error
+        to_json_string(value).expect("Why would serialization fail on an enum with no weird structs?") // there shouldn't be any reason to have an error
     }
 }
 
@@ -2310,7 +2535,7 @@ pub(crate) enum CultureType {
 impl From<&CultureType> for String {
 
     fn from(value: &CultureType) -> Self {
-        to_ron_string(value).expect("Why would serialization fail on a basic enum?")
+        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?")
     }
 }
 
@@ -2319,7 +2544,7 @@ impl TryFrom<String> for CultureType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_ron_str(&value).map_err(|_| CommandError::InvalidValueForCultureType(value))
+        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForCultureType(value))
     }
 }
 
@@ -2671,7 +2896,7 @@ impl From<&ElevationLimits> for String {
 
     fn from(value: &ElevationLimits) -> Self {
         // store as tuple for simplicity
-        to_ron_string(&(value.min_elevation,value.max_elevation)).expect("Why would serialization fail on a tuple of numbers?")
+        to_json_string(&(value.min_elevation,value.max_elevation)).expect("Why would serialization fail on a tuple of numbers?")
     }
 }
 
@@ -2681,7 +2906,7 @@ impl TryFrom<String> for ElevationLimits {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         // store as tuple for simplicity
-        let input: (f64,f64) = from_ron_str(&value).map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        let input: (f64,f64) = from_json_str(&value).map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
         Ok(Self {
             min_elevation: input.0,
             max_elevation: input.1,

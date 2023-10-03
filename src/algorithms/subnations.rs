@@ -36,6 +36,8 @@ use crate::commands::SubnationPercentArg;
 use crate::algorithms::colors::RandomColorGenerator;
 use super::colors::Luminosity;
 use crate::world_map::SubnationForColors;
+use crate::world_map::NeighborAndDirection;
+use crate::world_map::Neighbor;
 
 
 pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_layer: &OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
@@ -130,29 +132,39 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
         let mut place_subnations = Vec::new();
 
         let tile = tile_map.try_get(&(tile_id))?;
-        for (neighbor_id,_) in &tile.neighbors {
-            let neighbor = tile_map.try_get(neighbor_id)?;
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
-            let Some(total_cost) = subnation_expansion_cost(neighbor, &subnation, priority) else { continue };
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
 
-            if total_cost.0 <= max {
+                    let neighbor = tile_map.try_get(neighbor_id)?;
 
-                // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
-                // then I can place or replace the culture with this one. This will remove cultures that were previously
-                // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
-                // may still be spreading, don't worry).
-                let replace_subnation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
-                    &total_cost.0 < neighbor_cost
-                } else {
-                    true
-                };
+                    let Some(total_cost) = subnation_expansion_cost(neighbor, &subnation, priority) else { continue };
+    
+                    if total_cost.0 <= max {
+    
+                        // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
+                        // then I can place or replace the culture with this one. This will remove cultures that were previously
+                        // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
+                        // may still be spreading, don't worry).
+                        let replace_subnation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                            &total_cost.0 < neighbor_cost
+                        } else {
+                            true
+                        };
+    
+                        if replace_subnation {
+                            place_subnations.push((*neighbor_id,subnation.fid));
+                            _ = costs.insert(*neighbor_id, total_cost);
+                            queue.push((*neighbor_id,subnation.clone()), Reverse(total_cost));
+                        } // else we can't expand into this tile, and this line of spreading ends here.
+                    }
+    
 
-                if replace_subnation {
-                    place_subnations.push((*neighbor_id,subnation.fid));
-                    _ = costs.insert(*neighbor_id, total_cost);
-                    queue.push((*neighbor_id,subnation.clone()), Reverse(total_cost));
-                } // else we can't expand into this tile, and this line of spreading ends here.
-            }
+                }
+                Neighbor::OffMap(_) => (),
+            } // else it's off the map and therefore unknowable
+
 
 
         }
@@ -288,50 +300,56 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                         (Some(_),Some(_)) | (None,_) => {}
                     }
 
-                    for (neighbor_id,_) in &expand_tile.neighbors {
+                    for NeighborAndDirection(neighbor_id,_) in &expand_tile.neighbors {
 
-                        if nation_tiles.get(neighbor_id).is_none() {
-                            // we've already placed this in another subnation, or it wasn't available.
-                            continue;
-                        }
+                        match neighbor_id {
+                            Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
 
-
-                        let neighbor = tile_map.try_get(neighbor_id)?;
-                        if neighbor.subnation_id.is_some() {
-                            continue;
-                        }
-
-                        // the cost is different than regular subnation expansion. Basically, there is no cost to finish filling
-                        // up everything, except a small cost to keep things small.
-                        if neighbor.shore_distance < -3 {
-                            continue; // don't pass through deep ocean
-                        }
-                        if neighbor.nation_id != Some(subnation.nation_id) {
-                            continue; // don't leave nation
-                        }
-
-                        let total_cost = priority.0 + 10.0 * neighbor.area;                        
-                            
-                        if total_cost.0 <= max {
+                                if nation_tiles.get(neighbor_id).is_none() {
+                                    // we've already placed this in another subnation, or it wasn't available.
+                                    continue;
+                                }
+    
+    
+                                let neighbor = tile_map.try_get(neighbor_id)?;
+                                if neighbor.subnation_id.is_some() {
+                                    continue;
+                                }
+    
+                                // the cost is different than regular subnation expansion. Basically, there is no cost to finish filling
+                                // up everything, except a small cost to keep things small.
+                                if neighbor.shore_distance < -3 {
+                                    continue; // don't pass through deep ocean
+                                }
+                                if neighbor.nation_id != Some(subnation.nation_id) {
+                                    continue; // don't leave nation
+                                }
+    
+                                let total_cost = priority.0 + 10.0 * neighbor.area;                        
         
-                            // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
-                            // then I can place or replace the culture with this one. This will remove cultures that were previously
-                            // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
-                            // may still be spreading, don't worry).
-                            let replace_subnation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
-                                &total_cost < neighbor_cost
-                            } else {
-                                true
-                            };
-        
-                            if replace_subnation {
-                                _ = tile_subnation_changes.insert(*neighbor_id, subnation.fid);
-                                _ = nation_tiles.remove(neighbor_id);
-                                _ = costs.insert(*neighbor_id, total_cost);
-                                _ = queue.push(*neighbor_id, Reverse(total_cost));
-                            } // else we can't expand into this tile, and this line of spreading ends here.
-                        }
-        
+                                if total_cost.0 <= max {
+            
+                                    // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
+                                    // then I can place or replace the culture with this one. This will remove cultures that were previously
+                                    // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
+                                    // may still be spreading, don't worry).
+                                    let replace_subnation = if let Some(neighbor_cost) = costs.get(neighbor_id) {
+                                        &total_cost < neighbor_cost
+                                    } else {
+                                        true
+                                    };
+            
+                                    if replace_subnation {
+                                        _ = tile_subnation_changes.insert(*neighbor_id, subnation.fid);
+                                        _ = nation_tiles.remove(neighbor_id);
+                                        _ = costs.insert(*neighbor_id, total_cost);
+                                        _ = queue.push(*neighbor_id, Reverse(total_cost));
+                                    } // else we can't expand into this tile, and this line of spreading ends here.
+                                }
+                            }
+                            Neighbor::OffMap(_) => (),
+                        } // else it's off the map and unknowable
+
         
                     }
 
@@ -429,22 +447,29 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
         let mut adversaries = HashMap::new();
         let mut adversary_count = 0;
         let mut buddy_count = 0;
-        for (neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
-            let neighbor = tile_map.try_get(neighbor_id)?;
+            match neighbor_id {
+                Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
+                    let neighbor = tile_map.try_get(neighbor_id)?;
 
-            if neighbor.nation_id == tile.nation_id {
-                if neighbor.subnation_id == tile.subnation_id {
-                    buddy_count += 1;
-                } else {
-                    if let Some(count) = adversaries.get(&neighbor.subnation_id) {
-                        _ = adversaries.insert(neighbor.subnation_id, count + 1)
-                    } else {
-                        _ = adversaries.insert(neighbor.subnation_id, 1)
-                    };
-                    adversary_count += 1;
+                    if neighbor.nation_id == tile.nation_id {
+                        if neighbor.subnation_id == tile.subnation_id {
+                            buddy_count += 1;
+                        } else {
+                            if let Some(count) = adversaries.get(&neighbor.subnation_id) {
+                                _ = adversaries.insert(neighbor.subnation_id, count + 1)
+                            } else {
+                                _ = adversaries.insert(neighbor.subnation_id, 1)
+                            };
+                            adversary_count += 1;
+                        }
+                    }
+    
                 }
-            }
+                Neighbor::OffMap(_) => (),
+            } // else it's off the map and unknowable
+
 
         }
 

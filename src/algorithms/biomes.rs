@@ -1,6 +1,5 @@
 use crate::entity;
 use crate::world_map::TypedFeature;
-use crate::world_map::TileFeature;
 use crate::world_map::BiomeMatrix;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
@@ -46,8 +45,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         temperature: f64,
         water_flow: f64,
         precipitation: f64,
-        // TODO: Why am I initializing it like this? That should be the default initialization, no?
-        lake_id: Option<u64> = TileFeature::lake_id,
+        lake_id: Option<u64>,
         grouping: Grouping
     });
 
