@@ -332,7 +332,7 @@ macro_rules! areal_fns {
             self.inner.simplify(tolerance)?.try_into()
         }
 
-        #[allow(dead_code)] // not all implementation use this
+        #[allow(dead_code)] // not all implementations use this
         pub(crate) fn intersection(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
             if let Some(intersected) = self.inner.intersection(&rhs.inner) {
                 // I haven't seen any broken intersections yet, so I'm not checking validity.
@@ -493,6 +493,16 @@ impl MultiPolygon {
         let mut this = Self::blank()?;
         for polygon in polygons {
             this.push_polygon(polygon)?
+        }
+        Ok(this)
+    }
+
+    pub(crate) fn from_variants<Items: IntoIterator<Item = VariantArealGeometry>>(polygons: Items) -> Result<Self,CommandError> {
+        let mut this = Self::blank()?;
+        for variant in polygons {
+            for polygon in variant {
+                this.push_polygon(polygon?)?
+            }
         }
         Ok(this)
     }
@@ -914,6 +924,16 @@ impl VariantArealGeometry {
             (Self::Polygon(lhs), Self::MultiPolygon(rhs)) => rhs.difference(&lhs.clone().try_into()?),
         }
     }
+
+    pub(crate) fn intersection(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+        match (self,rhs) {
+            (Self::Polygon(lhs), Self::Polygon(rhs)) => lhs.intersection(rhs),
+            (Self::MultiPolygon(lhs), Self::MultiPolygon(rhs)) => lhs.intersection(rhs),
+            (Self::MultiPolygon(lhs), Self::Polygon(rhs)) => lhs.intersection(&rhs.clone().try_into()?),
+            (Self::Polygon(lhs), Self::MultiPolygon(rhs)) => rhs.intersection(&lhs.clone().try_into()?),
+        }
+    }
+
 
     pub(crate) fn buffer(&self, distance: f64, n_quad_segs: u32) -> Result<Self,CommandError> {
         match self {

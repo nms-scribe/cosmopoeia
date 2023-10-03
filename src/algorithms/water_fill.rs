@@ -223,7 +223,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                 for contained_tile in &new_lake.contained_tiles {
                     let contained_tile = tile_map.try_get_mut(contained_tile)?; 
                     contained_tile.lake_id = Some(lake_id);
-                    contained_tile.outlet_from = Vec::new()
+                    contained_tile.outlet_from_id = None
                 }
 
                 // mark the outlet tiles...
@@ -231,7 +231,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                     match outlet_tile {
                         Neighbor::Tile(outlet_tile) | Neighbor::CrossMap(outlet_tile,_) => {
                             let outlet_tile = tile_map.try_get_mut(outlet_tile)?; 
-                            outlet_tile.outlet_from = vec![*sponsor];
+                            outlet_tile.outlet_from_id = Some(*sponsor);
                         }
                         Neighbor::OffMap(_) => (),
                     } // else it's an outlet off the map, and there's nothing to mark
@@ -332,7 +332,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
             feature.set_lake_id(lake_id.copied())?;
 
-            feature.set_outlet_from(&tile.outlet_from)?;
+            feature.set_outlet_from_id(tile.outlet_from_id)?;
 
             edit_tiles_layer.update_feature(feature)?;
         }

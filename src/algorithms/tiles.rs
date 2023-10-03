@@ -376,6 +376,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     // FUTURE: After curving, towns which are along the coastline will sometimes now be in the ocean. I may need to deal with that as well, someday.
 
     let mut tile_layer = target.edit_tile_layer()?;
+    let extent_polygon = tile_layer.get_extent()?.create_polygon()?;
 
     let mut iterator = tile_layer.read_features().filter_map(|f| {
         match f.grouping() {
@@ -412,8 +413,12 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
             for new_polygon in polygon?.bezierify(bezier_scale.bezier_scale)? {
                 let new_polygon = new_polygon?;
                 ocean = ocean.difference(&VariantArealGeometry::Polygon(new_polygon.clone()))?;
+
+                // snip it into the edge of the extent_polygon
+                let new_polygon = new_polygon.intersection(&extent_polygon)?;
         
-                polygons.push(new_polygon);
+                // the last one returns a variant (multi?)polygon, so extend it as an iterator of polygons instead.
+                polygons.extend(new_polygon);
             }
         }
         (Some(polygons),ocean)
@@ -421,11 +426,13 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         (None,ocean)
     };
 
+    // snip the ocean polygon as well.
+    let ocean = ocean.intersection(&extent_polygon.into())?;
 
     let mut coastline_layer = target.create_coastline_layer(overwrite_coastline)?;
     if let Some(land_polygons) = land_polygons {
         for polygon in land_polygons.into_iter().watch(progress, "Writing land masses.", "Land masses written.") {
-            _ = coastline_layer.add_land_mass(polygon)?;
+            _ = coastline_layer.add_land_mass(polygon?)?;
         }
     }
 

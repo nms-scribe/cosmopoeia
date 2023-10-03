@@ -379,7 +379,7 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
                 from_lake: false,
             }))
         }
-        for outlet_from in &tile.outlet_from {
+        if let Some(outlet_from) = &tile.outlet_from_id {
             // get the flow for the outlet from the current tile?
             result.push(Rc::from(RiverSegment {
                 from: *outlet_from,

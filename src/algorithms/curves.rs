@@ -16,6 +16,7 @@ use crate::geometry::LinearRing;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let extent_polygon = target.edit_tile_layer()?.get_extent()?.create_polygon()?;
 
     let mut index_subject_layer = ThemeType::edit_theme_layer(target)?;
     let index_features = ThemeType::read_theme_features(&mut index_subject_layer);
@@ -60,9 +61,10 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                 rings.push(ring_geometry);
             }
             let polygon_geometry = Polygon::from_rings(rings)?;
+            let polygon_geometry = polygon_geometry.intersection(&extent_polygon)?;
             polygons.push(polygon_geometry);
         }
-        let multipolygon_geometry = MultiPolygon::from_polygons(polygons)?;
+        let multipolygon_geometry = MultiPolygon::from_variants(polygons)?;
         let mut feature = layer.try_feature_by_id(*fid)?;
         feature.set_geometry(multipolygon_geometry)?;
         layer.update_feature(feature)?;

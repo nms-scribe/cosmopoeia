@@ -89,15 +89,6 @@ fn from_json_str_nq<Value>(string: &str) -> Result<Value,serde_json::Error> wher
     Ok(value)
 }
 
-fn id_list_to_string(value: &Vec<u64>) -> String {
-    to_json_string(value).expect("Why would serialization fail on a list of numbers?") 
-}
-
-fn string_to_id_list(value: String) -> Result<Vec<u64>,CommandError> {
-    from_json_str(&value).map_err(|_| CommandError::InvalidValueForIdList(value))   
-}
-
-
 #[allow(variant_size_differences)] // Not sure how else to build this enum
 #[derive(Clone,Serialize,Deserialize,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
 #[serde(untagged)]
@@ -243,9 +234,6 @@ macro_rules! feature_get_field_type {
     (neighbor_directions) => {
         Vec<NeighborAndDirection>
     };
-    (id_list) => {
-        Vec<u64>
-    };
     (neighbor_list) => {
         Vec<Neighbor>
     };
@@ -312,9 +300,6 @@ macro_rules! feature_set_field_type {
     };
     (neighbor_directions) => {
         &Vec<NeighborAndDirection>
-    };
-    (id_list) => {
-        &Vec<u64>
     };
     (neighbor_list) => {
         &Vec<Neighbor>
@@ -387,9 +372,6 @@ macro_rules! feature_get_field {
     };
     ($self: ident neighbor_directions $feature_name: literal $prop: ident $field: path) => {
         string_to_neighbor_directions(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident id_list $feature_name: literal $prop: ident $field: path) => {
-        string_to_id_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident neighbor_list $feature_name: literal $prop: ident $field: path) => {
         string_to_neighbor_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
@@ -482,10 +464,6 @@ macro_rules! feature_set_field {
         let neighbors = neighbor_directions_to_string($value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
-    ($self: ident $value: ident id_list $field: path) => {{
-        let neighbors = id_list_to_string($value);
-        Ok($self.feature.set_field_string($field, &neighbors)?)
-    }};
     ($self: ident $value: ident neighbor_list $field: path) => {{
         let neighbors = neighbor_list_to_string($value);
         Ok($self.feature.set_field_string($field, &neighbors)?)
@@ -559,9 +537,6 @@ macro_rules! feature_field_value {
         } else {
             None
         }
-    };
-    ($prop: expr; id_list) => {
-        Some(FieldValue::StringValue(id_list_to_string(&$prop)))
     };
     ($prop: expr; neighbor_list) => {
         Some(FieldValue::StringValue(neighbor_list_to_string(&$prop)))
@@ -691,9 +666,6 @@ macro_rules! get_field_type_for_prop_type {
         OGRFieldType::OFTString
     };
     (option_id_ref) => {
-        OGRFieldType::OFTString
-    };
-    (id_list) => {
         OGRFieldType::OFTString
     };
     (neighbor_list) => {
@@ -1508,11 +1480,8 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     nation_id: option_id_ref,
     /// if the tile is part of a subnation, this is the id of the nation which controls it
     subnation_id: option_id_ref,
-    // NOTE: This field should only ever have one value or none. However, as I have no way of setting None
-    // on a u64 field (until gdal is updated to give me access to FieldSetNone), I'm going to use a vector
-    // to store it. In any way, you never know when I might support outlet from multiple points.
     /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-    outlet_from: id_list,
+    outlet_from_id: option_id_ref,
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
     neighbors: neighbor_directions,
     /// A value indicating whether the tile is on the edge of the map
@@ -1613,7 +1582,7 @@ entity!(TileForWaterFill: Tile {
     grouping: Grouping, 
     lake_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     neighbors: Vec<NeighborAndDirection>,
-    outlet_from: Vec<u64> = |_| Ok::<_,CommandError>(Vec::new()), // Not in TileForWaterFlow
+    outlet_from_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     temperature: f64,
     water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
     water_flow: f64,  // Initialized to blank in TileForWaterFlow
@@ -1630,7 +1599,7 @@ impl From<TileForWaterflow> for TileForWaterFill {
             water_flow: value.water_flow,
             water_accumulation: value.water_accumulation,
             flow_to: value.flow_to,
-            outlet_from: Vec::new(),
+            outlet_from_id: None,
             lake_id: None
         }
     }
@@ -1640,7 +1609,7 @@ impl From<TileForWaterflow> for TileForWaterFill {
 entity!(TileForRiverConnect: Tile {
     water_flow: f64,
     flow_to: Vec<Neighbor>,
-    outlet_from: Vec<u64>
+    outlet_from_id: Option<u64>
 });
 
 entity!(TileForWaterDistance: Tile {
