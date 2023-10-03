@@ -63,7 +63,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
             Grouping::Ocean
         } else {
-            let mut found_ocean_neighbor = false;
+            let mut found_ocean_neighbor_or_edge = false;
             let is_lake = tile.lake_id;
     
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
@@ -71,9 +71,12 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                 match neighbor_fid {
                     Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_)=> {
                         if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
+                            if neighbor.edge.is_some() {
+                                found_ocean_neighbor_or_edge = true;
+                            }
                             if neighbor.grouping.is_ocean() {
                                 // it's not part of the group, but we now know this body is next to the ocean
-                                found_ocean_neighbor = true
+                                found_ocean_neighbor_or_edge = true
                             } else if is_lake == neighbor.lake_id {
                                 // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
                                 neighbors.extend(neighbor.neighbors.iter().cloned());
@@ -83,7 +86,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
         
                         } else if ocean.contains(&neighbor_fid) {
                             // the reason it's not found is because it was already processed as an ocean, so, we know this body is next to the ocean.
-                            found_ocean_neighbor = true;
+                            found_ocean_neighbor_or_edge = true;
                         } // else it's been processed already, either in this group or in another group
                     }
                     Neighbor::OffMap(_) => (),
@@ -95,14 +98,11 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
     
             if is_lake.is_some() {
                 Grouping::Lake
-            } else if !found_ocean_neighbor {
+            } else if !found_ocean_neighbor_or_edge {
+                // this means we went through the whole land gropuing, and didn't find it connecting to any oceans,
+                // but also didn't meet the edge of the map. Therefore it's got to be an island in a lake.
+                // The edge check ensures that a world with no oceans still marks it's main landmass as a continent.
                 Grouping::LakeIsland // even if it's continent size
-                // NOTE: There is a possible error if there are no oceans on the map at all. While we could
-                // check oceans.len, that will cause every lake_island to be a continent, even if it actually is 
-                // a lake_island. We could have another flag for having found only lake neighbors, but that's just
-                // going to turn the whole thing into continent.
-                // -- The only solution is to know if we found a tile on the border of the map, and if we have one of those
-                // then it's a continent.
             } else if group_len > (tile_count.div_euclid(100)) { 
                 // NOTE: AFMG had 10 here. That didn't make enough large islands into continents on my map
                 // NOTE: The comparsion shouldn't be made against the tile count, but against a potential

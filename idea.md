@@ -459,7 +459,7 @@ These are things that really should be done before release, but they might take 
         [X] I feel like the easiest way is to just not have any neighbors at all for the south and north directions. This does two things:
             1) I don't have to do anything anywhere
             2) It keeps features from flowing into the poles, which can make the map look weird even under an appropriate projection.
-    [ ] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
+    [X] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
     [ ] Coastlines and the thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge. Although, I might be able to just do an intersection with the extents.
 [ ] Remove ToGeometryCollection?
 [ ] Can tile.outlet_from now become an Option<u64>?

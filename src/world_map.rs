@@ -1654,6 +1654,7 @@ entity!(TileForWaterDistance: Tile {
 
 entity!(TileForGroupingCalc: Tile {
     grouping: Grouping,
+    edge: Option<Edge>,
     lake_id: Option<u64>,
     neighbors: Vec<NeighborAndDirection>
 });
