@@ -1689,7 +1689,7 @@ impl TileForCulturePrefSorting<'_> {
         let biome = biomes.try_get(&tile.biome)?;
         let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
             match closest_water {
-                Neighbor::Tile(closest_water) => {
+                Neighbor::Tile(closest_water) | Neighbor::CrossMap(closest_water,_) => {
                     let closest_water = tiles.try_feature_by_id(closest_water)?;
                     if let Some(lake_id) = closest_water.lake_id()? {
                         let lake_id = lake_id;
@@ -1700,7 +1700,6 @@ impl TileForCulturePrefSorting<'_> {
                     }
        
                 },
-                Neighbor::CrossMap(_, _) => todo!(),
                 Neighbor::OffMap(_) => unreachable!("Why on earth would the closest_water be off the map?"),
             }
         } else {

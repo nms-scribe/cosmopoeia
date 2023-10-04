@@ -13,10 +13,12 @@ use crate::world_map::TypedFeatureIterator;
 use crate::geometry::MultiPolygon;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
+use crate::geometry::GDALGeometryWrapper;
+use crate::geometry::VariantArealGeometry;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let extent_polygon = target.edit_tile_layer()?.get_extent()?.create_polygon()?;
+    let extent_polygon: VariantArealGeometry = target.edit_tile_layer()?.get_extent()?.create_polygon()?.into();
 
     let mut index_subject_layer = ThemeType::edit_theme_layer(target)?;
     let index_features = ThemeType::read_theme_features(&mut index_subject_layer);
@@ -61,6 +63,12 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                 rings.push(ring_geometry);
             }
             let polygon_geometry = Polygon::from_rings(rings)?;
+            let polygon_geometry = if !polygon_geometry.is_valid() {
+                eprintln!("Fixing invalid polygon.");
+                polygon_geometry.make_valid_structure()?
+            } else {
+                polygon_geometry.into()
+            };
             let polygon_geometry = polygon_geometry.intersection(&extent_polygon)?;
             polygons.push(polygon_geometry);
         }

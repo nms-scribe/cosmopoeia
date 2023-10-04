@@ -13,6 +13,8 @@ pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> +
 
     fn get_envelope(&self) -> Extent;
 
+    fn is_valid(&self) -> bool;
+
 }
 
 macro_rules! non_collection_geometry {
@@ -66,6 +68,11 @@ macro_rules! non_collection_geometry {
                     width: envelope.MaxX - envelope.MinX,
                     height: envelope.MaxY - envelope.MinY
                 }
+            }
+
+            fn is_valid(&self) -> bool {
+                // FUTURE: This writes text to stdout if it isn't valid. Is there a way to fix that?
+                self.inner.is_valid()
             }
 
 
@@ -294,6 +301,12 @@ impl IntoIterator for LinearRing {
 
 non_collection_geometry!(Polygon,wkbPolygon);
 
+fn validate_options_structure() -> Result<gdal::cpl::CslStringList, CommandError> {
+    let mut validate_options = gdal::cpl::CslStringList::new();
+    validate_options.add_string("METHOD=STRUCTURE")?;
+    Ok(validate_options)
+}
+
 // While I could put these on some sort of trait, I'd also need to provide some sort of access to inner in that trait,
 // which wouldn't be private, and I don't really want 'inner' to leak. It doesn't belong on wrapper, because it shouldn't be
 // possible to run area on a 2D or less feature. (Union might be different)
@@ -310,9 +323,7 @@ macro_rules! areal_fns {
                     // I'm writing to stdout here because the is_valid also writes to stdout
                     // FUTURE: I can't use progress.warning here because it is borrowed for mutable, is there another way?
                     eprintln!("fixing invalid union");
-                    let mut validate_options = gdal::cpl::CslStringList::new();
-                    validate_options.add_string("METHOD=STRUCTURE")?;
-                    united.make_valid(&validate_options)?
+                    united.make_valid(&validate_options_structure()?)?
                 } else {
                     united
                 };
@@ -349,9 +360,7 @@ macro_rules! areal_fns {
                     // I'm writing to stdout here because the is_valid also writes to stdout
                     // FUTURE: I can't use progress.warning because I've got progress borrowed as mutable. Is there another way?
                     eprintln!("fixing invalid difference");
-                    let mut validate_options = gdal::cpl::CslStringList::new();
-                    validate_options.add_string("METHOD=STRUCTURE")?;
-                    different.make_valid(&validate_options)?
+                    different.make_valid(&validate_options_structure()?)?
                 } else {
                     different
                 };
@@ -402,8 +411,12 @@ impl Polygon {
     pub(crate) fn make_valid_default(&self) -> Result<VariantArealGeometry,CommandError> {
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
         // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-        let validate_options = gdal::cpl::CslStringList::new();
-        self.inner.make_valid(&validate_options)?.try_into()
+        self.inner.make_valid(&gdal::cpl::CslStringList::new())?.try_into()
+    }
+
+    pub(crate) fn make_valid_structure(&self) -> Result<VariantArealGeometry,CommandError> {
+        // primarily caused by invalid unions and things.
+        self.inner.make_valid(&validate_options_structure()?)?.try_into()
     }
 
     // NOTE: Theres a small chance that bezierifying will create invalid geometries. These are automatically
@@ -548,8 +561,7 @@ impl MultiPolygon {
     pub(crate) fn make_valid_default(&self) -> Result<Self,CommandError> {
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
         // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-        let validate_options = gdal::cpl::CslStringList::new();
-        self.inner.make_valid(&validate_options)?.try_into()
+        self.inner.make_valid(&gdal::cpl::CslStringList::new())?.try_into()
     }
 
 
@@ -657,6 +669,11 @@ impl GDALGeometryWrapper for Collection<VariantGeometry> {
         }
     }
 
+    fn is_valid(&self) -> bool {
+        // FUTURE: This writes text to stdout. Is there a way to fix that?
+        self.inner.is_valid()
+    }
+
 
 }
 
@@ -761,6 +778,7 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         Ok(self.inner.add_geometry(geometry.into())?)
     }
 
+    // implementations of GDALGeometryWrapper for use in Variant, because it is impossible to implement it directly
     fn get_envelope(&self) -> Extent {
         let envelope = self.inner.envelope();
         Extent {
@@ -771,9 +789,14 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         }
     }
 
-
+    fn is_valid(&self) -> bool {
+        // FUTURE: This writes text to stdout if it isn't valid. Is there a way to fix that?
+        self.inner.is_valid()
+    }
 
 }
+
+
 
 
 pub(crate) struct CollectionIter<ItemType: GDALGeometryWrapper> {
@@ -845,6 +868,12 @@ macro_rules! impl_variant_geometry {
             fn get_envelope(&self) -> Extent {
                 match self {
                     $( $enum::$variant(a) => a.get_envelope(), )*
+                }
+            }
+
+            fn is_valid(&self) -> bool {
+                match self {
+                    $( $enum::$variant(a) => a.is_valid(), )*
                 }
             }
 
@@ -1035,6 +1064,10 @@ impl GDALGeometryWrapper for NoGeometry {
 
     fn get_envelope(&self) -> Extent {
         unreachable!("This program should never be getting extent for 'None' geometry.")
+    }
+
+    fn is_valid(&self) -> bool {
+        false
     }
 
     
