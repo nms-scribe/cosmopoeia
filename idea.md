@@ -462,10 +462,12 @@ These are things that really should be done before release, but they might take 
     [X] grouping::calculate_grouping -- I think knowing about edge tiles can help me solve a corner case in calculating whether an island is a lake_island or a continent if there are no oceans.
     [X] Coastlines and the thematic curvifications can extend over the edge of the map when curved. If I have knowledge of whether a tile is an edge tile, and where that edge is, then I can stop the curve at the points that are on the edge. Although, I might be able to just do an intersection with the extents.
 [X] Can tile.outlet_from now become an Option<u64>?
-[ ] Play around with a simple serializer for the field data. The idea is a macro that outputs code like below, so you have to write the names of every field exactly, and the compilation will fail if you don't. This is not as good as a proc macro, but I will have control.
+[X] Play around with a simple serializer for the field data. The idea is a macro that outputs code like below, so you have to write the names of every field exactly, and the compilation will fail if you don't. This is not as good as a proc macro, but I will have control.
     ```
     let Foo{ field_a, field_b } = value
     ```
+[ ] separate utils into modules
+[ ] clippy
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 [ ] Turn on the following clippies and figure out how to deal with them:
     #![warn(clippy::arithmetic_side_effects)]

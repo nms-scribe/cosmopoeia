@@ -27,10 +27,6 @@ use indexmap::map::Keys as IndexKeys;
 use indexmap::map::Iter as IndexIter;
 use indexmap::map::IterMut as IndexIterMut;
 use indexmap::map::IntoIter as IndexIntoIter;
-use serde::Serialize;
-use serde::Deserialize;
-use serde_json::to_string as to_json_string;
-use serde_json::from_str as from_json_str;
 use paste::paste;
 use prisma::Rgb;
 use angular_units::Deg;
@@ -64,6 +60,12 @@ use crate::geometry::MultiPolygon;
 use crate::geometry::NoGeometry;
 use crate::utils::Edge;
 use crate::geometry::MultiLineString;
+use crate::utils::simple_serde::Deserializer as Deserializer;
+use crate::utils::simple_serde::Serializer as Serializer;
+use crate::utils::simple_serde::Serialize as Serialize;
+use crate::utils::simple_serde::Deserialize as Deserialize;    
+use crate::utils::simple_serde::Token;
+use crate::impl_simple_serde_tagged_enum;
 
 
 // FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
@@ -77,116 +79,106 @@ use crate::geometry::MultiLineString;
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
-// What I really want is a serialization format that uses identifiers instead of Strings. RON should work in theory, but it didn''t support [untagged] enums for deserialization. So, this is a sort of hack, it's only intended for single-word enums, definitely not for any textual values.
-fn to_json_string_nq<Value: Serialize>(value: &Value) -> Result<String,serde_json::Error> {
-    let string = to_json_string(value)?;
-    Ok(string.trim_matches('"').to_owned())
-}
-
-// see to_json_string_nq
-fn from_json_str_nq<Value>(string: &str) -> Result<Value,serde_json::Error> where Value: for<'a> Deserialize<'a> {
-    let value = from_json_str(&format!("\"{string}\""))?;
-    Ok(value)
-}
-
 #[allow(variant_size_differences)] // Not sure how else to build this enum
-#[derive(Clone,Serialize,Deserialize,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
-#[serde(untagged)]
+#[derive(Clone,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
 pub(crate) enum Neighbor {
     OffMap(Edge),
     Tile(u64),
     CrossMap(u64, Edge),
 }
 
-mod test {
 
-    use serde::Serialize;
-    use serde::Deserialize;
-    use super::Edge;
+impl Serialize for Neighbor {
+    // implemented so there are no tags.
 
-    #[allow(variant_size_differences)] // Not sure how else to build this enum
-    #[derive(Clone,Deserialize,Serialize,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
-    #[serde(untagged)]
-    pub(crate) enum Neighbor {
-        OffMap(Edge),
-        Tile(u64),
+    fn write_value<Target: Serializer>(&self, serializer: &mut Target) {
+        match self {
+            Neighbor::OffMap(edge) => edge.write_value(serializer),
+            Neighbor::Tile(id) => id.write_value(serializer),
+            Neighbor::CrossMap(id, edge) => (id,edge).write_value(serializer),
+        }
     }
+}
 
-    #[test]
-    fn test_neighbor_serde() {
-
-        use serde_json::to_string;
-        use serde_json::from_str;
-
-        let a = Neighbor::OffMap(Edge::North);
-        let b = Neighbor::Tile(78);
-        let c = Neighbor::OffMap(Edge::Southwest);
-
-        let d = to_string(&a).unwrap();
-        let e = to_string(&b).unwrap();
-        let f = to_string(&c).unwrap();
-
-        assert_eq!(d,"\"North\"");
-        assert_eq!(e,"78");
-        assert_eq!(f,"\"Southwest\"");
-
-        let g: Neighbor = from_str(&d).unwrap();
-        let h: Neighbor = from_str(&e).unwrap();
-        let i: Neighbor = from_str(&f).unwrap();
-
-        assert_eq!(a,g);
-        assert_eq!(b,h);
-        assert_eq!(c,i);
-
-        
-
+impl Deserialize for Neighbor {
+    // implemented so there are no tags
+    fn read_value<Source: Deserializer>(source: &mut Source) -> Result<Self,CommandError> {
+        if source.matches(&Token::OpenParenthesis)? {
+            let id = Deserialize::read_value(source)?;
+            source.expect(&Token::Comma)?;
+            let edge = Deserialize::read_value(source)?;
+            source.expect(&Token::CloseParenthesis)?;
+            Ok(Self::CrossMap(id, edge))
+        } else if let Some(id) = source.matches_integer()? {
+            Ok(Self::Tile(id))
+        } else {
+            let edge = Deserialize::read_value(source)?;
+            Ok(Self::OffMap(edge))
+        }
     }
 }
 
 fn neighbor_to_string(value: &Neighbor) -> String {
-    to_json_string(value).expect("Why would serialization fail on a f64?")
+    value.write_to_string()
 }
 
 fn string_to_neighbor(value: String) -> Result<Neighbor,CommandError> {
-    from_json_str(&value).map_err(|_| CommandError::InvalidValueForNeighbor(value))
+    Deserialize::read_from_str(&value)
 }
 
 fn neighbor_list_to_string(value: &Vec<Neighbor>) -> String {
-    to_json_string(value).expect("Why would serialization fail on a list of simple enums?") 
+    value.write_to_string()
 }
 
 fn string_to_neighbor_list(value: String) -> Result<Vec<Neighbor>,CommandError> {
-    from_json_str(&value).map_err(|_| CommandError::InvalidValueForNeighborList(value))   
+    Deserialize::read_from_str(&value)
 }
 
 
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,PartialEq,Debug)]
 pub(crate) struct NeighborAndDirection(pub(crate) Neighbor,pub(crate) Deg<f64>);
 
+impl Serialize for NeighborAndDirection {
+
+    fn write_value<Target: Serializer>(&self, serializer: &mut Target) {
+        // serialize it as a neighbor and the float inside the angle
+        (&self.0,self.1.0).write_value(serializer)
+    }
+}
+
+impl Deserialize for NeighborAndDirection {
+
+    fn read_value<Source: Deserializer>(source: &mut Source) -> Result<Self,CommandError> {
+        let (neighbor,float) = Deserialize::read_value(source)?;
+        Ok(Self(neighbor,Deg(float)))
+
+    }
+}
+
+
 fn neighbor_directions_to_string(value: &Vec<NeighborAndDirection>) -> String {
-    to_json_string(value).expect("Why would serialization fail on a list of number pairs?")
+    value.write_to_string()
 }
 
 fn string_to_neighbor_directions(value: String) -> Result<Vec<NeighborAndDirection>,CommandError> {
-    from_json_str(&value).map_err(|_| CommandError::InvalidValueForNeighborDirections(value))   
+    Deserialize::read_from_str(&value)
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)] // Although it seems like it would be more efficient, the call to to_json_string just references it again anyway.
 fn id_ref_to_string(value: &u64) -> String {
-    to_json_string(value).expect("Why would serialization fail on a f64?") 
+    value.write_to_string()
 }
 
 fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
-    from_json_str(&value).map_err(|_| CommandError::InvalidValueForIdRef(value))
+    Deserialize::read_from_str(&value)
 }
 
 fn edge_to_string(value: &Edge) -> String {
-    to_json_string_nq(value).expect("Why would serialization fail on a simple enum?")
+    value.write_to_string()
 }
 
 fn string_to_edge(value: String) -> Result<Edge,CommandError> {
-    from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForEdge(value))
+    Deserialize::read_from_str(&value)
 }
 
 fn color_to_string(value: Rgb<u8>) -> String {
@@ -1393,7 +1385,7 @@ impl TriangleLayer<'_,'_> {
 
 }
 
-#[derive(Clone,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,PartialEq,Debug)]
 pub(crate) enum Grouping {
     LakeIsland,
     Islet,
@@ -1416,9 +1408,22 @@ impl Grouping {
 
 }
 
+
+impl_simple_serde_tagged_enum!{
+    Grouping {
+        LakeIsland,
+        Islet,
+        Island,
+        Continent,
+        Lake,
+        Ocean
+    }
+}
+
+
 impl From<&Grouping> for String {
     fn from(value: &Grouping) -> Self {
-        to_json_string_nq(&value).expect("Why would serialization fail on a basic enum?")
+        value.write_to_string()
     }
 }
 
@@ -1426,7 +1431,7 @@ impl TryFrom<String> for Grouping {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForGroupingType(value))
+        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForGroupingType(value))
     }
 }
 
@@ -2047,7 +2052,7 @@ impl TileLayer<'_,'_> {
 }
 
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,PartialEq,Debug)]
 pub(crate) enum RiverSegmentFrom {
     Source,
     Lake,
@@ -2058,22 +2063,35 @@ pub(crate) enum RiverSegmentFrom {
     Confluence,
 }
 
+
+impl_simple_serde_tagged_enum!{
+    RiverSegmentFrom {
+        Source,
+        Branch,
+        Continuing,
+        BranchingLake,
+        BranchingConfluence,
+        Confluence,
+        Lake,
+    }
+}
+
 impl TryFrom<String> for RiverSegmentFrom {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForSegmentFrom(value))
+        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForSegmentFrom(value))
     }
 }
 
 impl From<&RiverSegmentFrom> for String {
 
     fn from(value: &RiverSegmentFrom) -> Self {
-        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+        value.write_to_string()
     }
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,PartialEq,Debug)]
 pub(crate) enum RiverSegmentTo {
     Mouth,
     Confluence,
@@ -2082,18 +2100,30 @@ pub(crate) enum RiverSegmentTo {
     BranchingConfluence,
 }
 
+
+impl_simple_serde_tagged_enum!{
+    RiverSegmentTo {
+        Mouth,
+        Branch,
+        Continuing,
+        BranchingConfluence,
+        Confluence,
+    }
+}
+
+
 impl TryFrom<String> for RiverSegmentTo {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForSegmentTo(value))
+        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForSegmentTo(value))
     }
 }
 
 impl From<&RiverSegmentTo> for String {
 
     fn from(value: &RiverSegmentTo) -> Self {
-        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+        value.write_to_string()
     }
 }
 
@@ -2121,7 +2151,7 @@ impl RiverLayer<'_,'_> {
 
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,PartialEq,Debug)]
 pub(crate) enum LakeType {
     Fresh,
     Salt,
@@ -2132,10 +2162,22 @@ pub(crate) enum LakeType {
 }
 
 
+impl_simple_serde_tagged_enum!{
+    LakeType {
+        Fresh,
+        Salt,
+        Frozen,
+        Pluvial,
+        Dry,
+        Marsh
+    }
+}
+
+
 impl From<&LakeType> for String {
 
     fn from(value: &LakeType) -> Self {
-        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?") // there shouldn't be any reason to have an error
+        value.write_to_string()
     }
 }
 
@@ -2143,7 +2185,7 @@ impl TryFrom<String> for LakeType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForLakeType(value))
+        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForLakeType(value))
     }
 }
 
@@ -2188,7 +2230,7 @@ impl LakeLayer<'_,'_> {
 
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,PartialEq,Debug)]
 pub(crate) enum BiomeCriteria {
     Matrix(Vec<(usize,usize)>), // moisture band, temperature band
     Wetland,
@@ -2196,18 +2238,28 @@ pub(crate) enum BiomeCriteria {
     Ocean
 }
 
+
+impl_simple_serde_tagged_enum!{
+    BiomeCriteria {
+        Ocean,
+        Wetland,
+        Glacier,
+        Matrix(list),
+    }
+}
+
 impl TryFrom<String> for BiomeCriteria {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_json_str(&value).map_err(|_| CommandError::InvalidBiomeMatrixValue(value))
+        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidBiomeMatrixValue(value))
     }
 }
 
 impl From<&BiomeCriteria> for String {
 
     fn from(value: &BiomeCriteria) -> Self {
-        to_json_string(value).expect("Why would serialization fail on an enum with no weird structs?") // there shouldn't be any reason to have an error
+        value.write_to_string()
     }
 }
 
@@ -2490,7 +2542,7 @@ impl BiomeLayer<'_,'_> {
 
 }
 
-#[derive(Clone,Hash,Eq,PartialEq,Serialize,Deserialize)]
+#[derive(Clone,Hash,Eq,PartialEq,Debug)]
 pub(crate) enum CultureType {
     Generic,
     Lake,
@@ -2501,11 +2553,24 @@ pub(crate) enum CultureType {
     Highland
 }
 
+impl_simple_serde_tagged_enum!{
+    CultureType {
+        Lake,
+        Generic,
+        Naval,
+        River,
+        Nomadic,
+        Hunting,
+        Highland,
+    }
+}
+
+
 
 impl From<&CultureType> for String {
 
     fn from(value: &CultureType) -> Self {
-        to_json_string_nq(value).expect("Why would serialization fail on a basic enum?")
+        value.write_to_string()
     }
 }
 
@@ -2514,7 +2579,7 @@ impl TryFrom<String> for CultureType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        from_json_str_nq(&value).map_err(|_| CommandError::InvalidValueForCultureType(value))
+        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForCultureType(value))
     }
 }
 
@@ -2866,7 +2931,7 @@ impl From<&ElevationLimits> for String {
 
     fn from(value: &ElevationLimits) -> Self {
         // store as tuple for simplicity
-        to_json_string(&(value.min_elevation,value.max_elevation)).expect("Why would serialization fail on a tuple of numbers?")
+        (value.min_elevation,value.max_elevation).write_to_string()
     }
 }
 
@@ -2876,7 +2941,7 @@ impl TryFrom<String> for ElevationLimits {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         // store as tuple for simplicity
-        let input: (f64,f64) = from_json_str(&value).map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        let input: (f64,f64) = Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
         Ok(Self {
             min_elevation: input.0,
             max_elevation: input.1,
@@ -3134,4 +3199,3 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
     }
 
 }
-

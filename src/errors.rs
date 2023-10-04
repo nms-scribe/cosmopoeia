@@ -8,8 +8,9 @@ use gdal::vector::geometry_type_to_name;
 
 pub(crate) use clap::error::Error as ArgumentError;
 use crate::utils::Edge;
+use crate::utils::simple_serde::Token;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum CommandError {
     GdalError(GdalError),
     VoronoiExpectsPolygons,
@@ -71,7 +72,15 @@ pub enum CommandError {
     InvalidValueForNeighbor(String),
     InvalidValueForNeighborList(String),
     InvalidValueForEdge(String),
-    CantFindMiddlePointOnEdge(u64, Edge, usize),     
+    CantFindMiddlePointOnEdge(u64, Edge, usize),
+    InvalidNumberInSerializedValue(String),
+    InvalidStringInSerializedValue(String),
+    InvalidCharacterInSerializedValue(char),
+    ExpectedTokenInSerializedValue(Token, Option<Token>),
+    ExpectedIdentifierInSerializedValue(Option<Token>),
+    ExpectedFloatInSerializedValue(Option<Token>),
+    ExpectedIntegerInSerializedValue(u32,bool,Option<Token>),
+    InvalidEnumValueInInSerializedValue(String)
 }
 
 impl Error for CommandError {
@@ -166,7 +175,35 @@ impl Display for CommandError {
             Self::CantConvertMultiPolygonToPolygon => write!(f,"Attempted to convert a multi-polygon with more than one polygon into a simple polygon."),
             Self::EmptyLinearRing => write!(f,"Attempted to create an empty ring for a polygon."),
             Self::UnclosedLinearRing => write!(f,"Attempted to create an unclosed polygon ring."),
-            Self::InvalidTileEdge(a,b) => write!(f,"A tile was calculated to be on a conflicting edges ('{a:?}' and '{b:?}') of the map. Perhaps the tile count is too small.")
+            Self::InvalidTileEdge(a,b) => write!(f,"A tile was calculated to be on a conflicting edges ('{a:?}' and '{b:?}') of the map. Perhaps the tile count is too small."),
+            Self::InvalidNumberInSerializedValue(a) => write!(f,"While parsing field value: found invalid number  '{a}'."),
+            Self::InvalidStringInSerializedValue(a) => write!(f,"While parsing field value: found unterminated string '{a}'."),
+            Self::InvalidCharacterInSerializedValue(a) => write!(f,"While parsing field value: found unexpected character '{a}'."),
+            Self::ExpectedTokenInSerializedValue(expected, found) => if let Some(found) = found {
+                write!(f,"While parsing field value: expected '{expected:?}', found '{found:?}'.")
+            } else {
+                write!(f,"While parsing field value: expected '{expected:?}', found end of text.")
+
+            },
+            Self::ExpectedIdentifierInSerializedValue(found) => if let Some(found) = found {
+                write!(f,"While parsing field value: expected identifier, found '{found:?}'.")
+            } else {
+                write!(f,"While parsing field value: expected identifier, found end of text.")
+
+            },
+            Self::ExpectedFloatInSerializedValue(found) => if let Some(found) = found {
+                write!(f,"While parsing field value: expected float, found '{found:?}'.")
+            } else {
+                write!(f,"While parsing field value: expected float, found end of text.")
+
+            },
+            Self::ExpectedIntegerInSerializedValue(size,signed,found) => if let Some(found) = found {
+                write!(f,"While parsing field value: expected {} integer({size}), found '{found:?}'.",if *signed { "signed" } else { "" })
+            } else {
+                write!(f,"While parsing field value: expected {} integer({size}), found end of text.",if *signed { "signed" } else { "" })
+
+            },
+            Self::InvalidEnumValueInInSerializedValue(value) => write!(f,"While parsing field value: found invalid enum value '{value}'.")
         }
     }
 }
