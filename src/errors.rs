@@ -80,7 +80,8 @@ pub enum CommandError {
     ExpectedIdentifierInSerializedValue(Option<Token>),
     ExpectedFloatInSerializedValue(Option<Token>),
     ExpectedIntegerInSerializedValue(u32,bool,Option<Token>),
-    InvalidEnumValueInInSerializedValue(String)
+    InvalidEnumValueInInSerializedValue(String),
+    NamerDistributionError(String),
 }
 
 impl Error for CommandError {
@@ -203,7 +204,8 @@ impl Display for CommandError {
                 write!(f,"While parsing field value: expected {} integer({size}), found end of text.",if *signed { "signed" } else { "" })
 
             },
-            Self::InvalidEnumValueInInSerializedValue(value) => write!(f,"While parsing field value: found invalid enum value '{value}'.")
+            Self::InvalidEnumValueInInSerializedValue(value) => write!(f,"While parsing field value: found invalid enum value '{value}'."),
+            Self::NamerDistributionError(namer) => write!(f,"While loading namer '{namer}', the length distribution could not be calculated.")
         }
     }
 }

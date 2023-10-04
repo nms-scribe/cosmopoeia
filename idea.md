@@ -470,13 +470,15 @@ These are things that really should be done before release, but they might take 
 [X] Change 'Point' to 'Coordinates', perhaps, and then get rid of UtilsPoint and GeoPoint
 [X] clippy
 [X] Is flow_to supposed to be a vector? Or optional?
-[ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
-[ ] Turn on the following clippies and figure out how to deal with them:
-    #![warn(clippy::arithmetic_side_effects)]
-    #![warn(clippy::as_conversions)]
-    #![warn(clippy::indexing_slicing)]
-    #![warn(clippy::float_arithmetic)]
-    #![warn(clippy::cargo_common_metadata)]
+[X] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
+[ ] map_err should pass the error on to the various things if it's found.
+[ ] Turn on the following clippies one at a time and figure out how to deal with them, then I can just leave them in:
+    [ ] #![warn(clippy::arithmetic_side_effects)]
+    [ ] #![warn(clippy::as_conversions)]
+    [ ] #![warn(clippy::indexing_slicing)]
+    [ ] #![warn(clippy::float_arithmetic)]
+    [ ] -- is there one for integer_arithmetic? Because I want to be able to check for overflow, which might simplify the release build.
+    [ ] #![warn(clippy::cargo_common_metadata)]
 
 
 ## Post-release tasks and feature requests.

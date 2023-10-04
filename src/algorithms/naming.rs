@@ -8,6 +8,8 @@ use std::ffi::OsStr;
 use std::fs::File;
 
 use rand::Rng;
+use rand_distr::Normal;
+use rand_distr::Distribution;
 use serde::Serialize;
 use serde::Deserialize;
 use serde_json::Serializer as JSONSerializer;
@@ -179,8 +181,6 @@ impl StateSuffixBehavior {
 
 #[derive(Serialize,Deserialize)]
 struct MarkovSource {
-    min_len: usize,
-    cutoff_len: usize,
     duplicatable_letters: Vec<char>,
     seed_words: Vec<String>,
 }
@@ -203,27 +203,43 @@ struct NamerSource {
 
 struct MarkovGenerator {
     chain: HashMap<Option<char>, Vec<String>>,
-    min_len: usize,
-    cutoff_len: usize,
+    length_distribution: Normal<f64>,
+    minimum_length: usize,
     duplicatable_letters: Vec<char>,
     seed_words: Vec<String>,
 
 }
 
+struct Chain {
+    chain: HashMap<Option<char>, Vec<String>>,
+    length_distribution: Normal<f64>,
+    minimum_length: usize,
+}
+
 impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
-    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<HashMap<Option<char>, Vec<String>>,CommandError> {
+    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<Chain,CommandError> {
         if array.is_empty() {
             Err(CommandError::EmptyNamerInput(name.to_owned()))
         } else {
             let mut chain = HashMap::new();
 
+            let name_count = array.len() as f64;
+            let mean_length = array.iter().map(String::len).sum::<usize>() as f64/name_count;
+            let mut squared_distance = 0.0;
+            let mut minimum_length = usize::MAX;
+
             progress.start_known_endpoint(|| array.len());
     
             for (j,n) in array.iter().enumerate() {
+                // for standard deviation calculation
+                squared_distance += (n.len() as f64 - mean_length).powi(2);
+                minimum_length = minimum_length.min(n.len());
+
                 let word: Vec<char> = n.trim().chars().collect();
                 let basic = word.iter().all(|c| matches!(c, '\u{0000}'..='\u{007f}')); // basic chars and English rules can be applied
+
     
                 // split word into pseudo-syllables
                 let mut syllable = String::new();
@@ -300,13 +316,21 @@ impl MarkovGenerator {
                 }
                 progress.update(|| j);
             }
+
+            let standard_deviation = (squared_distance/name_count).sqrt();
     
             progress.finish();
+
+            let length_distribution = Normal::new(mean_length, standard_deviation).map_err(|_| CommandError::NamerDistributionError(name.to_owned()))?;
 
             if chain.is_empty() {
                 Err(CommandError::EmptyNamerInput(name.to_owned()))
             } else {
-                Ok(chain)
+                Ok(Chain {
+                    chain,
+                    length_distribution,
+                    minimum_length
+                })
             }
     
         }
@@ -315,21 +339,22 @@ impl MarkovGenerator {
 
 
     fn new<Progress: ProgressObserver>(name: &str, base: MarkovSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
-        let chain = Self::calculate_chain(name,&base.seed_words,progress)?;
+        let Chain{chain,length_distribution,minimum_length} = Self::calculate_chain(name,&base.seed_words,progress)?;
+        
 
         Ok(Self {
             chain,
-            min_len: base.min_len,
-            cutoff_len: base.cutoff_len,
+            length_distribution,
+            minimum_length,
             duplicatable_letters: base.duplicatable_letters,
             seed_words: base.seed_words
         })
     }
 
-    pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random, min_len: Option<usize>, cutoff_len: Option<usize>) -> String {
+    pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
 
-        let min_len = min_len.unwrap_or(self.min_len);
-        let cutoff_len = cutoff_len.unwrap_or(self.cutoff_len);
+        let min_len = self.minimum_length;
+        let cutoff_len = self.length_distribution.sample(rng).ceil() as usize;
 
         let mut choices = self.chain.get(&None).expect("How would we get an empty chain?"); // As long as the input wasn't empty, this shouldn't panic
         let mut cur = choices.choose(rng).clone();
@@ -455,7 +480,7 @@ impl NamerMethod {
 
     pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
         match self {
-            Self::Markov(markov) => markov.make_word(rng, None, None),
+            Self::Markov(markov) => markov.make_word(rng),
             Self::ListPicker(picker) => picker.pick_word(rng)
         }
     }
@@ -718,16 +743,9 @@ impl NamerSetSource {
 
     pub(crate) fn extend_from_text<Reader: std::io::Read>(&mut self, name: String, text_is_markov: bool, source: BufReader<Reader>) -> Result<(),CommandError> {
         let mut list = Vec::new();
-        let mut min: Option<usize> = None;
-        let mut sum = 0;
         let mut duplicate_chars = HashSet::new();
         for line in source.lines() {
             let word = line.map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?; 
-            min = match min {
-                Some(n) => Some(n.min(word.len())),
-                None => Some(word.len())
-            };
-            sum += word.len();
             for (a,b) in word.chars().zip(word.chars().skip(1)) {
                 if a == b {
                     _ = duplicate_chars.insert(a);
@@ -739,15 +757,10 @@ impl NamerSetSource {
         }
 
         if text_is_markov {
-            let min_len = min.unwrap_or(0);
-            let avg_len = sum.div_euclid(list.len());
-            let cutoff_len = avg_len;
 
             self.add_namer(NamerSource {
                 name,
                 method: NamerMethodSource::Markov(MarkovSource {
-                    min_len,
-                    cutoff_len,
                     duplicatable_letters: duplicate_chars.into_iter().collect(),
                     seed_words: list,
                 }),
