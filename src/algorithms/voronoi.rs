@@ -127,13 +127,13 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             let line = geometry.get_ring(0)?; // this should be the outer ring for a triangle.
 
             if line.len() != 4 { // the line should be a loop, with the first and last elements
-                return Err(CommandError::VoronoiExpectsTriangles);
+                return Err(CommandError::VoronoiExpectsTriangles("Not enough points in a polygon.".to_owned()));
             }
 
             let points: [Coordinates; 3] = (0..3)
                .map(|i| Ok(line.get_point(i).try_into()?)).collect::<Result<Vec<Coordinates>,CommandError>>()?
                .try_into()
-               .map_err(|_| CommandError::VoronoiExpectsTriangles)?;
+               .map_err(|e| CommandError::VoronoiExpectsTriangles(format!("{e:?}")))?;
 
             let circumcenter = Coordinates::circumcenter((&points[0],&points[1],&points[2]));
 

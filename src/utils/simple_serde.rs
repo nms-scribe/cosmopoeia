@@ -120,18 +120,18 @@ impl Iterator for Tokenizer<'_> {
 
                         match number.parse() {
                             Ok(value) => Some(Ok(Token::Float(value))),
-                            Err(_) => Some(Err(CommandError::InvalidNumberInSerializedValue(number))),
+                            Err(e) => Some(Err(CommandError::InvalidNumberInSerializedValue(number,format!("{e}")))),
                         }                    
 
                     } else if signed {
                         match number.parse() {
                             Ok(value) => Some(Ok(Token::SignedInteger(value))),
-                            Err(_) => Some(Err(CommandError::InvalidNumberInSerializedValue(number))),
+                            Err(e) => Some(Err(CommandError::InvalidNumberInSerializedValue(number,format!("{e}")))),
                         }                    
                     } else {
                         match number.parse() {
                             Ok(value) => Some(Ok(Token::Integer(value))),
-                            Err(_) => Some(Err(CommandError::InvalidNumberInSerializedValue(number))),
+                            Err(e) => Some(Err(CommandError::InvalidNumberInSerializedValue(number,format!("{e}")))),
                         }                    
 
                     }

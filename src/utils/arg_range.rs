@@ -89,7 +89,8 @@ impl<NumberType: SampleUniform + PartialOrd + Copy + TruncOrSelf> ArgRange<Numbe
     }
 }
 
-impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>> Deserialize<'deserializer> for ArgRange<NumberType> {
+impl<'deserializer,NumberType: FromStr + PartialOrd + Deserialize<'deserializer>> Deserialize<'deserializer> for ArgRange<NumberType>
+where <NumberType as FromStr>::Err: Display {
 
     fn deserialize<Deserializer>(deserializer: Deserializer) -> Result<Self, Deserializer::Error>
     where
@@ -121,7 +122,8 @@ impl<NumberType: FromStr + Display> Serialize for ArgRange<NumberType> {
     }
 }
 
-impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> {
+impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> 
+where <NumberType as FromStr>::Err: Display {
     type Err = CommandError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -133,10 +135,10 @@ impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> {
                 false
             };
 
-            let first = first.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            let last = last.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
-            if first > last {
-                return Err(CommandError::InvalidRangeArgument(s.to_owned()))
+            let first = first.parse().map_err(|e| CommandError::InvalidRangeArgument(s.to_owned(),format!("{e}")))?;
+            let last = last.parse().map_err(|e| CommandError::InvalidRangeArgument(s.to_owned(),format!("{e}")))?;
+            if first >= last {
+                return Err(CommandError::InvalidRangeArgument(s.to_owned(),"First number must be less than last.".to_owned()))
             }
 
             Ok(if include_last {
@@ -145,7 +147,7 @@ impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> {
                 Self::Exclusive(first,last)
             })
         } else {
-            let number = s.parse().map_err(|_| CommandError::InvalidRangeArgument(s.to_owned()))?;
+            let number = s.parse().map_err(|e| CommandError::InvalidRangeArgument(s.to_owned(),format!("{e}")))?;
             Ok(Self::Single(number))
         }
     }

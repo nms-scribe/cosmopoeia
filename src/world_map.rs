@@ -150,9 +150,9 @@ fn string_to_color(value: &str) -> Result<Rgb<u8>,CommandError> {
         let str = &value.get(n..(n+2));
         str.and_then(|astr| u8::from_str_radix(astr, 16).ok()) // I'm going to drop the error anyway.
     });
-    let red = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned()))?;
-    let green = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned()))?;
-    let blue = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned()))?;
+    let red = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned(),"Missing red.".to_owned()))?;
+    let green = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned(),"Missing green.".to_owned()))?;
+    let blue = colors.next().ok_or_else(|| CommandError::InvalidValueForColor(value.to_owned(),"Missing blue.".to_owned()))?;
     Ok(Rgb::new(red,green,blue))
 
 }
@@ -1385,7 +1385,7 @@ impl TryFrom<String> for Grouping {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForGroupingType(value))
+        Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidValueForGroupingType(value,format!("{e}")))
     }
 }
 
@@ -2033,7 +2033,7 @@ impl TryFrom<String> for RiverSegmentFrom {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForSegmentFrom(value))
+        Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidValueForSegmentFrom(value,format!("{e}")))
     }
 }
 
@@ -2069,7 +2069,7 @@ impl TryFrom<String> for RiverSegmentTo {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForSegmentTo(value))
+        Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidValueForSegmentTo(value,format!("{e}")))
     }
 }
 
@@ -2138,7 +2138,7 @@ impl TryFrom<String> for LakeType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForLakeType(value))
+        Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidValueForLakeType(value,format!("{e}")))
     }
 }
 
@@ -2205,7 +2205,7 @@ impl TryFrom<String> for BiomeCriteria {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidBiomeMatrixValue(value))
+        Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidBiomeMatrixValue(value,format!("{e}")))
     }
 }
 
@@ -2532,7 +2532,7 @@ impl TryFrom<String> for CultureType {
     type Error = CommandError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidValueForCultureType(value))
+        Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidValueForCultureType(value,format!("{e}")))
     }
 }
 
@@ -2894,7 +2894,7 @@ impl TryFrom<String> for ElevationLimits {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         // store as tuple for simplicity
-        let input: (f64,f64) = Deserialize::read_from_str(&value).map_err(|_| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone()))?;
+        let input: (f64,f64) = Deserialize::read_from_str(&value).map_err(|e| CommandError::InvalidPropertyValue(PropertySchema::PROP_ELEVATION_LIMITS.to_owned(),value.clone(),format!("{e}")))?;
         Ok(Self {
             min_elevation: input.0,
             max_elevation: input.1,

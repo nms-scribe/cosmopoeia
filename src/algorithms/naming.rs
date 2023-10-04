@@ -321,7 +321,7 @@ impl MarkovGenerator {
     
             progress.finish();
 
-            let length_distribution = Normal::new(mean_length, standard_deviation).map_err(|_| CommandError::NamerDistributionError(name.to_owned()))?;
+            let length_distribution = Normal::new(mean_length, standard_deviation).map_err(|e| CommandError::NamerDistributionError(name.to_owned(),format!("{e}")))?;
 
             if chain.is_empty() {
                 Err(CommandError::EmptyNamerInput(name.to_owned()))
