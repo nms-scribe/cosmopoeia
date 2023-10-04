@@ -285,7 +285,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                 // spread the humidity amongst them... FUTURE: Should I wait it for the more direct tiles?
                 let humidity = humidity/best_neighbors.len() as f64;
 
-                for next_fid in best_neighbors.into_iter() {
+                for next_fid in best_neighbors {
                     if !visited.insert((start_id,next_fid.clone())) {
                         continue;
                         // set already contained the value, so we've reached one we've already visited, I don't want to go in circles.

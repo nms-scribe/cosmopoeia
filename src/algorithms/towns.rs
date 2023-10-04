@@ -108,12 +108,12 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
         }
     } else {
         let map_size = extent.width * extent.height;
-        let town_count = (map_size/100.0).floor() as usize;
-        let town_count = town_count.min(tiles.len() - placed_capital_count);
-        if town_count == 0 {
+        let generated_town_count = (map_size/100.0).floor() as usize;
+        let generated_town_count = generated_town_count.min(tiles.len() - placed_capital_count);
+        if generated_town_count == 0 {
             progress.warning(|| "There aren't enough populated cells to generate towns.")
         }
-        town_count
+        generated_town_count
     };
 
     let mut spacing = (extent.width + extent.height) / 150.0 / ((town_count as f64).powf(0.7)/66.0);
@@ -298,9 +298,8 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
         // figure out if it's a port
         let port_location = if let Some(closest_water) = &tile.harbor_tile_id {
             match closest_water {
-                neighbor @ Neighbor::Tile(closest_water) |
-                neighbor @ Neighbor::CrossMap(closest_water, _) => {
-                    let harbor = tile_map.try_get(&(closest_water))?;
+                neighbor @ (Neighbor::Tile(closest_water) | Neighbor::CrossMap(closest_water, _)) => {
+                    let harbor = tile_map.try_get(closest_water)?;
 
                     // add it to the map of towns by feature for removing port status later.
                     match coastal_towns.get_mut(&harbor.grouping_id) {

@@ -95,7 +95,7 @@ impl Iterator for Tokenizer<'_> {
                 },
                 ' ' => {
                     _ = self.text.next();
-                    while let Some(' ') = self.text.peek() {
+                    while matches!(self.text.peek(),Some(' ')) {
                         _ = self.text.next();
                     }
                     Some(Ok(Token::OpenBracket))
@@ -105,16 +105,16 @@ impl Iterator for Tokenizer<'_> {
                     let signed = matches!(char,'-' | '+');
                     let mut number = String::from(char);
                     _ = self.text.next();
-                    while let Some(char @ '0'..='9') = self.text.peek() {
-                        number.push(*char);
+                    while let Some(digit @ '0'..='9') = self.text.peek() {
+                        number.push(*digit);
                         _ = self.text.next();
                     }
 
-                    if let Some('.') = self.text.peek() {
+                    if matches!(self.text.peek(),Some('.')) {
                         number.push('.');
                         _ = self.text.next();
-                        while let Some(char @ '0'..='9') = self.text.peek() {
-                            number.push(*char);
+                        while let Some(digit @ '0'..='9') = self.text.peek() {
+                            number.push(*digit);
                             _ = self.text.next();
                         }
 
@@ -141,14 +141,14 @@ impl Iterator for Tokenizer<'_> {
                     let mut value = String::new();
                     _ = self.text.next();
                     let mut found_quote = false;
-                    while let Some(char) = self.text.next() {
-                        match char {
+                    while let Some(text_char) = self.text.next() {
+                        match text_char {
                             '"' => {
                                 found_quote = true;
                                 break
                             },
-                            '\\' => if let Some(char) = self.text.next() {
-                                value.push(char);
+                            '\\' => if let Some(escaped_char) = self.text.next() {
+                                value.push(escaped_char);
                             } else {
                                 value.push('\\');
                                 break;
@@ -166,8 +166,8 @@ impl Iterator for Tokenizer<'_> {
                 'A'..='Z' | 'a'..='z' => {
                     let mut value = String::from(*char);
                     _ = self.text.next();
-                    while let Some(char @ 'A'..='Z' | char @ 'a'..='z' | char @ '_' | char @ '0'..='9') = self.text.peek() {
-                        value.push(*char);
+                    while let Some(ident_char @ ('A'..='Z' | 'a'..='z' | '_' | '0'..='9')) = self.text.peek() {
+                        value.push(*ident_char);
                         _ = self.text.next();
                     }
                     Some(Ok(Token::Identifier(value)))
@@ -230,7 +230,7 @@ impl Deserializer for Peekable<Tokenizer<'_>> {
                 } else {
                     Err(CommandError::ExpectedTokenInSerializedValue(expected.clone(),Some(found.clone())))
                 },
-                (Token::Float(a), Token::Float(b)) => if a == b {
+                (Token::Float(a), Token::Float(b)) => if (a - b).abs() < f64::EPSILON {
                     Ok(())
                 } else {
                     Err(CommandError::ExpectedTokenInSerializedValue(expected.clone(),Some(found.clone())))
@@ -258,27 +258,11 @@ impl Deserializer for Peekable<Tokenizer<'_>> {
                 (Token::CloseParenthesis, Token::CloseParenthesis) |
                 (Token::Comma, Token::Comma) |
                 (Token::Whitespace, Token::Whitespace) => true,
-                (Token::Integer(a), Token::Integer(b)) => if a == b {
-                    true
-                } else {
-                    false
-                },
-                (Token::SignedInteger(a), Token::SignedInteger(b)) => if a == b {
-                    true
-                } else {
-                    false
-                },
-                (Token::Float(a), Token::Float(b)) => if a == b {
-                    true
-                } else {
-                    false 
-                },
+                (Token::Integer(a), Token::Integer(b)) => a == b,
+                (Token::SignedInteger(a), Token::SignedInteger(b)) => a == b,
+                (Token::Float(a), Token::Float(b)) => (a - b).abs() < f64::EPSILON,
                 (Token::String(a), Token::String(b)) |
-                (Token::Identifier(a), Token::Identifier(b)) => if a == b {
-                    true
-                } else {
-                    false
-                },
+                (Token::Identifier(a), Token::Identifier(b)) => a == b,
                 (_,_) => false
             },
             Some(Err(err)) => return Err(err.clone()),
@@ -300,7 +284,7 @@ impl Deserializer for Peekable<Tokenizer<'_>> {
     }
 
     fn skip_whitespace(&mut self) -> Result<(),CommandError> {
-        while let Some(Ok(Token::Whitespace)) = self.peek() {
+        while matches!(self.peek(), Some(Ok(Token::Whitespace))) {
             _ = self.next().transpose()?;
         }
         Ok(())
@@ -344,9 +328,8 @@ impl Deserializer for Peekable<Tokenizer<'_>> {
                 _ = self.next().transpose()?;
                 Ok(Some(value))
             },
-            Some(Ok(_)) => Ok(None),
             Some(Err(err)) => Err(err.clone()),
-            None => Ok(None),
+            Some(Ok(_)) | None => Ok(None),
         }
     }
 
@@ -449,7 +432,7 @@ impl<ItemType: Deserialize> Deserialize for Vec<ItemType> {
 
     fn read_value<Source: Deserializer>(deserializer: &mut Source) -> Result<Self,CommandError> {
         deserializer.expect(&Token::OpenBracket)?;
-        let mut result = Vec::new();
+        let mut result = Self::new();
         if !deserializer.matches(&Token::CloseBracket)? {
             result.push(Deserialize::read_value(deserializer)?);
             while deserializer.matches(&Token::Comma)? {
@@ -547,7 +530,7 @@ impl Serialize for usize {
 impl Deserialize for usize {
 
     fn read_value<Source: Deserializer>(deserializer: &mut Source) -> Result<Self,CommandError> {
-        Ok(deserializer.expect_integer(usize::BITS)? as usize)
+        Ok(deserializer.expect_integer(Self::BITS)? as Self)
     }
 }
 
@@ -561,7 +544,7 @@ impl Serialize for i32 {
 impl Deserialize for i32 {
 
     fn read_value<Source: Deserializer>(deserializer: &mut Source) -> Result<Self,CommandError> {
-        Ok(deserializer.expect_signed_integer(32)? as i32)
+        Ok(deserializer.expect_signed_integer(Self::BITS)? as Self)
     }
 }
 
@@ -694,72 +677,72 @@ mod test {
     use crate::world_map::CultureType;
 
 
-    fn test_serializing<Value: SimpleSerialize + SimpleDeserialize + PartialEq + core::fmt::Debug>(value: Value, text: &str) {
+    fn test_serializing<Value: SimpleSerialize + SimpleDeserialize + PartialEq + core::fmt::Debug>(value: &Value, text: &str) {
         let serialized = value.write_to_string();
         assert_eq!(serialized,text);
         let deserialized = Value::read_from_str(&serialized).unwrap();
-        assert_eq!(value,deserialized)
+        assert_eq!(value,&deserialized)
     }
 
 
     #[test]
     fn test_serde_edge() {
-        test_serializing(Edge::North, "North");
-        test_serializing(Edge::Southwest, "Southwest");
+        test_serializing(&Edge::North, "North");
+        test_serializing(&Edge::Southwest, "Southwest");
     }
 
     #[test]
     fn test_serde_neighbor() {
-        test_serializing(Neighbor::Tile(36), "36");
-        test_serializing(Neighbor::CrossMap(42, Edge::East), "(42,East)");
-        test_serializing(Neighbor::OffMap(Edge::West), "West");
+        test_serializing(&Neighbor::Tile(36), "36");
+        test_serializing(&Neighbor::CrossMap(42, Edge::East), "(42,East)");
+        test_serializing(&Neighbor::OffMap(Edge::West), "West");
     }
 
     #[test]
     fn test_serde_neighbor_vec() {
-        test_serializing(vec![Neighbor::Tile(36), Neighbor::CrossMap(42, Edge::East), Neighbor::OffMap(Edge::West)], "[36,(42,East),West]");
-        test_serializing::<Vec<Neighbor>>(vec![], "[]");
+        test_serializing(&vec![Neighbor::Tile(36), Neighbor::CrossMap(42, Edge::East), Neighbor::OffMap(Edge::West)], "[36,(42,East),West]");
+        test_serializing::<Vec<Neighbor>>(&vec![], "[]");
     }
 
     #[test]
     fn test_serde_neighbor_and_direction() {
-        test_serializing(NeighborAndDirection(Neighbor::Tile(72),Deg(45.6)), "(72,45.6)")
+        test_serializing(&NeighborAndDirection(Neighbor::Tile(72),Deg(45.6)), "(72,45.6)")
     }
 
     #[test]
     fn test_serde_neighbor_and_direction_vec() {
-        test_serializing(vec![NeighborAndDirection(Neighbor::Tile(72),Deg(45.6)),NeighborAndDirection(Neighbor::CrossMap(49,Edge::Southeast),Deg(0.1))], "[(72,45.6),((49,Southeast),0.1)]")
+        test_serializing(&vec![NeighborAndDirection(Neighbor::Tile(72),Deg(45.6)),NeighborAndDirection(Neighbor::CrossMap(49,Edge::Southeast),Deg(0.1))], "[(72,45.6),((49,Southeast),0.1)]")
     }
 
     #[test]
     fn test_serde_grouping() {
-        test_serializing(Grouping::LakeIsland, "LakeIsland")
+        test_serializing(&Grouping::LakeIsland, "LakeIsland")
     }
 
     #[test]
     fn test_serde_river_segment_from() {
-        test_serializing(RiverSegmentFrom::Confluence, "Confluence")
+        test_serializing(&RiverSegmentFrom::Confluence, "Confluence")
     }
 
     #[test]
     fn test_serde_river_segment_to() {
-        test_serializing(RiverSegmentTo::Mouth, "Mouth")
+        test_serializing(&RiverSegmentTo::Mouth, "Mouth")
     }
 
     #[test]
     fn test_serde_lake_type() {
-        test_serializing(LakeType::Fresh, "Fresh")
+        test_serializing(&LakeType::Fresh, "Fresh")
     }
 
     #[test]
     fn test_serde_biome_criteria() {
-        test_serializing(BiomeCriteria::Glacier, "Glacier");
-        test_serializing(BiomeCriteria::Matrix(vec![(23,24),(12,20),(13,4)]), "Matrix([(23,24),(12,20),(13,4)])")
+        test_serializing(&BiomeCriteria::Glacier, "Glacier");
+        test_serializing(&BiomeCriteria::Matrix(vec![(23,24),(12,20),(13,4)]), "Matrix([(23,24),(12,20),(13,4)])")
     }
 
     #[test]
     fn test_serde_culture_type() {
-        test_serializing(CultureType::Hunting, "Hunting")
+        test_serializing(&CultureType::Hunting, "Hunting")
     }
 
 

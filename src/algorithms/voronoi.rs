@@ -53,7 +53,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             // figure out if it lay off the edge of the map:
             let mut edge: Option<Edge> = None;
             for point in &vertices {
-                if let Some(point_edge) = extent.is_off_edge(&point) {
+                if let Some(point_edge) = extent.is_off_edge(point) {
                     if let Some(previous_edge) = edge {
                         edge = Some(point_edge.combine_with(previous_edge)?);
                     } else {
@@ -91,8 +91,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                     Edge::Southwest |
                     Edge::Northwest => {
                         let bounds = polygon.get_envelope();
-                        let edge = extent.is_extent_on_edge(&bounds)?;
-                        edge
+                        extent.is_extent_on_edge(&bounds)?
                     },
                     Edge::North |
                     Edge::East |

@@ -211,9 +211,9 @@ impl Coordinates {
         })
     }
 
-    pub(crate) fn longitude_across_antimeridian<Float>(source_x: Float, relative_x: Float) -> Float 
+    pub(crate) fn longitude_across_antimeridian<Float>(source_x: Float, relative_x: &Float) -> Float 
     where Float: PartialOrd + Sub<f64, Output = Float> + Add<f64, Output = Float> {
-        if source_x > relative_x {
+        if &source_x > relative_x {
             // it's across to the west, on the far east longitudes, so shift it around to the west
             source_x - 360.0
         } else {
@@ -224,7 +224,7 @@ impl Coordinates {
 
     pub(crate) fn across_antimeridian(&self, relative_to: &Self) -> Self {
         Self {
-            x: Self::longitude_across_antimeridian(self.x, relative_to.x),
+            x: Self::longitude_across_antimeridian(self.x, &relative_to.x),
             y: self.y
         }
     }

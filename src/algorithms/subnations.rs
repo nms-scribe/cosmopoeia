@@ -219,7 +219,7 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
     } else {
         10
     } as f64;
-    let total_cost = priority.0 + elevation_cost * neighbor.area;
+    let total_cost = OrderedFloat(elevation_cost.mul_add(neighbor.area, *priority.0));
     Some(total_cost)
 }
 
@@ -325,7 +325,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                                     continue; // don't leave nation
                                 }
     
-                                let total_cost = priority.0 + 10.0 * neighbor.area;                        
+                                let total_cost = OrderedFloat(10.0f64.mul_add(neighbor.area, *priority.0));
         
                                 if total_cost.0 <= max {
             

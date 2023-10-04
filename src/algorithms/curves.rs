@@ -63,11 +63,11 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                 rings.push(ring_geometry);
             }
             let polygon_geometry = Polygon::from_rings(rings)?;
-            let polygon_geometry = if !polygon_geometry.is_valid() {
+            let polygon_geometry = if polygon_geometry.is_valid() {
+                polygon_geometry.into()
+            } else {
                 eprintln!("Fixing invalid polygon.");
                 polygon_geometry.make_valid_structure()?
-            } else {
-                polygon_geometry.into()
             };
             let polygon_geometry = polygon_geometry.intersection(&extent_polygon)?;
             polygons.push(polygon_geometry);

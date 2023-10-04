@@ -41,7 +41,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
         for NeighborAndDirection(neighbor_fid,_) in &tile.neighbors {
             match neighbor_fid {
-                neighbor_tile @ Neighbor::Tile(neighbor_fid) | neighbor_tile @ Neighbor::CrossMap(neighbor_fid,_) => {
+                neighbor_tile @ (Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid, _)) => {
                     let neighbor = tile_map.try_get(neighbor_fid)?;
                     if is_land && (neighbor.grouping.is_water()) {
     

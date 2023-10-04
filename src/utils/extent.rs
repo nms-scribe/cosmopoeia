@@ -149,15 +149,15 @@ impl Extent {
     }
 
     pub(crate) fn wraps_latitudinally(&self) -> bool {
-        self.width == 360.0
+        (self.width - 360.0).abs() < f64::EPSILON
     }
 
     pub(crate) fn reaches_south_pole(&self) -> bool {
-        self.south == -90.0
+        (self.south - -90.0).abs() < f64::EPSILON
     }
 
     pub(crate) fn reaches_north_pole(&self) -> bool {
-        self.north() == 90.0
+        (self.north() - 90.0).abs() < f64::EPSILON
     }
 
 }

@@ -139,9 +139,9 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // rings duplicate points at either end, so I need to skip the last.
         for point in ring.into_iter().take(usable_points_len) { 
             if let Some(list) = east_west_list.as_mut() {
-                if point.0 == layer_extent.east() {
+                if (point.0 - layer_extent.east()).abs() < f64::EPSILON {
                     list.push((*fid,point.1,Side::East))
-                } else if point.0 == layer_extent.west {
+                } else if (point.0 - layer_extent.west).abs() < f64::EPSILON {
                     list.push((*fid,point.1,Side::West))
                 }
             }
@@ -193,7 +193,26 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                 Side::West => (&mut active_west_tiles,&mut active_east_tiles),
             };
 
-            if hither_tiles.contains_key(&id) {
+            match hither_tiles.remove(&id) {
+                None => {
+                    // this tile is being turned "on". So add it as a neighbor to any currently active tiles *on the other side*,
+                    // plus gather those active tiles as a set to be inserted for this tile.
+                    let mut yonder_neighbors = HashSet::new();
+                    for (yonder_id,yonder_set) in yonder_tiles {
+                        _ = yonder_neighbors.insert(*yonder_id);
+                        _ = yonder_set.insert(id);
+                    }
+                    // add that set to hither_tiles.
+                    _ = hither_tiles.insert(id, yonder_neighbors);
+                },
+                Some(neighbors) => {
+                    // key existed in the map, so turn it "off", no more neighbors will be assigned to it,
+                    // so add those neighbors to the cross_neight_set
+                    tile_map.try_get_mut(&id)?.cross_neighbor_set.extend(neighbors.into_iter());
+                },
+            }
+
+/*             if hither_tiles.contains_key(&id) {
                 // then it's time to turn it "off", no more neighbors should be assigned to it
                 let neighbors = hither_tiles.remove(&id).expect("Why wouldn't this exist if I put it in when the key was inserted?");
                 // and add those neighbors to the cross neighbors map
@@ -209,11 +228,11 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                 // add that set to hither_tiles.
                 _ = hither_tiles.insert(id, yonder_neighbors);
             }
-        }
+ */        }
 
         if (!active_east_tiles.is_empty()) || (!active_west_tiles.is_empty()) {
-            println!("east: {:?}",active_east_tiles);
-            println!("west: {:?}",active_west_tiles);
+            println!("east: {active_east_tiles:?}");
+            println!("west: {active_west_tiles:?}");
             panic!("Why would there be any tiles left active? A tile should always has exactly two nodes along a side.")
         }
 
@@ -229,7 +248,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         let mut neighbors = Vec::new();
         for neighbor_id in &tile.neighbor_set {
-            let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, false)?;
+            let neighbor_angle = calculate_neighbor_angle(tile, *neighbor_id, &tile_map, false)?;
 
             neighbors.push(NeighborAndDirection(Neighbor::Tile(*neighbor_id),neighbor_angle))
 
@@ -238,7 +257,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // handle the cross neighbors, if they were calculated, but this should only happen if they were on the edge
         if let Some(edge) = &tile.edge {
             for neighbor_id in &tile.cross_neighbor_set {
-                let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, true)?;
+                let neighbor_angle = calculate_neighbor_angle(tile, *neighbor_id, &tile_map, true)?;
     
                 neighbors.push(NeighborAndDirection(Neighbor::CrossMap(*neighbor_id,edge.clone()),neighbor_angle))
     
@@ -249,6 +268,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // recalculate edge for the purposes of creating OffMap tiles
         // wrapping edges (east and west) should not have OffMap tiles because they already have CrossMap tiles.
         // polar edges (north and south) should not have OffMap tiles in order to keep features from extending to the poles, which can make things look weird.
+        #[allow(clippy::match_same_arms)] // I have them separated for better understanding of what's going on
         let edge: Option<Edge> = match (wraps_latitudinally,reaches_north_pole,reaches_south_pole,&tile.edge) {
             (_, _, _, None) => None, // there was no edge in the first place
 
@@ -277,17 +297,13 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
             (false, true, false, Some(Edge::North)) => None,
             (false, true, false, Some(Edge::Northeast | Edge::East)) => Some(Edge::East),
             (false, true, false, Some(Edge::Northwest | Edge::West)) => Some(Edge::West),
-            (false, true, false, Some(edge @ Edge::South | 
-                                      edge @ Edge::Southeast | 
-                                      edge @ Edge::Southwest)) => Some(edge.clone()),
+            (false, true, false, Some(edge @ (Edge::South | Edge::Southeast | Edge::Southwest))) => Some(edge.clone()),
 
             // reaches_south_pole, so OffMap tiles for east, west and north corners
             (false, false, true, Some(Edge::South)) => None,
             (false, false, true, Some(Edge::Southeast | Edge::East)) => Some(Edge::East),
             (false, false, true, Some(Edge::Southwest | Edge::West)) => Some(Edge::West),
-            (false, false, true, Some(edge @ Edge::North | 
-                                      edge @ Edge::Northwest | 
-                                      edge @ Edge::Northeast)) => Some(edge.clone()),
+            (false, false, true, Some(edge @ (Edge::North | Edge::Northwest | Edge::Northeast))) => Some(edge.clone()),
 
             // no wrapping or poles at all, so edges are all as originally calculated
             (false, false, false, Some(edge)) => Some(edge.clone()),
@@ -314,14 +330,14 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
 }
 
-fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &u64, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
-    let neighbor = tile_map.try_get(neighbor_id)?;
+fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: u64, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
+    let neighbor = tile_map.try_get(&neighbor_id)?;
     let neighbor_angle = {
         let (site_x,site_y) = tile.site.to_tuple();
         let (neighbor_site_x,neighbor_site_y) = neighbor.site.to_tuple();
 
         let neighbor_site_x = if across_anti_meridian {
-            Coordinates::longitude_across_antimeridian(neighbor_site_x,site_x)
+            Coordinates::longitude_across_antimeridian(neighbor_site_x,&site_x)
         } else {
             neighbor_site_x
         };
@@ -625,9 +641,8 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                             }
                         }
                     }
-                    Neighbor::CrossMap(_,_) => (), // don't dissolve across the latitude. They will still be mapped, but they should be in separate polygons.
-                    Neighbor::OffMap(_) => (),
-                } // else it's off the map, ignore it.
+                    Neighbor::CrossMap(_,_) | Neighbor::OffMap(_) => (), // don't dissolve across the latitude. They will still be mapped, but they should be in separate polygons. And if it's off the map, ignore it.
+                } 
             }
 
             if usable_neighbors.is_empty() {

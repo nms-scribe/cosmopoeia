@@ -778,7 +778,8 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         Ok(self.inner.add_geometry(geometry.into())?)
     }
 
-    // implementations of GDALGeometryWrapper for use in Variant, because it is impossible to implement it directly
+    // implementations of GDALGeometryWrapper for use in Variant, because it is impossible to implement it directly due to nested types
+    #[allow(clippy::same_name_method)]
     fn get_envelope(&self) -> Extent {
         let envelope = self.inner.envelope();
         Extent {
@@ -789,6 +790,7 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         }
     }
 
+    #[allow(clippy::same_name_method)]
     fn is_valid(&self) -> bool {
         // FUTURE: This writes text to stdout if it isn't valid. Is there a way to fix that?
         self.inner.is_valid()
@@ -954,7 +956,7 @@ impl VariantArealGeometry {
         }
     }
 
-    pub(crate) fn intersection(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
+    pub(crate) fn intersection(&self, rhs: &Self) -> Result<Self,CommandError> {
         match (self,rhs) {
             (Self::Polygon(lhs), Self::Polygon(rhs)) => lhs.intersection(rhs),
             (Self::MultiPolygon(lhs), Self::MultiPolygon(rhs)) => lhs.intersection(rhs),

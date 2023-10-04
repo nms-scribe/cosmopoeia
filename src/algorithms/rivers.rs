@@ -71,9 +71,8 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
         let start_point = from_tile.site()?;
 
 
-    
         let new_river_data = match &segment.to {
-            end_tile @ Neighbor::Tile(segment_to) | end_tile @ Neighbor::CrossMap(segment_to,_)=> {
+            end_tile @ (Neighbor::Tile(segment_to) | Neighbor::CrossMap(segment_to, _))=> {
                 let across_map = match end_tile {
                     Neighbor::Tile(_) => false,
                     Neighbor::CrossMap(_, _) => true,

@@ -468,7 +468,8 @@ These are things that really should be done before release, but they might take 
     ```
 [X] separate utils into modules
 [X] Change 'Point' to 'Coordinates', perhaps, and then get rid of UtilsPoint and GeoPoint
-[ ] clippy
+[X] clippy
+[X] Is flow_to supposed to be a vector? Or optional?
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 [ ] Turn on the following clippies and figure out how to deal with them:
     #![warn(clippy::arithmetic_side_effects)]

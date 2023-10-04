@@ -1039,11 +1039,11 @@ impl ProcessTerrainTiles for Erode {
             });
 
 
-            for fid in tile_list.iter() {
+            for fid in &tile_list {
                 update_count += 1;
                 progress.update(|| update_count);
     
-                let entity = soil_map.try_get(&fid)?;
+                let entity = soil_map.try_get(fid)?;
 
                 // this is very similar to algorithms::tiles::find_flowingest_tile, but 1) I need to include soil in the result and 2) I'm more interested in steepness than depth and 3) Even if I even used the closures to replace the elevation with steepness somehow, I'm looking at the highest levels instead.
                 let (steepest_neighbors,steepest_grade) = find_lowest_tile(entity, &soil_map, |t| {
@@ -1075,7 +1075,7 @@ impl ProcessTerrainTiles for Erode {
                         // Grade is a percent. The following shifts all the soil if it's only 45 degrees, but this is much less likely than you'd think.
                         let shift_soil = (steepest_grade.abs() * entity.soil).min(entity.soil);
                         
-                        soil_map.try_get_mut(&fid)?.soil -= shift_soil;
+                        soil_map.try_get_mut(fid)?.soil -= shift_soil;
 
                         let shift_soil = shift_soil / steepest_neighbors.len() as f64;
 
@@ -1099,7 +1099,7 @@ impl ProcessTerrainTiles for Erode {
             if iteration < self.iterations - 1 {
                 // re-weather for next iteration
 
-                for fid in tile_list.iter() {
+                for fid in &tile_list {
                     update_count += 1;
                     progress.update(|| update_count);
 

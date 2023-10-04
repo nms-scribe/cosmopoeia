@@ -93,9 +93,9 @@ impl Serialize for Neighbor {
 
     fn write_value<Target: Serializer>(&self, serializer: &mut Target) {
         match self {
-            Neighbor::OffMap(edge) => edge.write_value(serializer),
-            Neighbor::Tile(id) => id.write_value(serializer),
-            Neighbor::CrossMap(id, edge) => (id,edge).write_value(serializer),
+            Self::OffMap(edge) => edge.write_value(serializer),
+            Self::Tile(id) => id.write_value(serializer),
+            Self::CrossMap(id, edge) => (id,edge).write_value(serializer),
         }
     }
 }
@@ -118,23 +118,6 @@ impl Deserialize for Neighbor {
     }
 }
 
-fn neighbor_to_string(value: &Neighbor) -> String {
-    value.write_to_string()
-}
-
-fn string_to_neighbor(value: String) -> Result<Neighbor,CommandError> {
-    Deserialize::read_from_str(&value)
-}
-
-fn neighbor_list_to_string(value: &Vec<Neighbor>) -> String {
-    value.write_to_string()
-}
-
-fn string_to_neighbor_list(value: String) -> Result<Vec<Neighbor>,CommandError> {
-    Deserialize::read_from_str(&value)
-}
-
-
 
 #[derive(Clone,PartialEq,Debug)]
 pub(crate) struct NeighborAndDirection(pub(crate) Neighbor,pub(crate) Deg<f64>);
@@ -156,30 +139,6 @@ impl Deserialize for NeighborAndDirection {
     }
 }
 
-
-fn neighbor_directions_to_string(value: &Vec<NeighborAndDirection>) -> String {
-    value.write_to_string()
-}
-
-fn string_to_neighbor_directions(value: String) -> Result<Vec<NeighborAndDirection>,CommandError> {
-    Deserialize::read_from_str(&value)
-}
-
-fn id_ref_to_string(value: &u64) -> String {
-    value.write_to_string()
-}
-
-fn string_to_id_ref(value: String) -> Result<u64,CommandError> {
-    Deserialize::read_from_str(&value)
-}
-
-fn edge_to_string(value: &Edge) -> String {
-    value.write_to_string()
-}
-
-fn string_to_edge(value: String) -> Result<Edge,CommandError> {
-    Deserialize::read_from_str(&value)
-}
 
 fn color_to_string(value: Rgb<u8>) -> String {
     let (red,green,blue) = (value.red(),value.green(),value.blue());
@@ -342,16 +301,16 @@ macro_rules! feature_get_field {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?)
     };
     ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
-        string_to_id_ref(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident neighbor $feature_name: literal $prop: ident $field: path) => {
-        string_to_neighbor(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident option_neighbor $feature_name: literal $prop: ident $field: path) => {
-        $self.feature.field_as_string_by_name($field)?.map(|a| string_to_neighbor(a)).transpose()
+        $self.feature.field_as_string_by_name($field)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     };
     ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
-        $self.feature.field_as_string_by_name($field)?.map(|a| string_to_id_ref(a)).transpose()
+        $self.feature.field_as_string_by_name($field)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     };
     ($self: ident i32 $feature_name: literal $prop: ident $field: path) => {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)?)
@@ -363,10 +322,10 @@ macro_rules! feature_get_field {
         Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)? != 0)
     };
     ($self: ident neighbor_directions $feature_name: literal $prop: ident $field: path) => {
-        string_to_neighbor_directions(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident neighbor_list $feature_name: literal $prop: ident $field: path) => {
-        string_to_neighbor_list(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
+        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
     };
     ($self: ident river_segment_from $feature_name: literal $prop: ident $field: path) => {
         RiverSegmentFrom::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
@@ -408,7 +367,7 @@ macro_rules! feature_get_field {
         Ok(Deg(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?))
     };
     ($self: ident option_edge $feature_name: literal $prop: ident $field: path) => {
-        $self.feature.field_as_string_by_name($field)?.map(|a| string_to_edge(a)).transpose()
+        $self.feature.field_as_string_by_name($field)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     };
 
 }
@@ -430,21 +389,21 @@ macro_rules! feature_set_field {
         }
     };
     ($self: ident $value: ident id_ref $field: path) => {
-        Ok($self.feature.set_field_string($field, &id_ref_to_string(&$value))?)
+        Ok($self.feature.set_field_string($field, &$value.write_to_string())?)
     };
     ($self: ident $value: ident neighbor $field: path) => {
-        Ok($self.feature.set_field_string($field, &neighbor_to_string(&$value))?)
+        Ok($self.feature.set_field_string($field, &$value.write_to_string())?)
     };
     ($self: ident $value: ident option_neighbor $field: path) => {
         if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &neighbor_to_string(&value))?)
+            Ok($self.feature.set_field_string($field, &value.write_to_string())?)
         } else {
             Ok($self.feature.set_field_null($field)?)
         }
     };
     ($self: ident $value: ident option_id_ref $field: path) => {
         if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &id_ref_to_string(&value))?)
+            Ok($self.feature.set_field_string($field, &value.write_to_string())?)
         } else {
             Ok($self.feature.set_field_null($field)?)
         }
@@ -453,11 +412,11 @@ macro_rules! feature_set_field {
         Ok($self.feature.set_field_integer($field, $value.into())?)
     };
     ($self: ident $value: ident neighbor_directions $field: path) => {{
-        let neighbors = neighbor_directions_to_string($value);
+        let neighbors = &$value.write_to_string();
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
     ($self: ident $value: ident neighbor_list $field: path) => {{
-        let neighbors = neighbor_list_to_string($value);
+        let neighbors = &$value.write_to_string();
         Ok($self.feature.set_field_string($field, &neighbors)?)
     }};
     ($self: ident $value: ident river_segment_from $field: path) => {{
@@ -498,7 +457,7 @@ macro_rules! feature_set_field {
     };
     ($self: ident $value: ident option_edge $field: path) => {
         if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &edge_to_string(&value))?)
+            Ok($self.feature.set_field_string($field, &value.write_to_string())?)
         } else {
             Ok($self.feature.set_field_null($field)?)
         }
@@ -525,28 +484,28 @@ macro_rules! feature_field_value {
     };
     ($prop: expr; option_id_ref) => {
         if let Some(value) = $prop {
-            Some(FieldValue::StringValue(id_ref_to_string(&value)))
+            Some(FieldValue::StringValue(value.write_to_string()))
         } else {
             None
         }
     };
     ($prop: expr; neighbor_list) => {
-        Some(FieldValue::StringValue(neighbor_list_to_string(&$prop)))
+        Some(FieldValue::StringValue($prop.write_to_string()))
     };
     ($prop: expr; neighbor_directions) => {
-        Some(FieldValue::StringValue(neighbor_directions_to_string(&$prop)))
+        Some(FieldValue::StringValue($prop.write_to_string()))
     };
     ($prop: expr; id_ref) => {
         // store id_ref as a string so I can use u64, as fields only support i64
-        Some(FieldValue::StringValue(id_ref_to_string(&$prop)))
+        Some(FieldValue::StringValue($prop.write_to_string()))
     };
     ($prop: expr; neighbor) => {
         // store id_ref as a string so I can use u64, as fields only support i64
-        Some(FieldValue::StringValue(neighbor_to_string(&$prop)))
+        Some(FieldValue::StringValue($prop.write_to_string()))
     };
     ($prop: expr; option_neighbor) => {
         if let Some(value) = &$prop {
-            Some(FieldValue::StringValue(neighbor_to_string(&value)))
+            Some(FieldValue::StringValue(value.write_to_string()))
         } else {
             None
         }
@@ -587,7 +546,7 @@ macro_rules! feature_field_value {
     }};
     ($prop: expr; option_edge) => {
         if let Some(value) = &$prop {
-            Some(FieldValue::StringValue(edge_to_string(&value)))
+            Some(FieldValue::StringValue(value.write_to_string()))
         } else {
             None
         }
@@ -1004,12 +963,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
             _phantom: core::marker::PhantomData
         }
     }
-
-    pub(crate) fn from_iter<Iter: Iterator<Item = (u64,EntityType)>>(iter: Iter) -> Self {
-        let inner = IndexMap::from_iter(iter);
-        Self::from(inner)
-    }
-
+    
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
     pub(crate) fn try_get(&self, key: &u64) -> Result<&EntityType,CommandError> {
         self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))

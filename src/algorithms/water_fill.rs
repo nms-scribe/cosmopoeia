@@ -1,3 +1,4 @@
+use core::ops::RangeFrom;
 use std::collections::HashSet;
 use std::collections::HashMap;
 
@@ -102,13 +103,15 @@ impl Lake {
 
 }
 
+enum WaterFillTask {
+    FillLake(u64, f64),
+    AddToFlow(f64)
+}
+
+
+
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
 pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, water_flow_result: WaterFlowResult, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
-
-    enum Task {
-        FillLake(u64, f64),
-        AddToFlow(f64)
-    }
 
     let mut tiles_layer = target.edit_tile_layer()?;
 
@@ -131,144 +134,84 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
             continue;
         }
 
+
         // figure out what we've got to do.
         // look for an existing lake
-        let task = if let Some(lake_id) = tile.lake_id {
-            // we're already in a lake, so the accumulation is intended to fill it.
-            Task::FillLake(lake_id, tile_accumulation)
-        } else {
-            // there is no lake here, so this is a flow task, unless it turns out we need a lake here.
-            // we already calculated the lowest neighbors that are actually below the tile in Flow, so let's just check that first.
-
-            let flow_to = &tile.flow_to;
-            if flow_to.is_empty() {
-                // we need to recalculate to find the lowest neighbors for this area:
-                let (_,lowest_elevation) = find_lowest_tile(tile,&tile_map,|t| {
-                    match t {
-                        Some((t,_)) => t.elevation,
-                        // for off the map, assume that the tile is the lowest possible elevation. This will force
-                        // water to flow off the map rather than accumulate.
-                        None => f64::NEG_INFINITY,
+        if let Some(task) = determine_water_fill_task(tile_fid, tile, tile_accumulation, &tile_map, &mut next_lake_id, &mut tile_queue, &mut lake_map)? {
+            match task {
+                WaterFillTask::AddToFlow(accumulation) => {
+                    let edit_tile = tile_map.try_get_mut(&tile_fid)?; 
+                    edit_tile.water_flow += accumulation;
+                    if let Some(mut feature) = tiles_layer.feature_by_id(tile_fid) {
+    
+                        feature.set_water_flow(edit_tile.water_flow)?;
+    
+                        tiles_layer.update_feature(feature)?;
                     }
-                }, |t| &t.neighbors)?;
-
-                // assuming that succeeded, we can create a new lake now.
-                if let Some(lowest_elevation) = lowest_elevation {
-                    // we need to be in a lake, so create a new one.
-                    let lake_id = next_lake_id.next().expect("Why would an unlimited range fail to return a next value?"); // it should be an infinite iterator, so it should always return Some.
-
-                    let new_lake = Lake {
-                        elevation: tile.elevation,
-                        bottom_elevation: tile.elevation,
-                        flow: 0.0, // will be added to in the task.
-                        spillover_elevation: lowest_elevation,
-                        contained_tiles: vec![tile_fid],
-                        tile_temperatures: vec![tile.temperature],
-                        shoreline_tiles: tile.neighbors.iter().map(|NeighborAndDirection(a,_)| (tile_fid,a.clone())).collect(),
-                        outlet_tiles: Vec::new()
-                    };
-
-                    _ = lake_map.insert(lake_id, new_lake);
-                    Task::FillLake(lake_id,tile_accumulation) // I just inserted it, it should exist here.
-
-                } else {
-                    // this is a tile with no neighbors, which should be impossible. but there is nothing I can do.
-                    continue;
+    
                 }
-
-
-            } else {
-                // we've got tiles that are lowever in elevation to go to...
-                let neighbor_flow = tile_accumulation/flow_to.len() as f64;
-
-                for neighbor_fid in flow_to {
-                    match neighbor_fid {
-                        Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
-                            // add a task to the queue to flow this down.
-                            tile_queue.push((*neighbor_fid,neighbor_flow));
-                        }
-                        Neighbor::OffMap(_) => (),
-                    }
-                }
-                // and the task for this one is to add to the flow:
-                Task::AddToFlow(tile_accumulation)
-            }
-        
-
-
-        };
-
-        match task {
-            Task::AddToFlow(accumulation) => {
-                let edit_tile = tile_map.try_get_mut(&tile_fid)?; 
-                edit_tile.water_flow += accumulation;
-                if let Some(mut feature) = tiles_layer.feature_by_id(tile_fid) {
-
-                    feature.set_water_flow(edit_tile.water_flow)?;
-
-                    tiles_layer.update_feature(feature)?;
-                }
-
-            }
-            Task::FillLake(lake_id,accumulation) => {
-                let (new_lake,accumulation,delete_lakes) = if let Some(lake) = lake_map.get(&lake_id) {
-                    grow_or_flow_lake(lake, accumulation, &tile_map, &lake_map, &mut tile_queue)?
-
-                } else {
-                    continue;
-                };
-
-                // update the new lake.
-                // mark the contained tiles...
-                for contained_tile in &new_lake.contained_tiles {
-                    let contained_tile = tile_map.try_get_mut(contained_tile)?; 
-                    contained_tile.lake_id = Some(lake_id);
-                    contained_tile.outlet_from_id = None
-                }
-
-                // mark the outlet tiles...
-                for (sponsor,outlet_tile) in &new_lake.outlet_tiles {
-                    match outlet_tile {
-                        Neighbor::Tile(outlet_tile) | Neighbor::CrossMap(outlet_tile,_) => {
-                            let outlet_tile = tile_map.try_get_mut(outlet_tile)?; 
-                            outlet_tile.outlet_from_id = Some(*sponsor);
-                        }
-                        Neighbor::OffMap(_) => (),
-                    } // else it's an outlet off the map, and there's nothing to mark
-                }
-
-                if accumulation > 0.0 { // we're still not done we have to do something with the remaining water.
-                    let outlet_tiles = &new_lake.outlet_tiles;
-                    if outlet_tiles.is_empty() {
-                        // add this task back to the queue so it can try to flood the lake to the next spillover.
-                        tile_queue.push((tile_fid,accumulation));
-
+                WaterFillTask::FillLake(lake_id,accumulation) => {
+                    let (new_lake,accumulation,delete_lakes) = if let Some(lake) = lake_map.get(&lake_id) {
+                        grow_or_flow_lake(lake, accumulation, &tile_map, &lake_map, &mut tile_queue)?
+    
                     } else {
-                        // this is the same as above, but with the new lake.
-                        // we can automatically flow to those tiles.
-                        let neighbor_flow = accumulation/outlet_tiles.len() as f64;
-
-                        for (_,neighbor_fid) in outlet_tiles {
-                            match neighbor_fid {
-                                Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
-                                    // add a task to the queue to flow this down.
-                                    tile_queue.push((*neighbor_fid,neighbor_flow));
+                        continue;
+                    };
+    
+                    // update the new lake.
+                    // mark the contained tiles...
+                    for contained_tile in &new_lake.contained_tiles {
+                        let contained_tile = tile_map.try_get_mut(contained_tile)?; 
+                        contained_tile.lake_id = Some(lake_id);
+                        contained_tile.outlet_from_id = None
+                    }
+    
+                    // mark the outlet tiles...
+                    for (sponsor,outlet_tile) in &new_lake.outlet_tiles {
+                        match outlet_tile {
+                            Neighbor::Tile(outlet_tile) | Neighbor::CrossMap(outlet_tile,_) => {
+                                let outlet_tile = tile_map.try_get_mut(outlet_tile)?; 
+                                outlet_tile.outlet_from_id = Some(*sponsor);
+                            }
+                            Neighbor::OffMap(_) => (),
+                        } // else it's an outlet off the map, and there's nothing to mark
+                    }
+    
+                    if accumulation > 0.0 { // we're still not done we have to do something with the remaining water.
+                        let outlet_tiles = &new_lake.outlet_tiles;
+                        if outlet_tiles.is_empty() {
+                            // add this task back to the queue so it can try to flood the lake to the next spillover.
+                            tile_queue.push((tile_fid,accumulation));
+    
+                        } else {
+                            // this is the same as above, but with the new lake.
+                            // we can automatically flow to those tiles.
+                            let neighbor_flow = accumulation/outlet_tiles.len() as f64;
+    
+                            for (_,neighbor_fid) in outlet_tiles {
+                                match neighbor_fid {
+                                    Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
+                                        // add a task to the queue to flow this down.
+                                        tile_queue.push((*neighbor_fid,neighbor_flow));
+                                    }
+                                    Neighbor::OffMap(_) => (),
                                 }
-                                Neighbor::OffMap(_) => (),
                             }
                         }
+    
                     }
-
-                }
-
-                // replace it in the map.
-                for lake in delete_lakes {
-                    _ = lake_map.remove(&lake);
-                }
-                _ = lake_map.insert(lake_id, new_lake);
-            },
-        
+    
+                    // replace it in the map.
+                    for lake in delete_lakes {
+                        _ = lake_map.remove(&lake);
+                    }
+                    _ = lake_map.insert(lake_id, new_lake);
+                },
+            
+            }
+    
         }
+
 
     }
 
@@ -345,6 +288,74 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 
 }
+
+fn determine_water_fill_task<Progress: ProgressObserver>(tile_fid: u64, tile: &TileForWaterFill, tile_accumulation: f64, tile_map: &EntityIndex<TileSchema, TileForWaterFill>, next_lake_id: &mut RangeFrom<u64>, tile_queue: &mut QueueWatcher<&str, Progress, (u64, f64)>, lake_map: &mut HashMap<u64, Lake>) -> Result<Option<WaterFillTask>,CommandError> {
+    if let Some(lake_id) = tile.lake_id {
+        // we're already in a lake, so the accumulation is intended to fill it.
+        Ok(Some(WaterFillTask::FillLake(lake_id, tile_accumulation)))
+    } else {
+        // there is no lake here, so this is a flow task, unless it turns out we need a lake here.
+        // we already calculated the lowest neighbors that are actually below the tile in Flow, so let's just check that first.
+
+        let flow_to = &tile.flow_to;
+        if flow_to.is_empty() {
+            // we need to recalculate to find the lowest neighbors for this area:
+            let (_,lowest_elevation) = find_lowest_tile(tile,tile_map,|t| {
+                match t {
+                    Some((t,_)) => t.elevation,
+                    // for off the map, assume that the tile is the lowest possible elevation. This will force
+                    // water to flow off the map rather than accumulate.
+                    None => f64::NEG_INFINITY,
+                }
+            }, |t| &t.neighbors)?;
+
+            // assuming that succeeded, we can create a new lake now.
+            if let Some(lowest_elevation) = lowest_elevation {
+                // we need to be in a lake, so create a new one.
+                let lake_id = next_lake_id.next().expect("Why would an unlimited range fail to return a next value?"); // it should be an infinite iterator, so it should always return Some.
+
+                let new_lake = Lake {
+                    elevation: tile.elevation,
+                    bottom_elevation: tile.elevation,
+                    flow: 0.0, // will be added to in the task.
+                    spillover_elevation: lowest_elevation,
+                    contained_tiles: vec![tile_fid],
+                    tile_temperatures: vec![tile.temperature],
+                    shoreline_tiles: tile.neighbors.iter().map(|NeighborAndDirection(a,_)| (tile_fid,a.clone())).collect(),
+                    outlet_tiles: Vec::new()
+                };
+
+                _ = lake_map.insert(lake_id, new_lake);
+                Ok(Some(WaterFillTask::FillLake(lake_id,tile_accumulation))) // I just inserted it, it should exist here.
+
+            } else {
+                // this is a tile with no neighbors, which should be impossible. but there is nothing I can do.
+                Ok(None)
+            }
+
+
+        } else {
+            // we've got tiles that are lowever in elevation to go to...
+            let neighbor_flow = tile_accumulation/flow_to.len() as f64;
+
+            for neighbor_fid in flow_to {
+                match neighbor_fid {
+                    Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
+                        // add a task to the queue to flow this down.
+                        tile_queue.push((*neighbor_fid,neighbor_flow));
+                    }
+                    Neighbor::OffMap(_) => (),
+                }
+            }
+            // and the task for this one is to add to the flow:
+            Ok(Some(WaterFillTask::AddToFlow(tile_accumulation)))
+        }
+    
+
+
+    }
+}
+
 
 fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64, tile_map: &EntityIndex<TileSchema, TileForWaterFill>, lake_map: &HashMap<u64, Lake>, tile_queue: &mut QueueWatcher<&str, Progress, (u64, f64)>) -> Result<(Lake, f64, Vec<u64>), CommandError> {
     let outlet_tiles = &lake.outlet_tiles;
