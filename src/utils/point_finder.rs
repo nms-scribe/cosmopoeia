@@ -3,12 +3,12 @@ use qutee::QuadTree;
 use qutee::Boundary;
 
 use super::extent::Extent;
-use super::point::Point;
+use super::coordinates::Coordinates;
 use crate::errors::CommandError;
 
 pub(crate) struct PointFinder {
   // It's kind of annoying, but the query method doesn't return the original point, so I have to store the point.
-  inner: QuadTree<f64,Point>,
+  inner: QuadTree<f64,Coordinates>,
   bounds: Boundary<f64>, // it also doesn't give us access to this, which is useful for cloning
   capacity: usize // or this
 }
@@ -24,7 +24,7 @@ impl PointFinder {
         }
     }
 
-    pub(crate) fn add_point(&mut self, point: Point) -> Result<(),CommandError> {
+    pub(crate) fn add_point(&mut self, point: Coordinates) -> Result<(),CommandError> {
         self.inner.insert_at(point.to_tuple(),point).map_err(|e|  {
             match e {
                 qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
@@ -34,7 +34,7 @@ impl PointFinder {
 
     }
 
-    pub(crate) fn points_in_target(&mut self, point: &Point, spacing: f64) -> bool {
+    pub(crate) fn points_in_target(&mut self, point: &Coordinates, spacing: f64) -> bool {
         let west = point.x - spacing;
         let south = point.y - spacing;
         let north = point.x + spacing;
@@ -65,7 +65,7 @@ impl PointFinder {
 }
 
 pub(crate) struct TileFinder {
-  inner: QuadTree<f64,(Point,u64)>, // I need the original point to test distance
+  inner: QuadTree<f64,(Coordinates,u64)>, // I need the original point to test distance
   bounds: Boundary<f64>, // see PointFinder
   //capacity: usize, // see PointFinder
   initial_search_radius: f64
@@ -83,7 +83,7 @@ impl TileFinder {
         }
     }
 
-    pub(crate) fn add_tile(&mut self, point: Point, tile: u64) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, point: Coordinates, tile: u64) -> Result<(),CommandError> {
         self.inner.insert_at(point.to_tuple(),(point,tile)).map_err(|e|  {
             match e {
                 qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
@@ -93,7 +93,7 @@ impl TileFinder {
 
     }
 
-    pub(crate) fn find_nearest_tile(&self, point: &Point) -> Result<u64,CommandError> {
+    pub(crate) fn find_nearest_tile(&self, point: &Coordinates) -> Result<u64,CommandError> {
         let mut spacing = self.initial_search_radius;
 
         macro_rules! calc_search_boundary {

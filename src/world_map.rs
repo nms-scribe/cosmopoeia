@@ -35,7 +35,7 @@ use angular_units::Angle;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::utils::point::Point as UtilsPoint; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
+use crate::utils::coordinates::Coordinates; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
 use crate::utils::extent::Extent;
 use crate::utils::title_case::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
@@ -1497,8 +1497,8 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
 
 impl TileFeature<'_> {
 
-    pub(crate) fn site(&self) -> Result<UtilsPoint,CommandError> {
-        Ok(UtilsPoint::try_from((self.site_x()?,self.site_y()?))?)
+    pub(crate) fn site(&self) -> Result<Coordinates,CommandError> {
+        Ok(Coordinates::try_from((self.site_x()?,self.site_y()?))?)
     }
 
 }
@@ -1521,20 +1521,20 @@ pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
 
 entity!(NewTileSite: Tile {
     geometry: Polygon,
-    site: UtilsPoint,
+    site: Coordinates,
     edge: Option<Edge>
 }); 
 
 entity!(TileForCalcNeighbors: Tile {
     geometry: Polygon,
     edge: Option<Edge>,
-    site: UtilsPoint,
+    site: Coordinates,
     neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new()),
     cross_neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
 });
 
 entity!(TileForTerrain: Tile {
-    site: UtilsPoint, 
+    site: Coordinates, 
     elevation: f64,
     grouping: Grouping, 
     neighbors: Vec<NeighborAndDirection>,
@@ -1618,7 +1618,7 @@ entity!(TileForRiverConnect: Tile {
 });
 
 entity!(TileForWaterDistance: Tile {
-    site: UtilsPoint,
+    site: Coordinates,
     grouping: Grouping, 
     neighbors: Vec<NeighborAndDirection>,
     water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
@@ -1655,7 +1655,7 @@ entity!(TileForPopulationNeighbor: Tile {
 
 entity!(TileForCultureGen: Tile {
     fid: u64,
-    site: UtilsPoint,
+    site: Coordinates,
     population: i32,
     habitability: f64,
     shore_distance: i32,
@@ -1671,7 +1671,7 @@ entity!(TileForCultureGen: Tile {
 
 pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity because we add in data from other layers.
     pub(crate) fid: u64,
-    pub(crate) site: UtilsPoint,
+    pub(crate) site: Coordinates,
     pub(crate) habitability: f64,
     pub(crate) shore_distance: i32,
     pub(crate) elevation_scaled: i32,
@@ -1741,7 +1741,7 @@ entity!(TileForCultureExpand: Tile {
 entity!(TileForTowns: Tile {
     fid: u64,
     habitability: f64,
-    site: UtilsPoint,
+    site: Coordinates,
     culture: Option<String>,
     grouping_id: u64
 });
@@ -1750,7 +1750,7 @@ entity!(TileForTownPopulation: Tile {
     fid: u64,
     geometry: Polygon,
     habitability: f64,
-    site: UtilsPoint,
+    site: Coordinates,
     grouping_id: u64,
     harbor_tile_id: Option<Neighbor>,
     water_count: Option<i32>,
@@ -1762,7 +1762,7 @@ entity!(TileForTownPopulation: Tile {
 
 impl TileForTownPopulation {
 
-    pub(crate) fn find_middle_point_between(&self, other: &Self) -> Result<UtilsPoint,CommandError> {
+    pub(crate) fn find_middle_point_between(&self, other: &Self) -> Result<Coordinates,CommandError> {
         let self_ring = self.geometry.get_ring(0)?;
         let other_ring = other.geometry.get_ring(0)?;
         let other_vertices: Vec<_> = other_ring.into_iter().collect();
@@ -1770,7 +1770,7 @@ impl TileForTownPopulation {
         common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
         common_vertices.retain(|p| other_vertices.contains(p));
         if common_vertices.len() == 2 {
-            let point1: UtilsPoint = (common_vertices[0].0,common_vertices[0].1).try_into()?;
+            let point1: Coordinates = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
             Ok(point1.middle_point_between(&point2))
         } else {
@@ -1779,7 +1779,7 @@ impl TileForTownPopulation {
 
     }
 
-    pub(crate) fn find_middle_point_on_edge(&self, edge: &Edge, extent: &Extent) -> Result<UtilsPoint,CommandError> {
+    pub(crate) fn find_middle_point_on_edge(&self, edge: &Edge, extent: &Extent) -> Result<Coordinates,CommandError> {
         let self_ring = self.geometry.get_ring(0)?;
         let mut common_vertices: Vec<_> = self_ring.into_iter().collect();
         common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
@@ -1788,7 +1788,7 @@ impl TileForTownPopulation {
             // NOTE: There will be a problem in cases where the edge is NE,NW,SE,SW, as there are likely going to 
             // be 3 points at least. However, this shouldn't happen since there shouldn't be any cross-map tiles in
             // those directions.
-            let point1: UtilsPoint = (common_vertices[0].0,common_vertices[0].1).try_into()?;
+            let point1: Coordinates = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
             Ok(point1.middle_point_between(&point2))
         } else {
@@ -2140,7 +2140,7 @@ layer!(River["rivers"]: MultiLineString {
 
 impl RiverLayer<'_,'_> {
 
-    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, lines: Vec<Vec<UtilsPoint>>) -> Result<u64,CommandError> {
+    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, lines: Vec<Vec<Coordinates>>) -> Result<u64,CommandError> {
         let lines = lines.into_iter().map(|line| {
             LineString::from_vertices(line.into_iter().map(|p| p.to_tuple()))
         });
@@ -2705,7 +2705,7 @@ layer!(Town["towns"]: Point {
 
 impl TownFeature<'_> {
 
-    pub(crate) fn move_to(&mut self, new_location: &UtilsPoint) -> Result<(),CommandError> {
+    pub(crate) fn move_to(&mut self, new_location: &Coordinates) -> Result<(),CommandError> {
         Ok(self.feature.set_geometry(new_location.create_geometry()?.into())?)
     }
 

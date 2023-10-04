@@ -5,7 +5,7 @@ use crate::geometry::LinearRing;
 use crate::geometry::Polygon;
 use crate::errors::CommandError;
 use crate::utils::edge::Edge;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 
 #[derive(Clone)]
 pub(crate) struct Extent {
@@ -37,7 +37,7 @@ impl Extent {
         }
     }
 
-    pub(crate) fn contains(&self,point: &Point) -> bool {
+    pub(crate) fn contains(&self,point: &Coordinates) -> bool {
         let x = point.x.into_inner();
         let y = point.y.into_inner();
         (x >= self.west) &&
@@ -93,7 +93,7 @@ impl Extent {
         }
     }
 
-    pub(crate) fn is_off_edge(&self, point: &Point) -> Option<Edge> {
+    pub(crate) fn is_off_edge(&self, point: &Coordinates) -> Option<Edge> {
         let (x,y) = point.to_tuple();
         self.is_tuple_on_edge(x, y)
 

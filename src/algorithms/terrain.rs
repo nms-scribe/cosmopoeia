@@ -17,7 +17,7 @@ use crate::raster::RasterMap;
 use crate::world_map::Grouping;
 use crate::world_map::ElevationLimits;
 use crate::utils::point_finder::TileFinder;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
 use crate::progress::WatchableDeque;
 use crate::progress::WatchableQueue;
@@ -543,7 +543,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             // find start and end points
             let start_x = parameters.gen_x(rng, &self.x_filter);
             let start_y = parameters.gen_y(rng, &self.y_filter);
-            let start_point: Point = (start_x, start_y).try_into()?;
+            let start_point: Coordinates = (start_x, start_y).try_into()?;
             let mut end_point;
 
             // find an end point that's far enough away
@@ -999,7 +999,7 @@ impl ProcessTerrainTiles for Erode {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
         
         entity!(TileForSoil: Tile {
-            site: Point,
+            site: Coordinates,
             elevation: f64, 
             neighbors: Vec<NeighborAndDirection>,
             soil: f64 = |_| Ok::<_,CommandError>(0.0)

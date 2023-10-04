@@ -7,7 +7,7 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::NewTileSite;
 use crate::utils::extent::Extent;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 use crate::errors::CommandError;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
@@ -17,7 +17,7 @@ use crate::geometry::GDALGeometryWrapper;
 
 pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
     Unstarted(GeometryIterator),
-    Started(IntoIter<Point,VoronoiInfo>,Option<usize>)
+    Started(IntoIter<Coordinates,VoronoiInfo>,Option<usize>)
 }
 
 pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
@@ -28,7 +28,7 @@ pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Polygo
 }
 
 pub(crate) struct VoronoiInfo {
-    pub(crate) vertices: Vec<Point>,
+    pub(crate) vertices: Vec<Coordinates>,
 }
 
 impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGenerator<GeometryIterator> {
@@ -43,7 +43,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
         })
     }
 
-    pub(crate) fn create_voronoi(site: &Point, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Polygon) -> Result<Option<NewTileSite>,CommandError> {
+    pub(crate) fn create_voronoi(site: &Coordinates, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Polygon) -> Result<Option<NewTileSite>,CommandError> {
         if (voronoi.vertices.len() >= 3) && extent.contains(site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
@@ -66,14 +66,14 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
             // The "beginning" of this ordering is north, so the "lowest" point will be the one closest to north in the northeast quadrant.
             // when angle is equal, the point closer to the center will be lesser.
-            vertices.sort_by(|a: &Point, b: &Point| -> Ordering
+            vertices.sort_by(|a: &Coordinates, b: &Coordinates| -> Ordering
             {
-                Point::order_clockwise(a, b, site)
+                Coordinates::order_clockwise(a, b, site)
             });
 
             // push a copy of the first vertex onto the end.
             vertices.push(vertices[0].clone());
-            let ring = LinearRing::from_vertices(vertices.iter().map(Point::to_tuple))?;
+            let ring = LinearRing::from_vertices(vertices.iter().map(Coordinates::to_tuple))?;
             let polygon = Polygon::from_rings([ring])?;
             let polygon = if edge.is_some() {
                 // intersection code is not trivial, just let someone else do it.
@@ -117,10 +117,10 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
 
     }
 
-    pub(crate) fn generate_voronoi<Progress: ProgressObserver>(source: &mut GeometryIterator, progress: &mut Progress) -> Result<IntoIter<Point,VoronoiInfo>,CommandError> {
+    pub(crate) fn generate_voronoi<Progress: ProgressObserver>(source: &mut GeometryIterator, progress: &mut Progress) -> Result<IntoIter<Coordinates,VoronoiInfo>,CommandError> {
 
         // Calculate a map of sites with a list of triangle circumcenters
-        let mut sites: HashMap<Point, VoronoiInfo> = HashMap::new(); // site, voronoi info
+        let mut sites: HashMap<Coordinates, VoronoiInfo> = HashMap::new(); // site, voronoi info
 
         for geometry in source.watch(progress,"Generating voronoi.","Voronoi generated.") {
             let geometry = geometry?;
@@ -131,12 +131,12 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                 return Err(CommandError::VoronoiExpectsTriangles);
             }
 
-            let points: [Point; 3] = (0..3)
-               .map(|i| Ok(line.get_point(i).try_into()?)).collect::<Result<Vec<Point>,CommandError>>()?
+            let points: [Coordinates; 3] = (0..3)
+               .map(|i| Ok(line.get_point(i).try_into()?)).collect::<Result<Vec<Coordinates>,CommandError>>()?
                .try_into()
                .map_err(|_| CommandError::VoronoiExpectsTriangles)?;
 
-            let circumcenter = Point::circumcenter((&points[0],&points[1],&points[2]));
+            let circumcenter = Coordinates::circumcenter((&points[0],&points[1],&points[2]));
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {

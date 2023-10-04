@@ -467,7 +467,7 @@ These are things that really should be done before release, but they might take 
     let Foo{ field_a, field_b } = value
     ```
 [X] separate utils into modules
-[ ] Change 'Point' to 'Coordinates', perhaps, and then get rid of UtilsPoint and GeoPoint
+[X] Change 'Point' to 'Coordinates', perhaps, and then get rid of UtilsPoint and GeoPoint
 [ ] clippy
 [ ] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 [ ] Turn on the following clippies and figure out how to deal with them:

@@ -15,7 +15,7 @@ use crate::world_map::WorldMap;
 use crate::algorithms::random_points::PointGenerator;
 use crate::progress::WatchableIterator;
 use crate::algorithms::triangles::DelaunayGenerator;
-use crate::utils::point::ToGeometryCollection;
+use crate::utils::coordinates::ToGeometryCollection;
 use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::random_points::load_points_layer;
 use crate::algorithms::triangles::load_triangles_layer;

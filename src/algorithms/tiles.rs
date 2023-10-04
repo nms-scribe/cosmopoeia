@@ -13,7 +13,7 @@ use crate::errors::CommandError;
 use crate::world_map::NewTileSite;
 use crate::world_map::TileForCalcNeighbors;
 use crate::world_map::TypedFeature;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 use crate::world_map::TileForCultureDissolve;
 use crate::world_map::CultureForDissolve;
 use crate::world_map::TileWithGeometry;
@@ -44,7 +44,7 @@ use crate::utils::extent::Extent;
 use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::triangles::DelaunayGenerator;
 use crate::algorithms::random_points::PointGenerator;
-use crate::utils::point::ToGeometryCollection;
+use crate::utils::coordinates::ToGeometryCollection;
 use crate::world_map::NamedFeature;
 use crate::commands::OverwriteTilesArg;
 use crate::commands::OverwriteCoastlineArg;
@@ -145,7 +145,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                     list.push((*fid,point.1,Side::West))
                 }
             }
-            let point: Point = point.try_into()?;
+            let point: Coordinates = point.try_into()?;
             match point_tile_index.get_mut(&point) {
                 None => {
                     _ = point_tile_index.insert(point, HashSet::from([*fid]));
@@ -321,7 +321,7 @@ fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &u64, tile
         let (neighbor_site_x,neighbor_site_y) = neighbor.site.to_tuple();
 
         let neighbor_site_x = if across_anti_meridian {
-            Point::longitude_across_antimeridian(neighbor_site_x,site_x)
+            Coordinates::longitude_across_antimeridian(neighbor_site_x,site_x)
         } else {
             neighbor_site_x
         };

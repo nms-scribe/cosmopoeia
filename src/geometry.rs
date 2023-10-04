@@ -4,7 +4,7 @@ use gdal::vector::OGRwkbGeometryType;
 use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
 use crate::algorithms::beziers::bezierify_points;
-use crate::utils::point::Point as UtilsPoint;
+use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
@@ -430,7 +430,7 @@ impl Polygon {
             }
 
             let line = bezierify_points(&points, scale)?;
-            rings.push(LinearRing::from_vertices(line.iter().map(UtilsPoint::to_tuple))?);
+            rings.push(LinearRing::from_vertices(line.iter().map(Coordinates::to_tuple))?);
         }
         let polygon = Self::from_rings(rings)?;
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
@@ -576,7 +576,7 @@ impl MultiPolygon {
                 }
                 
                 let line = bezierify_points(&points, scale)?;
-                rings.push(LinearRing::from_vertices(line.iter().map(UtilsPoint::to_tuple))?);
+                rings.push(LinearRing::from_vertices(line.iter().map(Coordinates::to_tuple))?);
             }
             polygons.push(Polygon::from_rings(rings)?);
         }

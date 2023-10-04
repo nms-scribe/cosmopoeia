@@ -1,7 +1,7 @@
 pub(crate) mod random;
 pub(crate) mod extent;
 pub(crate) mod edge;
-pub(crate) mod point;
+pub(crate) mod coordinates;
 pub(crate) mod title_case;
 pub(crate) mod namers_pretty_print;
 pub(crate) mod point_finder;

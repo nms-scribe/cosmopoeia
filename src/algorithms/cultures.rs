@@ -20,7 +20,7 @@ use crate::world_map::TileForCultureGen;
 use crate::world_map::TileForCulturePrefSorting;
 use crate::world_map::TileForCultureExpand;
 use crate::utils::random::RandomIndex;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 use crate::utils::ToRoman;
 use crate::world_map::Grouping;
 use crate::world_map::TileLayer;
@@ -279,7 +279,7 @@ fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_thres
     }
 }
 
-fn too_close(point_vec: &Vec<Point>, new_point: &Point, spacing: f64) -> bool {
+fn too_close(point_vec: &Vec<Coordinates>, new_point: &Coordinates, spacing: f64) -> bool {
     // NOTE: While I could use some sort of quadtree/point-distance index, I don't feel like I'm going to deal with enough cultures
     // at any one point to worry about that.
     for point in point_vec {

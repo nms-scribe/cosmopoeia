@@ -19,7 +19,7 @@ use crate::world_map::Neighbor;
 use crate::world_map::MapLayer;
 use crate::world_map::TileSchema;
 use crate::world_map::TileFeature;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 
 pub(crate) struct RiverSegment {
     pub(crate) from: u64,
@@ -150,7 +150,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
         if let Some((to_tile_id,previous_point,end_point,next_point)) = new_river_data {
             // create the bezier
             let line = bezierify_points_with_phantoms(Some(&previous_point), &[start_point,end_point], Some(&next_point), bezier_scale.bezier_scale)?;
-            let lines = Point::clip_point_vec_across_antimeridian(line,&extents)?;
+            let lines = Coordinates::clip_point_vec_across_antimeridian(line,&extents)?;
             segments.push((NewRiver {
                 from_tile_id,
                 from_type,
@@ -177,7 +177,7 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
 
 }
 
-fn generate_previous_segment_point<'feature>(previous_tile: Option<u64>, tiles: &MapLayer<'_, 'feature, TileSchema, TileFeature<'feature>>, end_point: &Point, start_point: &Point) -> Result<Point, CommandError> {
+fn generate_previous_segment_point<'feature>(previous_tile: Option<u64>, tiles: &MapLayer<'_, 'feature, TileSchema, TileFeature<'feature>>, end_point: &Coordinates, start_point: &Coordinates) -> Result<Coordinates, CommandError> {
     Ok(if let Some(x) = previous_tile {
         tiles.try_feature_by_id(x)?.site()?
     } else {

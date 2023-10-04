@@ -5,7 +5,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::algorithms::tiles::Theme;
 use crate::errors::CommandError;
 use crate::progress::WatchableIterator;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 use crate::world_map::TypedFeature;
 use crate::algorithms::beziers::bezierify_points;
 use crate::commands::BezierScaleArg;
@@ -28,7 +28,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     // But it shouldn't, because the only thing that leaks from that call is an index of owned Points and integers.
     let mut subject_layer = ThemeType::edit_theme_layer(target)?;
 
-    let mut segment_cache: HashMap<Point, Vec<Vec<Point>>> = HashMap::new();
+    let mut segment_cache: HashMap<Coordinates, Vec<Vec<Coordinates>>> = HashMap::new();
     let read_features = ThemeType::read_theme_features(&mut subject_layer);
     let polygon_segments = break_segments::<ThemeType,_>(read_features, &vertex_index, &mut segment_cache, progress)?;
 
@@ -83,14 +83,14 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
     Ok(())
 }
 
-fn index_vertexes<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, progress: &mut Progress) -> Result<HashMap<Point, i32>, CommandError> {
+fn index_vertexes<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, progress: &mut Progress) -> Result<HashMap<Coordinates, i32>, CommandError> {
     let mut vertex_index = HashMap::new();
 
     for multipolygon in read_features.watch(progress,"Indexing vertexes.","Vertexes indexed.").map(|f| f.geometry()) {
         for polygon in multipolygon? {
             for ring in polygon? {
                 for vertex in ring? {
-                    let vertex: Point = vertex.try_into()?;
+                    let vertex: Coordinates = vertex.try_into()?;
                     match vertex_index.get_mut(&vertex) {
                         Some(entry) => *entry += 1,
                         None => {
@@ -106,7 +106,7 @@ fn index_vertexes<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
 }
 
 struct UniqueSegment {
-    point: Point,
+    point: Coordinates,
     index: usize,
     reversed: bool
 }
@@ -115,7 +115,7 @@ struct BrokenSegments {
     map: HashMap<u64, Vec<Vec<Vec<UniqueSegment>>>>
 }
 
-fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, vertex_index: &HashMap<Point, i32>, segment_cache: &mut HashMap<Point, Vec<Vec<Point>>>, progress: &mut Progress) -> Result<BrokenSegments, CommandError> {
+fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, vertex_index: &HashMap<Coordinates, i32>, segment_cache: &mut HashMap<Coordinates, Vec<Vec<Coordinates>>>, progress: &mut Progress) -> Result<BrokenSegments, CommandError> {
     let mut polygon_segments = HashMap::new();
     for feature in read_features.watch(progress,"Breaking segments.","Segments broken.") {
         let fid = feature.fid()?;
@@ -132,7 +132,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                 let mut segments = Vec::new();
 
                 // convert the vertexes in the ring to points -- not that they have to be points, but they do have to be NotNaN, so this is good enough.
-                let mut vertexes = ring?.into_iter().map(Point::try_from)/*.map(|i| {
+                let mut vertexes = ring?.into_iter().map(Coordinates::try_from)/*.map(|i| {
                     ring.get_point(i as i32).try_into()
                 })*/;
 
@@ -235,7 +235,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
     })
 }
 
-fn find_segment_match(match_segments: &[Vec<Point>], segment: &Vec<Point>, reverse: bool) -> Option<UniqueSegment> {
+fn find_segment_match(match_segments: &[Vec<Coordinates>], segment: &Vec<Coordinates>, reverse: bool) -> Option<UniqueSegment> {
     for (index,match_segment) in match_segments.iter().enumerate() {
         if (!match_segment.is_empty()) && match_segment.len() == segment.len() {
             // search by reversed

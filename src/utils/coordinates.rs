@@ -9,19 +9,19 @@ use ordered_float::FloatIsNan;
 use crate::geometry::Collection;
 use crate::progress::ProgressObserver;
 use crate::geometry::GDALGeometryWrapper;
-use crate::geometry::Point as GeoPoint;
+use crate::geometry::Point;
 use crate::utils::edge::Edge;
 use crate::errors::CommandError;
 use super::extent::Extent;
 use crate::progress::WatchableIterator;
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
-pub(crate) struct Point {
+pub(crate) struct Coordinates {
     pub(crate) x: NotNan<f64>,
     pub(crate) y: NotNan<f64>
 }
 
-impl Point {
+impl Coordinates {
 
     pub(crate) fn to_tuple(&self) -> (f64,f64) {
         (*self.x,*self.y)
@@ -85,8 +85,8 @@ impl Point {
 
     }
 
-    pub(crate) fn create_geometry(&self) -> Result<GeoPoint,CommandError> {
-        GeoPoint::new(self.x.into(), self.y.into())
+    pub(crate) fn create_geometry(&self) -> Result<Point,CommandError> {
+        Point::new(self.x.into(), self.y.into())
     }
 
     pub(crate) fn circumcenter(points: (&Self,&Self,&Self)) -> Self {
@@ -296,7 +296,7 @@ impl Point {
 
 }
 
-impl TryFrom<(f64,f64,f64)> for Point {
+impl TryFrom<(f64,f64,f64)> for Coordinates {
 
     type Error = FloatIsNan;
 
@@ -308,7 +308,7 @@ impl TryFrom<(f64,f64,f64)> for Point {
     }
 }
 
-impl From<(NotNan<f64>,NotNan<f64>)> for Point {
+impl From<(NotNan<f64>,NotNan<f64>)> for Coordinates {
 
     fn from(value: (NotNan<f64>,NotNan<f64>)) -> Self {
         Self {
@@ -318,7 +318,7 @@ impl From<(NotNan<f64>,NotNan<f64>)> for Point {
     }
 }
 
-impl TryFrom<(f64,f64)> for Point {
+impl TryFrom<(f64,f64)> for Coordinates {
 
     type Error = FloatIsNan;
 
@@ -330,8 +330,8 @@ impl TryFrom<(f64,f64)> for Point {
     }
 }
 
-impl Sub for &Point {
-    type Output = Point;
+impl Sub for &Coordinates {
+    type Output = Coordinates;
 
     fn sub(self, rhs: Self) -> Self::Output {
         Self::Output {
@@ -341,8 +341,8 @@ impl Sub for &Point {
     }
 }
 
-impl Add for &Point {
-    type Output = Point;
+impl Add for &Coordinates {
+    type Output = Coordinates;
 
     fn add(self, rhs: Self) -> Self::Output {
         Self::Output {
@@ -358,9 +358,9 @@ pub(crate) trait ToGeometryCollection<Geometry: GDALGeometryWrapper> {
 }
 
 // FUTURE: Implement traits so I can just use collect? But then I can't use progress observer.
-impl<Iter: Iterator<Item=Result<GeoPoint,CommandError>>> ToGeometryCollection<GeoPoint> for Iter {
+impl<Iter: Iterator<Item=Result<Point,CommandError>>> ToGeometryCollection<Point> for Iter {
 
-    fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Collection<GeoPoint>,CommandError> {
+    fn to_geometry_collection<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<Collection<Point>,CommandError> {
         let mut result = Collection::new()?;
         for geometry in self.watch(progress,"Collecting points.","Points collected.") {
             result.push_item(geometry?)?;

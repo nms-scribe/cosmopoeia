@@ -9,7 +9,7 @@ use rand_distr::Distribution;
 use crate::world_map::TownForPopulation;
 use crate::world_map::LakeForTownPopulation;
 use crate::world_map::TileForTownPopulation;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 use crate::world_map::TileLayer;
 use crate::utils::point_finder::PointFinder;
 use crate::utils::extent::Extent;
@@ -273,7 +273,7 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
     struct TownDetails {
         population: i32,
         is_port: bool,
-        new_location: Option<Point>
+        new_location: Option<Coordinates>
     }
 
     let mut tile_layer = target.edit_tile_layer()?;
@@ -364,7 +364,7 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
             let (tile_x,tile_y) = tile.site.to_tuple();
             let x = if (tile_x % 2.0) < 1.0 { tile_x + shift } else { tile_x - shift };
             let y = if (tile_y % 2.0) < 1.0 { tile_y + shift } else { tile_y - shift };
-            (false,Some(Point::try_from((x,y))?))
+            (false,Some(Coordinates::try_from((x,y))?))
         } else {
             (port_location.is_some(),port_location)
         };

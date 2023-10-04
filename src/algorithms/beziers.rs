@@ -1,16 +1,16 @@
 use adaptive_bezier::adaptive_bezier_curve;
 
 use crate::errors::CommandError;
-use crate::utils::point::Point;
+use crate::utils::coordinates::Coordinates;
 
 struct PolyBezier {
-    vertices: Vec<Point>,
-    controls: Vec<(Point,Point)> // this should always have one less item than vertices.
+    vertices: Vec<Coordinates>,
+    controls: Vec<(Coordinates,Coordinates)> // this should always have one less item than vertices.
 }
 
 impl PolyBezier {
 
-    #[cfg(test)] pub(crate) fn segment_at(&self, index: usize) -> Option<(&Point,&Point,&Point,&Point)> {
+    #[cfg(test)] pub(crate) fn segment_at(&self, index: usize) -> Option<(&Coordinates,&Coordinates,&Coordinates,&Coordinates)> {
         if index < self.controls.len() {
             let v1 = &self.vertices[index];
             let c = &self.controls[index];
@@ -48,7 +48,7 @@ impl PolyBezier {
 
     // finds a curve from a line where the first points and last points are curved with influence of optional extended points.
     // The curves created by these end segments are not included in the result.
-    pub(crate) fn from_poly_line_with_phantoms(phantom_start: Option<&Point>, line: &[Point], phantom_end: Option<&Point>) -> Self {
+    pub(crate) fn from_poly_line_with_phantoms(phantom_start: Option<&Coordinates>, line: &[Coordinates], phantom_end: Option<&Coordinates>) -> Self {
         match (phantom_start,phantom_end) {
             (None, None) => Self::from_poly_line(line),
             (None, Some(end)) => {
@@ -74,7 +74,7 @@ impl PolyBezier {
 
     }
 
-    pub(crate) fn from_poly_line(vertices: &[Point]) -> Self {
+    pub(crate) fn from_poly_line(vertices: &[Coordinates]) -> Self {
         if vertices.len() < 2 {
             return Self {
                 vertices: vertices.to_vec(),
@@ -124,7 +124,7 @@ impl PolyBezier {
         // the vertices as p,p+2. This will create n-2 vertices to match up with interior points.
         let pairs = vertices.iter().zip(vertices.iter().skip(2));
         // tangents for these pairs are found by subtracting the points
-        let tangents: Vec<Point> = pairs.map(|(u, v)| v.subtract(u)).collect();
+        let tangents: Vec<Coordinates> = pairs.map(|(u, v)| v.subtract(u)).collect();
 
         // the start and end tangents are from different pairs.
         let (start,end) = if vertices[0] == vertices[vertices.len() - 1] {
@@ -148,8 +148,8 @@ impl PolyBezier {
 
         let tangents = start.iter().chain(tangents.iter()).chain(end.iter());
         // the tangents are normalized -- we just need the direction, not the distance, so this is a unit vector pointing the same direction.
-        let tangents = tangents.map(Point::normalized);
-        let tangents: Vec<Point> = tangents.collect();
+        let tangents = tangents.map(Coordinates::normalized);
+        let tangents: Vec<Coordinates> = tangents.collect();
 
         // Build Bezier curves
         // zip up the points into pairs with their tangents
@@ -177,7 +177,7 @@ impl PolyBezier {
         }
     }
 
-    pub(crate) fn to_poly_line(&self, scale: f64) -> Result<Vec<Point>,CommandError> {
+    pub(crate) fn to_poly_line(&self, scale: f64) -> Result<Vec<Coordinates>,CommandError> {
         // I don't just want to put equally spaced points, I want what appears to be called an adaptive bezier:
         // https://agg.sourceforge.net/antigrain.com/research/adaptive_bezier/index.html 
         // I found a Javascript translation of that here: https://github.com/mattdesl/adaptive-bezier-curve, 
@@ -216,13 +216,13 @@ impl PolyBezier {
 
 }
 
-pub(crate) fn bezierify_points(line: &[Point], scale: f64) -> Result<Vec<Point>,CommandError> {
+pub(crate) fn bezierify_points(line: &[Coordinates], scale: f64) -> Result<Vec<Coordinates>,CommandError> {
     let bezier = PolyBezier::from_poly_line(line);
     bezier.to_poly_line(scale)
 }
 
 
-pub(crate) fn find_curve_making_point(start_point: &Point, end_point: &Point) -> Point {
+pub(crate) fn find_curve_making_point(start_point: &Coordinates, end_point: &Coordinates) -> Coordinates {
     // This function creates a phantom point which can be used to give an otherwise straight ending segment a bit of a curve.
     let parallel = start_point.subtract(end_point);
     // I want to switch the direction of the curve in some way that looks random, but is reproducible.
@@ -234,7 +234,7 @@ pub(crate) fn find_curve_making_point(start_point: &Point, end_point: &Point) ->
 }
 
 
-pub(crate) fn bezierify_points_with_phantoms(before: Option<&Point>, line: &[Point], after: Option<&Point>, scale: f64) -> Result<Vec<Point>,CommandError> {
+pub(crate) fn bezierify_points_with_phantoms(before: Option<&Coordinates>, line: &[Coordinates], after: Option<&Coordinates>, scale: f64) -> Result<Vec<Coordinates>,CommandError> {
     // create the bezier
     let bezier = PolyBezier::from_poly_line_with_phantoms(before,line,after);
     // convert that to a polyline.
