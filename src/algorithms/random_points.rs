@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use crate::utils::Extent;
+use crate::utils::extent::Extent;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;

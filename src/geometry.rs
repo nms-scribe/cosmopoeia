@@ -4,8 +4,8 @@ use gdal::vector::OGRwkbGeometryType;
 use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
 use crate::algorithms::beziers::bezierify_points;
-use crate::utils::Point as UtilsPoint;
-use crate::utils::Extent;
+use crate::utils::point::Point as UtilsPoint;
+use crate::utils::extent::Extent;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 

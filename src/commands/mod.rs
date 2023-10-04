@@ -42,7 +42,7 @@ use gen_towns::GenTowns;
 use gen_nations::GenNations;
 use gen_subnations::GenSubnations;
 use big_bang::BigBang;
-use crate::utils::ArgRange;
+use crate::utils::arg_range::ArgRange;
 
 
 pub(crate) trait Task {

@@ -8,7 +8,7 @@ use crate::algorithms::nations::expand_nations;
 use crate::algorithms::nations::generate_nations;
 use crate::world_map::CultureForNations;
 use crate::world_map::WorldMap;
-use crate::utils::random_number_generator;
+use crate::utils::random::random_number_generator;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::command_def;

@@ -14,7 +14,7 @@ use ordered_float::OrderedFloat;
 
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
-use crate::utils::RandomIndex;
+use crate::utils::random::RandomIndex;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::TileForCulturePrefSorting;
 

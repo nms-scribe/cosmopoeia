@@ -13,7 +13,7 @@ use crate::errors::CommandError;
 use crate::world_map::NewTileSite;
 use crate::world_map::TileForCalcNeighbors;
 use crate::world_map::TypedFeature;
-use crate::utils::Point;
+use crate::utils::point::Point;
 use crate::world_map::TileForCultureDissolve;
 use crate::world_map::CultureForDissolve;
 use crate::world_map::TileWithGeometry;
@@ -40,11 +40,11 @@ use crate::world_map::SubnationFeature;
 use crate::world_map::TypedFeatureIterator;
 use crate::world_map::MapLayer;
 use crate::world_map::ElevationLimits;
-use crate::utils::Extent;
+use crate::utils::extent::Extent;
 use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::triangles::DelaunayGenerator;
 use crate::algorithms::random_points::PointGenerator;
-use crate::utils::ToGeometryCollection;
+use crate::utils::point::ToGeometryCollection;
 use crate::world_map::NamedFeature;
 use crate::commands::OverwriteTilesArg;
 use crate::commands::OverwriteCoastlineArg;
@@ -54,7 +54,7 @@ use crate::geometry::MultiPolygon;
 use crate::geometry::VariantArealGeometry;
 use crate::world_map::NeighborAndDirection;
 use crate::world_map::Neighbor;
-use crate::utils::Edge;
+use crate::utils::edge::Edge;
 
 
 pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {

@@ -10,7 +10,7 @@ use crate::world_map::WorldMap;
 use crate::progress::ProgressObserver;
 use crate::world_map::CultureForNations;
 use crate::world_map::CultureSchema;
-use crate::utils::random_number_generator;
+use crate::utils::random::random_number_generator;
 use crate::algorithms::subnations::generate_subnations;
 use crate::algorithms::subnations::expand_subnations;
 use crate::algorithms::subnations::fill_empty_subnations;

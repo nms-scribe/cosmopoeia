@@ -5,7 +5,7 @@ use gdal::raster::Buffer;
 use gdal::raster::GdalType;
 
 use crate::errors::CommandError;
-use crate::utils::Extent;
+use crate::utils::extent::Extent;
 use crate::world_map::ElevationLimits;
 
 pub(crate) struct RasterBounds {

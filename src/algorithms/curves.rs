@@ -5,7 +5,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::algorithms::tiles::Theme;
 use crate::errors::CommandError;
 use crate::progress::WatchableIterator;
-use crate::utils::Point;
+use crate::utils::point::Point;
 use crate::world_map::TypedFeature;
 use crate::algorithms::beziers::bezierify_points;
 use crate::commands::BezierScaleArg;

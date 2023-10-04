@@ -19,7 +19,7 @@ use crate::world_map::Neighbor;
 use crate::world_map::MapLayer;
 use crate::world_map::TileSchema;
 use crate::world_map::TileFeature;
-use crate::utils::Point;
+use crate::utils::point::Point;
 
 pub(crate) struct RiverSegment {
     pub(crate) from: u64,

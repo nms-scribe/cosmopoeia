@@ -14,7 +14,7 @@ use crate::algorithms::cultures::expand_cultures;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::tiles::dissolve_tiles_by_theme;
-use crate::utils::random_number_generator;
+use crate::utils::random::random_number_generator;
 use crate::algorithms::tiles::CultureTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::world_map::WorldMapTransaction;

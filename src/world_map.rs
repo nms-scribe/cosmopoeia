@@ -35,8 +35,8 @@ use angular_units::Angle;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::utils::Point as UtilsPoint; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
-use crate::utils::Extent;
+use crate::utils::point::Point as UtilsPoint; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
+use crate::utils::extent::Extent;
 use crate::utils::title_case::ToTitleCase;
 use crate::gdal_fixes::FeatureFix;
 use crate::algorithms::naming::Namer;
@@ -58,7 +58,7 @@ use crate::geometry::Polygon;
 use crate::geometry::LineString;
 use crate::geometry::MultiPolygon;
 use crate::geometry::NoGeometry;
-use crate::utils::Edge;
+use crate::utils::edge::Edge;
 use crate::geometry::MultiLineString;
 use crate::utils::simple_serde::Deserializer as Deserializer;
 use crate::utils::simple_serde::Serializer as Serializer;

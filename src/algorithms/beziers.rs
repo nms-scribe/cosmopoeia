@@ -1,7 +1,7 @@
 use adaptive_bezier::adaptive_bezier_curve;
 
 use crate::errors::CommandError;
-use crate::utils::Point;
+use crate::utils::point::Point;
 
 struct PolyBezier {
     vertices: Vec<Point>,

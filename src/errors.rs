@@ -7,7 +7,7 @@ use ordered_float::FloatIsNan;
 use gdal::vector::geometry_type_to_name;
 
 pub(crate) use clap::error::Error as ArgumentError;
-use crate::utils::Edge;
+use crate::utils::edge::Edge;
 use crate::utils::simple_serde::Token;
 
 #[derive(Debug,Clone)]

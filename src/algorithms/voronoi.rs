@@ -6,12 +6,12 @@ use std::collections::hash_map::IntoIter;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::NewTileSite;
-use crate::utils::Extent;
-use crate::utils::Point;
+use crate::utils::extent::Extent;
+use crate::utils::point::Point;
 use crate::errors::CommandError;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
-use crate::utils::Edge;
+use crate::utils::edge::Edge;
 use crate::geometry::GDALGeometryWrapper;
 
 

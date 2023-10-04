@@ -19,7 +19,7 @@ use serde_json::from_reader as from_json_reader;
 //use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::split_string_from_end;
-use crate::utils::RandomIndex;
+use crate::utils::random::RandomIndex;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::commands::NamerArg;

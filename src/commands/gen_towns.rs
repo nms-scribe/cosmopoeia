@@ -8,7 +8,7 @@ use crate::algorithms::towns::populate_towns;
 use crate::algorithms::towns::generate_towns;
 use crate::world_map::CultureForTowns;
 use crate::world_map::WorldMap;
-use crate::utils::random_number_generator;
+use crate::utils::random::random_number_generator;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::progress::ProgressObserver;

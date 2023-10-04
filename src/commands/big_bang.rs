@@ -35,7 +35,7 @@ use crate::commands::CulturesGenArg;
 use crate::commands::SubnationPercentArg;
 use crate::commands::TownCountsArg;
 use crate::commands::LakeBufferScaleArg;
-use crate::utils::random_number_generator;
+use crate::utils::random::random_number_generator;
 
 
 #[derive(Args)]
