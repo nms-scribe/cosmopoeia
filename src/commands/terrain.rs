@@ -40,6 +40,7 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct Recipe {
 
+        #[arg(long)]
         /// JSON File describing the tasks to complete
         pub source: PathBuf
     }
@@ -69,6 +70,7 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct RecipeSet {
 
+        #[arg(long)]
         /// JSON file containing a map of potential recipes to follow
         pub source: PathBuf,
 
@@ -138,7 +140,9 @@ subcommand_def!{
     /// Inverts the heights across the entier map
     #[derive(Deserialize,Serialize)]
     pub struct Multiply {
+        #[arg(long)]
         pub height_filter: Option<ArgRange<i8>>, 
+        #[arg(long)]
         pub height_factor: f64 // this doesn't have to be i8 because it's a multiplication, will still work no matter what the scale.
     }
     
@@ -180,7 +184,9 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct RandomUniform{
 
+        #[arg(long)]
         pub height_filter: Option<ArgRange<i8>>, 
+        #[arg(long)]
         pub height_delta: ArgRange<i8>
     }
     
@@ -203,12 +209,16 @@ subcommand_def!{
     #[derive(Deserialize,Serialize)]
     pub struct AddHill {
 
+        #[arg(long)]
         pub count: ArgRange<usize>,
 
+        #[arg(long)]
         pub height_delta: ArgRange<i8>,
 
+        #[arg(long)]
         pub x_filter: ArgRange<f64>,
 
+        #[arg(long)]
         pub y_filter: ArgRange<f64>
 
     }
@@ -227,9 +237,13 @@ subcommand_def!{
     /// Adds a range of heights or a trough to a certain area of a map
     #[derive(Deserialize,Serialize)]
     pub struct AddRange {
+        #[arg(long)]
         pub count: ArgRange<usize>,
+        #[arg(long)]
         pub height_delta: ArgRange<i8>,
+        #[arg(long)]
         pub x_filter: ArgRange<f64>,
+        #[arg(long)]
         pub y_filter: ArgRange<f64>
     }
 }
@@ -254,7 +268,9 @@ subcommand_def!{
 
     #[derive(Deserialize,Serialize)]
     pub struct AddStrait { 
+        #[arg(long)]
         pub width: ArgRange<f64>,
+        #[arg(long)]
         pub direction: StraitDirection
     }
 
@@ -274,7 +290,7 @@ subcommand_def!{
     /// Changes the heights based on their distance from the edge of the map
     #[derive(Deserialize,Serialize)]
     pub struct Mask {
-        #[arg(default_value="1")]
+        #[arg(long,default_value="1")]
         pub power: f64
     }
 }
@@ -300,7 +316,9 @@ subcommand_def!{
     /// Inverts the heights across the entire map
     #[derive(Deserialize,Serialize)]
     pub struct Invert {
+        #[arg(long)]
         pub probability: f64, 
+        #[arg(long)]
         pub axes: InvertAxes
     }
     
@@ -322,7 +340,9 @@ subcommand_def!{
     /// Inverts the heights across the entier map
     #[derive(Deserialize,Serialize)]
     pub struct Add {
+        #[arg(long)]
         pub height_filter: Option<ArgRange<i8>>, 
+        #[arg(long)]
         pub height_delta: i8
     }
     
@@ -344,7 +364,7 @@ subcommand_def!{
     /// Smooths elevations by averaging the value against it's neighbors.
     #[derive(Deserialize,Serialize)]
     pub struct Smooth {
-        #[arg(default_value="2")]
+        #[arg(long,default_value="2")]
         pub fr: f64
     }
     
@@ -364,11 +384,11 @@ subcommand_def!{
     /// Runs an erosion process on the map
     #[derive(Deserialize,Serialize)]
     pub struct Erode {
-        #[arg(default_value="1000")]
+        #[arg(long,default_value="1000")]
         /// Maximum amount of "soil" in meters to weather off of the elevation before erosion (Actual amount calculated based on slope)
         pub weathering_amount: f64,
 
-        #[arg(default_value="10")]
+        #[arg(long,default_value="10")]
         pub iterations: usize
     }
 }
@@ -387,8 +407,11 @@ subcommand_def!{
     /// Sets random points in an area to ocean if they are below sea level (Use FloodOcean to complete the process)
     #[derive(Deserialize,Serialize)]
     pub struct SeedOcean {
+        #[arg(long)]
         pub count: ArgRange<usize>,
+        #[arg(long)]
         pub x_filter: ArgRange<f64>,
+        #[arg(long)]
         pub y_filter: ArgRange<f64>
     }
     
@@ -454,7 +477,7 @@ subcommand_def!{
         pub ocean_arg: OceanSourceArg,
 
         /// The elevation to compare to
-        #[arg(allow_negative_numbers=true)]
+        #[arg(long,allow_negative_numbers=true)]
         pub elevation: f64
     }
 }

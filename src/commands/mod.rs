@@ -17,6 +17,7 @@ use crate::progress::ProgressObserver;
 
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
 mod dev;
+mod docs;
 mod create;
 pub(crate) mod terrain;
 mod gen_climate;
@@ -30,6 +31,7 @@ mod big_bang;
 
 use gdal_dev::Gdal;
 use dev::Dev;
+use docs::Docs;
 use create::Create;
 use create::CreateCalcNeighbors;
 use create::CreateTiles;
@@ -87,6 +89,8 @@ command_def!{
         Gdal,
         /// Support commands used mostly during development
         Dev,
+        /// Output documentation
+        Docs,
         /// Creates a world map.
         Create,
         /// Support command for calculating tile neighbors after creation

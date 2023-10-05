@@ -295,14 +295,21 @@ To proceed on this, I can break it down into the following steps:
 [-] Hide the sub-commands from help, but document them with an appropriate option flag on help. -- I wonder if this might work if I can do nested subcommands, but with defaults? Then maybe I could only display them when they do help on the other command. I've decided these are going in the wiki instead.
 [X] Clean up and triage TODOs and FUTURE:s into things I must do now, simple things I could do now, and things that can wait until sometime later.
 [X] Work on "Simple Pre-release Tasks" below
-[ ] Work on "Complex Pre-release Tasks" below
+[X] Work on "Complex Pre-release Tasks" below
 [ ] Documentation
+    [ ] It's possible to have a separate executable in a bin/<name>.rs file which would give alternate access to code. Create a cosmopoeia-docs command there, perhaps. This will auto-generate some of the docs to a docs subfolder. Should look at github to see where the best place to put this is, though.
+    [ ] I need to document:
+        [..] Command line: There are clap-markdown crates or something like that
+        [ ] Database Schema: I might could put some rudimentary "Schema description" function in the layer macro which let's me write the documentation metadata to a function.
+        [ ] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file
+        [ ] Namer files
+        [ ] Culture set files
+        [ ] The QGIS file?
+        [ ] How to get started
     [ ] Can I set it up so it shows up as a wiki on github?
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
-    [ ] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool.
+    [ ] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool. It's predecessors were designed for generating lots of random maps over and over. This is designed for generating a few maps, which you can then modify in external tools as you need.
     [ ] Make sure it's clear that, although the algorithms were inspired by AFMG, the tool is not guaranteed to, and indeed not designed to, behave exactly the same in regards to output given the same output parameters.
-    [ ] Include explanation of all commands
-    [ ] Include explanation of the data (layers and fields) in the output file.
     [ ] Add the following to documentation:
 
     # On Crates
@@ -327,23 +334,12 @@ To proceed on this, I can break it down into the following steps:
     * According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
     * According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
     * According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
-[ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows.
-[ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, a few other places), and start updating those places when changes are made.
+[ ] Set up private github repository for now.
+[ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
+[ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)
+[ ] Make the github repository public.
+[ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
 [ ] Put the Post-Release Tasks into issues on github
-[ ] Improved, Similar-area voronoization algorithm vaguely described above
-[ ] Improved climate generation commands
-[ ] Some additions to `gen-civil`, or perhaps another command:
-    [ ] `gen-civil-roads`
-    [ ] `gen-civil-trails`
-    [ ] `gen-civil-ocean-routes`
-    [ ] Update `gen-civil-town-details` so that the population of towns are effected by connection to roads
-[ ] Improved people and culture generation commands if I can think of anything...
-[ ] `regen-*` commands
-    [ ] Based on what is done in `gen-people` and some other things, but keep things that shouldn't be regenerated. -- Do I want to allow them to "lock" things? This almost has to be the same algorithms that I'm using. In which case, do I really need this? The only way this would be useful is if I could lock, because otherwise you could just continue.
-[X] `dissolve` commands
-[X] `genesis` command and `genesis-heightmap` Which does everything.
-[ ] Also a `regenesis` command that will let you start at a specific stage in the process and regenerate everything from that, but keep the previous stuff. This is different from just the sub-tasks, as it will finish all tasks after that.
-[ ] `convert-image` command if I can't just use convert-heightmap
 
 The following additional tasks need to be triaged:
 
@@ -472,13 +468,6 @@ These are things that really should be done before release, but they might take 
 [X] Is flow_to supposed to be a vector? Or optional?
 [X] Namers: Figure out a way to get the mean length and a standard deviation while calculating the markov chain. Then, when generating words, use those values to generate the length of the output word. I feel that will be a lot closer to realistic names.
 [X] map_err should pass the error on to the various things if it's found.
-[ ] Turn on the following clippies one at a time and figure out how to deal with them, then I can just leave them in:
-    [ ] #![warn(clippy::arithmetic_side_effects)]
-    [ ] #![warn(clippy::as_conversions)]
-    [ ] #![warn(clippy::indexing_slicing)]
-    [ ] #![warn(clippy::float_arithmetic)]
-    [ ] -- is there one for integer_arithmetic? Because I want to be able to check for overflow, which might simplify the release build.
-    [ ] #![warn(clippy::cargo_common_metadata)]
 
 
 ## Post-release tasks and feature requests.
@@ -490,6 +479,16 @@ These are things that really should be done before release, but they might take 
 [ ] Add a spheremode option which causes points to be generated at higher spacing at higher latitudes and changes how distance and area are calculated where that's important.
     [ ] RasterBounds::pixels_to_coords and coords_to_pixels -- make sure these are calculated correctly for spheremode
     [ ] I may need to bring in my own delaunay algorithm. First, I wouldn't need to collect points into a geometry. But second, when I add sphere_mode, the changes to the distance formula might change. Third, I might be able to remove an array collection step in there, before generating voronoi. Not sure.
+[ ] More informational error handling: Make user of the following to add in information about where errors occur.
+    * https://doc.rust-lang.org/std/macro.module_path.html
+    * https://doc.rust-lang.org/std/macro.line.html
+    * https://doc.rust-lang.org/std/macro.file.html
+    * https://doc.rust-lang.org/std/any/fn.type_name.html with https://stackoverflow.com/questions/38088067/equivalent-of-func-or-function-in-rust
+[ ] A trace log option might be nice, but it's kind of useless if the error occurs while you're not running it, and then doesn't when you turn it on.
+[ ] Decide how to handle the following: It would be nice to avoid these common errors, but this will lead to a lot of errors that will stop the process anyway. I think, before I do something like this, I have to have more in-depth error handling, by adding locations and the like to error messages (there is a 'line!' macro that might be useful for that.)
+    [ ] #![warn(clippy::arithmetic_side_effects)]
+    [ ] #![warn(clippy::as_conversions)]
+    [ ] #![warn(clippy::indexing_slicing)]
 [ ] Consider a change to culture stuff. Right now we have two ways of specifying tile preference for culture and nation expansion: CultureType enum and the TilePreference enum. Play around with making the TilePreference option the standard, and at best create some pre-defined TilePreferences that are easier to serialize. **Or** replace the TilePreference with CultureTypes.
     [ ] If I do keep CultureType, figure out a better way that allows for more customization.
     [ ] If I can make the culture and biomes more configurable, then I can get rid of the 'supports_nomadic' and 'supports_hunting' fields on biomes.
@@ -526,8 +525,15 @@ These are things that really should be done before release, but they might take 
 [ ] After curving, towns which are along the coastline will sometimes be in the ocean. May need to deal with that.
 [ ] Technically, since lakes have an inset, it should be possible to have population on a lake tile, along the coast. But, if a town is set there, it has to be placed outside of the lake.
 [ ] There's a double link that needs to be maintained with towns: the town has a tile_id, and the tiles have a town_id. If towns are randomly regenerated, I'm not sure if the old town_ids in the tiles are then cleared out.
-[ ] Add in road generation algorithms similar to AFMG
-    [ ] towns::populate_towns -- If I ever add in roads, then roads should increase population of towns. However, I could have the road generation algorithm do that itself.
+[ ] `gen-transporation`
+    [ ] `gen-transportation-roads`
+    [ ] `gen-transportation-trails`
+    [ ] `gen-transportation-ocean-routes` -- Make a note that ocean currents are not used here (unless I figure those out first)
+    [ ] Update `gen-town` so that the population of towns are effected by connection to roads
+[ ] `regen-*` commands
+    [ ] Based on what is done in `gen-people` and some other things, but keep things that shouldn't be regenerated. -- Do I want to allow them to "lock" things? This almost has to be the same algorithms that I'm using. In which case, do I really need this? The only way this would be useful is if I could lock, because otherwise you could just redo some things.
+[ ] Also a `regenesis` command that will let you start at a specific stage in the process and regenerate everything from that, but keep the previous stuff. This is different from just the sub-tasks, as it will finish all tasks after that. (This is related to the status thing I came up with before)
+[ ] `image` terrain source which accepts an image and an extent in one dimension (the other is calculated by ratio), and a way of combining the different bands on the image.
 [ ] Revisit the target.reedit problem in big_bang, see if I can get an MRE that causes the problem and track down the problem.
 [ ] Revisit subnation curvify: the subnations should follow their nation borders when possible. This might be done more easily if we curvify the subnations first, then just dissolve the nations out of their subnations.
 [ ] Review all of the algorithms to see if there are better ways
