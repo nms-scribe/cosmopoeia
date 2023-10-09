@@ -306,7 +306,7 @@ To proceed on this, I can break it down into the following steps:
                 [X] implemented GetTypedField for f64, test and then finish the others
                 [X] SetTypedField is a separate trait because we can use references to set some values, so we can implement for Borrowed
                 [X] Add get_field_value for SetTypedField?
-        [ ] Terrain recipes should use the enum tag under a "task" key alongside their properties, instead of the currently object key form. Same for the other ones if they're not already.
+        [X] Terrain recipes should use the enum tag under a "task" key alongside their properties, instead of the currently object key form. Same for the other ones if they're not already.
         [ ] I might need to do something similar to what I'm doing for serialization here. Call it JSONDoc or something, where I have to specify field names and enum variants in a macro in order to get what I want, using a trait.
             [ ] I think I can use the following: https://docs.rs/schemars/latest/schemars/
             [ ] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file

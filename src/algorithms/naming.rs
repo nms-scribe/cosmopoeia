@@ -187,6 +187,7 @@ struct MarkovSource {
 
 
 #[derive(Serialize,Deserialize)]
+#[serde(tag="method")]
 enum NamerMethodSource {
     Markov(MarkovSource),
     ListPicker(Vec<String>)
@@ -196,6 +197,7 @@ enum NamerMethodSource {
 #[derive(Serialize,Deserialize)] 
 struct NamerSource {
     name: String,
+    #[serde(flatten)]
     method: NamerMethodSource,
     state_name: Vec<StateNameBehavior>,
     state_suffix: StateSuffixBehavior,

@@ -544,6 +544,7 @@ impl LoadTerrainTask for SampleElevation {
 
 #[derive(Deserialize,Serialize,Subcommand)]
 #[command(disable_help_subcommand(true))]
+#[serde(tag="task")]
 pub enum Command {
     Recipe(Recipe),
     RecipeSet(RecipeSet),
