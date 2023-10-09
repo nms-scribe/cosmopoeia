@@ -1,9 +1,10 @@
+use core::hash::Hash;
 use std::path::Path;
 use std::path::PathBuf;
 use std::collections::HashMap;
-use core::hash::Hash;
 use std::collections::HashSet;
 use std::collections::hash_map::IntoIter;
+use std::fmt::Display;
 
 use gdal::DriverManager;
 use gdal::Dataset;
@@ -19,6 +20,7 @@ use gdal::vector::Layer;
 use gdal::vector::Feature;
 use gdal::vector::FeatureIterator;
 use gdal::Transaction;
+use gdal::vector::field_type_to_name;
 use ordered_float::OrderedFloat;
 use ordered_float::NotNan;
 use indexmap::IndexMap;
@@ -30,7 +32,6 @@ use indexmap::map::IntoIter as IndexIntoIter;
 use paste::paste;
 use prisma::Rgb;
 use angular_units::Deg;
-use angular_units::Angle;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -79,14 +80,280 @@ use crate::impl_simple_serde_tagged_enum;
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
+
+#[derive(Clone,PartialEq)]
+pub(crate) struct FieldTypeDocumentation {
+    pub(crate) name: String,
+    pub(crate) description: String, // More detailed description for the format
+    pub(crate) storage_type: String, // the concrete field type in the database
+    pub(crate) syntax: String, // syntax for the format
+    pub(crate) sub_types: Vec<FieldTypeDocumentation>
+
+}
+
+pub(crate) trait DocumentedFieldType {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation;
+
+}
+
+pub(crate) trait TypedField: Sized + DocumentedFieldType {
+
+    const STORAGE_TYPE: OGRFieldType::Type;
+
+    fn get_required<FieldType>(value: Option<FieldType>, field_id: &'static str) -> Result<FieldType,CommandError> {
+        value.ok_or_else(|| CommandError::MissingField(field_id))
+    }
+    
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError>;
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError>;
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError>;
+}
+
+
+
+
+pub(crate) fn describe_variant_syntax(variants: &[(&str,&[&[FieldTypeDocumentation]])]) -> (String,Vec<FieldTypeDocumentation>) {
+    let mut result = String::new();
+    let mut sub_types = Vec::new();
+    let mut first_variant = true;
+    for (variant,has_tuple) in variants {
+        if first_variant {
+            first_variant = false;
+        } else {
+            result.push_str(" | ")
+        }
+        result.push('"');
+        result.push_str(&variant);
+        result.push('"');
+        for tuple_items in *has_tuple {
+            result.push_str(" (");
+            let mut first_tuple_item = true;
+            for item in *tuple_items {
+                if first_tuple_item {
+                    first_tuple_item = false
+                } else {
+                    result.push_str(", ");
+                }
+                result.push_str(&item.name);
+                sub_types.push(item.clone());
+            }
+            result.push(')');
+        }
+
+    }
+    (result,sub_types)
+
+
+}
+
+macro_rules! impl_documentation_for_tagged_enum {
+
+    (#[doc=$description: literal] $enum: ty {$(#[doc=$variant_description: literal] $variant: ident $(($($tuple_name: ident: $tuple_type: ty),*$(,)?))?),*$(,)?}) => {
+        impl DocumentedFieldType for $enum {
+
+            fn get_field_type_documentation() -> FieldTypeDocumentation {
+
+                let mut description = String::new();
+                description.push_str($description.trim_start());
+                description.push('\n');
+                $(
+                    description.push_str("* ");
+                    description.push_str(stringify!($variant));
+                    description.push(':');
+                    description.push(' ');
+                    description.push_str($variant_description.trim_start());
+                    description.push('\n');
+                )*
+
+                let (syntax,sub_types) = describe_variant_syntax(&[$((stringify!($variant),&[$(&[$(<$tuple_type>::get_field_type_documentation()),*])?])),*]);
+
+                FieldTypeDocumentation {
+                    name: stringify!($enum).to_owned(),
+                    description,
+                    storage_type: field_type_to_name(<$enum>::STORAGE_TYPE), // TODO: Should take this from a TypedField trait instead
+                    syntax,
+                    sub_types
+                }
+            }
+        
+        }
+
+        // This enforce that we have all of the same enum values
+        impl $enum {
+
+            fn _documented_field_type_identity(self) -> Self {
+                match self {
+                    $(
+                        Self::$variant$(($($tuple_name),*))? => Self::$variant$(($($tuple_name),*))?,
+                    )*
+                }
+            }
+
+        }
+    }
+}
+
+impl TypedField for Edge {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+impl TypedField for Option<Edge> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
+        feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        if let Some(value) = self {
+            Ok(feature.set_field_string(field_name, &value.write_to_string())?)
+        } else {
+            Ok(feature.set_field_null(field_name)?)
+        }
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        if let Some(value) = self {
+            value.to_field_value()
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+
+
+
+impl_documentation_for_tagged_enum!{
+    /// The name of a side or corner of the map.
+    Edge {
+        /// The north edge of the map
+        North,
+        /// The northeast corner of the map
+        Northeast,
+        /// The east edge of the map
+        East,
+        /// The southeast corner of the map
+        Southeast,
+        /// The south edge of the map
+        South,
+        /// The southwest corner of the map
+        Southwest,
+        /// The west edge of the map
+        West,
+        /// The northwest corner of the map
+        Northwest
+    }
+}
+
+
 #[allow(variant_size_differences)] // Not sure how else to build this enum
 #[derive(Clone,PartialEq,Eq,Hash,PartialOrd,Ord,Debug)]
 pub(crate) enum Neighbor {
     OffMap(Edge),
-    Tile(u64),
-    CrossMap(u64, Edge),
+    Tile(IdRef),
+    CrossMap(IdRef, Edge),
 }
 
+impl TypedField for Neighbor {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+
+}
+
+
+
+impl TypedField for Option<Neighbor> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
+        feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        if let Some(value) = self {
+            Ok(value.set_field(feature,field_name)?)
+        } else {
+            Ok(feature.set_field_null(field_name)?)
+        }
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        if let Some(value) = self {
+            value.to_field_value()
+        } else {
+            Ok(None)
+        }
+    }
+
+    
+}
+
+
+impl TypedField for Vec<Neighbor> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+
+
+impl DocumentedFieldType for Neighbor {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "Neighbor".to_owned(),
+            description: "Specifies a type of neighbor for a tile. There are three possibilities. They are described by their contents, not their name, in order to simplify the NeighborDirection fields.\n* Tile: a regular contiguous tile, which is specified by it's id.\n* CrossMap: a tile that sits on the opposite side of the map, specified by it's id and direction as an 'Edge'.\n* OffMap: unknown content that is off the edges of the map, specified merely by a direction as an 'Edge'".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
+            syntax: "<integer> | (<integer>,<Edge>) | <Edge>".to_owned(),
+            sub_types: vec![Edge::get_field_type_documentation()]
+        }
+    }
+}
 
 impl Serialize for Neighbor {
     // implemented so there are no tags.
@@ -110,7 +377,7 @@ impl Deserialize for Neighbor {
             source.expect(&Token::CloseParenthesis)?;
             Ok(Self::CrossMap(id, edge))
         } else if let Some(id) = source.matches_integer()? {
-            Ok(Self::Tile(id))
+            Ok(Self::Tile(IdRef::new(id)))
         } else {
             let edge = Deserialize::read_value(source)?;
             Ok(Self::OffMap(edge))
@@ -121,6 +388,39 @@ impl Deserialize for Neighbor {
 
 #[derive(Clone,PartialEq,Debug)]
 pub(crate) struct NeighborAndDirection(pub(crate) Neighbor,pub(crate) Deg<f64>);
+
+impl TypedField for Vec<NeighborAndDirection> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+
+
+impl DocumentedFieldType for Vec<NeighborAndDirection> {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "NeighborAndDirection".to_owned(),
+            description: "A pair of Neighbor and angular direction (in degrees, clockwise from north) surrounded by parentheses.".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
+            syntax: "(<Neighbor>,<real>)".to_owned(),
+            sub_types: vec![Neighbor::get_field_type_documentation()]
+        }
+    }
+}
 
 impl Serialize for NeighborAndDirection {
 
@@ -139,6 +439,97 @@ impl Deserialize for NeighborAndDirection {
     }
 }
 
+#[derive(PartialEq,Eq,Hash,PartialOrd,Ord,Clone,Debug)]
+pub struct IdRef(u64);
+
+impl IdRef {
+
+    pub(crate) fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+}
+
+
+impl Display for IdRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.0)
+    }
+}
+
+impl Deserialize for IdRef {
+
+    fn read_value<Source: Deserializer>(deserializer: &mut Source) -> Result<Self,CommandError> {
+        let inner = Deserialize::read_value(deserializer)?;
+        Ok(Self(inner))
+    }
+
+}
+
+impl Serialize for IdRef {
+    fn write_value<Target: Serializer>(&self, serializer: &mut Target) {
+        self.0.write_value(serializer)
+    }
+}
+
+impl TypedField for IdRef {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+impl TypedField for Option<IdRef> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
+        feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        if let Some(value) = self {
+            Ok(value.set_field(feature,field_name)?)
+        } else {
+            Ok(feature.set_field_null(field_name)?)
+        }
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        if let Some(value) = self {
+            value.to_field_value()
+        } else {
+            Ok(None)
+        }
+    }
+
+}
+
+
+
+impl DocumentedFieldType for IdRef {
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "ID Reference".to_owned(),
+            description: "A reference to the 'fid' field in another table. This is stored as a String field because an unsigned integer field is not available.".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE), 
+            syntax: "<integer>".to_owned(),
+            sub_types: Vec::new()
+        }
+    }
+}
 
 fn color_to_string(value: Rgb<u8>) -> String {
     let (red,green,blue) = (value.red(),value.green(),value.blue());
@@ -157,403 +548,6 @@ fn string_to_color(value: &str) -> Result<Rgb<u8>,CommandError> {
 
 }
 
-macro_rules! feature_get_field_type {
-    (f64) => {
-        f64
-    };
-    (id_ref) => {
-        u64
-    };
-    (neighbor) => {
-        Neighbor
-    };
-    (option_neighbor) => {
-        Option<Neighbor>
-    };
-    (i32) => {
-        i32
-    };
-    (bool) => {
-        bool
-    };
-    (option_id_ref) => {
-        Option<u64>
-    };
-    (option_i32) => {
-        Option<i32> // this is the same because everything's an option, the option tag only means it can accept options
-    };
-    (neighbor_directions) => {
-        Vec<NeighborAndDirection>
-    };
-    (neighbor_list) => {
-        Vec<Neighbor>
-    };
-    (river_segment_from) => {
-        RiverSegmentFrom
-    };
-    (river_segment_to) => {
-        RiverSegmentTo
-    };
-    (string) => {
-        String
-    };
-    (option_string) => {
-        Option<String>
-    };
-    (biome_criteria) => {
-        BiomeCriteria
-    };
-    (lake_type) => {
-        LakeType
-    };
-    (grouping) => {
-        Grouping
-    };
-    (culture_type) => {
-        CultureType
-    };
-    (color) => {
-        Rgb<u8>
-    };
-    (angle) => {
-        Deg<f64>
-    };
-    (option_edge) => {
-        Option<Edge>
-    }
-
-}
-
-macro_rules! feature_set_field_type {
-    (f64) => {
-        f64
-    };
-    (id_ref) => {
-        u64
-    };
-    (neighbor) => {
-        &Neighbor
-    };
-    (option_neighbor) => {
-        &Option<Neighbor>
-    };
-    (option_id_ref) => {
-        Option<u64>
-    };
-    (i32) => {
-        i32
-    };
-    (option_i32) => {
-        Option<i32>
-    };
-    (bool) => {
-        bool
-    };
-    (neighbor_directions) => {
-        &Vec<NeighborAndDirection>
-    };
-    (neighbor_list) => {
-        &Vec<Neighbor>
-    };
-    (river_segment_from) => {
-        &RiverSegmentFrom
-    };
-    (river_segment_to) => {
-        &RiverSegmentTo
-    };
-    (string) => {
-        &str
-    };
-    (option_string) => {
-        Option<&str>
-    };
-    (biome_criteria) => {
-        &BiomeCriteria
-    };
-    (lake_type) => {
-        &LakeType
-    };
-    (grouping) => {
-        &Grouping
-    };
-    (culture_type) => {
-        &CultureType
-    };
-    (color) => {
-        Rgb<u8>
-    };
-    (angle) => {
-        Deg<f64>
-    };
-    (option_edge) => {
-        &Option<Edge>
-    };
-}
-
-macro_rules! feature_get_required {
-    ($feature_name: literal $prop: ident $value: expr ) => {
-        $value.ok_or_else(|| CommandError::MissingField(concat!($feature_name,".",stringify!($prop))))
-    };
-}
-
-macro_rules! feature_get_field {
-    ($self: ident f64 $feature_name: literal $prop: ident $field: path) => {
-        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?)
-    };
-    ($self: ident id_ref $feature_name: literal $prop: ident $field: path) => {
-        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident neighbor $feature_name: literal $prop: ident $field: path) => {
-        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident option_neighbor $feature_name: literal $prop: ident $field: path) => {
-        $self.feature.field_as_string_by_name($field)?.map(|a| Deserialize::read_from_str(&a)).transpose()
-    };
-    ($self: ident option_id_ref $feature_name: literal $prop: ident $field: path) => {
-        $self.feature.field_as_string_by_name($field)?.map(|a| Deserialize::read_from_str(&a)).transpose()
-    };
-    ($self: ident i32 $feature_name: literal $prop: ident $field: path) => {
-        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)?)
-    };
-    ($self: ident option_i32 $feature_name: literal $prop: ident $field: path) => {
-        Ok($self.feature.field_as_integer_by_name($field)?)
-    };
-    ($self: ident bool $feature_name: literal $prop: ident $field: path) => {
-        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_integer_by_name($field)?)? != 0)
-    };
-    ($self: ident neighbor_directions $feature_name: literal $prop: ident $field: path) => {
-        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident neighbor_list $feature_name: literal $prop: ident $field: path) => {
-        Deserialize::read_from_str(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident river_segment_from $feature_name: literal $prop: ident $field: path) => {
-        RiverSegmentFrom::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident river_segment_to $feature_name: literal $prop: ident $field: path) => {
-        RiverSegmentTo::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident string $feature_name: literal $prop: ident $field: path) => {
-        Ok(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident option_string $feature_name: literal $prop: ident $field: path) => {
-        if let Some(value) = $self.feature.field_as_string_by_name($field)? {
-            if value == "" {
-                // we're storing null strings as empty for now.
-                Ok(None)
-            } else {
-                Ok(Some(value))
-            }
-        } else {
-            Ok(None)
-        }
-    };
-    ($self: ident biome_criteria $feature_name: literal $prop: ident $field: path) => {
-        BiomeCriteria::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident lake_type $feature_name: literal $prop: ident $field: path) => {
-        LakeType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident grouping $feature_name: literal $prop: ident $field: path) => {
-        Grouping::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident culture_type $feature_name: literal $prop: ident $field: path) => {
-        CultureType::try_from(feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident color $feature_name: literal $prop: ident $field: path) => {
-        string_to_color(&feature_get_required!($feature_name $prop $self.feature.field_as_string_by_name($field)?)?)
-    };
-    ($self: ident angle $feature_name: literal $prop: ident $field: path) => {
-        Ok(Deg(feature_get_required!($feature_name $prop $self.feature.field_as_double_by_name($field)?)?))
-    };
-    ($self: ident option_edge $feature_name: literal $prop: ident $field: path) => {
-        $self.feature.field_as_string_by_name($field)?.map(|a| Deserialize::read_from_str(&a)).transpose()
-    };
-
-}
-
-macro_rules! feature_set_field {
-    ($self: ident $value: ident f64 $field: path) => {
-        // The NotNan thing verifies that the value is not NaN, which would be treated as null.
-        // This can help me catch math problems early...
-        Ok($self.feature.set_field_double($field, NotNan::try_from($value)?.into_inner())?)
-    };
-    ($self: ident $value: ident i32 $field: path) => {
-        Ok($self.feature.set_field_integer($field, $value)?)
-    };
-    ($self: ident $value: ident option_i32 $field: path) => {
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_integer($field, value)?)
-        } else {
-            Ok($self.feature.set_field_null($field)?)
-        }
-    };
-    ($self: ident $value: ident id_ref $field: path) => {
-        Ok($self.feature.set_field_string($field, &$value.write_to_string())?)
-    };
-    ($self: ident $value: ident neighbor $field: path) => {
-        Ok($self.feature.set_field_string($field, &$value.write_to_string())?)
-    };
-    ($self: ident $value: ident option_neighbor $field: path) => {
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &value.write_to_string())?)
-        } else {
-            Ok($self.feature.set_field_null($field)?)
-        }
-    };
-    ($self: ident $value: ident option_id_ref $field: path) => {
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &value.write_to_string())?)
-        } else {
-            Ok($self.feature.set_field_null($field)?)
-        }
-    };
-    ($self: ident $value: ident bool $field: path) => {
-        Ok($self.feature.set_field_integer($field, $value.into())?)
-    };
-    ($self: ident $value: ident neighbor_directions $field: path) => {{
-        let neighbors = &$value.write_to_string();
-        Ok($self.feature.set_field_string($field, &neighbors)?)
-    }};
-    ($self: ident $value: ident neighbor_list $field: path) => {{
-        let neighbors = &$value.write_to_string();
-        Ok($self.feature.set_field_string($field, &neighbors)?)
-    }};
-    ($self: ident $value: ident river_segment_from $field: path) => {{
-        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident river_segment_to $field: path) => {{
-        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident string $field: path) => {{
-        Ok($self.feature.set_field_string($field, $value)?)
-    }};
-    ($self: ident $value: ident option_string $field: path) => {{
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, value)?)
-        } else {
-            Ok($self.feature.set_field_null($field)?)
-        }        
-    }};
-    ($self: ident $value: ident biome_criteria $field: path) => {{
-        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident lake_type $field: path) => {{
-        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident grouping $field: path) => {{
-        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident culture_type $field: path) => {{
-        Ok($self.feature.set_field_string($field, &Into::<String>::into($value))?)
-    }};
-    ($self: ident $value: ident color $field: path) => {{
-        Ok($self.feature.set_field_string($field, &color_to_string($value))?)
-    }};
-    ($self: ident $value: ident angle $field: path) => {
-        // The NotNan thing verifies that the value is not NaN, which would be treated as null.
-        // This can help me catch math problems early...
-        Ok($self.feature.set_field_double($field, NotNan::try_from($value.scalar())?.into_inner())?)
-    };
-    ($self: ident $value: ident option_edge $field: path) => {
-        if let Some(value) = $value {
-            Ok($self.feature.set_field_string($field, &value.write_to_string())?)
-        } else {
-            Ok($self.feature.set_field_null($field)?)
-        }
-    };
-
-}
-
-macro_rules! feature_field_value {
-    ($prop: expr; f64) => {
-        Some(FieldValue::RealValue(NotNan::<f64>::try_from($prop)?.into_inner()))
-    };
-    ($prop: expr; i32) => {
-        Some(FieldValue::IntegerValue($prop))
-    };
-    ($prop: expr; bool) => {
-        Some(FieldValue::IntegerValue($prop.into()))
-    };
-    ($prop: expr; option_i32) => {
-        if let Some(value) = $prop {
-            Some(FieldValue::IntegerValue(value))
-        } else {
-            None
-        }
-    };
-    ($prop: expr; option_id_ref) => {
-        if let Some(value) = $prop {
-            Some(FieldValue::StringValue(value.write_to_string()))
-        } else {
-            None
-        }
-    };
-    ($prop: expr; neighbor_list) => {
-        Some(FieldValue::StringValue($prop.write_to_string()))
-    };
-    ($prop: expr; neighbor_directions) => {
-        Some(FieldValue::StringValue($prop.write_to_string()))
-    };
-    ($prop: expr; id_ref) => {
-        // store id_ref as a string so I can use u64, as fields only support i64
-        Some(FieldValue::StringValue($prop.write_to_string()))
-    };
-    ($prop: expr; neighbor) => {
-        // store id_ref as a string so I can use u64, as fields only support i64
-        Some(FieldValue::StringValue($prop.write_to_string()))
-    };
-    ($prop: expr; option_neighbor) => {
-        if let Some(value) = &$prop {
-            Some(FieldValue::StringValue(value.write_to_string()))
-        } else {
-            None
-        }
-    };
-    ($prop: expr; river_segment_from) => {{
-        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
-    }};
-    ($prop: expr; river_segment_to) => {{
-        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
-    }};
-    ($prop: expr; string) => {{
-        Some(FieldValue::StringValue($prop.to_owned()))
-    }};
-    ($prop: expr; option_string) => {{
-        if let Some(value) = &$prop {
-            Some(FieldValue::StringValue(value.to_owned()))
-        } else {
-            None
-        }
-    }};
-    ($prop: expr; biome_criteria) => {{
-        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
-    }};
-    ($prop: expr; lake_type) => {{
-        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
-    }};
-    ($prop: expr; grouping) => {{
-        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
-    }};
-    ($prop: expr; culture_type) => {{
-        Some(FieldValue::StringValue(Into::<String>::into(&$prop)))
-    }};
-    ($prop: expr; color) => {{
-        Some(FieldValue::StringValue(color_to_string($prop)))
-    }};
-    ($prop: expr; angle) => {{
-        Some(FieldValue::RealValue($prop.scalar()))
-    }};
-    ($prop: expr; option_edge) => {
-        if let Some(value) = &$prop {
-            Some(FieldValue::StringValue(value.write_to_string()))
-        } else {
-            None
-        }
-    };
-
-}
-
 pub(crate) trait Schema {
 
     type Geometry: GDALGeometryWrapper;
@@ -568,7 +562,7 @@ pub(crate) trait Schema {
 
 pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data_life>>  {
 
-    fn fid(&self) -> Result<u64,CommandError>;
+    fn fid(&self) -> Result<IdRef,CommandError>;
 
     fn into_feature(self) -> Feature<'data_life>;
 
@@ -597,76 +591,331 @@ macro_rules! feature_count_fields {
     };
 }
 
-macro_rules! get_field_type_for_prop_type {
-    (f64) => {
-        OGRFieldType::OFTReal
-    };
-    (i32) => {
-        OGRFieldType::OFTInteger
-    };
-    (grouping) => {
-        OGRFieldType::OFTString
-    };
-    (id_ref) => {
-        OGRFieldType::OFTString
-    };
-    (neighbor) => {
-        OGRFieldType::OFTString
-    };
-    (option_neighbor) => {
-        OGRFieldType::OFTString
-    };
-    (option_id_ref) => {
-        OGRFieldType::OFTString
-    };
-    (neighbor_list) => {
-        OGRFieldType::OFTString
-    };
-    (option_i32) => {
-        OGRFieldType::OFTInteger
-    };
-    (string) => {
-        OGRFieldType::OFTString
-    };
-    (option_string) => {
-        OGRFieldType::OFTString
-    };
-    (neighbor_directions) => {
-        OGRFieldType::OFTString
-    };
-    (river_segment_from) => {
-        OGRFieldType::OFTString
-    };
-    (river_segment_to) => {
-        OGRFieldType::OFTString
-    };
-    (lake_type) => {
-        OGRFieldType::OFTString
-    };
-    (biome_criteria) => {
-        OGRFieldType::OFTString
-    };
-    (bool) => {
-        OGRFieldType::OFTInteger
-    };
-    (culture_type) => {
-        OGRFieldType::OFTString
-    };
-    (color) => {
-        OGRFieldType::OFTString
-    };
-    (angle) => {
-        OGRFieldType::OFTInteger
-    };
-    (option_edge) => {
-        OGRFieldType::OFTString
+impl TypedField for Deg<f64> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTReal;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Ok(Deg(f64::get_field(feature,field_name,field_id)?))
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        self.0.set_field(feature, field_name)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        self.0.to_field_value()
+    }
+
+}
+
+
+impl DocumentedFieldType for Deg<f64> {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "Angle".to_owned(),
+            description: "A real number from 0 to 360.".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
+            syntax: "<real>".to_owned(),
+            sub_types: Vec::new()
+        }
     }
 }
 
+impl TypedField for String {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)
+    }
+
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self)?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.clone())))
+    }
+
+}
+
+
+
+impl TypedField for Option<String> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+
+    fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
+        if let Some(value) = feature.field_as_string_by_name(field_name)? {
+            if value == "" {
+                // we're storing null strings as empty for now.
+                Ok(None)
+            } else {
+                Ok(Some(value))
+            }
+        } else {
+            Ok(None)
+        }
+
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        if let Some(value) = self {
+            Ok(value.set_field(feature,field_name)?)
+        } else {
+            Ok(feature.set_field_null(field_name)?)
+        }
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        if let Some(value) = self {
+            value.to_field_value()
+        } else {
+            Ok(None)
+        }
+    }
+
+}
+
+
+impl DocumentedFieldType for String {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "String".to_owned(),
+            description: "A string of text".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
+            syntax: "<string>".to_owned(),
+            sub_types: Vec::new(),
+        }
+    }
+}
+
+impl<Inner: DocumentedFieldType> DocumentedFieldType for Option<Inner> {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        let inner = Inner::get_field_type_documentation();
+        FieldTypeDocumentation { 
+            name: format!("Optional {}",inner.name),
+            description: inner.description.clone(), 
+            storage_type: inner.storage_type.clone(), 
+            syntax: format!("{}?",inner.syntax),
+            sub_types: vec![inner]
+        }
+    }
+
+}
+
+impl<Inner: DocumentedFieldType> DocumentedFieldType for Vec<Inner> {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        let inner = Inner::get_field_type_documentation();
+        FieldTypeDocumentation { 
+            name: format!("List of {}",inner.name),
+            description: format!("A list of comma-separated {} values in brackets.",inner.name), 
+            storage_type: field_type_to_name(OGRFieldType::OFTString), 
+            syntax: format!("[<{}>, ..]",inner.name),
+            sub_types: vec![inner]
+        }
+    }
+
+}
+
+impl TypedField for bool {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTInteger;
+
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Ok(Self::get_required(feature.field_as_integer_by_name(field_name)?, field_id)? != 0)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_integer(field_name, (*self).into())?)
+
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::IntegerValue((*self).into())))
+    }
+
+}
+
+impl DocumentedFieldType for bool {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "Boolean".to_owned(),
+            description: "An value of 1 or 0".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
+            syntax: "<bool>".to_owned(),
+            sub_types: Vec::new(),
+        }
+    }
+}
+
+impl TypedField for Rgb<u8> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        string_to_color(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &color_to_string(*self))?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(color_to_string(*self))))
+    }
+
+}
+
+
+impl DocumentedFieldType for Rgb<u8> {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation {
+            name: "Color".to_owned(),
+            description: "A color in #RRGGBB syntax.".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
+            syntax: "<color>".to_owned(),
+            sub_types: Vec::new(),
+        }
+    }
+}
+
+impl TypedField for f64 {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTReal;
+
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Self::get_required(feature.field_as_double_by_name(field_name)?, field_id)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        // The NotNan thing verifies that the value is not NaN, which would be treated as null.
+        // This can help me catch math problems early...
+        Ok(feature.set_field_double(field_name, NotNan::try_from(*self)?.into_inner())?)
+
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::RealValue(NotNan::try_from(*self)?.into_inner())))
+    }
+
+}
+
+impl DocumentedFieldType for f64 {
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation { 
+            name: "Real".to_owned(), 
+            description: "A real number.".to_owned(), 
+            storage_type: field_type_to_name(Self::STORAGE_TYPE), 
+            syntax: "<real>".to_owned(),
+            sub_types: Vec::new() 
+        }
+    }
+}
+
+impl TypedField for i32 {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTInteger;
+
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Self::get_required(feature.field_as_integer_by_name(field_name)?, field_id)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_integer(field_name,*self)?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::IntegerValue(*self)))
+    }
+    
+
+}
+
+impl TypedField for Option<i32> {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTInteger;
+
+
+    
+    fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
+        Ok(feature.field_as_integer_by_name(field_name)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        if let Some(value) = self {
+            Ok(feature.set_field_integer(field_name, *value)?)
+        } else {
+            Ok(feature.set_field_null(field_name)?)
+        }
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        if let Some(value) = self {
+            value.to_field_value()
+        } else {
+            Ok(None)
+        }
+    }
+
+}
+
+impl DocumentedFieldType for i32 {
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation { 
+            name: "Signed Integer".to_owned(), 
+            description: "A signed integer.".to_owned(), 
+            storage_type: field_type_to_name(Self::STORAGE_TYPE), 
+            syntax: "<integer>".to_owned(),
+            sub_types: Vec::new()
+        }
+    }
+}
+
+
+pub(crate) struct FieldDocumentation {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) field_type: FieldTypeDocumentation
+}
+
+pub(crate) struct LayerDocumentation {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) geometry: String,
+    pub(crate) fields: Vec<FieldDocumentation>
+}
+
+
+macro_rules! hide_item {
+    ($anything: ident false, $content: item) => {
+        $content
+    };
+    ($anything: ident $helper: literal, $content: item) => {
+    };
+    (, $content: item) => {
+        $content
+    };
+}
+
 macro_rules! layer {
-    ($(#[add_struct($add_struct_attr: meta)])* $name: ident [$layer_name: literal]: $geometry_type: ident {$(
-        $(#[doc = $doc_attr: literal])? $(#[get($get_attr: meta)])* $(#[set($set_attr: meta)])* $prop: ident: $prop_type: ident
-    ),*$(,)?}) => {
+    ($(#[doc = $layer_doc_attr: literal])? $name: ident [$layer_name: literal]: $geometry_type: ident {$(
+        $(#[doc = $field_doc_attr: literal])? $(#[get($get_attr: meta)])* $(#[set($set_attr: meta)])* $prop: ident: $prop_type: ty
+    ),*$(,)?} $(hide_add($hide_add: literal))? $(hide_doc($hide_doc: literal))?) => {
 
         paste!{
             pub(crate) struct [<$name Feature>]<'data_life> {
@@ -689,6 +938,7 @@ macro_rules! layer {
         }
 
         paste!{
+            $(#[doc = $layer_doc_attr])?
             pub(crate) struct [<$name Schema>];
         }
 
@@ -701,7 +951,7 @@ macro_rules! layer {
 
                 // field definitions
                 const FIELD_DEFS: [(&str,OGRFieldType::Type); feature_count_fields!($($prop),*)] = [
-                    $((paste!{Self::[<FIELD_ $prop:snake:upper>]},get_field_type_for_prop_type!($prop_type))),*
+                    $((paste!{Self::[<FIELD_ $prop:snake:upper>]},<$prop_type>::STORAGE_TYPE)),*
                 ];
 
 
@@ -729,8 +979,8 @@ macro_rules! layer {
             impl<'impl_life> TypedFeature<'impl_life,[<$name Schema>]> for [<$name Feature>]<'impl_life> {
 
                 // fid field
-                fn fid(&self) -> Result<u64,CommandError> {
-                    self.feature.fid().ok_or_else(|| CommandError::MissingField(concat!($layer_name,".","fid")))
+                fn fid(&self) -> Result<IdRef,CommandError> {
+                    Ok(IdRef::new(self.feature.fid().ok_or_else(|| CommandError::MissingField(concat!($layer_name,".","fid")))?))
                 }
 
                 fn into_feature(self) -> Feature<'impl_life> {
@@ -755,14 +1005,16 @@ macro_rules! layer {
                 // property functions
                 $(
                     paste!{
-                        $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<feature_get_field_type!($prop_type),CommandError> {
-                            feature_get_field!(self $prop_type $layer_name $prop [<$name Schema>]::[<FIELD_ $prop:snake:upper>])
+                        $(#[doc = $field_doc_attr])?
+                        $(#[$get_attr])* pub(crate) fn $prop(&self) -> Result<$prop_type,CommandError> {
+                            <$prop_type>::get_field(&self.feature,[<$name Schema>]::[<FIELD_ $prop:snake:upper>],concat!($layer_name,".",stringify!($prop)))
                         }
                     }
             
                     paste!{
-                        $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: feature_set_field_type!($prop_type)) -> Result<(),CommandError> {
-                            feature_set_field!(self value $prop_type [<$name Schema>]::[<FIELD_ $prop:snake:upper>])
+                        $(#[doc = $field_doc_attr])?
+                        $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: &$prop_type) -> Result<(),CommandError> {
+                            value.set_field(&self.feature,[<$name Schema>]::[<FIELD_ $prop:snake:upper>])
                         }            
         
                     }
@@ -775,11 +1027,12 @@ macro_rules! layer {
 
         paste!{
 
-            $(#[$add_struct_attr])* 
-            pub(crate) struct [<New $name>] {
-                $(
-                    pub(crate) $prop: feature_get_field_type!($prop_type)
-                ),*
+            hide_item!{$(hide_add $hide_add)?,
+                pub(crate) struct [<New $name>] {
+                    $(
+                        pub(crate) $prop: $prop_type
+                    ),*
+                }
             }
         }
 
@@ -788,32 +1041,54 @@ macro_rules! layer {
 
             impl [<$name Layer>]<'_,'_> {
 
-                $(#[$add_struct_attr])*
-                // I've marked entity as possibly not used because some calls have no fields and it won't be assigned.          
-                fn add_struct(&mut self, _entity: &[<New $name>], geometry: Option<<[<$name Schema>] as Schema>::Geometry>) -> Result<u64,CommandError> {
-                    let field_names = [
-                        $(paste!{
-                            [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
-                        }),*
-                    ];
-                    let field_values = [
-                        $(feature_field_value!(_entity.$prop; $prop_type)),*
-                    ];
-                    if let Some(geometry) = geometry {
-                        self.add_feature_with_geometry(geometry, &field_names, &field_values)
-                    } else {
-                        self.add_feature_without_geometry(&field_names, &field_values)
-                    }
+                hide_item!{$(hide_add $hide_add)?,
+                    // I've marked entity as possibly not used because some calls have no fields and it won't be assigned.          
+                    fn add_struct(&mut self, _entity: &[<New $name>], geometry: Option<<[<$name Schema>] as Schema>::Geometry>) -> Result<IdRef,CommandError> {
+                        let field_names = [
+                            $(paste!{
+                                [<$name Schema>]::[<FIELD_ $prop:snake:upper>]
+                            }),*
+                        ];
+                        let field_values = [
+                            $(_entity.$prop.to_field_value()?),*
+                        ];
+                        if let Some(geometry) = geometry {
+                            self.add_feature_with_geometry(geometry, &field_names, &field_values)
+                        } else {
+                            self.add_feature_without_geometry(&field_names, &field_values)
+                        }
 
+                    }
                 }
-                
             }
 
         }
 
+        paste!{
+            hide_item!{$(hide_doc $hide_doc)?,
+                pub(crate) fn [<document_ $name:snake _layer>]() -> Result<LayerDocumentation,CommandError> {
+                    Ok(LayerDocumentation {
+                        name: $layer_name.to_owned(),
+                        description: concat!("",$($layer_doc_attr: literal)?).trim_start().to_owned(),
+                        geometry: stringify!($geometry_type).to_owned(),
+                        fields: vec![
+                            $(
+                                FieldDocumentation {
+                                    name: stringify!($prop).to_owned(),
+                                    description: concat!("",$($field_doc_attr)?).trim_start().to_owned(),
+                                    field_type: <$prop_type>::get_field_type_documentation()
+                                }
+                            ),*
+                
+                        ],
+                    })            
+
+                }
+            }
+        }
+
     };
 }
-
 
 
 
@@ -866,7 +1141,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
 
     }
 
-    pub(crate) fn into_entities_index_for_each<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>, Callback: FnMut(&u64,&Data) -> Result<(),CommandError>>(self, mut callback: Callback, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
+    pub(crate) fn into_entities_index_for_each<Progress: ProgressObserver, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>, Callback: FnMut(&IdRef,&Data) -> Result<(),CommandError>>(self, mut callback: Callback, progress: &mut Progress) -> Result<EntityIndex<SchemaType,Data>,CommandError> {
 
         let mut result = IndexMap::new();
         for feature in self.watch(progress,format!("Indexing {}.",SchemaType::LAYER_NAME),format!("{} indexed.",SchemaType::LAYER_NAME.to_title_case())) {
@@ -916,7 +1191,7 @@ pub(crate) struct EntityIterator<'data_life, SchemaType: Schema, Feature: TypedF
 
 // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
 impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>, Data: Entity<SchemaType> + TryFrom<Feature,Error=CommandError>> Iterator for EntityIterator<'impl_life,SchemaType,Feature,Data> {
-    type Item = Result<(u64,Data),CommandError>;
+    type Item = Result<(IdRef,Data),CommandError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(feature) = self.features.next() {
@@ -946,7 +1221,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life, SchemaTyp
 pub(crate) struct EntityIndex<SchemaType: Schema, EntityType: Entity<SchemaType>> {
     // I use an IndexMap instead of HashMap as it ensures that the map maintains an order when iterating.
     // This helps me get reproducible results with the same random seed.
-    inner: IndexMap<u64,EntityType>,
+    inner: IndexMap<IdRef,EntityType>,
     _phantom: core::marker::PhantomData<SchemaType>
 }
 
@@ -954,7 +1229,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
 
     // NOTE: There is no 'insert' or 'new' function because this should be created with to_entities_index.
 
-    fn from(mut inner: IndexMap<u64,EntityType>) -> Self {
+    fn from(mut inner: IndexMap<IdRef,EntityType>) -> Self {
         // I want to ensure that the tiles are sorted in insertion order (by fid). So do this here.
         // if there were an easy way to insert_sorted from the beginning, then I wouldn't need to do this.
         inner.sort_keys();
@@ -965,29 +1240,29 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
     }
     
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
-    pub(crate) fn try_get(&self, key: &u64) -> Result<&EntityType,CommandError> {
-        self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
+    pub(crate) fn try_get(&self, key: &IdRef) -> Result<&EntityType,CommandError> {
+        self.inner.get(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, key.clone()))
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
-    pub(crate) fn try_get_mut(&mut self, key: &u64) -> Result<&mut EntityType,CommandError> {
-        self.inner.get_mut(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
+    pub(crate) fn try_get_mut(&mut self, key: &IdRef) -> Result<&mut EntityType,CommandError> {
+        self.inner.get_mut(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, key.clone()))
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
-    pub(crate) fn try_remove(&mut self, key: &u64) -> Result<EntityType,CommandError> {
-        self.inner.remove(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, *key))
+    pub(crate) fn try_remove(&mut self, key: &IdRef) -> Result<EntityType,CommandError> {
+        self.inner.remove(key).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME, key.clone()))
     }
 
-    pub(crate) fn keys(&self) -> IndexKeys<'_, u64, EntityType> {
+    pub(crate) fn keys(&self) -> IndexKeys<'_, IdRef, EntityType> {
         self.inner.keys()
     }
 
-    pub(crate) fn iter(&self) -> IndexIter<'_, u64, EntityType> {
+    pub(crate) fn iter(&self) -> IndexIter<'_, IdRef, EntityType> {
         self.inner.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> IndexIterMut<'_, u64, EntityType> {
+    pub(crate) fn iter_mut(&mut self) -> IndexIterMut<'_, IdRef, EntityType> {
         self.inner.iter_mut()
     }
 
@@ -996,11 +1271,11 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
-    pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
+    pub(crate) fn maybe_get(&self, key: &IdRef) -> Option<&EntityType> {
         self.inner.get(key)
     }
 
-    pub(crate) fn pop(&mut self) -> Option<(u64, EntityType)> {
+    pub(crate) fn pop(&mut self) -> Option<(IdRef, EntityType)> {
         self.inner.pop()
     }
 
@@ -1018,18 +1293,18 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
 }
 
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> IntoIterator for EntityIndex<SchemaType,EntityType> {
-    type Item = (u64,EntityType);
+    type Item = (IdRef,EntityType);
 
-    type IntoIter = IndexIntoIter<u64,EntityType>;
+    type IntoIter = IndexIntoIter<IdRef,EntityType>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }
 }
 
-impl<SchemaType: Schema, EntityType: Entity<SchemaType>> FromIterator<(u64,EntityType)> for EntityIndex<SchemaType,EntityType> {
+impl<SchemaType: Schema, EntityType: Entity<SchemaType>> FromIterator<(IdRef,EntityType)> for EntityIndex<SchemaType,EntityType> {
 
-    fn from_iter<Iter: IntoIterator<Item = (u64,EntityType)>>(iter: Iter) -> Self {
+    fn from_iter<Iter: IntoIterator<Item = (IdRef,EntityType)>>(iter: Iter) -> Self {
         Self::from(IndexMap::from_iter(iter))
     }
 }
@@ -1044,7 +1319,7 @@ pub(crate) struct EntityIndexQueueWatcher<'progress,Message: AsRef<str>, Progres
 
 impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexQueueWatcher<'_,Message,Progress,SchemaType,EntityType> {
 
-    pub(crate) fn pop(&mut self) -> Option<(u64,EntityType)> {
+    pub(crate) fn pop(&mut self) -> Option<(IdRef,EntityType)> {
         let result = self.inner.pop();
         self.popped += 1;
         let len = self.inner.len();
@@ -1057,12 +1332,12 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, Entity
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
-    pub(crate) fn maybe_get(&self, key: &u64) -> Option<&EntityType> {
+    pub(crate) fn maybe_get(&self, key: &IdRef) -> Option<&EntityType> {
         self.inner.maybe_get(key)
     }
 
     #[allow(clippy::trivially_copy_pass_by_ref)] // except that the inner method only wants a ref as well.
-    pub(crate) fn try_remove(&mut self, key: &u64) -> Result<EntityType,CommandError> {
+    pub(crate) fn try_remove(&mut self, key: &IdRef) -> Result<EntityType,CommandError> {
         let result = self.inner.try_remove(key)?;
         self.popped += 1;
         let len = self.inner.len();
@@ -1250,13 +1525,8 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
 
     }
 
-    // FUTURE: I wish I could get rid of the lifetime thingie...
-    pub(crate) fn feature_by_id(&'feature self, fid: u64) -> Option<Feature> {
-        self.layer.feature(fid).map(Feature::from)
-    }
-
-    pub(crate) fn try_feature_by_id(&'feature self, fid: u64) -> Result<Feature,CommandError> {
-        self.layer.feature(fid).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,fid)).map(Feature::from)
+    pub(crate) fn try_feature_by_id(&'feature self, fid: &IdRef) -> Result<Feature,CommandError> {
+        self.layer.feature(fid.0).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,fid.clone())).map(Feature::from)
     }
 
 
@@ -1268,7 +1538,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         self.layer.feature_count() as usize
     }
 
-    fn add_feature_with_geometry(&mut self, geometry: SchemaType::Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
+    fn add_feature_with_geometry(&mut self, geometry: SchemaType::Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
         // I dug out the source to get this. I wanted to be able to return the feature being created.
         let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
         feature.set_geometry(geometry.into())?;
@@ -1280,10 +1550,10 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             }
         }
         feature.create(&self.layer)?;
-        feature.fid().ok_or_else(|| CommandError::MissingField("fid"))
+        Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
     }
 
-    fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<u64,CommandError> {
+    fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
         // This function is used for lookup tables, like biomes.
 
         // I had to dig into the source to get this stuff...
@@ -1296,18 +1566,18 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             }
         }
         feature.create(&self.layer)?;
-        feature.fid().ok_or_else(|| CommandError::MissingField("fid"))
+        Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
 
     }
 
 }
 
-layer!(Point["points"]: Point {});
+layer!(Point["points"]: Point {} hide_doc(true));
 
 
 impl PointLayer<'_,'_> {
 
-    pub(crate) fn add_point(&mut self, point: Point) -> Result<u64,CommandError> {
+    pub(crate) fn add_point(&mut self, point: Point) -> Result<IdRef,CommandError> {
 
         self.add_struct(&NewPoint {  }, Some(point))
     
@@ -1320,11 +1590,11 @@ impl PointLayer<'_,'_> {
 
 }
 
-layer!(Triangle["triangles"]: Polygon {});
+layer!(Triangle["triangles"]: Polygon {} hide_doc(true));
 
 impl TriangleLayer<'_,'_> {
 
-    pub(crate) fn add_triangle(&mut self, geo: Polygon) -> Result<u64,CommandError> {
+    pub(crate) fn add_triangle(&mut self, geo: Polygon) -> Result<IdRef,CommandError> {
 
         self.add_struct(&NewTriangle {  }, Some(geo))
         
@@ -1362,16 +1632,54 @@ impl Grouping {
 
 }
 
+impl TypedField for Grouping {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
 
 impl_simple_serde_tagged_enum!{
     Grouping {
-        LakeIsland,
-        Islet,
-        Island,
         Continent,
+        Island,
+        Islet,
         Lake,
+        LakeIsland,
         Ocean
     }
+}
+
+impl_documentation_for_tagged_enum!{
+    /// A type of land or water feature.
+    Grouping {
+        /// A large land mass surrounded by ocean or the edge of the map if no ocean
+        Continent,
+        /// A small land mass surrounded by ocean
+        Island,
+        /// A smaller land mass surrounded by ocean
+        Islet,
+        /// A body of water created from rainfall, usually not at elevation 0.
+        Lake,
+        /// A land mass surrounded by a lake
+        LakeIsland,
+        /// A body of water created by flooding the terrain to elevation 0.
+        Ocean
+    }
+
 }
 
 
@@ -1389,7 +1697,7 @@ impl TryFrom<String> for Grouping {
     }
 }
 
-layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
+layer!(Tile["tiles"]: Polygon {
     /// longitude of the node point for the tile's voronoi
     #[set(allow(dead_code))] site_x: f64,
     /// latitude of the node point for the tile's voronoi
@@ -1401,14 +1709,14 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     /// elevation scaled into a value from 0 to 100, where 20 is sea-level.
     elevation_scaled: i32,
     /// Indicates whether the tile is part of the ocean, an island, a continent, a lake, and maybe others.
-    grouping: grouping,
+    grouping: Grouping,
     /// A unique id for each grouping. These id's do not map to other tables, but will tell when tiles are in the same group. Use lake_id to link to the lake table.
-    // NOTE: This isn't an id_ref, but let's store it that way anyway
-    grouping_id: id_ref,
+    // NOTE: This isn't an IdRef, but let's store it that way anyway
+    grouping_id: IdRef,
     /// average annual temperature of tile in imaginary units
     temperature: f64,
     /// roughly estimated average wind direction for tile
-    wind: angle,
+    wind: Deg<f64>,
     /// average annual precipitation of tile in imaginary units
     precipitation: f64,
     /// amount of water flow through tile in imaginary units
@@ -1416,37 +1724,37 @@ layer!(#[add_struct(allow(dead_code))] Tile["tiles"]: Polygon {
     /// amount of water accumulating (because it couldn't flow on) in imaginary units
     water_accumulation: f64,
     /// if the tile is in a lake, this is the id of the lake in the lakes layer
-    lake_id: option_id_ref,
+    lake_id: Option<IdRef>,
     /// id of neighboring tile which water flows to
-    flow_to: neighbor_list,
+    flow_to: Vec<Neighbor>,
     /// shortest distance in number of tiles to an ocean or lake shoreline. This will be positive on land and negative inside a water body.
     shore_distance: i32,
     /// If this is a land tile neighboring a water body, this is the id of the closest tile
-    harbor_tile_id: option_neighbor,
+    harbor_tile_id: Option<Neighbor>,
     /// if this is a land tile neighboring a water body, this is the number of neighbor tiles that are water
-    water_count: option_i32,
+    water_count: Option<i32>,
     /// The biome for this tile
-    biome: string,
+    biome: String,
     /// the factor used to generate population numbers, along with the area of the tile
     habitability: f64,
     /// base population of the cell outside of the towns.
     population: i32,
     /// The name of the culture assigned to this tile, unless wild
-    culture: option_string,
+    culture: Option<String>,
     /// if the tile has a town, this is the id of the town in the towns layer
-    town_id: option_id_ref, 
+    town_id: Option<IdRef>, 
     /// if the tile is part of a nation, this is the id of the nation which controls it
-    nation_id: option_id_ref,
+    nation_id: Option<IdRef>,
     /// if the tile is part of a subnation, this is the id of the nation which controls it
-    subnation_id: option_id_ref,
+    subnation_id: Option<IdRef>,
     /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-    outlet_from_id: option_id_ref,
+    outlet_from_id: Option<IdRef>,
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
-    neighbors: neighbor_directions,
+    neighbors: Vec<NeighborAndDirection>,
     /// A value indicating whether the tile is on the edge of the map
-    #[set(allow(dead_code))] edge: option_edge,
+    #[set(allow(dead_code))] edge: Option<Edge>,
 
-});
+} hide_add(true) hide_doc(false)); // NOTE: I'm only using the hide_doc(false) here to prove to the compiler that we could use that option.
 
 
 impl TileFeature<'_> {
@@ -1483,8 +1791,8 @@ entity!(TileForCalcNeighbors: Tile {
     geometry: Polygon,
     edge: Option<Edge>,
     site: Coordinates,
-    neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new()),
-    cross_neighbor_set: HashSet<u64> = |_| Ok::<_,CommandError>(HashSet::new())
+    neighbor_set: HashSet<IdRef> = |_| Ok::<_,CommandError>(HashSet::new()),
+    cross_neighbor_set: HashSet<IdRef> = |_| Ok::<_,CommandError>(HashSet::new())
 });
 
 entity!(TileForTerrain: Tile {
@@ -1510,14 +1818,14 @@ impl TileForTerrain {
 
 
 entity!(TileForTemperatures: Tile {
-    fid: u64, 
+    fid: IdRef, 
     site_y: f64, 
     elevation: f64, 
     grouping: Grouping
 });
 
 entity!(TileForWinds: Tile {
-    fid: u64, 
+    fid: IdRef, 
     site_y: f64
 });
 
@@ -1539,9 +1847,9 @@ entity!(TileForWaterFill: Tile {
     elevation: f64, 
     flow_to: Vec<Neighbor>, // Initialized to blank in TileForWaterFlow
     grouping: Grouping, 
-    lake_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
+    lake_id: Option<IdRef> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     neighbors: Vec<NeighborAndDirection>,
-    outlet_from_id: Option<u64> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
+    outlet_from_id: Option<IdRef> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     temperature: f64,
     water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
     water_flow: f64,  // Initialized to blank in TileForWaterFlow
@@ -1568,7 +1876,7 @@ impl From<TileForWaterflow> for TileForWaterFill {
 entity!(TileForRiverConnect: Tile {
     water_flow: f64,
     flow_to: Vec<Neighbor>,
-    outlet_from_id: Option<u64>
+    outlet_from_id: Option<IdRef>
 });
 
 entity!(TileForWaterDistance: Tile {
@@ -1583,7 +1891,7 @@ entity!(TileForWaterDistance: Tile {
 entity!(TileForGroupingCalc: Tile {
     grouping: Grouping,
     edge: Option<Edge>,
-    lake_id: Option<u64>,
+    lake_id: Option<IdRef>,
     neighbors: Vec<NeighborAndDirection>
 });
 
@@ -1597,18 +1905,18 @@ entity!(TileForPopulation: Tile {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
     harbor_tile_id: Option<Neighbor>,
-    lake_id: Option<u64>
+    lake_id: Option<IdRef>
 });
 
 entity!(TileForPopulationNeighbor: Tile {
     grouping: Grouping,
-    lake_id: Option<u64>
+    lake_id: Option<IdRef>
 });
 
 
 
 entity!(TileForCultureGen: Tile {
-    fid: u64,
+    fid: IdRef,
     site: Coordinates,
     population: i32,
     habitability: f64,
@@ -1624,7 +1932,7 @@ entity!(TileForCultureGen: Tile {
 });
 
 pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity because we add in data from other layers.
-    pub(crate) fid: u64,
+    pub(crate) fid: IdRef,
     pub(crate) site: Coordinates,
     pub(crate) habitability: f64,
     pub(crate) shore_distance: i32,
@@ -1644,7 +1952,7 @@ impl TileForCulturePrefSorting<'_> {
         let neighboring_lake_size = if let Some(closest_water) = tile.harbor_tile_id {
             match closest_water {
                 Neighbor::Tile(closest_water) | Neighbor::CrossMap(closest_water,_) => {
-                    let closest_water = tiles.try_feature_by_id(closest_water)?;
+                    let closest_water = tiles.try_feature_by_id(&closest_water)?;
                     if let Some(lake_id) = closest_water.lake_id()? {
                         let lake_id = lake_id;
                         let lake = lakes.try_get(&lake_id)?;
@@ -1684,7 +1992,7 @@ entity!(TileForCultureExpand: Tile {
     grouping: Grouping,
     water_flow: f64,
     neighbors: Vec<NeighborAndDirection>,
-    lake_id: Option<u64>,
+    lake_id: Option<IdRef>,
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
@@ -1693,23 +2001,23 @@ entity!(TileForCultureExpand: Tile {
 });
 
 entity!(TileForTowns: Tile {
-    fid: u64,
+    fid: IdRef,
     habitability: f64,
     site: Coordinates,
     culture: Option<String>,
-    grouping_id: u64
+    grouping_id: IdRef
 });
 
 entity!(TileForTownPopulation: Tile {
-    fid: u64,
+    fid: IdRef,
     geometry: Polygon,
     habitability: f64,
     site: Coordinates,
-    grouping_id: u64,
+    grouping_id: IdRef,
     harbor_tile_id: Option<Neighbor>,
     water_count: Option<i32>,
     temperature: f64,
-    lake_id: Option<u64>,
+    lake_id: Option<IdRef>,
     water_flow: f64,
     grouping: Grouping
 });
@@ -1728,7 +2036,7 @@ impl TileForTownPopulation {
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
             Ok(point1.middle_point_between(&point2))
         } else {
-            Err(CommandError::CantFindMiddlePoint(self.fid,other.fid,common_vertices.len()))
+            Err(CommandError::CantFindMiddlePoint(self.fid.clone(),other.fid.clone(),common_vertices.len()))
         }
 
     }
@@ -1746,7 +2054,7 @@ impl TileForTownPopulation {
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
             Ok(point1.middle_point_between(&point2))
         } else {
-            Err(CommandError::CantFindMiddlePointOnEdge(self.fid,edge.clone(),common_vertices.len()))
+            Err(CommandError::CantFindMiddlePointOnEdge(self.fid.clone(),edge.clone(),common_vertices.len()))
         }
 
     }
@@ -1761,9 +2069,9 @@ entity!(TileForNationExpand: Tile {
     grouping: Grouping,
     water_flow: f64,
     neighbors: Vec<NeighborAndDirection>,
-    lake_id: Option<u64>,
+    lake_id: Option<IdRef>,
     culture: Option<String>,
-    nation_id: Option<u64> = |_| Ok::<_,CommandError>(None),
+    nation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
@@ -1772,14 +2080,14 @@ entity!(TileForNationExpand: Tile {
 entity!(TileForNationNormalize: Tile {
     grouping: Grouping,
     neighbors: Vec<NeighborAndDirection>,
-    town_id: Option<u64>,
-    nation_id: Option<u64>
+    town_id: Option<IdRef>,
+    nation_id: Option<IdRef>
 });
 
 entity!(TileForSubnations: Tile {
-    fid: u64,
-    town_id: Option<u64>,
-    nation_id: Option<u64>,
+    fid: IdRef,
+    town_id: Option<IdRef>,
+    nation_id: Option<IdRef>,
     culture: Option<String>,
     population: i32
 });
@@ -1788,8 +2096,8 @@ entity!(TileForSubnationExpand: Tile {
     neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32,
     elevation_scaled: i32,
-    nation_id: Option<u64>,
-    subnation_id: Option<u64> = |_| Ok::<_,CommandError>(None),
+    nation_id: Option<IdRef>,
+    subnation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
     area: f64 = |feature: &TileFeature| {
         Ok::<_,CommandError>(feature.geometry()?.area())
     },
@@ -1798,9 +2106,9 @@ entity!(TileForSubnationExpand: Tile {
 entity!(TileForEmptySubnations: Tile {
     neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32,
-    nation_id: Option<u64>,
-    subnation_id: Option<u64>,
-    town_id: Option<u64>,
+    nation_id: Option<IdRef>,
+    subnation_id: Option<IdRef>,
+    town_id: Option<IdRef>,
     population: i32,
     culture: Option<String>,
     area: f64 = |feature: &TileFeature| {
@@ -1810,9 +2118,9 @@ entity!(TileForEmptySubnations: Tile {
 
 entity!(TileForSubnationNormalize: Tile {
     neighbors: Vec<NeighborAndDirection>,
-    town_id: Option<u64>,
-    nation_id: Option<u64>,
-    subnation_id: Option<u64>
+    town_id: Option<IdRef>,
+    nation_id: Option<IdRef>,
+    subnation_id: Option<IdRef>
 });
 
 entity!(TileForCultureDissolve: Tile {
@@ -1867,7 +2175,7 @@ impl TileWithNeighbors for TileForBiomeDissolve {
 }
 
 entity!(TileForNationDissolve: Tile {
-    nation_id: Option<u64>,
+    nation_id: Option<IdRef>,
     geometry: Polygon,
     neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32
@@ -1892,7 +2200,7 @@ impl TileWithNeighbors for TileForNationDissolve {
 }
 
 entity!(TileForSubnationDissolve: Tile {
-    subnation_id: Option<u64>,
+    subnation_id: Option<IdRef>,
     geometry: Polygon,
     neighbors: Vec<NeighborAndDirection>,
     shore_distance: i32
@@ -1927,7 +2235,7 @@ impl TileLayer<'_,'_> {
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     // FUTURE: It would also be nice to get rid of the lifetimes
-    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: u64) -> Result<Data,CommandError> {
+    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: &IdRef) -> Result<Data,CommandError> {
         self.try_feature_by_id(fid)?.try_into()
     }
 
@@ -1944,15 +2252,15 @@ impl TileLayer<'_,'_> {
                 TileSchema::FIELD_ELEVATION_SCALED,
                 TileSchema::FIELD_GROUPING,
             ],&[
-                feature_field_value!(x; f64),
-                feature_field_value!(y; f64),
-                feature_field_value!(tile.edge; option_edge),
+                x.to_field_value()?,
+                y.to_field_value()?,
+                tile.edge.to_field_value()?,
                 // initial tiles start with 0 elevation, terrain commands will edit this...
-                feature_field_value!(0.0; f64), // FUTURE: Watch that this type stays correct
+                0.0.to_field_value()?, // FUTURE: Watch that this type stays correct
                 // and scaled elevation starts with 20.
-                feature_field_value!(20; i32), // FUTURE: Watch that this type stays correct
+                20.to_field_value()?, // FUTURE: Watch that this type stays correct
                 // tiles are continent by default until someone samples some ocean.
-                feature_field_value!(Grouping::Continent; grouping)
+                Grouping::Continent.to_field_value()?
             ])?;
         Ok(())
 
@@ -1986,7 +2294,7 @@ impl TileLayer<'_,'_> {
 
         let tile_map = self.read_features().into_entities_index_for_each::<_,TileForWaterFill,_>(|fid,tile| {
             if tile.water_accumulation > 0.0 {
-                lake_queue.push((*fid,tile.water_accumulation));
+                lake_queue.push((fid.clone(),tile.water_accumulation));
             }
 
             Ok(())
@@ -2016,16 +2324,54 @@ pub(crate) enum RiverSegmentFrom {
     Confluence,
 }
 
+impl TypedField for RiverSegmentFrom {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+
+impl_documentation_for_tagged_enum!{
+    /// A name for how the river segment begins
+    RiverSegmentFrom {
+        /// The segment begins with the splitting of another river
+        Branch,
+        /// The segment begins with a split that coincides with a confluence in the same tile
+        BranchingConfluence,
+        /// The segment begins with a split coming out of a lake
+        BranchingLake,
+        /// The segment begins with the joining of two rivers
+        Confluence,
+        /// The segment begins at the end of a single other segment
+        Continuing,
+        /// The segment begins at the outflow of a lake
+        Lake,
+        /// The segment begins where no other segment ends, with enough waterflow to make a river
+        Source,
+    }
+}
 
 impl_simple_serde_tagged_enum!{
     RiverSegmentFrom {
-        Source,
         Branch,
-        Continuing,
-        BranchingLake,
         BranchingConfluence,
+        BranchingLake,
         Confluence,
+        Continuing,
         Lake,
+        Source,
     }
 }
 
@@ -2053,17 +2399,50 @@ pub(crate) enum RiverSegmentTo {
     BranchingConfluence,
 }
 
+impl TypedField for RiverSegmentTo {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
 
 impl_simple_serde_tagged_enum!{
     RiverSegmentTo {
-        Mouth,
         Branch,
-        Continuing,
         BranchingConfluence,
         Confluence,
+        Continuing,
+        Mouth,
     }
 }
 
+impl_documentation_for_tagged_enum!{
+    /// A name for how a river segment ends
+    RiverSegmentTo {
+        /// The segment ends by branching into multiple segments
+        Branch,
+        /// The segment ends by branching where other segments also join
+        BranchingConfluence,
+        /// The segment ends by joining with another segment
+        Confluence,
+        /// The segment ends with the beginning of a single other segment
+        Continuing,
+        /// The segment ends by emptying into an ocean or lake
+        Mouth,
+    }
+}
 
 impl TryFrom<String> for RiverSegmentTo {
     type Error = CommandError;
@@ -2083,18 +2462,18 @@ impl From<&RiverSegmentTo> for String {
 
 layer!(River["rivers"]: MultiLineString {
     // clippy doesn't understand why I'm using 'from_*' here.
-    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_tile_id: id_ref,
-    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_type: river_segment_from,
+    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_tile_id: IdRef,
+    #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_type: RiverSegmentFrom,
     #[get(allow(clippy::wrong_self_convention))] #[get(allow(dead_code))] #[set(allow(dead_code))] from_flow: f64,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] to_tile_id: neighbor,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] to_type: river_segment_to,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] to_tile_id: Neighbor,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] to_type: RiverSegmentTo,
     #[get(allow(dead_code))] #[set(allow(dead_code))] to_flow: f64,
 });
 
 
 impl RiverLayer<'_,'_> {
 
-    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, lines: Vec<Vec<Coordinates>>) -> Result<u64,CommandError> {
+    pub(crate) fn add_segment(&mut self, new_river: &NewRiver, lines: Vec<Vec<Coordinates>>) -> Result<IdRef,CommandError> {
         let lines = lines.into_iter().map(|line| {
             LineString::from_vertices(line.into_iter().map(|p| p.to_tuple()))
         });
@@ -2112,6 +2491,44 @@ pub(crate) enum LakeType {
     Pluvial, // lake forms intermittently, it's also salty
     Dry,
     Marsh,
+}
+
+
+
+impl_documentation_for_tagged_enum!{
+    /// A name for a type of lake.
+    LakeType {
+        /// Lake is freshwater
+        Fresh,
+        /// Lake is saltwater
+        Salt,
+        /// Lake is frozen
+        Frozen,
+        /// Lake is intermittent
+        Pluvial,
+        /// Lakebed is dry
+        Dry,
+        /// Lake is shallow
+        Marsh
+    }
+}
+
+impl TypedField for LakeType {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
 }
 
 
@@ -2144,7 +2561,7 @@ impl TryFrom<String> for LakeType {
 
 layer!(Lake["lakes"]: MultiPolygon {
     #[get(allow(dead_code))] #[set(allow(dead_code))] elevation: f64,
-    #[set(allow(dead_code))] type_: lake_type,
+    #[set(allow(dead_code))] type_: LakeType,
     #[get(allow(dead_code))] #[set(allow(dead_code))] flow: f64,
     #[set(allow(dead_code))] size: i32,
     #[get(allow(dead_code))] #[set(allow(dead_code))] temperature: f64,
@@ -2170,7 +2587,7 @@ entity!(LakeForTownPopulation: Lake {
 
 impl LakeLayer<'_,'_> {
 
-    pub(crate) fn add_lake(&mut self, lake: &NewLake, geometry: MultiPolygon) -> Result<u64,CommandError> {
+    pub(crate) fn add_lake(&mut self, lake: &NewLake, geometry: MultiPolygon) -> Result<IdRef,CommandError> {
         self.add_struct(lake, Some(geometry))
     }
 
@@ -2191,13 +2608,59 @@ pub(crate) enum BiomeCriteria {
     Ocean
 }
 
+impl DocumentedFieldType for (usize,usize) {
+
+    fn get_field_type_documentation() -> FieldTypeDocumentation {
+        FieldTypeDocumentation { 
+            name: "Unsigned Integer Pair".to_owned(), 
+            description: "A pair of unsigned integers in parentheses.".to_owned(), 
+            storage_type: field_type_to_name(OGRFieldType::OFTString), 
+            syntax: "(<integer>,<integer>)".to_owned(),
+            sub_types: Vec::new()
+        }
+    }
+}
+
+impl_documentation_for_tagged_enum!{
+    /// Criteria for how the biome is to be mapped to the world based on generated climate data.
+    BiomeCriteria {
+        /// This biome should be used for glacier -- only one is allowed
+        Glacier,
+        /// The biome should be placed in the following locations in the moisture and temperature matrix -- coordinates must not be used for another biome
+        Matrix(list: Vec<(usize,usize)>),
+        /// The biome should be used for ocean -- only one is allowed
+        Ocean,
+        /// The biome should be used for wetland -- only one is allowed
+        Wetland,
+    }
+}
+
+impl TypedField for BiomeCriteria {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+
 
 impl_simple_serde_tagged_enum!{
     BiomeCriteria {
+        Glacier,
+        Matrix(list: Vec<(usize,usize)>),
         Ocean,
         Wetland,
-        Glacier,
-        Matrix(list),
     }
 }
 
@@ -2235,13 +2698,13 @@ pub(crate) struct BiomeMatrix {
 }
 
 layer!(Biome["biomes"]: MultiPolygon {
-    #[set(allow(dead_code))] name: string,
+    #[set(allow(dead_code))] name: String,
     #[set(allow(dead_code))] habitability: i32,
-    #[set(allow(dead_code))] criteria: biome_criteria,
+    #[set(allow(dead_code))] criteria: BiomeCriteria,
     #[set(allow(dead_code))] movement_cost: i32,
     #[set(allow(dead_code))] supports_nomadic: bool,
     #[set(allow(dead_code))] supports_hunting: bool,
-    #[set(allow(dead_code))] color: string,
+    #[set(allow(dead_code))] color: Rgb<u8>,
 });
 
 impl Entity<BiomeSchema> for NewBiome {
@@ -2355,7 +2818,7 @@ impl BiomeSchema {
                 movement_cost: default.movement_cost,
                 supports_nomadic: default.supports_nomadic,
                 supports_hunting: default.supports_hunting,
-                color: default.color.to_owned()
+                color: string_to_color(default.color).expect("Someone messed up the biome color constants?")
             }
 
         }).collect()
@@ -2465,7 +2928,7 @@ impl NamedEntity<BiomeSchema> for BiomeForNationExpand {
 }
 
 entity!(BiomeForDissolve: Biome {
-    fid: u64,
+    fid: IdRef,
     name: String
 });
 
@@ -2477,7 +2940,7 @@ impl NamedEntity<BiomeSchema> for BiomeForDissolve {
 
 impl BiomeLayer<'_,'_> {
 
-    pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<u64,CommandError> {
+    pub(crate) fn add_biome(&mut self, biome: &NewBiome) -> Result<IdRef,CommandError> {
         self.add_struct(biome, None)
 
     }
@@ -2506,15 +2969,55 @@ pub(crate) enum CultureType {
     Highland
 }
 
+impl TypedField for CultureType {
+
+    const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
+
+    fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+    }
+
+    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+    }
+
+    fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
+        Ok(Some(FieldValue::StringValue(self.write_to_string())))
+    }
+
+}
+
+impl_documentation_for_tagged_enum!{
+    /// The name for the type of culture, which specifies how the culture behaves during generation
+    CultureType {
+        /// A culture with no landscape preferences, created when no other culture type is suggested
+        Generic,
+        /// A culture that prefers higher elevations
+        Highland,
+        /// A culture that prefers forested landscapes
+        Hunting,
+        /// A culture that prefers to live on the shore of lakes
+        Lake,
+        /// A culture that prefers ocean shores
+        Naval,
+        /// A culture that prevers drier elevations
+        Nomadic,
+        /// A culture that prefers to live along rivers
+        River,
+    }
+}
+
+
+
 impl_simple_serde_tagged_enum!{
     CultureType {
-        Lake,
         Generic,
-        Naval,
-        River,
-        Nomadic,
-        Hunting,
         Highland,
+        Hunting,
+        Lake,
+        Naval,
+        Nomadic,
+        River,
     }
 }
 
@@ -2537,12 +3040,12 @@ impl TryFrom<String> for CultureType {
 }
 
 layer!(Culture["cultures"]: MultiPolygon {
-    #[set(allow(dead_code))] name: string,
-    #[set(allow(dead_code))] namer: string,
-    #[set(allow(dead_code))] type_: culture_type,
+    #[set(allow(dead_code))] name: String,
+    #[set(allow(dead_code))] namer: String,
+    #[set(allow(dead_code))] type_: CultureType,
     #[set(allow(dead_code))] expansionism: f64,
-    #[set(allow(dead_code))] center_tile_id: id_ref,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] color: color,
+    #[set(allow(dead_code))] center_tile_id: IdRef,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] color: Rgb<u8>,
 });
 
 impl<'feature> NamedFeature<'feature,CultureSchema> for CultureFeature<'feature> {
@@ -2574,7 +3077,7 @@ pub(crate) trait CultureWithType {
 // needs to be hashable in order to fit into a priority queue
 entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement: Culture {
     name: String,
-    center_tile_id: u64,
+    center_tile_id: IdRef,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &CultureFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
@@ -2622,7 +3125,7 @@ impl CultureWithType for CultureForNations {
 
 
 entity!(CultureForDissolve: Culture {
-    fid: u64,
+    fid: IdRef,
     name: String
 });
 
@@ -2635,7 +3138,7 @@ impl NamedEntity<CultureSchema> for CultureForDissolve {
 
 impl CultureLayer<'_,'_> {
 
-    pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<u64,CommandError> {
+    pub(crate) fn add_culture(&mut self, culture: &NewCulture) -> Result<IdRef,CommandError> {
         self.add_struct(culture, None)
     }
 
@@ -2648,11 +3151,11 @@ impl CultureLayer<'_,'_> {
 }
 
 layer!(Town["towns"]: Point {
-    #[set(allow(dead_code))] name: string,
-    #[set(allow(dead_code))] culture: option_string,
+    #[set(allow(dead_code))] name: String,
+    #[set(allow(dead_code))] culture: Option<String>,
     #[set(allow(dead_code))] is_capital: bool,
-    #[set(allow(dead_code))] tile_id: id_ref,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] grouping_id: id_ref, 
+    #[set(allow(dead_code))] tile_id: IdRef,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] grouping_id: IdRef, 
     #[get(allow(dead_code))] population: i32,
     #[get(allow(dead_code))] is_port: bool,
 });
@@ -2666,16 +3169,16 @@ impl TownFeature<'_> {
 }
 
 entity!(TownForPopulation: Town {
-    fid: u64,
+    fid: IdRef,
     is_capital: bool,
-    tile_id: u64
+    tile_id: IdRef
 });
 
 entity!(TownForNations: Town {
-    fid: u64,
+    fid: IdRef,
     is_capital: bool,
     culture: Option<String>,
-    tile_id: u64
+    tile_id: IdRef
 });
 
 entity!(TownForNationNormalize: Town {
@@ -2692,7 +3195,7 @@ entity!(TownForEmptySubnations: Town {
 
 impl TownLayer<'_,'_> {
 
-    pub(crate) fn add_town(&mut self, town: &NewTown, geometry: Point) -> Result<u64,CommandError> {
+    pub(crate) fn add_town(&mut self, town: &NewTown, geometry: Point) -> Result<IdRef,CommandError> {
         self.add_struct(town, Some(geometry))
     }
 
@@ -2706,13 +3209,13 @@ impl TownLayer<'_,'_> {
 
 
 layer!(Nation["nations"]: MultiPolygon {
-    #[set(allow(dead_code))] name: string,
-    #[set(allow(dead_code))] culture: option_string,
-    #[set(allow(dead_code))] center_tile_id: id_ref, 
-    #[set(allow(dead_code))] type_: culture_type,
+    #[set(allow(dead_code))] name: String,
+    #[set(allow(dead_code))] culture: Option<String>,
+    #[set(allow(dead_code))] center_tile_id: IdRef, 
+    #[set(allow(dead_code))] type_: CultureType,
     #[set(allow(dead_code))] expansionism: f64,
-    #[set(allow(dead_code))] capital_town_id: id_ref,
-    #[set(allow(dead_code))] color: color,
+    #[set(allow(dead_code))] capital_town_id: IdRef,
+    #[set(allow(dead_code))] color: Rgb<u8>,
 });
 
 impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
@@ -2723,21 +3226,21 @@ impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
 
 // needs to be hashable in order to fit into a priority queue
 entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement: Nation {
-    fid: u64,
+    fid: IdRef,
     name: String,
-    center_tile_id: u64,
+    center_tile_id: IdRef,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
 });
 
 entity!(NationForSubnations: Nation {
-    fid: u64,
-    capital_town_id: u64,
+    fid: IdRef,
+    capital_town_id: IdRef,
     color: Rgb<u8>
 });
 
 entity!(NationForEmptySubnations: Nation {
-    fid: u64,
+    fid: IdRef,
     color: Rgb<u8>,
     culture: Option<String>
 });
@@ -2749,7 +3252,7 @@ entity!(NationForSubnationColors: Nation {
 
 impl NationLayer<'_,'_> {
 
-    pub(crate) fn add_nation(&mut self, nation: &NewNation) -> Result<u64,CommandError> {
+    pub(crate) fn add_nation(&mut self, nation: &NewNation) -> Result<IdRef,CommandError> {
         self.add_struct(nation, None)
     }
 
@@ -2763,13 +3266,13 @@ impl NationLayer<'_,'_> {
 }
 
 layer!(Subnation["subnations"]: MultiPolygon {
-    #[set(allow(dead_code))] name: string,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] culture: option_string,
-    #[set(allow(dead_code))] center_tile_id: id_ref,
-    #[get(allow(dead_code))] #[set(allow(dead_code))] type_: culture_type,
-    #[set(allow(dead_code))] seat_town_id: option_id_ref, 
-    #[set(allow(dead_code))] nation_id: id_ref, 
-    #[get(allow(dead_code))] #[set(allow(dead_code))] color: color,
+    #[set(allow(dead_code))] name: String,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] culture: Option<String>,
+    #[set(allow(dead_code))] center_tile_id: IdRef,
+    #[get(allow(dead_code))] #[set(allow(dead_code))] type_: CultureType,
+    #[set(allow(dead_code))] seat_town_id: Option<IdRef>, 
+    #[set(allow(dead_code))] nation_id: IdRef, 
+    #[get(allow(dead_code))] #[set(allow(dead_code))] color: Rgb<u8>,
 });
 
 impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feature> {
@@ -2779,24 +3282,24 @@ impl<'feature> NamedFeature<'feature,SubnationSchema> for SubnationFeature<'feat
 }
 
 entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement: Subnation {
-    fid: u64,
-    center_tile_id: u64,
-    nation_id: u64
+    fid: IdRef,
+    center_tile_id: IdRef,
+    nation_id: IdRef
 });
 
 entity!(SubnationForNormalize: Subnation {
-    center_tile_id: u64,
-    seat_town_id: Option<u64>
+    center_tile_id: IdRef,
+    seat_town_id: Option<IdRef>
 });
 
 entity!(SubnationForColors: Subnation {
-    fid: u64,
-    nation_id: u64
+    fid: IdRef,
+    nation_id: IdRef
 });
 
 impl SubnationLayer<'_,'_> {
 
-    pub(crate) fn add_subnation(&mut self, subnation: &NewSubnation) -> Result<u64,CommandError> {
+    pub(crate) fn add_subnation(&mut self, subnation: &NewSubnation) -> Result<IdRef,CommandError> {
         self.add_struct(subnation, None)
     }
 
@@ -2813,7 +3316,7 @@ layer!(Coastline["coastlines"]: Polygon  {
 
 impl CoastlineLayer<'_,'_> {
 
-    pub(crate) fn add_land_mass(&mut self, geometry: Polygon) -> Result<u64, CommandError> {
+    pub(crate) fn add_land_mass(&mut self, geometry: Polygon) -> Result<IdRef, CommandError> {
         self.add_struct(&NewCoastline {  }, Some(geometry))
     }
 
@@ -2824,7 +3327,7 @@ layer!(Ocean["oceans"]: Polygon {
 
 impl OceanLayer<'_,'_> {
 
-    pub(crate) fn add_ocean(&mut self, geometry: Polygon) -> Result<u64, CommandError> {
+    pub(crate) fn add_ocean(&mut self, geometry: Polygon) -> Result<IdRef, CommandError> {
         self.add_struct(&NewOcean {  }, Some(geometry))
     }
 
@@ -2847,8 +3350,8 @@ impl LineLayer<'_,'_> {
 */
 
 layer!(Property["properties"]: NoGeometry {
-    #[set(allow(dead_code))] name: string,
-    value: string,
+    #[set(allow(dead_code))] name: String,
+    value: String,
 });
 
 impl PropertySchema {
@@ -2918,7 +3421,7 @@ impl PropertyLayer<'_,'_> {
         self.get_property(PropertySchema::PROP_ELEVATION_LIMITS)?.try_into()
     }
 
-    fn set_property(&mut self, name: &str, value: &str) -> Result<u64,CommandError> {
+    fn set_property(&mut self, name: &str, value: &str) -> Result<IdRef,CommandError> {
         let mut found = None;
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
             if feature.name()? == name {
@@ -2927,8 +3430,8 @@ impl PropertyLayer<'_,'_> {
             }
         }
         if let Some(found) = found {
-            let mut feature = self.try_feature_by_id(found)?;
-            feature.set_value(value)?;
+            let mut feature = self.try_feature_by_id(&found)?;
+            feature.set_value(&value.to_owned())?;
             self.update_feature(feature)?;
             Ok(found)
         } else {
@@ -2940,7 +3443,7 @@ impl PropertyLayer<'_,'_> {
         }
     }
 
-    pub(crate) fn set_elevation_limits(&mut self, value: &ElevationLimits) -> Result<u64,CommandError> {
+    pub(crate) fn set_elevation_limits(&mut self, value: &ElevationLimits) -> Result<IdRef,CommandError> {
         self.set_property(PropertySchema::PROP_ELEVATION_LIMITS, &Into::<String>::into(value))
     }
 

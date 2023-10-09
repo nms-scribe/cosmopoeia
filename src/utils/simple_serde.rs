@@ -551,17 +551,18 @@ impl Deserialize for i32 {
 #[macro_export]
 macro_rules! impl_simple_serde_tagged_enum {
 
-    ($enum: ty {$($variant: ident $(($($name: ident),*$(,)?))?),*$(,)?}) => {
+    ($enum: ty {$($variant: ident $(($($tuple_name: ident: $tuple_type: ty),*$(,)?))?),*$(,)?}) => {
+
         impl $crate::utils::simple_serde::Serialize for $enum {
     
             fn write_value<Target: $crate::utils::simple_serde::Serializer>(&self, serializer: &mut Target) {
                 match self {
                     $(
-                        Self::$variant$(($($name,)*))? => {
+                        Self::$variant$(($($tuple_name,)*))? => {
                             serializer.write_token($crate::utils::simple_serde::Token::Identifier(stringify!($variant).to_owned()));
                             $(
                                 // use tuple serialization to do it. Note that I need the comma even on the one-element to convert it into a tuple
-                                ($( $name, )*).write_value(serializer)
+                                ($( $tuple_name, )*).write_value(serializer)
                             )?
                         },
                     )*
@@ -577,8 +578,8 @@ macro_rules! impl_simple_serde_tagged_enum {
                     $(
                         stringify!($variant) => {
                             // use tuple deserialization. Note that I need the comma even on the one-element to convert it into a tuple
-                            $( let ($($name,)*) = $crate::utils::simple_serde::Deserialize::read_value(deserializer)?;)?
-                            Ok(Self::$variant$(($($name,)*))?)
+                            $( let ($($tuple_name,)*) = $crate::utils::simple_serde::Deserialize::read_value(deserializer)?;)?
+                            Ok(Self::$variant$(($($tuple_name,)*))?)
                         }
                     ),*
                     invalid => Err($crate::errors::CommandError::InvalidEnumValueInInSerializedValue(invalid.to_owned())),
@@ -675,6 +676,7 @@ mod test {
     use crate::world_map::LakeType;
     use crate::world_map::BiomeCriteria;
     use crate::world_map::CultureType;
+    use crate::world_map::IdRef;
 
 
     fn test_serializing<Value: SimpleSerialize + SimpleDeserialize + PartialEq + core::fmt::Debug>(value: &Value, text: &str) {
@@ -693,25 +695,25 @@ mod test {
 
     #[test]
     fn test_serde_neighbor() {
-        test_serializing(&Neighbor::Tile(36), "36");
-        test_serializing(&Neighbor::CrossMap(42, Edge::East), "(42,East)");
+        test_serializing(&Neighbor::Tile(IdRef::new(36)), "36");
+        test_serializing(&Neighbor::CrossMap(IdRef::new(42), Edge::East), "(42,East)");
         test_serializing(&Neighbor::OffMap(Edge::West), "West");
     }
 
     #[test]
     fn test_serde_neighbor_vec() {
-        test_serializing(&vec![Neighbor::Tile(36), Neighbor::CrossMap(42, Edge::East), Neighbor::OffMap(Edge::West)], "[36,(42,East),West]");
+        test_serializing(&vec![Neighbor::Tile(IdRef::new(36)), Neighbor::CrossMap(IdRef::new(42), Edge::East), Neighbor::OffMap(Edge::West)], "[36,(42,East),West]");
         test_serializing::<Vec<Neighbor>>(&vec![], "[]");
     }
 
     #[test]
     fn test_serde_neighbor_and_direction() {
-        test_serializing(&NeighborAndDirection(Neighbor::Tile(72),Deg(45.6)), "(72,45.6)")
+        test_serializing(&NeighborAndDirection(Neighbor::Tile(IdRef::new(72)),Deg(45.6)), "(72,45.6)")
     }
 
     #[test]
     fn test_serde_neighbor_and_direction_vec() {
-        test_serializing(&vec![NeighborAndDirection(Neighbor::Tile(72),Deg(45.6)),NeighborAndDirection(Neighbor::CrossMap(49,Edge::Southeast),Deg(0.1))], "[(72,45.6),((49,Southeast),0.1)]")
+        test_serializing(&vec![NeighborAndDirection(Neighbor::Tile(IdRef::new(72)),Deg(45.6)),NeighborAndDirection(Neighbor::CrossMap(IdRef::new(49),Edge::Southeast),Deg(0.1))], "[(72,45.6),((49,Southeast),0.1)]")
     }
 
     #[test]

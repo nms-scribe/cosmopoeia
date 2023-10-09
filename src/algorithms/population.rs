@@ -48,7 +48,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     let mut work_queue = work_queue.watch_queue(progress, "Calculating population.", "Population calculated.");
     while let Some(fid) = work_queue.pop() {
         let (habitability,population) = {
-            let tile = tiles.try_entity_by_id::<TileForPopulation>(fid)?; 
+            let tile = tiles.try_entity_by_id::<TileForPopulation>(&fid)?; 
             let mut suitability = if tile.lake_id.is_some() {
                 0.0
             } else {
@@ -66,8 +66,8 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                     if let Some(water_cell) = tile.harbor_tile_id {
                         match water_cell {
                             Neighbor::Tile(water_cell) | Neighbor::CrossMap(water_cell, _) => {
-                                let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(water_cell)?;
-                                if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id)).transpose()?.map(|l| &l.type_) {
+                                let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&water_cell)?;
+                                if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id.into())).transpose()?.map(|l| &l.type_) {
                                     match lake_type {
                                         LakeType::Fresh => suitability += 30.0,
                                         LakeType::Salt => suitability += 10.0,
@@ -101,10 +101,10 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
             }
         };
 
-        let mut feature = tiles.try_feature_by_id(fid)?;
+        let mut feature = tiles.try_feature_by_id(&fid)?;
 
-        feature.set_habitability(habitability)?;
-        feature.set_population(population)?;
+        feature.set_habitability(&habitability)?;
+        feature.set_population(&population)?;
 
         tiles.update_feature(feature)?;
 

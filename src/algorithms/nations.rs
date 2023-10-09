@@ -113,14 +113,14 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         // place the nation center
         let tile = tile_map.try_get_mut(&nation.center_tile_id)?;
-        tile.nation_id = Some(nation.fid);
+        tile.nation_id = Some(nation.fid.clone());
 
-        _ = costs.insert(nation.center_tile_id, OrderedFloat::from(1.0));
+        _ = costs.insert(nation.center_tile_id.clone(), OrderedFloat::from(1.0));
 
-        _ = capitals.insert(nation.center_tile_id);
+        _ = capitals.insert(nation.center_tile_id.clone());
 
         // add the tile to the queue for work.
-        _ = queue.push((nation.center_tile_id,nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        _ = queue.push((nation.center_tile_id.clone(),nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -183,10 +183,10 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     
                         if replace_nation {
                             // place the nation even if there is no population or something.
-                            place_nations.push((*neighbor_id,nation.fid));
-                            _ = costs.insert(*neighbor_id, total_cost);
+                            place_nations.push((neighbor_id.clone(),nation.fid.clone()));
+                            _ = costs.insert(neighbor_id.clone(), total_cost);
     
-                            queue.push((*neighbor_id, nation.clone(), nation_biome.clone()), Reverse(total_cost));
+                            queue.push((neighbor_id.clone(), nation.clone(), nation_biome.clone()), Reverse(total_cost));
     
                         } // else we can't expand into this tile, and this line of spreading ends here.
                     } else {
@@ -211,9 +211,9 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing nations.","Nations written.") {
 
-        let mut feature = tiles.try_feature_by_id(*fid)?;
+        let mut feature = tiles.try_feature_by_id(&fid)?;
 
-        feature.set_nation_id(tile.nation_id)?;
+        feature.set_nation_id(&tile.nation_id.clone())?;
 
         tiles.update_feature(feature)?;
 
@@ -379,7 +379,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
 
     let mut tile_list = Vec::new();
     let tile_map = tiles_layer.read_features().into_entities_index_for_each::<_,TileForNationNormalize,_>(|fid,_| {
-        tile_list.push(*fid);
+        tile_list.push(fid.clone());
         Ok(())
     }, progress)?;
 
@@ -400,8 +400,8 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
                     let neighbor = tile_map.try_get(neighbor_id)?;
 
-                    if let Some(town_id) = neighbor.town_id {
-                        let town = town_index.try_get(&(town_id))?;
+                    if let Some(town_id) = &neighbor.town_id {
+                        let town = town_index.try_get(&town_id)?;
                         if town.is_capital {
                             dont_overwrite = true; // don't overwrite near capital
                             break;
@@ -413,9 +413,9 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
                             buddy_count += 1;
                         } else {
                             if let Some(count) = adversaries.get(&neighbor.nation_id) {
-                                _ = adversaries.insert(neighbor.nation_id, count + 1);
+                                _ = adversaries.insert(neighbor.nation_id.clone(), count + 1);
                             } else {
-                                _ = adversaries.insert(neighbor.nation_id, 1);
+                                _ = adversaries.insert(neighbor.nation_id.clone(), 1);
                             };
                             adversary_count += 1;
                         }
@@ -446,8 +446,8 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
 
         if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
             if count > buddy_count {
-                let mut change_tile = tiles_layer.try_feature_by_id(tile_id)?;
-                change_tile.set_nation_id(worst_adversary)?;
+                let mut change_tile = tiles_layer.try_feature_by_id(&tile_id)?;
+                change_tile.set_nation_id(&worst_adversary)?;
                 tiles_layer.update_feature(change_tile)?    
             }
 

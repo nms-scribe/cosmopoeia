@@ -15,6 +15,7 @@ use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
 use crate::geometry::GDALGeometryWrapper;
 use crate::geometry::VariantArealGeometry;
+use crate::world_map::IdRef;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -73,7 +74,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
             polygons.push(polygon_geometry);
         }
         let multipolygon_geometry = MultiPolygon::from_variants(polygons)?;
-        let mut feature = layer.try_feature_by_id(*fid)?;
+        let mut feature = layer.try_feature_by_id(&fid)?;
         feature.set_geometry(multipolygon_geometry)?;
         layer.update_feature(feature)?;
 
@@ -112,7 +113,7 @@ struct UniqueSegment {
 }
 
 struct BrokenSegments {
-    map: HashMap<u64, Vec<Vec<Vec<UniqueSegment>>>>
+    map: HashMap<IdRef, Vec<Vec<Vec<UniqueSegment>>>>
 }
 
 fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_features: TypedFeatureIterator<'feature, <ThemeType as Theme>::ThemeSchema, <ThemeType as Theme>::Feature<'feature>>, vertex_index: &HashMap<Coordinates, i32>, segment_cache: &mut HashMap<Coordinates, Vec<Vec<Coordinates>>>, progress: &mut Progress) -> Result<BrokenSegments, CommandError> {

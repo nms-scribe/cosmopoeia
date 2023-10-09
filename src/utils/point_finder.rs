@@ -5,6 +5,7 @@ use qutee::Boundary;
 use super::extent::Extent;
 use super::coordinates::Coordinates;
 use crate::errors::CommandError;
+use crate::world_map::IdRef;
 
 pub(crate) struct PointFinder {
   // It's kind of annoying, but the query method doesn't return the original point, so I have to store the point.
@@ -65,7 +66,7 @@ impl PointFinder {
 }
 
 pub(crate) struct TileFinder {
-  inner: QuadTree<f64,(Coordinates,u64)>, // I need the original point to test distance
+  inner: QuadTree<f64,(Coordinates,IdRef)>, // I need the original point to test distance
   bounds: Boundary<f64>, // see PointFinder
   //capacity: usize, // see PointFinder
   initial_search_radius: f64
@@ -83,7 +84,7 @@ impl TileFinder {
         }
     }
 
-    pub(crate) fn add_tile(&mut self, point: Coordinates, tile: u64) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&mut self, point: Coordinates, tile: IdRef) -> Result<(),CommandError> {
         self.inner.insert_at(point.to_tuple(),(point,tile)).map_err(|e|  {
             match e {
                 qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
@@ -93,7 +94,7 @@ impl TileFinder {
 
     }
 
-    pub(crate) fn find_nearest_tile(&self, point: &Coordinates) -> Result<u64,CommandError> {
+    pub(crate) fn find_nearest_tile(&self, point: &Coordinates) -> Result<IdRef,CommandError> {
         let mut spacing = self.initial_search_radius;
 
         macro_rules! calc_search_boundary {
@@ -114,12 +115,12 @@ impl TileFinder {
             () => {
                 let mut found = None;
                 for item in self.inner.query(search_boundary) {
-                    match found {
-                        None => found = Some((item.1,item.0.distance(point))),
+                    match &found {
+                        None => found = Some((item.1.clone(),item.0.distance(point))),
                         Some(last_found) => {
                             let this_distance = item.0.distance(point);
                             if this_distance < last_found.1 {
-                                found = Some((item.1,this_distance))
+                                found = Some((item.1.clone(),this_distance))
                             }
                         },
                     }

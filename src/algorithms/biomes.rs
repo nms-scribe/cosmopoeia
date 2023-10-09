@@ -11,6 +11,7 @@ use crate::world_map::LakeForBiomes;
 use crate::world_map::Grouping;
 use crate::world_map::TileSchema;
 use crate::commands::OverwriteBiomesArg;
+use crate::world_map::IdRef;
 
 pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteBiomesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -38,14 +39,12 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
     let mut tiles_layer = target.edit_tile_layer()?; 
 
-    // based on AFMG algorithm
-
     entity!(BiomeSource: Tile {
-        fid: u64,
+        fid: IdRef,
         temperature: f64,
         water_flow: f64,
         precipitation: f64,
-        lake_id: Option<u64>,
+        lake_id: Option<IdRef>,
         grouping: Grouping
     });
 
@@ -60,7 +59,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         } else {
             // is it a wetland?
             if (tile.water_flow > 400.0) || 
-               matches!(tile.lake_id.map(|id| lake_map.try_get(&(id)).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
+               matches!(tile.lake_id.as_ref().map(|id| lake_map.try_get(&id).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
                 biomes.wetland.clone()
             } else {
                 // The original calculation favored deserts too much
@@ -89,13 +88,11 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
     
         };
 
-        if let Some(mut tile) = tiles_layer.feature_by_id(tile.fid) {
+        let mut tile = tiles_layer.try_feature_by_id(&tile.fid)?;
+        
+        tile.set_biome(&biome)?;
 
-            tile.set_biome(&biome)?;
-
-            tiles_layer.update_feature(tile)?;
-
-        }
+        tiles_layer.update_feature(tile)?;
 
     }
 

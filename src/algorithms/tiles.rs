@@ -55,6 +55,7 @@ use crate::geometry::VariantArealGeometry;
 use crate::world_map::NeighborAndDirection;
 use crate::world_map::Neighbor;
 use crate::utils::edge::Edge;
+use crate::world_map::IdRef;
 
 
 pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -140,18 +141,18 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         for point in ring.into_iter().take(usable_points_len) { 
             if let Some(list) = east_west_list.as_mut() {
                 if (point.0 - layer_extent.east()).abs() < f64::EPSILON {
-                    list.push((*fid,point.1,Side::East))
+                    list.push((fid.clone(),point.1,Side::East))
                 } else if (point.0 - layer_extent.west).abs() < f64::EPSILON {
-                    list.push((*fid,point.1,Side::West))
+                    list.push((fid.clone(),point.1,Side::West))
                 }
             }
             let point: Coordinates = point.try_into()?;
             match point_tile_index.get_mut(&point) {
                 None => {
-                    _ = point_tile_index.insert(point, HashSet::from([*fid]));
+                    _ = point_tile_index.insert(point, HashSet::from([fid.clone()]));
                 },
                 Some(set) => {
-                    _ = set.insert(*fid);
+                    _ = set.insert(fid.clone());
                 }
             }
         }
@@ -166,7 +167,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         for tile in &tiles {
             
             // I can't calculate the angle yet, because I'm still deduplicating any intersections. I'll do that in the next loop.
-            let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).copied();
+            let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).cloned();
 
             tile_map.try_get_mut(tile)?.neighbor_set.extend(neighbors)
 
@@ -183,8 +184,8 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // now, with that list sorted by latitude, when I go through it, if I see an id the first time, that turns the tile "on", and
         // when I see that the second time, that turns the tile "off". So, we keep track of "active" tiles on each side.
         // to track them, I'm keeping a map of tile and their neighbors
-        let mut active_east_tiles: HashMap<u64, HashSet<u64>> = HashMap::new();
-        let mut active_west_tiles: HashMap<u64, HashSet<u64>> = HashMap::new();
+        let mut active_east_tiles: HashMap<IdRef, HashSet<IdRef>> = HashMap::new();
+        let mut active_west_tiles: HashMap<IdRef, HashSet<IdRef>> = HashMap::new();
 
         // iterate through the list
         for (id,_,side) in east_west_list.into_iter().watch(progress, "Matching antimeridian neighbors.", "Antimeridian neighbors matched.") {
@@ -199,8 +200,8 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                     // plus gather those active tiles as a set to be inserted for this tile.
                     let mut yonder_neighbors = HashSet::new();
                     for (yonder_id,yonder_set) in yonder_tiles {
-                        _ = yonder_neighbors.insert(*yonder_id);
-                        _ = yonder_set.insert(id);
+                        _ = yonder_neighbors.insert(yonder_id.clone());
+                        _ = yonder_set.insert(id.clone());
                     }
                     // add that set to hither_tiles.
                     _ = hither_tiles.insert(id, yonder_neighbors);
@@ -248,18 +249,18 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         let mut neighbors = Vec::new();
         for neighbor_id in &tile.neighbor_set {
-            let neighbor_angle = calculate_neighbor_angle(tile, *neighbor_id, &tile_map, false)?;
+            let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, false)?;
 
-            neighbors.push(NeighborAndDirection(Neighbor::Tile(*neighbor_id),neighbor_angle))
+            neighbors.push(NeighborAndDirection(Neighbor::Tile(neighbor_id.clone()),neighbor_angle))
 
         }
 
         // handle the cross neighbors, if they were calculated, but this should only happen if they were on the edge
         if let Some(edge) = &tile.edge {
             for neighbor_id in &tile.cross_neighbor_set {
-                let neighbor_angle = calculate_neighbor_angle(tile, *neighbor_id, &tile_map, true)?;
+                let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, true)?;
     
-                neighbors.push(NeighborAndDirection(Neighbor::CrossMap(*neighbor_id,edge.clone()),neighbor_angle))
+                neighbors.push(NeighborAndDirection(Neighbor::CrossMap(neighbor_id.clone(),edge.clone()),neighbor_angle))
     
             }
     
@@ -320,7 +321,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // sort the neighbors by tile_id, to help ensure random reproducibility
         neighbors.sort_by_cached_key(|n| n.0.clone());
 
-        let mut feature = layer.try_feature_by_id(*fid)?;
+        let mut feature = layer.try_feature_by_id(fid)?;
         feature.set_neighbors(&neighbors)?;
         layer.update_feature(feature)?;
 
@@ -330,7 +331,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
 }
 
-fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: u64, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
+fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
     let neighbor = tile_map.try_get(&neighbor_id)?;
     let neighbor_angle = {
         let (site_x,site_y) = tile.site.to_tuple();
@@ -468,7 +469,7 @@ pub(crate) trait Theme: Sized {
 
     fn new<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<Self,CommandError>;
 
-    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<Option<u64>, CommandError>;
+    fn get_theme_id(&self, tile: &Self::TileForTheme) -> Result<Option<IdRef>, CommandError>;
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, Self::ThemeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature;
 
@@ -494,9 +495,9 @@ impl Theme for CultureTheme {
         })
     }
 
-    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<Option<u64>, CommandError> {
+    fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<Option<IdRef>, CommandError> {
         if let Some(culture) = &tile.culture {
-            Ok::<_,CommandError>(Some(self.culture_id_map.try_get(culture)?.fid))
+            Ok::<_,CommandError>(Some(self.culture_id_map.try_get(culture)?.fid.clone()))
         } else {
             Ok(None)
         }
@@ -530,9 +531,9 @@ impl Theme for BiomeTheme {
         })
     }
 
-    fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<Option<u64>, CommandError> {
+    fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<Option<IdRef>, CommandError> {
         let biome = &tile.biome; 
-        Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid))
+        Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid.clone()))
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, BiomeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -560,8 +561,8 @@ impl Theme for NationTheme {
         Ok(Self)
     }
 
-    fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<Option<u64>, CommandError> {
-        Ok(tile.nation_id)
+    fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<Option<IdRef>, CommandError> {
+        Ok(tile.nation_id.clone())
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -590,8 +591,8 @@ impl Theme for SubnationTheme {
         Ok(Self)
     }
 
-    fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<Option<u64>, CommandError> {
-        Ok(tile.subnation_id)
+    fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<Option<IdRef>, CommandError> {
+        Ok(tile.subnation_id.clone())
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -610,7 +611,7 @@ impl Theme for SubnationTheme {
 pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
 {
 
-    let mut new_polygon_map: HashMap<u64, _> = HashMap::new();
+    let mut new_polygon_map: HashMap<IdRef, _> = HashMap::new();
 
     let theme = ThemeType::new(target,progress)?;
 
@@ -622,7 +623,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
     },progress)?;
 
     for tile in tiles.into_iter().watch(progress, "Gathering tiles.", "Tiles gathered.") {
-        let mapping: Option<(u64,MultiPolygon)> = if let Some(id) = theme.get_theme_id(&tile)? {
+        let mapping: Option<(IdRef,MultiPolygon)> = if let Some(id) = theme.get_theme_id(&tile)? {
             Some((id,tile.geometry().clone().try_into()?))
         } else if tile.shore_distance() == &-1 {
             let mut usable_neighbors = HashMap::new();
@@ -649,7 +650,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 None
             } else {
                 let chosen_value = usable_neighbors.iter().max_by_key(|n| n.1).expect("Why would there be no max if we know the list isn't empty?").0;
-                Some((*chosen_value,tile.geometry().clone().try_into()?))
+                Some((chosen_value.clone(),tile.geometry().clone().try_into()?))
             }
         } else {
             None
@@ -674,7 +675,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
         let geometry = if let Some(geometries) = new_polygon_map.remove(&fid) {
             // it should never be empty if it's in the map, but since I'm already allowing for empty geographies, might as well check.
             if geometries.is_empty() {
-                empty_features.push((fid,feature.get_name()?));
+                empty_features.push((fid.clone(),feature.get_name()?));
                 MultiPolygon::from_polygons([])?
             } else {
                 let mut geometries = geometries.into_iter();
@@ -684,7 +685,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 first.union(&remaining)?.try_into()?
             }
         } else {
-            empty_features.push((fid,feature.get_name()?));
+            empty_features.push((fid.clone(),feature.get_name()?));
             // An empty multipolygon appears to be the answer, at the very least I no longer get the null geometry pointer
             // errors in the later ones.
             MultiPolygon::from_polygons([])?
@@ -699,7 +700,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
     for (fid,geometry) in changed_features.into_iter().watch(progress, "Writing geometries.", "Geometries written.") {
 
-        let mut feature: ThemeType::Feature<'_> = edit_polygon_layer.try_feature_by_id(fid)?;
+        let mut feature: ThemeType::Feature<'_> = edit_polygon_layer.try_feature_by_id(&fid)?;
         feature.set_geometry(geometry)?;
         edit_polygon_layer.update_feature(feature)?;    
 

@@ -22,7 +22,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     let mut water_queue = PriorityQueue::new();
 
     let mut tile_map = tiles.read_features().into_entities_index_for_each::<_,TileForWaterDistance,_>(|fid,_| {
-        queue.push(*fid);
+        queue.push(fid.clone());
         Ok(())
     }, progress)?;
 
@@ -77,10 +77,10 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         edit_tile.closest_water_tile_id = closest_water;
         if on_shore {
             if is_land {
-                _ = shore_distances.insert(fid,1);
+                _ = shore_distances.insert(fid.clone(),1);
                 _ = land_queue.push(fid,Reverse(1));
             } else {
-                _ = shore_distances.insert(fid,-1);
+                _ = shore_distances.insert(fid.clone(),-1);
                 _ = water_queue.push(fid,Reverse(1));
             }
         }
@@ -108,8 +108,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                     };
 
                     if replace_distance {
-                        _ = shore_distances.insert(*neighbor_id,cost);
-                        land_queue.push(*neighbor_id, Reverse(cost));
+                        _ = shore_distances.insert(neighbor_id.clone(),cost);
+                        land_queue.push(neighbor_id.clone(), Reverse(cost));
                     }
                 }
                 Neighbor::OffMap(_) => (),
@@ -137,8 +137,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                     };
 
                     if replace_distance {
-                        _ = shore_distances.insert(*neighbor_id,-cost);
-                        water_queue.push(*neighbor_id, Reverse(cost));
+                        _ = shore_distances.insert(neighbor_id.clone(),-cost);
+                        water_queue.push(neighbor_id.clone(), Reverse(cost));
                     }
                 }
                 Neighbor::OffMap(_) => (),
@@ -150,11 +150,11 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
 
     for (fid,tile) in tile_map.into_iter().watch(progress, "Writing data.", "Data written.") {
 
-        let mut feature = tiles.try_feature_by_id(fid)?;
+        let mut feature = tiles.try_feature_by_id(&fid)?;
         let shore_distance = shore_distances.remove(&fid).expect("Why wouldn't this value have been generated for the tile?");
-        feature.set_shore_distance(shore_distance)?;
+        feature.set_shore_distance(&shore_distance)?;
         feature.set_harbor_tile_id(&tile.closest_water_tile_id)?;
-        feature.set_water_count(tile.water_count)?;
+        feature.set_water_count(&tile.water_count)?;
         tiles.update_feature(feature)?;
 
 

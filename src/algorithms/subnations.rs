@@ -38,6 +38,7 @@ use super::colors::Luminosity;
 use crate::world_map::SubnationForColors;
 use crate::world_map::NeighborAndDirection;
 use crate::world_map::Neighbor;
+use crate::world_map::IdRef;
 
 
 pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_layer: &OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
@@ -48,10 +49,10 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
 
     for tile in target.edit_tile_layer()?.read_features().into_entities::<TileForSubnations>().watch(progress, "Reading tiles.", "Tiles read.") {
         let (_,tile) = tile?;
-        if let (Some(nation_id),Some(town_id)) = (tile.nation_id,tile.town_id) {
-            match towns_by_nation.get_mut(&nation_id) {
-                None => _ = towns_by_nation.insert(nation_id, vec![(tile,town_id)]),
-                Some(list) => list.push((tile,town_id))
+        if let (Some(nation_id),Some(town_id)) = (&tile.nation_id,tile.town_id.clone()) {
+            match towns_by_nation.get_mut(nation_id) {
+                None => _ = towns_by_nation.insert(nation_id.clone(), vec![(tile,town_id)]),
+                Some(list) => list.push((tile,town_id.clone()))
             }
         }
     
@@ -71,12 +72,12 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
         nation_towns.sort_by_cached_key(|a| (OrderedFloat::from(a.0.population as f64) * town_sort_normal.sample(rng).clamp(0.5,1.5),(a.1 == nation.capital_town_id)));
 
         for (center_tile,seat) in nation_towns.iter().take(subnation_count) {
-            let center_tile_id = center_tile.fid;
+            let center_tile_id = center_tile.fid.clone();
             let culture = center_tile.culture.clone();
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
             let name = if rng.gen_bool(0.5) {
                 // name by town
-                let town = town_map.try_get(seat)?;
+                let town = town_map.try_get(&seat)?;
                 town.name.clone()
             } else {
                 // new name by culture
@@ -87,7 +88,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
 
             let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
 
-            let seat_town_id = Some(*seat);
+            let seat_town_id = Some(seat.clone());
 
             _ = subnations.add_subnation(&NewSubnation {
                 name,
@@ -95,7 +96,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
                 center_tile_id,
                 type_,
                 seat_town_id,
-                nation_id: nation.fid,
+                nation_id: nation.fid.clone(),
                 color
             })?;
         }
@@ -119,9 +120,9 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
     for subnation in target.edit_subnations_layer()?.read_features().into_entities::<SubnationForPlacement>().watch(progress,"Reading subnations.","Subnations read.") {
         let (_,subnation) = subnation?;
-        let center = subnation.center_tile_id;
-        tile_map.try_get_mut(&center)?.subnation_id = Some(subnation.fid);
-        _ = costs.insert(center, OrderedFloat::from(1.0));
+        let center = subnation.center_tile_id.clone();
+        tile_map.try_get_mut(&center)?.subnation_id = Some(subnation.fid.clone());
+        _ = costs.insert(center.clone(), OrderedFloat::from(1.0));
         _ = queue.push((center,subnation), Reverse(OrderedFloat::from(0.0)));
     }
 
@@ -131,7 +132,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
         let mut place_subnations = Vec::new();
 
-        let tile = tile_map.try_get(&(tile_id))?;
+        let tile = tile_map.try_get(&tile_id.into())?;
         for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
             match neighbor_id {
@@ -154,9 +155,9 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                         };
     
                         if replace_subnation {
-                            place_subnations.push((*neighbor_id,subnation.fid));
-                            _ = costs.insert(*neighbor_id, total_cost);
-                            queue.push((*neighbor_id,subnation.clone()), Reverse(total_cost));
+                            place_subnations.push((neighbor_id.clone(),subnation.fid.clone()));
+                            _ = costs.insert(neighbor_id.clone(), total_cost);
+                            queue.push((neighbor_id.clone(),subnation.clone()), Reverse(total_cost));
                         } // else we can't expand into this tile, and this line of spreading ends here.
                     }
     
@@ -181,8 +182,8 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
     let tile_layer_update = target.edit_tile_layer()?;
 
     for (fid,tile) in tile_map.into_iter().watch(progress,"Writing subnations.","Subnations written.") {
-        let mut feature = tile_layer_update.try_feature_by_id(fid)?;
-        feature.set_subnation_id(tile.subnation_id)?;
+        let mut feature = tile_layer_update.try_feature_by_id(&fid)?;
+        feature.set_subnation_id(&tile.subnation_id)?;
         tile_layer_update.update_feature(feature)?;
     }
 
@@ -209,7 +210,7 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
     if neighbor.shore_distance < -3 {
         return None; // don't pass through deep ocean
     }
-    if neighbor.nation_id != Some(subnation.nation_id) {
+    if neighbor.nation_id.as_ref() != Some(&subnation.nation_id) {
         return None; // don't leave nation
     }
     let elevation_cost = if neighbor.elevation_scaled >= 70 {
@@ -232,16 +233,16 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
     let mut tiles_by_nation = HashMap::new();
 
     let tile_map = tile_layer.read_features().into_entities_index_for_each::<_,TileForEmptySubnations,_>(|fid,tile| {
-        if let (Some(nation_id),None) = (tile.nation_id,tile.subnation_id) {
+        if let (Some(nation_id),None) = (&tile.nation_id,&tile.subnation_id) {
             // use a priority queue to make it easier to remove by value as well.
-            match tiles_by_nation.get_mut(&nation_id) {
+            match tiles_by_nation.get_mut(nation_id) {
                 None => { 
-                    let mut queue = PriorityQueue::new();
-                    _ = queue.push(*fid, tile.population);
-                    _ = tiles_by_nation.insert(nation_id, queue); 
+                    let mut queue: PriorityQueue<IdRef, i32> = PriorityQueue::new();
+                    _ = queue.push(fid.clone(), tile.population);
+                    _ = tiles_by_nation.insert(nation_id.clone(), queue); 
                 },
                 Some(queue) => {
-                    _ = queue.push(*fid, tile.population);
+                    _ = queue.push(fid.clone(), tile.population);
                 },
             }
         }
@@ -254,7 +255,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
     let mut tile_subnation_changes = HashMap::new();
     let mut new_subnations = Vec::new();
-    let mut next_subnation_id = 0..;
+    let mut next_subnation_id = 1..;
 
     for nation in nations.into_iter().watch(progress,"Creating and placing subnations.","Subnations created and placed.") {
 
@@ -263,7 +264,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                 let tile = tile_map.try_get(&tile_id)?;
                 // we have what we need to start a new subnation, this should be the highest population tile
                 let mut seat = None;
-                let center_tile_id = tile_id;
+                let center_tile_id = tile_id.clone();
 
                 #[allow(clippy::unnecessary_lazy_evaluations)] // I disagree, it's calling a function
                 let culture = tile.culture.as_ref().or_else(|| nation.culture.as_ref()).cloned();
@@ -271,30 +272,30 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
                 let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
 
-                let nation_id = nation.fid;
+                let nation_id = nation.fid.clone();
                 let color = nation.color;
 
 
                 let subnation = SubnationForPlacement {
-                    fid: next_subnation_id.next().expect("Why would an unlimited range stop returning values?"),
-                    center_tile_id,
-                    nation_id,
+                    fid: IdRef::new(next_subnation_id.next().expect("Why would an unlimited range stop returning values?")),
+                    center_tile_id: center_tile_id.clone(),
+                    nation_id: nation_id.clone(),
                 };
 
-                _ = tile_subnation_changes.insert(tile_id, subnation.fid);
+                _ = tile_subnation_changes.insert(tile_id.clone(), subnation.fid.clone());
                 
                 let mut costs = HashMap::new();
-                _ = costs.insert(tile_id, OrderedFloat::from(1.0));
+                _ = costs.insert(tile_id.clone(), OrderedFloat::from(1.0));
                 
                 let mut queue = PriorityQueue::new();
-                _ = queue.push(tile_id,Reverse(OrderedFloat::from(0.0)));
+                _ = queue.push(tile_id.clone(),Reverse(OrderedFloat::from(0.0)));
 
                 while let Some((expand_tile_id,priority)) = queue.pop() {
                     let expand_tile = tile_map.try_get(&expand_tile_id)?;
                     // check if we've got a seat, or a better one.
-                    match (expand_tile.town_id,seat) {
+                    match (&expand_tile.town_id,&seat) {
                         (Some(town_id),None) => seat = Some((town_id,expand_tile.population)),
-                        (Some(new_town_id),Some((_,old_population))) if expand_tile.population > old_population => {
+                        (Some(new_town_id),Some((_,old_population))) if expand_tile.population > *old_population => {
                             seat = Some((new_town_id,expand_tile.population))
                         },
                         (Some(_),Some(_)) | (None,_) => {}
@@ -321,7 +322,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                                 if neighbor.shore_distance < -3 {
                                     continue; // don't pass through deep ocean
                                 }
-                                if neighbor.nation_id != Some(subnation.nation_id) {
+                                if neighbor.nation_id.as_ref() != Some(&subnation.nation_id) {
                                     continue; // don't leave nation
                                 }
     
@@ -340,10 +341,10 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                                     };
             
                                     if replace_subnation {
-                                        _ = tile_subnation_changes.insert(*neighbor_id, subnation.fid);
+                                        _ = tile_subnation_changes.insert(neighbor_id.clone(), subnation.fid.clone());
                                         _ = nation_tiles.remove(neighbor_id);
-                                        _ = costs.insert(*neighbor_id, total_cost);
-                                        _ = queue.push(*neighbor_id, Reverse(total_cost));
+                                        _ = costs.insert(neighbor_id.clone(), total_cost);
+                                        _ = queue.push(neighbor_id.clone(), Reverse(total_cost));
                                     } // else we can't expand into this tile, and this line of spreading ends here.
                                 }
                             }
@@ -356,11 +357,11 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
                 }
 
-                let seat_town_id = seat.map(|(id,_)| id);
+                let seat_town_id = seat.map(|(id,_)| id.clone());
 
-                let name = if let (Some(seat_town_id),true) = (seat_town_id,rng.gen_bool(0.5)) {
+                let name = if let (Some(seat_town_id),true) = (&seat_town_id,rng.gen_bool(0.5)) {
                     // name by town
-                    let town = town_map.try_get(&seat_town_id)?;
+                    let town = town_map.try_get(seat_town_id)?;
                     town.name.clone()
                 } else {
                     // new name by culture
@@ -400,11 +401,11 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
 
     for (tile_id,temp_subnation_id) in tile_subnation_changes.into_iter().watch(progress,"Writing new subnations to tiles.","New subnations written to tiles.") {
 
-        let mut tile = tiles_layer.try_feature_by_id(tile_id)?;
+        let mut tile = tiles_layer.try_feature_by_id(&tile_id)?;
 
         let real_id = assigned_ids.get(&temp_subnation_id).expect("How would we use an id that we didn't add to the map?");
 
-        tile.set_subnation_id(Some(*real_id))?;
+        tile.set_subnation_id(&Some(real_id.clone()))?;
 
         tiles_layer.update_feature(tile)?;
 
@@ -422,7 +423,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
     let mut tile_list = Vec::new();
     let tile_map = tiles_layer.read_features().into_entities_index_for_each::<_,TileForSubnationNormalize,_>(|fid,_| {
-        tile_list.push(*fid);
+        tile_list.push(fid.clone());
         Ok(())
     },progress)?;
 
@@ -433,12 +434,12 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
             continue; // don't overwrite towns
         }
 
-        if let Some(subnation_id) = tile.subnation_id {
+        if let Some(subnation_id) = &tile.subnation_id {
             // if the subnation doesn't have a seat, don't erase it's center tile.
             // (if it did have a seat, then it has towns, and the above check would hold it.)
             // This prevents very small subnations which were created with "Fill Empty" from being
             // deleted.
-            let subnation = subnations_map.try_get(&(subnation_id))?;
+            let subnation = subnations_map.try_get(subnation_id)?;
             if subnation.seat_town_id.is_none() && tile_id == subnation.center_tile_id {
                 continue;
             }
@@ -458,9 +459,9 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
                             buddy_count += 1;
                         } else {
                             if let Some(count) = adversaries.get(&neighbor.subnation_id) {
-                                _ = adversaries.insert(neighbor.subnation_id, count + 1)
+                                _ = adversaries.insert(neighbor.subnation_id.clone(), count + 1)
                             } else {
-                                _ = adversaries.insert(neighbor.subnation_id, 1)
+                                _ = adversaries.insert(neighbor.subnation_id.clone(), 1)
                             };
                             adversary_count += 1;
                         }
@@ -487,8 +488,8 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
 
         if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
             if count > buddy_count {
-                let mut change_tile = tiles_layer.try_feature_by_id(tile_id)?;
-                change_tile.set_subnation_id(worst_adversary)?;
+                let mut change_tile = tiles_layer.try_feature_by_id(&tile_id)?;
+                change_tile.set_subnation_id(&worst_adversary)?;
                 tiles_layer.update_feature(change_tile)?    
             }
 
@@ -509,8 +510,8 @@ pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(t
     let subnations = subnations_layer.read_features().into_entities_vec::<_,SubnationForColors>(progress)?;
 
     for subnation in subnations.iter().watch(progress, "Counting subnations.", "Subnations counted.") {
-        let nation = subnation.nation_id;
-        nation_color_index.try_get_mut(&nation)?.subnation_count += 1;
+        let nation = &subnation.nation_id;
+        nation_color_index.try_get_mut(nation)?.subnation_count += 1;
     }
 
     // This will become an input to the generator so we can generate colors within the same ranges as the nations.
@@ -526,8 +527,8 @@ pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(t
 
     for subnation in subnations.into_iter().watch(progress, "Assigning colors.", "Colors assigned.") {
         let generator = nation_color_generator_index.get_mut(&subnation.nation_id).expect("This was just added to the map, so it should still be there.");
-        let mut feature = subnations_layer.try_feature_by_id(subnation.fid)?;
-        feature.set_color(generator.next().expect("There should have been enough colors generated for everybody."))?;
+        let mut feature = subnations_layer.try_feature_by_id(&subnation.fid)?;
+        feature.set_color(&generator.next().expect("There should have been enough colors generated for everybody."))?;
         subnations_layer.update_feature(feature)?;
 
     }

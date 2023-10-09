@@ -42,6 +42,7 @@ use crate::entity;
 use crate::algorithms::tiles::find_lowest_tile;
 use crate::world_map::NeighborAndDirection;
 use crate::world_map::Neighbor;
+use crate::world_map::IdRef;
 
 
 enum RelativeHeightTruncation {
@@ -486,8 +487,8 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
                 limit += 1;
             }
 
-            _ = change_map.insert(start,height_delta);
-            let mut queue = VecDeque::from([start]).watch_queue(progress,format!("Generating hill #{}.",i+1),format!("Hill #{} generated.",i+1));
+            _ = change_map.insert(start.clone(),height_delta);
+            let mut queue = VecDeque::from([start.clone()]).watch_queue(progress,format!("Generating hill #{}.",i+1),format!("Hill #{} generated.",i+1));
 
             while let Some(tile_id) = queue.pop_front() {
                 let tile = tile_map.try_get(&tile_id)?;
@@ -501,9 +502,9 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
                             }
 
                             let neighbor_height_delta = last_change.powf(parameters.blob_power) * (rng.gen_range(0.0..0.2) + 0.9);
-                            _ = change_map.insert(*neighbor_id, neighbor_height_delta);
+                            _ = change_map.insert(neighbor_id.clone(), neighbor_height_delta);
                             if neighbor_height_delta > 1.0 { 
-                                queue.push_back(*neighbor_id)
+                                queue.push_back(neighbor_id.clone())
                             }
                         }
                         Neighbor::OffMap(_) => (),
@@ -579,8 +580,8 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                         match neighbor_id {
                             Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
                                 if !used.contains(neighbor_id) {
-                                    queue.push(*neighbor_id);
-                                    _ = used.insert(*neighbor_id);
+                                    queue.push(neighbor_id.clone());
+                                    _ = used.insert(neighbor_id.clone());
                                 }
 
                             }
@@ -610,9 +611,9 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                                 let neighbor = tile_map.try_get(neighbor_id)?;
                                 let elevation = neighbor.elevation;
                                 match min_elevation {
-                                    None => min_elevation = Some((*neighbor_id,elevation)),
+                                    None => min_elevation = Some((neighbor_id.clone(),elevation)),
                                     Some((_,prev_elevation)) => if elevation < prev_elevation {
-                                        min_elevation = Some((*neighbor_id,elevation))
+                                        min_elevation = Some((neighbor_id.clone(),elevation))
                                     }
                                 }
                             }
@@ -640,11 +641,11 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
     }
 }
 
-fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchema, TileForTerrain>, used: &mut HashSet<u64>, start: u64, end: u64, jagged_probability: f64) -> Result<Vec<u64>, CommandError> {
+fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchema, TileForTerrain>, used: &mut HashSet<IdRef>, start: IdRef, end: IdRef, jagged_probability: f64) -> Result<Vec<IdRef>, CommandError> {
     let mut cur_id = start;
     let end_tile = tile_map.try_get(&end)?;
-    let mut range = vec![cur_id];
-    _ = used.insert(cur_id);
+    let mut range = vec![cur_id.clone()];
+    _ = used.insert(cur_id.clone());
     while cur_id != end {
         let mut min = f64::INFINITY;
         let cur_tile = tile_map.try_get(&cur_id)?;
@@ -666,7 +667,7 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
                     };
                     if diff < min {
                         min = diff;
-                        cur_id = *neighbor_id;
+                        cur_id = neighbor_id.clone();
                     }
                 }
                 Neighbor::OffMap(_) => (),
@@ -675,8 +676,8 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
         if min.is_infinite() { // no neighbors at all were found?
             break;
         }
-        range.push(cur_id);
-        _ = used.insert(cur_id);
+        range.push(cur_id.clone());
+        _ = used.insert(cur_id.clone());
     }
     Ok(range)
 
@@ -778,8 +779,8 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
                             if used.contains(neighbor_id) {
                                 continue;
                             }
-                            _ = used.insert(*neighbor_id);
-                            next_queue.push(*neighbor_id);
+                            _ = used.insert(neighbor_id.clone());
+                            next_queue.push(neighbor_id.clone());
                         }
                         Neighbor::OffMap(_) => (),
                     } // else ignore off the map
@@ -890,10 +891,10 @@ impl ProcessTerrainTilesWithPointIndex for Invert {
                     // NOTE: This is where the most time is spent. Removing this and setting switch_tile_id to a constant value 
                     // sped up things about 90%. Of course, it also broke the algorithm.
                     let switch_tile_id = point_index.find_nearest_tile(&switch_point)?;
-                    _ = switches.insert(switch_tile_id, *fid);     
+                    _ = switches.insert(switch_tile_id.clone(), fid.clone());     
                     switch_tile_id               
                 },
-                Some(id) => *id,
+                Some(id) => id.clone(),
             };
 
 
@@ -901,7 +902,7 @@ impl ProcessTerrainTilesWithPointIndex for Invert {
 
             // removing this command did not produce significant speed improvements for this part of the progress,
             // so this isn't adding to the time. (And would have broken the algorithm)
-            inverted_heights.push((*fid, switch_tile.elevation));
+            inverted_heights.push((fid.clone(), switch_tile.elevation));
 
         }
 
@@ -982,7 +983,7 @@ impl ProcessTerrainTiles for Smooth {
             } else {
                 parameters.clamp_elevation(tile.elevation.mul_add(self.fr - 1.0, average) / self.fr)
             };
-            changed_heights.push((*fid,new_height));
+            changed_heights.push((fid.clone(),new_height));
         }
 
         for (fid,elevation) in changed_heights.into_iter().watch(progress, "Writing heights.", "Heights written.") {
@@ -1020,8 +1021,8 @@ impl ProcessTerrainTiles for Erode {
             progress.update(|| update_count);
 
             let elevation = tile.elevation - weathering_amount;
-            tile_list.push(*fid);
-            (*fid,TileForSoil {
+            tile_list.push(fid.clone());
+            (fid.clone(),TileForSoil {
                 site: tile.site.clone(),
                 neighbors: tile.neighbors.clone(),
                 elevation,
@@ -1165,7 +1166,7 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
                                 if neighbor_diff > diff {
                                     found_downslope = true;
                                     diff = neighbor_diff;
-                                    seed_id = *neighbor_id;
+                                    seed_id = neighbor_id.clone();
                                     seed = neighbor;
                                     if seed.elevation < 0.0 {
                                         found = true;
@@ -1221,7 +1222,7 @@ impl ProcessTerrainTiles for FloodOcean {
                         Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
                             let neighbor = tile_map.try_get(&neighbor_id)?;
                             if (neighbor.elevation < 0.0) && !matches!(neighbor.grouping,Grouping::Ocean) {
-                                $queue.push(*neighbor_id)
+                                $queue.push(neighbor_id.clone())
                             }
         
                         } // else it's off the map and unknowable
@@ -1360,7 +1361,7 @@ impl TerrainTask {
     
                 let mut point_index = TileFinder::new(&tile_extents, tile_count, tile_search_radius);
                 let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForTerrain,_>(|fid,tile| {
-                    point_index.add_tile(tile.site.clone(), *fid)
+                    point_index.add_tile(tile.site.clone(), fid.clone())
                 }, progress)?;
     
                 for me in selves {
@@ -1391,19 +1392,19 @@ impl TerrainTask {
     
                     // warn user if a tile was set to ocean that's above 0.
                     if matches!(tile.grouping,Grouping::Ocean) && (tile.elevation > 0.0) {
-                        bad_ocean_tiles_found.push(fid);
+                        bad_ocean_tiles_found.push(fid.clone());
                     }        
     
     
-                    let mut feature = layer.try_feature_by_id(fid)?;
+                    let mut feature = layer.try_feature_by_id(&fid)?;
                     if elevation_changed {
     
                         let elevation = parameters.clamp_elevation(tile.elevation);
                         let elevation_scaled = parameters.scale_elevation(elevation);
         
        
-                        feature.set_elevation(elevation)?;
-                        feature.set_elevation_scaled(elevation_scaled)?;
+                        feature.set_elevation(&elevation)?;
+                        feature.set_elevation_scaled(&elevation_scaled)?;
                     }
                     if grouping_changed {
     

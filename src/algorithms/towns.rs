@@ -29,6 +29,7 @@ use crate::commands::OverwriteTownsArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::TownCountsArg;
 use crate::world_map::Neighbor;
+use crate::world_map::IdRef;
 
 pub(crate) struct ScoredTileForTowns {
     pub(crate) tile: TileForTowns,
@@ -64,7 +65,7 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
             name,
             culture,
             is_capital,
-            tile_id: tile.fid,
+            tile_id: tile.fid.clone(),
             grouping_id: tile.grouping_id,
             population: 0,
             is_port: false
@@ -78,11 +79,11 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
     // Maybe delete it.
     let mut editing_tiles_layer = target.edit_tile_layer()?;
     // I have to update all tiles, otherwise we might have erroneous data from a previous run.
-    let editing_tiles: Vec<u64> = editing_tiles_layer.read_features().watch(progress,"Reading tiles.","Tiles read.").map(|f| f.fid()).collect::<Result<Vec<_>,_>>()?;
+    let editing_tiles: Vec<IdRef> = editing_tiles_layer.read_features().watch(progress,"Reading tiles.","Tiles read.").map(|f| f.fid()).collect::<Result<Vec<_>,_>>()?;
     for fid in editing_tiles {
         let town = placed_towns.get(&fid);
-        let mut tile = editing_tiles_layer.try_feature_by_id(fid)?;
-        tile.set_town_id(town.copied())?;
+        let mut tile = editing_tiles_layer.try_feature_by_id(&fid)?;
+        tile.set_town_id(&town.cloned())?;
         editing_tiles_layer.update_feature(tile)?;
     }
 
@@ -293,7 +294,7 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for town in towns_layer.read_features().into_entities::<TownForPopulation>().watch(progress,"Populating towns.","Towns populated.") {
         let (_,town) = town?;
-        let tile = tile_map.try_get(&(town.tile_id))?;
+        let tile = tile_map.try_get(&town.tile_id)?;
 
         // figure out if it's a port
         let port_location = if let Some(closest_water) = &tile.harbor_tile_id {
@@ -303,13 +304,13 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
                     // add it to the map of towns by feature for removing port status later.
                     match coastal_towns.get_mut(&harbor.grouping_id) {
-                        None => _ = coastal_towns.insert(harbor.grouping_id, vec![town.fid]),
-                        Some(entry) => entry.push(town.fid),
+                        None => _ = coastal_towns.insert(harbor.grouping_id.clone(), vec![town.fid.clone()]),
+                        Some(entry) => entry.push(town.fid.clone()),
                     }
         
                     // no ports if the water is frozen
                     if harbor.temperature > 0.0 {
-                        let on_large_water = if let Some(lake_id) = harbor.lake_id {
+                        let on_large_water = if let Some(lake_id) = &harbor.lake_id {
                             // don't make it a port if the lake is only 1 tile big
                             let lake = lake_map.try_get(&(lake_id))?;
                             lake.size > 1
@@ -384,12 +385,12 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
     }
 
     for (fid,town) in town_details.into_iter().watch(progress,"Writing town details.","Town details written.") {
-        let mut town_feature = towns_layer.try_feature_by_id(fid)?;
+        let mut town_feature = towns_layer.try_feature_by_id(&fid)?;
         if let Some(new_location) = town.new_location {
             town_feature.move_to(&new_location)?;
         }
-        town_feature.set_population(town.population)?;
-        town_feature.set_is_port(town.is_port)?;
+        town_feature.set_population(&town.population)?;
+        town_feature.set_is_port(&town.is_port)?;
         towns_layer.update_feature(town_feature)?;
     }
 

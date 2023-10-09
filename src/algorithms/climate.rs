@@ -19,6 +19,7 @@ use crate::commands::PrecipitationArg;
 use crate::progress::WatchableQueue;
 use crate::world_map::NeighborAndDirection;
 use crate::world_map::Neighbor;
+use crate::world_map::IdRef;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, temperatures: &TemperatureRangeArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -136,12 +137,11 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
         };
         let temp = (adabiatic_temp*100.0).round()/100.0;
 
-        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
-            working_feature.set_temperature(temp)?;
+        let mut working_feature = layer.try_feature_by_id(&feature.fid)?; 
+        
+        working_feature.set_temperature(&temp)?;
 
-            layer.update_feature(working_feature)?;
-
-        }
+        layer.update_feature(working_feature)?;
 
 
 
@@ -165,12 +165,11 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         let wind_dir = Deg(winds.get(&ordered_float::OrderedFloat(feature.site_y)).copied().unwrap_or(90) as f64);
  
-        if let Some(mut working_feature) = layer.feature_by_id(feature.fid) {
-            working_feature.set_wind(wind_dir)?;
+        let mut working_feature = layer.try_feature_by_id(&feature.fid)?;
+        
+        working_feature.set_wind(&wind_dir)?;
 
-            layer.update_feature(working_feature)?;
-
-        }
+        layer.update_feature(working_feature)?;
 
 
     }
@@ -231,11 +230,11 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     let mut visited = HashSet::new();
 
     // I can't work on the tiles map while also iterating it, so I have to copy the keys
-    let mut working_queue: Vec<(u64,Option<f64>,u64)> = tile_map.keys().map(|id| (*id,None,*id)).collect();
+    let mut working_queue: Vec<(IdRef,Option<f64>,IdRef)> = tile_map.keys().map(|id| (id.clone(),None,id.clone())).collect();
     // The order of the tiles changes the results, so make sure they are always in the same order to 
     // keep the results reproducible. I know this seems OCD, but it's important if anyone wants
     // to test things.
-    working_queue.sort_by_key(|(id,_,_)| *id);
+    working_queue.sort_by_cached_key(|(id,_,_)| id.clone());
     let mut working_queue = working_queue.watch_queue(progress,"Tracing winds.","Winds traced.");
 
     while let Some((tile_id,humidity,start_id)) = working_queue.pop() {
@@ -286,7 +285,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                 let humidity = humidity/best_neighbors.len() as f64;
 
                 for next_fid in best_neighbors {
-                    if !visited.insert((start_id,next_fid.clone())) {
+                    if !visited.insert((start_id.clone(),next_fid.clone())) {
                         continue;
                         // set already contained the value, so we've reached one we've already visited, I don't want to go in circles.
                     } 
@@ -305,7 +304,7 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
                             let real_next = tile_map.try_get_mut(&next_fid)?;
                             real_next.precipitation = next.precipitation;
                 
-                            working_queue.push((next_fid,Some(humidity),start_id));                        
+                            working_queue.push((next_fid,Some(humidity),start_id.clone()));                        
                         }
                         Neighbor::OffMap(_) => {
                             // the humidity spreads off of the map
@@ -330,12 +329,11 @@ pub(crate) fn generate_precipitation<Progress: ProgressObserver>(target: &mut Wo
     }
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing precipitation.","Precipitation written.") {
-        if let Some(mut working_feature) = layer.feature_by_id(*fid) {
+        let mut working_feature = layer.try_feature_by_id(fid)?; 
+        
+        working_feature.set_precipitation(&tile.precipitation)?;
 
-            working_feature.set_precipitation(tile.precipitation)?;
-
-            layer.update_feature(working_feature)?;
-        }
+        layer.update_feature(working_feature)?;
 
 
     }

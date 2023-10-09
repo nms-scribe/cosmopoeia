@@ -322,14 +322,14 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     
     for culture in cultures {
 
-        _ = culture_centers.insert(culture.center_tile_id);
+        _ = culture_centers.insert(culture.center_tile_id.clone());
 
         // place the culture center
-        let tile = tile_map.try_get_mut(&(culture.center_tile_id))?;
+        let tile = tile_map.try_get_mut(&culture.center_tile_id)?;
         tile.culture = Some(culture.name.clone());
 
         // add the tile to the queue for work.
-        _ = queue.push((culture.center_tile_id,culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        _ = queue.push((culture.center_tile_id.clone(),culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -387,10 +387,10 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                         if replace_culture {
                             // even if there's no population in the tile, if we can spread to it, mark it as the cultures.
                             // Otherwise, we get some "empty" areas around lakes.
-                            place_cultures.push((*neighbor_id,culture.name.clone()));
-                            _ = costs.insert(*neighbor_id, total_cost);
+                            place_cultures.push((neighbor_id.clone(),culture.name.clone()));
+                            _ = costs.insert(neighbor_id.clone(), total_cost);
 
-                            queue.push((*neighbor_id, culture.clone(), culture_biome.clone()), Reverse(total_cost));
+                            queue.push((neighbor_id.clone(), culture.clone(), culture_biome.clone()), Reverse(total_cost));
 
                         } // else we can't expand into this tile, and this line of spreading ends here.
                     } else {
@@ -431,9 +431,9 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing cultures.","Cultures written.") {
 
-        let mut feature = tiles.try_feature_by_id(*fid)?;
+        let mut feature = tiles.try_feature_by_id(fid)?;
 
-        feature.set_culture(tile.culture.as_deref())?;
+        feature.set_culture(&tile.culture)?;
 
         tiles.update_feature(feature)?;
 

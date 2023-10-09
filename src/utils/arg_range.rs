@@ -137,7 +137,7 @@ where <NumberType as FromStr>::Err: Display {
 
             let first = first.parse().map_err(|e| CommandError::InvalidRangeArgument(s.to_owned(),format!("{e}")))?;
             let last = last.parse().map_err(|e| CommandError::InvalidRangeArgument(s.to_owned(),format!("{e}")))?;
-            if first >= last {
+            if first > last {
                 return Err(CommandError::InvalidRangeArgument(s.to_owned(),"First number must be less than last.".to_owned()))
             }
 

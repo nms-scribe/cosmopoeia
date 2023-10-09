@@ -8,6 +8,7 @@ use crate::world_map::Grouping;
 use crate::errors::CommandError;
 use crate::world_map::NeighborAndDirection;
 use crate::world_map::Neighbor;
+use crate::world_map::IdRef;
 
 pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -31,8 +32,8 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
         // However, there is no guarantee that it won't (and almost assured it won't) overlap with the other id
         // numbers. Keeping them separate will simplify some algorithms, as otherwise I'd have to check both the
         // grouping and grouping_id to make sure I'm looking in the right place.
-        let grouping_id = next_grouping_id.next().expect("Why would an unlimited range fail?");
-        let mut group = vec![fid];
+        let grouping_id = IdRef::new(next_grouping_id.next().expect("Why would an unlimited range fail?"));
+        let mut group = vec![fid.clone()];
         let mut neighbors = tile.neighbors.clone();
 
         let grouping_type = if tile.grouping.is_ocean() {
@@ -46,7 +47,7 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                         if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
                             if neighbor.grouping.is_ocean() {
                                 // it's part of the same group
-                                _ = ocean.insert(neighbor_fid); // insert it into oceans so we can check whether an island is a lake island or not.
+                                _ = ocean.insert(neighbor_fid.clone()); // insert it into oceans so we can check whether an island is a lake island or not.
                                 neighbors.extend(neighbor.neighbors.iter().cloned());
                                 _ = table.try_remove(&neighbor_fid)?;
                                 group.push(neighbor_fid);
@@ -127,9 +128,9 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
 
     for (grouping,grouping_id,group) in groupings.iter().watch(progress,"Writing grouping types.","Grouping types written.") {
         for tile in group {
-            let mut feature = tiles.try_feature_by_id(*tile)?;
+            let mut feature = tiles.try_feature_by_id(&tile)?;
             feature.set_grouping(grouping)?;
-            feature.set_grouping_id(*grouping_id)?;
+            feature.set_grouping_id(&grouping_id.clone())?;
             tiles.update_feature(feature)?;
         }
     }

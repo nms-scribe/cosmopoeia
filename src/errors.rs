@@ -9,6 +9,7 @@ use gdal::vector::geometry_type_to_name;
 pub(crate) use clap::error::Error as ArgumentError;
 use crate::utils::edge::Edge;
 use crate::utils::simple_serde::Token;
+use crate::world_map::IdRef;
 
 #[derive(Debug,Clone)]
 pub enum CommandError {
@@ -18,7 +19,7 @@ pub enum CommandError {
     FloatIsNan,
     MissingField(&'static str),
     MissingGeometry(&'static str),
-    MissingFeature(&'static str,u64),
+    MissingFeature(&'static str,IdRef),
     InvalidValueForIdList(String,String),
     InvalidValueForNeighborDirections(String,String),
     InvalidValueForIdRef(String,String), 
@@ -43,7 +44,7 @@ pub enum CommandError {
     CultureSourceRead(String),
     CultureSourceWrite(String),
     PointFinderOutOfBounds(f64,f64),
-    CantFindMiddlePoint(u64,u64,usize),
+    CantFindMiddlePoint(IdRef,IdRef,usize),
     RasterDatasetRequired,
     UnsupportedRasterSourceBand(GdalDataType),
     MaxElevationMustBePositive(f64),
@@ -72,7 +73,7 @@ pub enum CommandError {
     InvalidValueForNeighbor(String,String),
     InvalidValueForNeighborList(String,String),
     InvalidValueForEdge(String,String),
-    CantFindMiddlePointOnEdge(u64, Edge, usize),
+    CantFindMiddlePointOnEdge(IdRef, Edge, usize),
     InvalidNumberInSerializedValue(String,String),
     InvalidStringInSerializedValue(String),
     InvalidCharacterInSerializedValue(char),

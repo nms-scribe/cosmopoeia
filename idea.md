@@ -297,16 +297,26 @@ To proceed on this, I can break it down into the following steps:
 [X] Work on "Simple Pre-release Tasks" below
 [X] Work on "Complex Pre-release Tasks" below
 [ ] Documentation
-    [ ] It's possible to have a separate executable in a bin/<name>.rs file which would give alternate access to code. Create a cosmopoeia-docs command there, perhaps. This will auto-generate some of the docs to a docs subfolder. Should look at github to see where the best place to put this is, though.
+    [-] It's possible to have a separate executable in a bin/<name>.rs file which would give alternate access to code. Create a cosmopoeia-docs command there, perhaps. This will auto-generate some of the docs to a docs subfolder. Should look at github to see where the best place to put this is, though.
     [ ] I need to document:
-        [..] Command line: There are clap-markdown crates or something like that
-        [ ] Database Schema: I might could put some rudimentary "Schema description" function in the layer macro which let's me write the documentation metadata to a function.
-        [ ] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file
-        [ ] Namer files
-        [ ] Culture set files
+        [X] Command line: There are clap-markdown crates or something like that
+        [-] Database Schema: I might could put some rudimentary "Schema description" function in the layer macro which let's me write the documentation metadata to a function.
+            [X] Replace the current "Serialization Documentation" with a simple PropertyType Documentation trait that would be impld on every field type.
+            [X] In fact, if I had a TypedField trait I could possibly get away with getting rid of all the get_field... macros
+                [X] implemented GetTypedField for f64, test and then finish the others
+                [X] SetTypedField is a separate trait because we can use references to set some values, so we can implement for Borrowed
+                [X] Add get_field_value for SetTypedField?
+        [ ] Terrain recipes should use the enum tag under a "task" key alongside their properties, instead of the currently object key form. Same for the other ones if they're not already.
+        [ ] I might need to do something similar to what I'm doing for serialization here. Call it JSONDoc or something, where I have to specify field names and enum variants in a macro in order to get what I want, using a trait.
+            [ ] I think I can use the following: https://docs.rs/schemars/latest/schemars/
+            [ ] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file
+            [ ] Namer files
+            [ ] Culture set files
         [ ] The QGIS file?
         [ ] How to get started
+    [ ] The docs command should write each of the docs to a separate directory.
     [ ] Can I set it up so it shows up as a wiki on github?
+    [ ] Need to edit the content on all of the above.
     [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
     [ ] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool. It's predecessors were designed for generating lots of random maps over and over. This is designed for generating a few maps, which you can then modify in external tools as you need.
     [ ] Make sure it's clear that, although the algorithms were inspired by AFMG, the tool is not guaranteed to, and indeed not designed to, behave exactly the same in regards to output given the same output parameters.
@@ -334,6 +344,7 @@ To proceed on this, I can break it down into the following steps:
     * According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
     * According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
     * According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
+[ ] As I have approval, move the recipes and things like that from AFMG into /share
 [ ] Set up private github repository for now.
 [ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)

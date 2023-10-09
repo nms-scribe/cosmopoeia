@@ -84,6 +84,7 @@ impl Edge {
     }
 }
 
+
 impl_simple_serde_tagged_enum!{
     Edge {
         North,
@@ -94,6 +95,5 @@ impl_simple_serde_tagged_enum!{
         Southwest,
         West,
         Northwest
-
     }
 }

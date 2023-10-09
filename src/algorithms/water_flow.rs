@@ -10,10 +10,11 @@ use crate::world_map::EntityIndex;
 use crate::world_map::TileSchema;
 use super::tiles::find_lowest_tile;
 use crate::world_map::Neighbor;
+use crate::world_map::IdRef;
 
 pub(crate) struct WaterFlowResult  { 
     pub(crate) tile_map: EntityIndex<TileSchema,TileForWaterFill>, 
-    pub(crate) lake_queue: Vec<(u64,f64)> 
+    pub(crate) lake_queue: Vec<(IdRef,f64)> 
 }
 
 pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<WaterFlowResult,CommandError> {
@@ -29,7 +30,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForWaterflow,_>(|fid,tile| {
         if !tile.grouping.is_ocean() {
             // pushing the elevation onto here is easier than trying to map out the elevation during the sort, 
-            tile_list.push((*fid,tile.elevation));
+            tile_list.push((fid.clone(),tile.elevation));
         }
 
         Ok(())
@@ -74,7 +75,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
                 }
                 (0.0,lowest)
             } else {
-                lake_queue.push((*fid,water_flow));
+                lake_queue.push((fid.clone(),water_flow));
                 (water_flow,Vec::new())
             }
 
@@ -91,14 +92,13 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing flow.","Flow written.") {
-        if let Some(mut working_feature) = layer.feature_by_id(*fid) {
+        let mut working_feature = layer.try_feature_by_id(fid)?;
+        
+        working_feature.set_water_flow(&tile.water_flow)?;
+        working_feature.set_water_accumulation(&tile.water_accumulation)?;
+        working_feature.set_flow_to(&tile.flow_to)?;
 
-            working_feature.set_water_flow(tile.water_flow)?;
-            working_feature.set_water_accumulation(tile.water_accumulation)?;
-            working_feature.set_flow_to(&tile.flow_to)?;
-
-            layer.update_feature(working_feature)?;
-        }
+        layer.update_feature(working_feature)?;
 
 
     }
