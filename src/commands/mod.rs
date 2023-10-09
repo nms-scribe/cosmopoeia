@@ -9,6 +9,7 @@ use serde::Deserialize;
 use paste::paste;
 use ordered_float::OrderedFloat;
 use rangemap::RangeMap;
+use schemars::JsonSchema;
 
 
 use crate::errors::CommandError;
@@ -148,14 +149,14 @@ pub struct TargetArg {
 
 }
 
-#[derive(Args,Serialize,Deserialize)]
+#[derive(Args,Serialize,Deserialize,JsonSchema)]
 pub struct ElevationSourceArg {
     /// The path to the heightmap containing the elevation data
     pub source: PathBuf,
 
 }
 
-#[derive(Args,Serialize,Deserialize)]
+#[derive(Args,Serialize,Deserialize,JsonSchema)]
 pub struct OceanSourceArg {
     /// The path to the heightmap containing the ocean data
     pub source: PathBuf,

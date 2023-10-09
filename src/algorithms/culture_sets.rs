@@ -11,6 +11,7 @@ use serde_json::Serializer as JSONSerializer;
 use serde_json::from_reader as from_json_reader;
 use rand::Rng;
 use ordered_float::OrderedFloat;
+use schemars::JsonSchema;
 
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
@@ -18,7 +19,7 @@ use crate::utils::random::RandomIndex;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::TileForCulturePrefSorting;
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,Serialize,Deserialize,JsonSchema)]
 pub(crate) enum TilePreference {
     // s[i] -> Habitability
     Habitability, 
@@ -100,7 +101,7 @@ impl TilePreference {
 
 
 // NOTE: The serialization of this and CultureSetItem should be almost the same (except that no fields are optional in CultureSetItem, and count is only on this one)
-#[derive(Deserialize,Clone)]
+#[derive(Deserialize,Clone,JsonSchema)]
 pub(crate) struct CultureSetItemSource {
     name: Option<String>,
     namer: Option<String>,

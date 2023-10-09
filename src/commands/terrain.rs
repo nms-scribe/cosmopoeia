@@ -11,6 +11,7 @@ use serde::Serialize;
 use serde::Deserialize;
 use serde_json::from_reader as from_json_reader;
 use serde_json::to_string_pretty as to_json_string_pretty;
+use schemars::JsonSchema;
 
 use crate::commands::Task;
 use crate::world_map::WorldMap;
@@ -37,7 +38,7 @@ use crate::commands::RandomSeedArg;
 subcommand_def!{
 
     /// Processes a series of pre-saved tasks
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Recipe {
 
         #[arg(long)]
@@ -67,7 +68,7 @@ impl LoadTerrainTask for Recipe {
 subcommand_def!{
 
     /// Randomly chooses a recipe from a set of named recipes and follows it
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct RecipeSet {
 
         #[arg(long)]
@@ -116,7 +117,7 @@ impl LoadTerrainTask for RecipeSet {
 subcommand_def!{
 
     /// Clears all elevations to 0 and all groupings to "Continent". This is an alias for Multiplying all height by 0.0.
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Clear{}
     
 }
@@ -138,7 +139,7 @@ impl LoadTerrainTask for Clear {
 subcommand_def!{
 
     /// Inverts the heights across the entier map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Multiply {
         #[arg(long)]
         pub height_filter: Option<ArgRange<i8>>, 
@@ -162,7 +163,7 @@ impl LoadTerrainTask for Multiply {
 subcommand_def!{
 
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct ClearOcean{}
     
 }
@@ -181,7 +182,7 @@ impl LoadTerrainTask for ClearOcean {
 subcommand_def!{
 
     /// Adds a uniform amount of random noise to the map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct RandomUniform{
 
         #[arg(long)]
@@ -206,7 +207,7 @@ impl LoadTerrainTask for RandomUniform {
 subcommand_def!{
 
     /// Adds hills or pits to a certain area of the map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct AddHill {
 
         #[arg(long)]
@@ -235,7 +236,7 @@ impl LoadTerrainTask for AddHill {
 subcommand_def!{
 
     /// Adds a range of heights or a trough to a certain area of a map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct AddRange {
         #[arg(long)]
         pub count: ArgRange<usize>,
@@ -256,7 +257,7 @@ impl LoadTerrainTask for AddRange {
 }
 
 
-#[derive(Clone,Deserialize,Serialize,ValueEnum)]
+#[derive(Clone,Deserialize,Serialize,ValueEnum,JsonSchema)]
 pub enum StraitDirection {
     Horizontal,
     Vertical
@@ -266,7 +267,7 @@ subcommand_def!{
 
     /// Adds a long cut somewhere on the map
 
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct AddStrait { 
         #[arg(long)]
         pub width: ArgRange<f64>,
@@ -288,7 +289,7 @@ impl LoadTerrainTask for AddStrait {
 subcommand_def!{
 
     /// Changes the heights based on their distance from the edge of the map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Mask {
         #[arg(long,default_value="1")]
         pub power: f64
@@ -304,7 +305,7 @@ impl LoadTerrainTask for Mask {
 
 }
 
-#[derive(Clone,Deserialize,Serialize,ValueEnum)]
+#[derive(Clone,Deserialize,Serialize,ValueEnum,JsonSchema)]
 pub enum InvertAxes {
     X,
     Y,
@@ -314,7 +315,7 @@ pub enum InvertAxes {
 subcommand_def!{
 
     /// Inverts the heights across the entire map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Invert {
         #[arg(long)]
         pub probability: f64, 
@@ -338,7 +339,7 @@ impl LoadTerrainTask for Invert {
 subcommand_def!{
 
     /// Inverts the heights across the entier map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Add {
         #[arg(long)]
         pub height_filter: Option<ArgRange<i8>>, 
@@ -362,7 +363,7 @@ impl LoadTerrainTask for Add {
 subcommand_def!{
 
     /// Smooths elevations by averaging the value against it's neighbors.
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Smooth {
         #[arg(long,default_value="2")]
         pub fr: f64
@@ -382,7 +383,7 @@ impl LoadTerrainTask for Smooth {
 
 subcommand_def!{
     /// Runs an erosion process on the map
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Erode {
         #[arg(long,default_value="1000")]
         /// Maximum amount of "soil" in meters to weather off of the elevation before erosion (Actual amount calculated based on slope)
@@ -405,7 +406,7 @@ impl LoadTerrainTask for Erode {
 subcommand_def!{
 
     /// Sets random points in an area to ocean if they are below sea level (Use FloodOcean to complete the process)
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct SeedOcean {
         #[arg(long)]
         pub count: ArgRange<usize>,
@@ -431,7 +432,7 @@ impl LoadTerrainTask for SeedOcean {
 subcommand_def!{
 
     /// Finds tiles that are marked as ocean and marks all neighbors that are below sea level as ocean, until no neighbors below sea level can be found.
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct FloodOcean{}
     
 }
@@ -450,7 +451,7 @@ impl LoadTerrainTask for FloodOcean {
 subcommand_def!{
 
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct FillOcean{}
     
 }
@@ -469,7 +470,7 @@ impl LoadTerrainTask for FillOcean {
 subcommand_def!{
 
     /// Sets tiles to ocean by sampling data from a heightmap. If value in heightmap is less than specified elevation, it becomes ocean.
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct SampleOceanBelow {
 
         #[clap(flatten)]
@@ -497,7 +498,7 @@ impl LoadTerrainTask for SampleOceanBelow {
 subcommand_def!{
 
     /// Sets tiles to ocean by sampling data from a heightmap. If data in heightmap is not nodata, the tile becomes ocean.
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct SampleOceanMasked {
 
         #[clap(flatten)]
@@ -522,7 +523,7 @@ impl LoadTerrainTask for SampleOceanMasked {
 subcommand_def!{
 
     /// Replaces elevations by sampling from a heightmap
-    #[derive(Deserialize,Serialize)]
+    #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct SampleElevation {
 
         #[clap(flatten)]
@@ -542,7 +543,7 @@ impl LoadTerrainTask for SampleElevation {
 }
 
 
-#[derive(Deserialize,Serialize,Subcommand)]
+#[derive(Deserialize,Serialize,Subcommand,JsonSchema)]
 #[command(disable_help_subcommand(true))]
 #[serde(tag="task")]
 pub enum Command {

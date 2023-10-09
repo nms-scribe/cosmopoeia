@@ -1,10 +1,19 @@
 use core::fmt::Display;
 use core::str::FromStr;
+use std::collections::BTreeMap;
 
 use serde::Serialize;
 use serde::Deserialize;
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
+use schemars::JsonSchema;
+use schemars::gen::SchemaGenerator;
+use schemars::schema::Schema;
+use schemars::schema::SchemaObject;
+use schemars::schema::Metadata;
+use schemars::schema::StringValidation;
+use schemars::schema::SingleOrVec;
+use schemars::schema::InstanceType;
 
 use crate::errors::CommandError;
 
@@ -161,5 +170,42 @@ impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
             Self::Exclusive(min,max) => write!(f,"{min}..{max}"),
             Self::Single(single) => write!(f,"{single}"),
         }
+    }
+}
+
+impl<NumberType: JsonSchema> JsonSchema for ArgRange<NumberType> {
+    fn schema_name() -> String {
+        format!("ArgRange_{}",NumberType::schema_name())
+    }
+
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        // TODO: Can I use the SchemaGenerator to generate something with the following properties instead?
+        Schema::Object(SchemaObject {
+            metadata: Some(Metadata {
+                id: None,
+                title: None,
+                description: Some("A string value representing a range of numbers.".to_owned()),
+                default: None,
+                deprecated: false,
+                read_only: false,
+                write_only: false,
+                examples: Vec::new(),
+            }.into()),
+            instance_type: Some(SingleOrVec::Single(InstanceType::String.into())),
+            format: None,
+            enum_values: None,
+            const_value: None,
+            subschemas: None,
+            number: None,
+            string: Some(StringValidation {
+                max_length: None,
+                min_length: None,
+                pattern: Some("\\d+(\\.\\d+)?(\\.\\.=?\\d+(\\.\\d+)?)?".to_owned()),
+            }.into()),
+            array: None,
+            object: None,
+            reference: None,
+            extensions: BTreeMap::new(),
+        })
     }
 }

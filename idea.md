@@ -310,6 +310,7 @@ To proceed on this, I can break it down into the following steps:
         [ ] I might need to do something similar to what I'm doing for serialization here. Call it JSONDoc or something, where I have to specify field names and enum variants in a macro in order to get what I want, using a trait.
             [ ] I think I can use the following: https://docs.rs/schemars/latest/schemars/
                 [ ] doc tags are under metadata.description
+            [ ] There might be tools to generate markdown, search for on internet: json schema to markdown
             [ ] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file
             [ ] Namer files
             [ ] Culture set files

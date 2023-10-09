@@ -1,6 +1,7 @@
 use clap::Args;
 use clap_markdown::print_help_markdown;
 use indexmap::IndexMap;
+use schemars::schema_for;
 
 // I was going to put this in a separate binary, but doing so would require that some of the code by pub instead of pub(crate). As I'm currently only considering commands and errors to be pub, that would be a problem, even if I'm not supporting a stable API.
 use crate::Cosmopoeia;
@@ -21,6 +22,9 @@ use crate::world_map::document_coastline_layer;
 use crate::world_map::document_ocean_layer;
 use crate::world_map::document_property_layer;
 use crate::world_map::FieldTypeDocumentation;
+use crate::commands::terrain::Command as TerrainCommand;
+use crate::algorithms::culture_sets::CultureSetItemSource;
+use crate::algorithms::naming::NamerSource;
 
 fn list_schemas() -> Result<Vec<LayerDocumentation>,CommandError> {
     Ok(vec![
@@ -54,7 +58,7 @@ fn map_field_types(field_type: &FieldTypeDocumentation, map: &mut IndexMap<Strin
     name
 }
 
-fn write_schema_docs() -> Result<(),CommandError> {
+fn write_world_file_schema_docs() -> Result<(),CommandError> {
     println!("# World File Schema");
 
     let mut formats = IndexMap::new();
@@ -103,7 +107,25 @@ subcommand_def!{
 impl Task for Docs {
     fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
         print_help_markdown::<Cosmopoeia>();
-        write_schema_docs()?;
+        write_world_file_schema_docs()?;
+        write_terrain_task_schema_docs()?;
+        write_culture_schema_docs()?;
+        write_namer_schema_docs()?;
         Ok(())
     }
+}
+
+fn write_namer_schema_docs() -> Result<(),CommandError> {
+    println!("{}",serde_json::to_string_pretty(&schema_for!(TerrainCommand)).map_err(|e| CommandError::TerrainProcessWrite(format!("Error writing schema for terrains: ({e}).")))?);
+    Ok(())
+}
+
+fn write_culture_schema_docs() -> Result<(),CommandError> {
+    println!("{}",serde_json::to_string_pretty(&schema_for!(CultureSetItemSource)).map_err(|e| CommandError::TerrainProcessWrite(format!("Error writing schema for terrains: ({e}).")))?);
+    Ok(())
+}
+
+fn write_terrain_task_schema_docs() -> Result<(),CommandError> {
+    println!("{}",serde_json::to_string_pretty(&schema_for!(NamerSource)).map_err(|e| CommandError::TerrainProcessWrite(format!("Error writing schema for terrains: ({e}).")))?);
+    Ok(())
 }

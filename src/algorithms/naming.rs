@@ -14,6 +14,8 @@ use serde::Serialize;
 use serde::Deserialize;
 use serde_json::Serializer as JSONSerializer;
 use serde_json::from_reader as from_json_reader;
+use schemars::JsonSchema;
+
 
 // NOTE: *** I'M NOT GOING TO LOAD THE NAMER OR CULTURE STUFF INTO THE DATABASE. Instead, I hope to provide some default data in the `share` directory.
 
@@ -75,7 +77,7 @@ const fn is_vowel(c: char) -> bool {
     is_ref_vowel(&c)
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,Serialize,Deserialize,JsonSchema)]
 enum StateNameBehavior {
     TrimSuffixes(Vec<String>), // if any of the specified strings appear at the end, get rid of them.
     TrimSuffixesIfLonger(Vec<String>,usize), // if any of the specified strings appear at the end, get rid of them if the word is longer than a specific size
@@ -135,7 +137,7 @@ impl StateNameBehavior {
     }
 }
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone,Serialize,Deserialize,JsonSchema)]
 enum StateSuffixBehavior {
     NoSuffix, // do not apply any suffix, not even the default one
     Default,
@@ -179,14 +181,14 @@ impl StateSuffixBehavior {
     }
 }
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize,Deserialize,JsonSchema)]
 struct MarkovSource {
     duplicatable_letters: Vec<char>,
     seed_words: Vec<String>,
 }
 
 
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize,Deserialize,JsonSchema)]
 #[serde(tag="method")]
 enum NamerMethodSource {
     Markov(MarkovSource),
@@ -194,8 +196,8 @@ enum NamerMethodSource {
 }
 
 
-#[derive(Serialize,Deserialize)] 
-struct NamerSource {
+#[derive(Serialize,Deserialize,JsonSchema)] 
+pub(crate) struct NamerSource {
     name: String,
     #[serde(flatten)]
     method: NamerMethodSource,
