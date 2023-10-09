@@ -22,6 +22,7 @@ qutee = "0.1.1"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 rangemap = "1.4.0"
+schemars = "0.8.15"
 serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 

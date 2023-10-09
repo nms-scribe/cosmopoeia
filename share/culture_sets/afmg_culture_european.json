@@ -1,0 +1,277 @@
+[
+    {
+        "name": "Shwazen",
+        "namer": "German",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 10.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Temperate deciduous forest",
+                            "Temperate rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Angshire",
+        "namer": "English",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 10.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Luari",
+        "namer": "French",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 12.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Temperate deciduous forest",
+                            "Temperate rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Tallian",
+        "namer": "Italian",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Astellian",
+        "namer": "Castillian",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 16.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Slovan",
+        "namer": "Ruthenian",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 6.0
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Norse",
+        "namer": "Nordic",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 5.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Elladan",
+        "namer": "Greek",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Romian",
+        "namer": "Roman",
+        "probability": 0.2,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Soumi",
+        "namer": "Finnic",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 5.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Taiga"
+                                ],
+                                4.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Portuzian",
+        "namer": "Portuguese",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 17.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Vengrian",
+        "namer": "Hungarian",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 11.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Grassland"
+                                ],
+                                4.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Turchian",
+        "namer": "Turkish",
+        "probability": 0.05,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 14.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Euskati",
+        "namer": "Basque",
+        "probability": 0.05,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 15.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Keltan",
+        "namer": "Celtic",
+        "probability": 0.05,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 11.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Temperate deciduous forest",
+                                    "Temperate rainforest"
+                                ],
+                                4.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    }
+]

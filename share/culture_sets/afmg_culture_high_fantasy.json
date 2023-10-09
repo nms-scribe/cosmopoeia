@@ -1,0 +1,292 @@
+[
+    {
+        "name": "Quenian (Elfish)",
+        "namer": "Elven",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Biomes": [
+                                [
+                                    "Temperate deciduous forest",
+                                    "Tropical rainforest",
+                                    "Temperate rainforest",
+                                    "Taiga"
+                                ],
+                                10.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Eldar (Elfish)",
+        "namer": "Elven",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Biomes": [
+                                [
+                                    "Temperate deciduous forest",
+                                    "Tropical rainforest",
+                                    "Temperate rainforest",
+                                    "Taiga"
+                                ],
+                                10.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Trow (Dark Elfish)",
+        "namer": "Dark Elven",
+        "probability": 0.9,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Biomes": [
+                                [
+                                    "Tropical rainforest",
+                                    "Temperate rainforest",
+                                    "Taiga",
+                                    "Wetland"
+                                ],
+                                10.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Lothian (Dark Elfish)",
+        "namer": "Dark Elven",
+        "probability": 0.3,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Biomes": [
+                                [
+                                    "Tropical rainforest",
+                                    "Temperate rainforest",
+                                    "Taiga",
+                                    "Wetland"
+                                ],
+                                10.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Dunirr (Dwarven)",
+        "namer": "Dwarven",
+        "probability": 1.0,
+        "preferences": {
+            "Add": [
+                "NormalizedHabitability",
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Khazadur (Dwarven)",
+        "namer": "Dwarven",
+        "probability": 1.0,
+        "preferences": {
+            "Add": [
+                "NormalizedHabitability",
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Kobold (Goblin)",
+        "namer": "Goblin",
+        "probability": 1.0,
+        "preferences": {
+            "Add": [
+                "ShoreDistance",
+                {
+                    "Negate": "Habitability"
+                }
+            ]
+        }
+    },
+    {
+        "name": "Uruk (Orkish)",
+        "namer": "Orc",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                "Elevation",
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Ugluk (Orkish)",
+        "namer": "Orc",
+        "probability": 0.5,
+        "preferences": {
+            "Divide": [
+                {
+                    "Multiply": [
+                        "Elevation",
+                        "ShoreDistance"
+                    ]
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Hot desert",
+                            "Cold desert",
+                            "Tundra",
+                            "Glacier"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Yotunn (Giants)",
+        "namer": "Giant",
+        "probability": 0.7,
+        "preferences": {
+            "Temperature": -10.0
+        }
+    },
+    {
+        "name": "Rake (Drakonic)",
+        "namer": "Draconic",
+        "probability": 0.7,
+        "preferences": {
+            "Negate": "Habitability"
+        }
+    },
+    {
+        "name": "Arago (Arachnid)",
+        "namer": "Arachnid",
+        "probability": 0.7,
+        "preferences": {
+            "Add": [
+                "ShoreDistance",
+                {
+                    "Negate": "Habitability"
+                }
+            ]
+        }
+    },
+    {
+        "name": "Aj'Snaga (Serpents)",
+        "namer": "Serpents",
+        "probability": 0.7,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Biomes": [
+                        [
+                            "Wetland"
+                        ],
+                        10.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Anor (Human)",
+        "namer": "Human Generic",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 10.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Dail (Human)",
+        "namer": "Human Generic",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 13.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Rohand (Human)",
+        "namer": "Turkish",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 16.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Dulandir (Human)",
+        "namer": "Mongolian",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 5.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Cold desert",
+                                    "Grassland",
+                                    "Tundra"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    }
+]

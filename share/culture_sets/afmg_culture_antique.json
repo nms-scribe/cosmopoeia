@@ -1,0 +1,315 @@
+[
+    {
+        "name": "Roman",
+        "namer": "Roman",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 14.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Roman",
+        "namer": "Roman",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Roman",
+        "namer": "Roman",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 16.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Roman",
+        "namer": "Roman",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 17.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Hellenic",
+        "namer": "Greek",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        },
+                        {
+                            "OceanCoast": 4.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Hellenic",
+        "namer": "Greek",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 19.0
+                        },
+                        {
+                            "OceanCoast": 4.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Macedonian",
+        "namer": "Greek",
+        "probability": 0.5,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 12.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Celtic",
+        "namer": "Celtic",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Pow": [
+                        {
+                            "Temperature": 11.0
+                        },
+                        0.5
+                    ]
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Temperate deciduous forest",
+                            "Temperate rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Germanic",
+        "namer": "German",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Pow": [
+                        {
+                            "Temperature": 10.0
+                        },
+                        0.5
+                    ]
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Temperate deciduous forest",
+                            "Temperate rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Persian",
+        "namer": "Iranian",
+        "probability": 0.8,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Scythian",
+        "namer": "Iranian",
+        "probability": 0.5,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Pow": [
+                        {
+                            "Temperature": 11.0
+                        },
+                        0.5
+                    ]
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Grassland"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Cantabrian",
+        "namer": "Basque",
+        "probability": 0.5,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 16.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Estian",
+        "namer": "Finnic",
+        "probability": 0.2,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 5.0
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Carthaginian",
+        "namer": "Levantine",
+        "probability": 0.3,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 20.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Hebrew",
+        "namer": "Levantine",
+        "probability": 0.2,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 19.0
+                        }
+                    ]
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Mesopotamian",
+        "namer": "Mesopotamian",
+        "probability": 0.2,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 22.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Hot desert",
+                            "Cold desert",
+                            "Savanna"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    }
+]

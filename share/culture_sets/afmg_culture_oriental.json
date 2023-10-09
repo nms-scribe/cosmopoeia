@@ -1,0 +1,240 @@
+[
+    {
+        "name": "Koryo",
+        "namer": "Korean",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 12.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Hantzu",
+        "namer": "Chinese",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 13.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Yamoto",
+        "namer": "Japanese",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Turchian",
+        "namer": "Turkish",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 12.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Berberan",
+        "namer": "Berber",
+        "probability": 0.2,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 19.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Hot desert",
+                                    "Cold desert",
+                                    "Savanna"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Eurabic",
+        "namer": "Arabic",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 26.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Hot desert",
+                                    "Cold desert"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Efratic",
+        "namer": "Mesopotamian",
+        "probability": 0.1,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 22.0
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Tehrani",
+        "namer": "Iranian",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Maui",
+        "namer": "Hawaiian",
+        "probability": 0.2,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 24.0
+                },
+                {
+                    "OceanCoast": 4.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Carnatic",
+        "namer": "Karnataka",
+        "probability": 0.5,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 26.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Vietic",
+        "namer": "Vietnamese",
+        "probability": 0.8,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 25.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Tropical rainforest"
+                        ],
+                        7.0
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Guantzu",
+        "namer": "Cantonese",
+        "probability": 0.5,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 17.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Ulus",
+        "namer": "Mongolian",
+        "probability": 1.0,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 5.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Cold desert",
+                                    "Grassland",
+                                    "Tundra"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    }
+]

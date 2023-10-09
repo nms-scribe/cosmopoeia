@@ -1,0 +1,1004 @@
+{
+    "volcano": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "90..=100",
+            "x_filter": "44..=56",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.8,
+            "height_range": "50..=100"
+        },
+        {
+            "task": "AddRange",
+            "count": "1..=2",
+            "height_delta": "30..=55",
+            "x_filter": "45..=55",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "Smooth",
+            "fr": 3
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "35..=45",
+            "x_filter": "25..=30",
+            "y_filter": "20..=75"
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "35..=55",
+            "x_filter": "75..=80",
+            "y_filter": "25..=75"
+        },
+        {
+            "task": "AddHill",
+            "count": "0..=1",
+            "height_delta": "20..=25",
+            "x_filter": "10..=15",
+            "y_filter": "20..=25"
+        },
+        {
+            "task": "Mask",
+            "power": 3
+        },
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "high-island": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "90..=100",
+            "x_filter": "65..=75",
+            "y_filter": "47..=53"
+        },
+        {
+            "task": "Add",
+            "height_delta": 7,
+            "height_range": "0..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=6",
+            "height_delta": "20..=30",
+            "x_filter": "25..=55",
+            "y_filter": "45..=55"
+        },
+        {
+            "task": "AddRange",
+            "count": "1",
+            "height_delta": "40..=50",
+            "x_filter": "45..=55",
+            "y_filter": "45..=55"
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.8,
+            "height_range": "20..=100"
+        },
+        {
+            "task": "Mask",
+            "power": 3
+        },
+        {
+            "task": "Smooth",
+            "fr": 2
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=3",
+            "height_delta": "-30..=-20",
+            "x_filter": "20..=30",
+            "y_filter": "20..=30"
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=3",
+            "height_delta": "-30..=-20",
+            "x_filter": "60..=80",
+            "y_filter": "70..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "10..=15",
+            "x_filter": "60..=60",
+            "y_filter": "50..=50"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "13..=16",
+            "x_filter": "15..=20",
+            "y_filter": "20..=75"
+        },
+        {
+            "task": "AddRange",
+            "count": "1..=2",
+            "height_delta": "30..=40",
+            "x_filter": "15..=85",
+            "y_filter": "30..=40"
+        },
+        {
+            "task": "AddRange",
+            "count": "1..=2",
+            "height_delta": "30..=40",
+            "x_filter": "15..=85",
+            "y_filter": "60..=70"
+        },
+        {
+            "task": "AddHill",
+            "count": "3..=5",
+            "height_delta": "-30..=-10",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "Add",
+            "height_delta": -10
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "low-island": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "90..=99",
+            "x_filter": "60..=80",
+            "y_filter": "45..=55"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "20..=30",
+            "x_filter": "10..=30",
+            "y_filter": "10..=90"
+        },
+        {
+            "task": "Smooth",
+            "fr": 2
+        },
+        {
+            "task": "AddHill",
+            "count": "6..=7",
+            "height_delta": "25..=35",
+            "x_filter": "20..=70",
+            "y_filter": "30..=70"
+        },
+        {
+            "task": "AddRange",
+            "count": "1",
+            "height_delta": "40..=50",
+            "x_filter": "45..=55",
+            "y_filter": "45..=55"
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=3",
+            "height_delta": "-30..=-20",
+            "x_filter": "15..=85",
+            "y_filter": "20..=30"
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=3",
+            "height_delta": "-30..=-20",
+            "x_filter": "15..=85",
+            "y_filter": "70..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "10..=15",
+            "x_filter": "5..=15",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "10..=15",
+            "x_filter": "85..=95",
+            "y_filter": "70..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=7",
+            "height_delta": "-25..=-15",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.4,
+            "height_range": "20..=100"
+        },
+        {
+            "task": "Mask",
+            "power": 4
+        },
+        {
+            "task": "Add",
+            "height_delta": -10
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "continents": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "80..=85",
+            "x_filter": "60..=80",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "80..=85",
+            "x_filter": "20..=30",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "AddHill",
+            "count": "6..=7",
+            "height_delta": "15..=30",
+            "x_filter": "25..=75",
+            "y_filter": "15..=85"
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.6,
+            "height_range": "20..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "8..=10",
+            "height_delta": "5..=10",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddRange",
+            "count": "1..=2",
+            "height_delta": "30..=60",
+            "x_filter": "5..=15",
+            "y_filter": "25..=75"
+        },
+        {
+            "task": "AddRange",
+            "count": "1..=2",
+            "height_delta": "30..=60",
+            "x_filter": "80..=95",
+            "y_filter": "25..=75"
+        },
+        {
+            "task": "AddRange",
+            "count": "0..=3",
+            "height_delta": "30..=60",
+            "x_filter": "80..=90",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddStrait",
+            "width": "2",
+            "direction": "Vertical"
+        },
+        {
+            "task": "AddStrait",
+            "width": "1",
+            "direction": "Vertical"
+        },
+        {
+            "task": "Smooth",
+            "fr": 3
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=4",
+            "height_delta": "-20..=-15",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=4",
+            "height_delta": "-10..=-5",
+            "x_filter": "45..=55",
+            "y_filter": "45..=55"
+        },
+        {
+            "task": "AddHill",
+            "count": "3..=4",
+            "height_delta": "-20..=-10",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "Mask",
+            "power": 4
+        },
+        {
+            "task": "Add",
+            "height_delta": -10
+        },
+        {
+            "task": "Erode",
+            "weathering_amount": 1000,
+            "iterations": 100
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "archipelago": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "Add",
+            "height_delta": 11,
+            "height_range": "0..=100"
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=3",
+            "height_delta": "40..=60",
+            "x_filter": "20..=80",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": 5,
+            "height_delta": "15..=20",
+            "x_filter": "10..=90",
+            "y_filter": "30..=70"
+        },
+        {
+            "task": "AddHill",
+            "count": 2,
+            "height_delta": "10..=15",
+            "x_filter": "10..=30",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": 2,
+            "height_delta": "10..=15",
+            "x_filter": "60..=90",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "Smooth",
+            "fr": 3
+        },
+        {
+            "task": "AddRange",
+            "count": "10",
+            "height_delta": "-30..=-20",
+            "x_filter": "5..=95",
+            "y_filter": "5..=95"
+        },
+        {
+            "task": "AddStrait",
+            "width": "2",
+            "direction": "Vertical"
+        },
+        {
+            "task": "AddStrait",
+            "width": "2",
+            "direction": "Horizontal"
+        },
+        {
+            "task": "Add",
+            "height_delta": -15
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "atoll": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "75..=80",
+            "x_filter": "50..=60",
+            "y_filter": "45..=55"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "30..=50",
+            "x_filter": "25..=75",
+            "y_filter": "30..=70"
+        },
+        {
+            "task": "AddHill",
+            "count": "0..=1",
+            "height_delta": "30..=50",
+            "x_filter": "25..=35",
+            "y_filter": "30..=70"
+        },
+        {
+            "task": "Smooth",
+            "fr": 1
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.2,
+            "height_range": "25..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "0..=1",
+            "height_delta": "10..=20",
+            "x_filter": "50..=55",
+            "y_filter": "48..=52"
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "mediterranean": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=6",
+            "height_delta": "30..=80",
+            "x_filter": "0..=100",
+            "y_filter": "0..=10"
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=6",
+            "height_delta": "30..=80",
+            "x_filter": "0..=100",
+            "y_filter": "90..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "6..=8",
+            "height_delta": "30..=50",
+            "x_filter": "10..=90",
+            "y_filter": "0..=5"
+        },
+        {
+            "task": "AddHill",
+            "count": "6..=8",
+            "height_delta": "30..=50",
+            "x_filter": "10..=90",
+            "y_filter": "95..=100"
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.9,
+            "height_range": "20..=100"
+        },
+        {
+            "task": "Mask",
+            "power": -2
+        },
+        {
+            "task": "Smooth",
+            "fr": 1
+        },
+        {
+            "task": "AddHill",
+            "count": "2..=3",
+            "height_delta": "30..=70",
+            "x_filter": "0..=5",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "2..=3",
+            "height_delta": "30..=70",
+            "x_filter": "95..=100",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=6",
+            "height_delta": "-50..=-40",
+            "x_filter": "0..=100",
+            "y_filter": "0..=10"
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=6",
+            "height_delta": "-50..=-40",
+            "x_filter": "0..=100",
+            "y_filter": "90..=100"
+        },
+        {
+            "task": "Add",
+            "height_delta": -30
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "peninsula": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=3",
+            "height_delta": "20..=35",
+            "x_filter": "40..=50",
+            "y_filter": "0..=15"
+        },
+        {
+            "task": "Add",
+            "height_delta": 5,
+            "height_range": "0..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": 1,
+            "height_delta": "90..=100",
+            "x_filter": "10..=90",
+            "y_filter": "0..=5"
+        },
+        {
+            "task": "Add",
+            "height_delta": 13,
+            "height_range": "0..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "3..=4",
+            "height_delta": "3..=5",
+            "x_filter": "5..=95",
+            "y_filter": "80..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "3..=5",
+            "x_filter": "5..=95",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "AddRange",
+            "count": "5..=6",
+            "height_delta": "-25..=-10",
+            "x_filter": "5..=95",
+            "y_filter": "5..=95"
+        },
+        {
+            "task": "Smooth",
+            "fr": 3
+        },
+        {
+            "task": "Invert",
+            "probability": 0.4,
+            "axes": "Both"
+        },
+        {
+            "task": "Add",
+            "height_delta": -10
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "pangea": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "25..=40",
+            "x_filter": "15..=50",
+            "y_filter": "0..=10"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "5..=40",
+            "x_filter": "50..=85",
+            "y_filter": "0..=10"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "25..=40",
+            "x_filter": "50..=85",
+            "y_filter": "90..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=2",
+            "height_delta": "5..=40",
+            "x_filter": "15..=50",
+            "y_filter": "90..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "8..=12",
+            "height_delta": "20..=40",
+            "x_filter": "20..=80",
+            "y_filter": "48..=52"
+        },
+        {
+            "task": "Smooth",
+            "fr": 2
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.7,
+            "height_range": "20..=100"
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=4",
+            "height_delta": "-35..=-25",
+            "x_filter": "5..=95",
+            "y_filter": "10..=20"
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=4",
+            "height_delta": "-35..=-25",
+            "x_filter": "5..=95",
+            "y_filter": "80..=90"
+        },
+        {
+            "task": "AddRange",
+            "count": "5..=6",
+            "height_delta": "30..=40",
+            "x_filter": "10..=90",
+            "y_filter": "35..=65"
+        },
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "isthmus": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=10",
+            "height_delta": "15..=30",
+            "x_filter": "0..=30",
+            "y_filter": "0..=20"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=10",
+            "height_delta": "15..=30",
+            "x_filter": "10..=50",
+            "y_filter": "20..=40"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=10",
+            "height_delta": "15..=30",
+            "x_filter": "30..=70",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=10",
+            "height_delta": "15..=30",
+            "x_filter": "50..=90",
+            "y_filter": "60..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=10",
+            "height_delta": "15..=30",
+            "x_filter": "70..=100",
+            "y_filter": "80..=100"
+        },
+        {
+            "task": "Smooth",
+            "fr": 2
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=8",
+            "height_delta": "-30..=-15",
+            "x_filter": "0..=30",
+            "y_filter": "0..=20"
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=8",
+            "height_delta": "-30..=-15",
+            "x_filter": "10..=50",
+            "y_filter": "20..=40"
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=8",
+            "height_delta": "-30..=-15",
+            "x_filter": "30..=70",
+            "y_filter": "40..=60"
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=8",
+            "height_delta": "-30..=-15",
+            "x_filter": "50..=90",
+            "y_filter": "60..=80"
+        },
+        {
+            "task": "AddRange",
+            "count": "4..=8",
+            "height_delta": "-30..=-15",
+            "x_filter": "70..=100",
+            "y_filter": "80..=100"
+        },
+        {
+            "task": "Invert",
+            "probability": 0.25,
+            "axes": "X"
+        },
+        {
+            "task": "Add",
+            "height_delta": -50
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "shattered": [
+        {
+            "task": "AddHill",
+            "count": 8,
+            "height_delta": "35..=40",
+            "x_filter": "15..=85",
+            "y_filter": "30..=70"
+        },
+        {
+            "task": "AddRange",
+            "count": "10..=20",
+            "height_delta": "-50..=-40",
+            "x_filter": "5..=95",
+            "y_filter": "5..=95"
+        },
+        {
+            "task": "AddRange",
+            "count": "5..=7",
+            "height_delta": "30..=40",
+            "x_filter": "10..=90",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "12..=20",
+            "height_delta": "-40..=-30",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "Add", 
+            "height_delta": 15
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "taklamakan": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": "1..=3",
+            "height_delta": "20..=30",
+            "x_filter": "30..=70",
+            "y_filter": "30..=70"
+        },
+        {
+            "task": "AddHill",
+            "count": "2..=4",
+            "height_delta": "60..=85",
+            "x_filter": "0..=5",
+            "y_filter": "0..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "2..=4",
+            "height_delta": "60..=85",
+            "x_filter": "95..=100",
+            "y_filter": "0..=100"
+        },
+        {
+            "task": "AddHill",
+            "count": "3..=4",
+            "height_delta": "60..=85",
+            "x_filter": "20..=80",
+            "y_filter": "0..=5"
+        },
+        {
+            "task": "AddHill",
+            "count": "3..=4",
+            "height_delta": "60..=85",
+            "x_filter": "20..=80",
+            "y_filter": "95..=100"
+        },
+        {
+            "task": "Smooth",
+            "fr": 3
+        },
+        {
+            "task": "Add",
+            "height_delta": -40
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "old-world": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddRange",
+            "count": "3",
+            "height_delta": "70",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "2..=3",
+            "height_delta": "50..=70",
+            "x_filter": "15..=45",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "2..=3",
+            "height_delta": "50..=70",
+            "x_filter": "65..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "AddHill",
+            "count": "4..=6",
+            "height_delta": "20..=25",
+            "x_filter": "15..=85",
+            "y_filter": "20..=80"
+        },
+        {
+            "task": "Multiply",
+            "height_factor": 0.5,
+            "height_range": "20..=100"
+        },
+        {
+            "task": "Smooth",
+            "fr": 2
+        },
+        {
+            "task": "AddRange",
+            "count": "3..=4",
+            "height_delta": "20..=50",
+            "x_filter": "15..=35",
+            "y_filter": "20..=45"
+        },
+        {
+            "task": "AddRange",
+            "count": "2..=4",
+            "height_delta": "20..=50",
+            "x_filter": "65..=85",
+            "y_filter": "45..=80"
+        },
+        {
+            "task": "AddStrait",
+            "width": "3..=7",
+            "direction": "Vertical"
+        },
+        {
+            "task": "AddRange",
+            "count": "6..=8",
+            "height_delta": "-50..=-20",
+            "x_filter": "15..=85",
+            "y_filter": "45..=65"
+        },
+        {
+            "task": "AddHill",
+            "count": "5..=6",
+            "height_delta": "-30..=-20",
+            "x_filter": "10..=90",
+            "y_filter": "10..=90"
+        },
+        {
+            "task": "FillOcean"
+        }
+    ],
+    "fractious": [
+        {
+            "task": "Add",
+            "height_delta": -20
+        },
+        {
+            "task": "AddHill",
+            "count": "12..=15",
+            "height_delta": "50..=80",
+            "x_filter": "5..=95",
+            "y_filter": "5..=95"
+        },
+        {
+            "task": "Mask",
+            "power": -1.5
+        },
+        {
+            "task": "Mask",
+            "power": 3
+        },
+        {
+            "task": "Add",
+            "height_delta": -20,
+            "height_range": "30..=100"
+        },
+        {
+            "task": "AddRange",
+            "count": "6..=8",
+            "height_delta": "40..=50",
+            "x_filter": "5..=95",
+            "y_filter": "10..=90"
+        },
+        {
+            "task": "Add",
+            "height_delta": -10
+        },
+        {
+            "task": "FillOcean"
+        }
+    ]
+}

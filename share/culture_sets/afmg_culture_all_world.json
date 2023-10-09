@@ -1,0 +1,625 @@
+[
+    {
+        "name": "Shwazen",
+        "namer": "German",
+        "probability": 0.7,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 10.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Temperate deciduous forest",
+                            "Temperate rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Angshire",
+        "namer": "English",
+        "probability": 1.0,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 10.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Luari",
+        "namer": "French",
+        "probability": 0.6,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 12.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Temperate deciduous forest",
+                            "Temperate rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Tallian",
+        "namer": "Italian",
+        "probability": 0.6,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Astellian",
+        "namer": "Castillian",
+        "probability": 0.6,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 16.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Slovan",
+        "namer": "Ruthenian",
+        "probability": 0.7,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 6.0
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Norse",
+        "namer": "Nordic",
+        "probability": 0.7,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 5.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Elladan",
+        "namer": "Greek",
+        "probability": 0.7,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Romian",
+        "namer": "Roman",
+        "probability": 0.7,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Soumi",
+        "namer": "Finnic",
+        "probability": 0.3,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 5.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Taiga"
+                                ],
+                                4.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Koryo",
+        "namer": "Korean",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 12.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Hantzu",
+        "namer": "Chinese",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 13.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Yamoto",
+        "namer": "Japanese",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Portuzian",
+        "namer": "Portuguese",
+        "probability": 0.4,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 17.0
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Nawatli",
+        "namer": "Nahuatl",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "Elevation",
+                {
+                    "Temperature": 18.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Tropical rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Vengrian",
+        "namer": "Hungarian",
+        "probability": 0.2,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 11.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Grassland"
+                                ],
+                                4.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Turchian",
+        "namer": "Turkish",
+        "probability": 0.2,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 13.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Berberan",
+        "namer": "Berber",
+        "probability": 0.1,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 19.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Hot desert",
+                                    "Cold desert",
+                                    "Savanna"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Eurabic",
+        "namer": "Arabic",
+        "probability": 0.2,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 26.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Hot desert",
+                                    "Cold desert"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Inuk",
+        "namer": "Inuit",
+        "probability": 0.05,
+        "preferences": {
+            "Divide": [
+                {
+                    "Temperature": -1.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Tundra",
+                            "Glacier"
+                        ],
+                        4.0
+                    ]
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Euskati",
+        "namer": "Basque",
+        "probability": 0.05,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 15.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Yoruba",
+        "namer": "Nigerian",
+        "probability": 0.05,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 15.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Tropical seasonal forest",
+                            "Tropical rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Keltan",
+        "namer": "Celtic",
+        "probability": 0.05,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 11.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Temperate deciduous forest",
+                                    "Temperate rainforest"
+                                ],
+                                4.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Efratic",
+        "namer": "Mesopotamian",
+        "probability": 0.05,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 22.0
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Tehrani",
+        "namer": "Iranian",
+        "probability": 0.1,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        }
+                    ]
+                },
+                "Elevation"
+            ]
+        }
+    },
+    {
+        "name": "Maui",
+        "namer": "Hawaiian",
+        "probability": 0.05,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 24.0
+                },
+                {
+                    "OceanCoast": 4.0
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Carnatic",
+        "namer": "Karnataka",
+        "probability": 0.05,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 26.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Inqan",
+        "namer": "Quechua",
+        "probability": 0.05,
+        "preferences": {
+            "Divide": [
+                "Elevation",
+                {
+                    "Temperature": 13.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Kiswaili",
+        "namer": "Swahili",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 29.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Hot desert",
+                            "Savanna",
+                            "Tropical seasonal forest",
+                            "Tropical rainforest"
+                        ],
+                        4.0
+                    ]
+                }
+            ]
+        }
+    },
+    {
+        "name": "Vietic",
+        "namer": "Vietnamese",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 25.0
+                },
+                {
+                    "Biomes": [
+                        [
+                            "Tropical rainforest"
+                        ],
+                        7.0
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Guantzu",
+        "namer": "Cantonese",
+        "probability": 0.1,
+        "preferences": {
+            "Divide": [
+                "NormalizedHabitability",
+                {
+                    "Temperature": 17.0
+                }
+            ]
+        }
+    },
+    {
+        "name": "Ulus",
+        "namer": "Mongolian",
+        "probability": 0.1,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 5.0
+                        },
+                        {
+                            "Biomes": [
+                                [
+                                    "Cold desert",
+                                    "Grassland",
+                                    "Tundra"
+                                ],
+                                7.0
+                            ]
+                        }
+                    ]
+                },
+                "ShoreDistance"
+            ]
+        }
+    },
+    {
+        "name": "Hebrew",
+        "namer": "Levantine",
+        "probability": 0.2,
+        "preferences": {
+            "Multiply": [
+                {
+                    "Divide": [
+                        "NormalizedHabitability",
+                        {
+                            "Temperature": 18.0
+                        }
+                    ]
+                },
+                {
+                    "OceanCoast": 4.0
+                }
+            ]
+        }
+    }
+]

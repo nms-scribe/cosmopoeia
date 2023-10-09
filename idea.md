@@ -309,6 +309,7 @@ To proceed on this, I can break it down into the following steps:
         [X] Terrain recipes should use the enum tag under a "task" key alongside their properties, instead of the currently object key form. Same for the other ones if they're not already.
         [ ] I might need to do something similar to what I'm doing for serialization here. Call it JSONDoc or something, where I have to specify field names and enum variants in a macro in order to get what I want, using a trait.
             [ ] I think I can use the following: https://docs.rs/schemars/latest/schemars/
+                [ ] doc tags are under metadata.description
             [ ] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file
             [ ] Namer files
             [ ] Culture set files
