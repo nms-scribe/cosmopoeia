@@ -1,6 +1,5 @@
 use core::fmt::Display;
 use core::str::FromStr;
-use std::collections::BTreeMap;
 
 use serde::Serialize;
 use serde::Deserialize;
@@ -12,7 +11,6 @@ use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
 use schemars::schema::Metadata;
 use schemars::schema::StringValidation;
-use schemars::schema::SingleOrVec;
 use schemars::schema::InstanceType;
 
 use crate::errors::CommandError;
@@ -173,39 +171,92 @@ impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
     }
 }
 
-impl<NumberType: JsonSchema> JsonSchema for ArgRange<NumberType> {
+pub trait NumberPattern {
+
+    fn pattern() -> &'static str;
+}
+
+macro_rules! impl_number_pattern_float {
+    ($float: ty) => {
+        impl NumberPattern for $float {
+            fn pattern() -> &'static str {
+                "-?\\d+(\\.\\d+)?"
+            }
+        }
+            
+    };
+}
+
+macro_rules! impl_number_pattern_signed_int {
+    ($int: ty) => {
+        impl NumberPattern for $int {
+            fn pattern() -> &'static str {
+                "-?\\d+"
+            }
+        }
+            
+    };
+}
+
+macro_rules! impl_number_pattern_unsigned_int {
+    ($int: ty) => {
+        impl NumberPattern for $int {
+            fn pattern() -> &'static str {
+                "\\d+"
+            }
+        }
+            
+    };
+}
+
+impl_number_pattern_float!(f64);
+
+impl_number_pattern_float!(f32);
+
+impl_number_pattern_unsigned_int!(usize);
+
+impl_number_pattern_signed_int!(i8);
+
+impl_number_pattern_signed_int!(i16);
+
+impl_number_pattern_signed_int!(i32);
+
+impl_number_pattern_signed_int!(i64);
+
+impl_number_pattern_signed_int!(i128);
+
+impl_number_pattern_unsigned_int!(u8);
+
+impl_number_pattern_unsigned_int!(u16);
+
+impl_number_pattern_unsigned_int!(u32);
+
+impl_number_pattern_unsigned_int!(u64);
+
+impl_number_pattern_unsigned_int!(u128);
+
+impl<NumberType: JsonSchema + NumberPattern> JsonSchema for ArgRange<NumberType> {
     fn schema_name() -> String {
-        format!("ArgRange_{}",NumberType::schema_name())
+        format!("Range_{}",NumberType::schema_name())
     }
 
-    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        // TODO: Can I use the SchemaGenerator to generate something with the following properties instead?
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        let number_pattern = NumberType::pattern();
+        let pattern = Some(format!("{number_pattern}(\\.\\.=?{number_pattern})?"));
+    
         Schema::Object(SchemaObject {
-            metadata: Some(Metadata {
-                id: None,
-                title: None,
-                description: Some("A string value representing a range of numbers.".to_owned()),
-                default: None,
-                deprecated: false,
-                read_only: false,
-                write_only: false,
-                examples: Vec::new(),
-            }.into()),
-            instance_type: Some(SingleOrVec::Single(InstanceType::String.into())),
+            instance_type: Some(InstanceType::String.into()),
             format: None,
-            enum_values: None,
-            const_value: None,
-            subschemas: None,
-            number: None,
             string: Some(StringValidation {
                 max_length: None,
                 min_length: None,
-                pattern: Some("\\d+(\\.\\d+)?(\\.\\.=?\\d+(\\.\\d+)?)?".to_owned()),
+                pattern
             }.into()),
-            array: None,
-            object: None,
-            reference: None,
-            extensions: BTreeMap::new(),
+            metadata: Some(Metadata {
+                description: Some("A string value representing a range of numbers.".to_owned()),
+                ..Default::default()
+            }.into()),
+            ..Default::default()
         })
     }
 }

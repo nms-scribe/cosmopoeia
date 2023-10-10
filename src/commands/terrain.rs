@@ -542,32 +542,38 @@ impl LoadTerrainTask for SampleElevation {
     }
 }
 
+// FUTURE: all this to get rid of a few warnings that I can't get rid of in the derive macro output
+#[allow(unused_qualifications)]
+mod command {
+    use super::*;
 
-#[derive(Deserialize,Serialize,Subcommand,JsonSchema)]
-#[command(disable_help_subcommand(true))]
-#[serde(tag="task")]
-pub enum Command {
-    Recipe(Recipe),
-    RecipeSet(RecipeSet),
-    Clear(Clear),
-    ClearOcean(ClearOcean),
-    RandomUniform(RandomUniform),
-    AddHill(AddHill),
-    AddRange(AddRange),
-    AddStrait(AddStrait),
-    Mask(Mask),
-    Invert(Invert),
-    Add(Add),
-    Multiply(Multiply),
-    Smooth(Smooth),
-    Erode(Erode),
-    SeedOcean(SeedOcean),
-    FillOcean(FillOcean),
-    FloodOcean(FloodOcean),
-    SampleOceanMasked(SampleOceanMasked),
-    SampleOceanBelow(SampleOceanBelow),
-    SampleElevation(SampleElevation),
+    #[derive(Deserialize,Serialize,Subcommand,JsonSchema)]
+    #[command(disable_help_subcommand(true))]
+    #[serde(tag="task")]
+    pub enum Command {
+        Recipe(Recipe),
+        RecipeSet(RecipeSet),
+        Clear(Clear),
+        ClearOcean(ClearOcean),
+        RandomUniform(RandomUniform),
+        AddHill(AddHill),
+        AddRange(AddRange),
+        AddStrait(AddStrait),
+        Mask(Mask),
+        Invert(Invert),
+        Add(Add),
+        Multiply(Multiply),
+        Smooth(Smooth),
+        Erode(Erode),
+        SeedOcean(SeedOcean),
+        FillOcean(FillOcean),
+        FloodOcean(FloodOcean),
+        SampleOceanMasked(SampleOceanMasked),
+        SampleOceanBelow(SampleOceanBelow),
+        SampleElevation(SampleElevation),
+    }
 }
+pub(crate) use command::Command;
 
 impl Command {
 

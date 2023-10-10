@@ -187,13 +187,21 @@ struct MarkovSource {
     seed_words: Vec<String>,
 }
 
+// FUTURE: all this to get rid of a few warnings that I can't get rid of in the derive macro output
+#[allow(unused_qualifications)]
+mod namer_method_source {
+    use super::*;
 
-#[derive(Serialize,Deserialize,JsonSchema)]
-#[serde(tag="method")]
-enum NamerMethodSource {
-    Markov(MarkovSource),
-    ListPicker(Vec<String>)
+    #[derive(Serialize,Deserialize,JsonSchema)]
+    #[serde(tag="method")]
+    pub(super) enum NamerMethodSource {
+        Markov(MarkovSource),
+        ListPicker(Vec<String>)
+    }
+    
 }
+
+use namer_method_source::NamerMethodSource;
 
 
 #[derive(Serialize,Deserialize,JsonSchema)] 
