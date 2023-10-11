@@ -143,6 +143,8 @@ fn join_iter<Str: AsRef<str>, Iter: Iterator<Item = Str>>(iter: Iter, delimiter:
     })
 }
 
+// The idea behind this struct is to catch major changes to the json schema in compilation.
+// properties not listed here are not supported, and will cause an error.
 struct UsableSchema {
     any_of: Option<Vec<UsableSchema>>,
     one_of: Option<Vec<UsableSchema>>,
@@ -205,6 +207,16 @@ impl UsableSchema {
         if let Some(_) = const_value {
             unimplemented!("const_value isn't supported yet.");
         }
+
+        let reference = if let Some(reference) = reference {
+            if let Some(reference) = reference.strip_prefix("#/definitions/") {
+                Some(reference.to_owned())
+            } else {
+                unimplemented!("reference did not have the expected prefix.")
+            }
+        } else {
+            None
+        };
     
         // metadata
         let (title,description,default) = if let Some(metadata) = metadata {
@@ -321,7 +333,7 @@ impl UsableSchema {
         } else {
             (Default::default(),None,None)
         };
-    // TODO: Maybe I do want to get the adobe stuff to work?
+
         let (any_of,one_of) = if let Some(subschemas) = subschemas {
             let SubschemaValidation{any_of,one_of,not, all_of, if_schema, then_schema, else_schema } = *subschemas;
             if all_of.is_some() {
@@ -337,7 +349,6 @@ impl UsableSchema {
                 unimplemented!("else_schema isn't supported yet.")
             }
             if not.is_some() {
-                // TODO: 'not' very likely comes from simplifying a schema that is boolean(false)
                 unimplemented!("not isn't supported yet.")
             }
             let any_of = if let Some(any_of) = any_of {
@@ -429,7 +440,7 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
         writeln!(target,"{TAB}- **Items**:")?;
 
         for schema in items {
-            write_schema(schema, None, Some(2), None, None, target)?
+            write_schema(schema, None, None, false, 2, target)?
         }
     }
 
@@ -437,7 +448,7 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
         writeln!(target,"## Properties")?;
         for (name,property_schema) in properties {
             let is_required = schema.required_props.contains(&name);
-            write_schema(property_schema, Some((name,true)), Some(1), None, Some(is_required), target)?;
+            write_schema(property_schema, Some((name,true)), None, is_required, 1, target)?;
         }
     }
 
@@ -446,7 +457,7 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
     if let Some(UsableSchemaOrBoolean::Schema(additional_properties)) = schema.additional_properties.map(|s| *s) {
         writeln!(target,"## Additional Properties")?;
         writeln!(target)?;
-        write_schema(additional_properties, Some(("Additional Properties".to_owned(),false)), None, None, None, target)?;
+        write_schema(additional_properties, Some(("Additional Properties".to_owned(),false)), None, false, 0, target)?;
     }
 
     if !definitions.is_empty() {
@@ -456,7 +467,8 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
                 Schema::Bool(_) => unimplemented!("Boolean schemas in definitions are not yet supported."),
                 Schema::Object(schema) => {
                     let schema = UsableSchema::from(schema);
-                    write_schema(schema, Some((name,true)), Some(1), None, Some(false), target)?;
+                    let anchor = format!("definitions/{name}");
+                    write_schema(schema, Some((name,true)), Some(anchor), false, 1, target)?;
                 },
             }
         }
@@ -468,12 +480,9 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
 }
 
 
-// TODO: Get rid of default options and replace with explicit
 // TODO: Change order of parameters if not logical.
 // TODO: name could be Option<String,bool>
-fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_span? */, indent_level: Option<usize> /* default 0 */, path: Option<Vec<String>>, required: Option<bool> /* default false */, target: &mut File) -> Result<(),CommandError> {
-
-    let level = indent_level.unwrap_or_else(|| 0);
+fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_span? */, anchor: Option<String>, required: bool, level: usize, target: &mut File) -> Result<(),CommandError> {
 
     // TODO: name should be indent
     let indentation = TAB.repeat(level);
@@ -504,7 +513,7 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
     };
 
     let instance_type = if let Some(instance_types) = schema.instance_types {
-        let required = if let Some(true) = required {
+        let required = if required {
             ", required"
         } else {
             ""
@@ -518,9 +527,8 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
     };
 
 
-    let anchor = if let Some(path) = path {
-        let path = path.join("/");
-        format!("<a id=\"{path}\"></a>")
+    let anchor = if let Some(anchor) = anchor {
+        format!("<a id=\"{anchor}\"></a>")
     } else {
         String::new()
     };
@@ -532,14 +540,14 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
     if let Some(any_of) = schema.any_of {
         writeln!(target,"{indentation_items}- **Any of**")?;
         for schema in any_of {
-            write_schema(schema, None, Some(level + 2), None, None, target)?;
+            write_schema(schema, None, None, false, level + 2, target)?;
         }
     }
 
     if let Some(one_of) = schema.one_of {
         writeln!(target,"{indentation_items}- **One of**")?;
         for schema in one_of {
-            write_schema(schema, None, Some(level + 2), None, None, target)?;
+            write_schema(schema, None, None, false, level + 2, target)?;
         }
     }
 
@@ -548,18 +556,18 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
         writeln!(target,"{indentation}{TAB}- **Items**:")?;
 
         for schema in items {
-            write_schema(schema, None, Some(level + 2), None, None, target)?
+            write_schema(schema, None, None, false, level + 2, target)?
         }
     }
 
     if let Some(UsableSchemaOrBoolean::Schema(additional_properties)) = schema.additional_properties.map(|s| *s) {
-        write_schema(additional_properties, Some(("Additional Properties".to_owned(),false)), Some(level + 1), None, None, target)?;
+        write_schema(additional_properties, Some(("Additional Properties".to_owned(),false)), None, false, level + 1, target)?;
     }
 
     if let Some(properties) = schema.properties {
         for (name,property_schema) in properties {
             let is_required = schema.required_props.contains(&name);
-            write_schema(property_schema, Some((name,true)), Some(level + 1), None, Some(is_required), target)?;
+            write_schema(property_schema, Some((name,true)), None, is_required, level + 1, target)?;
         }
     }
 
@@ -616,9 +624,7 @@ fn construct_description_line(schema: &UsableSchema) -> Result<Vec<String>,Comma
     }
 
     if let Some(reference) = &schema.reference {
-        // TODO: Check this, is it right?
-        let link = &reference[2..];
-        description_line.push(format!("Refer to *[{reference}](#{link})*"))
+        description_line.push(format!("See *[{reference}](#definitions/{reference})*"))
     }
 
     if !description_line.is_empty() {

@@ -3,9 +3,9 @@
 ## Items
 
   - **Items**:
-    - : Refer to *[#/definitions/NamerSource](#definitions/NamerSource)*
+    - : See *[NamerSource](#definitions/NamerSource)*
 ## Definitions
-  - **`NamerSource`***(Object)*
+  - <a id="definitions/NamerSource"></a>**`NamerSource`***(Object)*
     - **One of**
       - *(Object)*
         - **`duplicatable_letters`***(Array, required)*
@@ -22,9 +22,9 @@
     - **`name`***(String, required)*
     - **`state_name`***(Array, required)*
       - **Items**:
-        - : Refer to *[#/definitions/StateNameBehavior](#definitions/StateNameBehavior)*
-    - **`state_suffix`**: Refer to *[#/definitions/StateSuffixBehavior](#definitions/StateSuffixBehavior)*
-  - **`StateNameBehavior`**
+        - : See *[StateNameBehavior](#definitions/StateNameBehavior)*
+    - **`state_suffix`**: See *[StateSuffixBehavior](#definitions/StateSuffixBehavior)*
+  - <a id="definitions/StateNameBehavior"></a>**`StateNameBehavior`**
     - **One of**
       - *(Object)*: Can not contain additional properties.
         - **`TrimSuffixes`***(Array, required)*
@@ -46,7 +46,7 @@
           - **Items**:
             - *(String)*
             - *(String)*
-  - **`StateSuffixBehavior`**
+  - <a id="definitions/StateSuffixBehavior"></a>**`StateSuffixBehavior`**
     - **One of**
       - *(String)*: Must be on of: ["NoSuffix","Default"]
       - *(Object)*: Can not contain additional properties.
@@ -65,4 +65,4 @@
       - *(Object)*: Can not contain additional properties.
         - **`Choice`***(Array, required)*
           - **Items**:
-            - : Refer to *[#/definitions/StateSuffixBehavior](#definitions/StateSuffixBehavior)*
+            - : See *[StateSuffixBehavior](#definitions/StateSuffixBehavior)*
