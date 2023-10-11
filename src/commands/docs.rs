@@ -529,8 +529,16 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
         String::new()
     };
 
-    // TODO: If there's nothing after the bullet, until the description, then don't insert the colon
-    writeln!(target,"{indent}* {anchor}{name_formatted}{instance_type}: {description_line}")?;
+    let name = format!("{anchor}{name_formatted}{instance_type}");
+    if name.is_empty() {
+        if !description_line.is_empty() {
+            writeln!(target,"{indent}* {description_line}")?;
+        }
+    } else if description_line.is_empty() {
+        writeln!(target,"{indent}* {name}")?;
+    } else {
+        writeln!(target,"{indent}* {name}: {description_line}")?;
+    }
 
     // FUTURE: Support all_of in the same way as any_of
 
@@ -627,10 +635,6 @@ fn describe_schema(schema: &UsableSchema) -> Result<Vec<String>,CommandError> {
 
     if let Some(reference) = &schema.reference {
         description_line.push(format!("See *[{reference}](#definitions/{reference})*"))
-    }
-
-    if !description_line.is_empty() {
-        description_line.insert(0, ":".to_owned())
     }
 
     Ok(description_line)
