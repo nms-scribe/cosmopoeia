@@ -296,6 +296,18 @@ To proceed on this, I can break it down into the following steps:
 [X] Clean up and triage TODOs and FUTURE:s into things I must do now, simple things I could do now, and things that can wait until sometime later.
 [X] Work on "Simple Pre-release Tasks" below
 [X] Work on "Complex Pre-release Tasks" below
+[ ] Break world_map module into several modules:
+    [ ] typed_map: everything for typing a map
+        [ ] fields
+        [ ] features
+        [ ] entities
+        [ ] geometry (move this over)
+        [ ] layers
+        [ ] dataset? do I have something for this?
+    [ ] world_map:
+        [ ] field_types: all of the custom field types
+        [ ] layers: all of the layers
+        [ ] mod: the WorldMap construct itself.
 [ ] Documentation
     [-] It's possible to have a separate executable in a bin/<name>.rs file which would give alternate access to code. Create a cosmopoeia-docs command there, perhaps. This will auto-generate some of the docs to a docs subfolder. Should look at github to see where the best place to put this is, though.
     [ ] I need to document:

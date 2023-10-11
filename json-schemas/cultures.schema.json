@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Array_of_CultureSetItemSource",
+  "type": "array",
+  "items": {
+    "$ref": "#/definitions/CultureSetItemSource"
+  },
+  "definitions": {
+    "CultureSetItemSource": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "namer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preferences": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TilePreference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "probability": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      }
+    },
+    "TilePreference": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Habitability",
+            "ShoreDistance",
+            "Elevation",
+            "NormalizedHabitability"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "Temperature"
+          ],
+          "properties": {
+            "Temperature": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Biomes"
+          ],
+          "properties": {
+            "Biomes": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "number",
+                  "format": "double"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "OceanCoast"
+          ],
+          "properties": {
+            "OceanCoast": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Negate"
+          ],
+          "properties": {
+            "Negate": {
+              "$ref": "#/definitions/TilePreference"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Multiply"
+          ],
+          "properties": {
+            "Multiply": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TilePreference"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Divide"
+          ],
+          "properties": {
+            "Divide": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TilePreference"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Add"
+          ],
+          "properties": {
+            "Add": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TilePreference"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Pow"
+          ],
+          "properties": {
+            "Pow": {
+              "type": "array",
+              "items": [
+                {
+                  "$ref": "#/definitions/TilePreference"
+                },
+                {
+                  "type": "number",
+                  "format": "double"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

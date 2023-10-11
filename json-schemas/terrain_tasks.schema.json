@@ -1,0 +1,511 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Map_of_Array_of_Command",
+  "type": "object",
+  "additionalProperties": {
+    "type": "array",
+    "items": {
+      "$ref": "#/definitions/Command"
+    }
+  },
+  "definitions": {
+    "Command": {
+      "oneOf": [
+        {
+          "description": "Processes a series of pre-saved tasks",
+          "type": "object",
+          "required": [
+            "source",
+            "task"
+          ],
+          "properties": {
+            "source": {
+              "description": "JSON File describing the tasks to complete",
+              "type": "string"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Recipe"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Randomly chooses a recipe from a set of named recipes and follows it",
+          "type": "object",
+          "required": [
+            "source",
+            "task"
+          ],
+          "properties": {
+            "recipe": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "description": "JSON file containing a map of potential recipes to follow",
+              "type": "string"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "RecipeSet"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Clears all elevations to 0 and all groupings to \"Continent\". This is an alias for Multiplying all height by 0.0.",
+          "type": "object",
+          "required": [
+            "task"
+          ],
+          "properties": {
+            "task": {
+              "type": "string",
+              "enum": [
+                "Clear"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)",
+          "type": "object",
+          "required": [
+            "task"
+          ],
+          "properties": {
+            "task": {
+              "type": "string",
+              "enum": [
+                "ClearOcean"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Adds a uniform amount of random noise to the map",
+          "type": "object",
+          "required": [
+            "height_delta",
+            "task"
+          ],
+          "properties": {
+            "height_delta": {
+              "$ref": "#/definitions/Range_int8"
+            },
+            "height_filter": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Range_int8"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "RandomUniform"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Adds hills or pits to a certain area of the map",
+          "type": "object",
+          "required": [
+            "count",
+            "height_delta",
+            "task",
+            "x_filter",
+            "y_filter"
+          ],
+          "properties": {
+            "count": {
+              "$ref": "#/definitions/Range_uint"
+            },
+            "height_delta": {
+              "$ref": "#/definitions/Range_int8"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "AddHill"
+              ]
+            },
+            "x_filter": {
+              "$ref": "#/definitions/Range_double"
+            },
+            "y_filter": {
+              "$ref": "#/definitions/Range_double"
+            }
+          }
+        },
+        {
+          "description": "Adds a range of heights or a trough to a certain area of a map",
+          "type": "object",
+          "required": [
+            "count",
+            "height_delta",
+            "task",
+            "x_filter",
+            "y_filter"
+          ],
+          "properties": {
+            "count": {
+              "$ref": "#/definitions/Range_uint"
+            },
+            "height_delta": {
+              "$ref": "#/definitions/Range_int8"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "AddRange"
+              ]
+            },
+            "x_filter": {
+              "$ref": "#/definitions/Range_double"
+            },
+            "y_filter": {
+              "$ref": "#/definitions/Range_double"
+            }
+          }
+        },
+        {
+          "description": "Adds a long cut somewhere on the map",
+          "type": "object",
+          "required": [
+            "direction",
+            "task",
+            "width"
+          ],
+          "properties": {
+            "direction": {
+              "$ref": "#/definitions/StraitDirection"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "AddStrait"
+              ]
+            },
+            "width": {
+              "$ref": "#/definitions/Range_double"
+            }
+          }
+        },
+        {
+          "description": "Changes the heights based on their distance from the edge of the map",
+          "type": "object",
+          "required": [
+            "power",
+            "task"
+          ],
+          "properties": {
+            "power": {
+              "type": "number",
+              "format": "double"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Mask"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Inverts the heights across the entire map",
+          "type": "object",
+          "required": [
+            "axes",
+            "probability",
+            "task"
+          ],
+          "properties": {
+            "axes": {
+              "$ref": "#/definitions/InvertAxes"
+            },
+            "probability": {
+              "type": "number",
+              "format": "double"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Invert"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Inverts the heights across the entier map",
+          "type": "object",
+          "required": [
+            "height_delta",
+            "task"
+          ],
+          "properties": {
+            "height_delta": {
+              "type": "integer",
+              "format": "int8"
+            },
+            "height_filter": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Range_int8"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Add"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Inverts the heights across the entier map",
+          "type": "object",
+          "required": [
+            "height_factor",
+            "task"
+          ],
+          "properties": {
+            "height_factor": {
+              "type": "number",
+              "format": "double"
+            },
+            "height_filter": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Range_int8"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Multiply"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Smooths elevations by averaging the value against it's neighbors.",
+          "type": "object",
+          "required": [
+            "fr",
+            "task"
+          ],
+          "properties": {
+            "fr": {
+              "type": "number",
+              "format": "double"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Smooth"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Runs an erosion process on the map",
+          "type": "object",
+          "required": [
+            "iterations",
+            "task",
+            "weathering_amount"
+          ],
+          "properties": {
+            "iterations": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "Erode"
+              ]
+            },
+            "weathering_amount": {
+              "description": "Maximum amount of \"soil\" in meters to weather off of the elevation before erosion (Actual amount calculated based on slope)",
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        {
+          "description": "Sets random points in an area to ocean if they are below sea level (Use FloodOcean to complete the process)",
+          "type": "object",
+          "required": [
+            "count",
+            "task",
+            "x_filter",
+            "y_filter"
+          ],
+          "properties": {
+            "count": {
+              "$ref": "#/definitions/Range_uint"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "SeedOcean"
+              ]
+            },
+            "x_filter": {
+              "$ref": "#/definitions/Range_double"
+            },
+            "y_filter": {
+              "$ref": "#/definitions/Range_double"
+            }
+          }
+        },
+        {
+          "description": "Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)",
+          "type": "object",
+          "required": [
+            "task"
+          ],
+          "properties": {
+            "task": {
+              "type": "string",
+              "enum": [
+                "FillOcean"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Finds tiles that are marked as ocean and marks all neighbors that are below sea level as ocean, until no neighbors below sea level can be found.",
+          "type": "object",
+          "required": [
+            "task"
+          ],
+          "properties": {
+            "task": {
+              "type": "string",
+              "enum": [
+                "FloodOcean"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Sets tiles to ocean by sampling data from a heightmap. If data in heightmap is not nodata, the tile becomes ocean.",
+          "type": "object",
+          "required": [
+            "source",
+            "task"
+          ],
+          "properties": {
+            "source": {
+              "description": "The path to the heightmap containing the ocean data",
+              "type": "string"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "SampleOceanMasked"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Sets tiles to ocean by sampling data from a heightmap. If value in heightmap is less than specified elevation, it becomes ocean.",
+          "type": "object",
+          "required": [
+            "elevation",
+            "source",
+            "task"
+          ],
+          "properties": {
+            "elevation": {
+              "description": "The elevation to compare to",
+              "type": "number",
+              "format": "double"
+            },
+            "source": {
+              "description": "The path to the heightmap containing the ocean data",
+              "type": "string"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "SampleOceanBelow"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Replaces elevations by sampling from a heightmap",
+          "type": "object",
+          "required": [
+            "source",
+            "task"
+          ],
+          "properties": {
+            "source": {
+              "description": "The path to the heightmap containing the elevation data",
+              "type": "string"
+            },
+            "task": {
+              "type": "string",
+              "enum": [
+                "SampleElevation"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "InvertAxes": {
+      "type": "string",
+      "enum": [
+        "X",
+        "Y",
+        "Both"
+      ]
+    },
+    "Range_double": {
+      "description": "A string value representing a range of numbers.",
+      "type": "string",
+      "pattern": "-?\\d+(\\.\\d+)?(\\.\\.=?-?\\d+(\\.\\d+)?)?"
+    },
+    "Range_int8": {
+      "description": "A string value representing a range of numbers.",
+      "type": "string",
+      "pattern": "-?\\d+(\\.\\.=?-?\\d+)?"
+    },
+    "Range_uint": {
+      "description": "A string value representing a range of numbers.",
+      "type": "string",
+      "pattern": "\\d+(\\.\\.=?\\d+)?"
+    },
+    "StraitDirection": {
+      "type": "string",
+      "enum": [
+        "Horizontal",
+        "Vertical"
+      ]
+    }
+  }
+}

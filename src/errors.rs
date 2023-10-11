@@ -83,6 +83,8 @@ pub enum CommandError {
     ExpectedIntegerInSerializedValue(u32,bool,Option<Token>),
     InvalidEnumValueInInSerializedValue(String),
     NamerDistributionError(String,String),
+    IOError(String),
+    SerdeJSONError(String),
 }
 
 impl Error for CommandError {
@@ -206,7 +208,10 @@ impl Display for CommandError {
 
             },
             Self::InvalidEnumValueInInSerializedValue(value) => write!(f,"While parsing field value: found invalid enum value '{value}'."),
-            Self::NamerDistributionError(namer,message) => write!(f,"While loading namer '{namer}', the length distribution could not be calculated. ('{message}')")
+            Self::NamerDistributionError(namer,message) => write!(f,"While loading namer '{namer}', the length distribution could not be calculated. ('{message}')"),
+            Self::IOError(message) => write!(f,"Error writing to file: ('{message}')."),
+            Self::SerdeJSONError(message) => write!(f,"Error serializing data: ('{message}').")
+
         }
     }
 }
@@ -225,6 +230,20 @@ impl From<FloatIsNan> for CommandError {
     }
 
 }
+
+impl From<std::io::Error> for CommandError {
+    fn from(value: std::io::Error) -> Self {
+        CommandError::IOError(format!("{value}"))
+    }
+}
+
+impl From<serde_json::Error> for CommandError {
+    fn from(value: serde_json::Error) -> Self {
+        CommandError::SerdeJSONError(format!("{value}"))
+    }
+}
+
+
 
 #[derive(Debug)]
 pub enum ProgramError {

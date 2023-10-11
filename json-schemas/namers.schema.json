@@ -1,0 +1,265 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Array_of_NamerSource",
+  "type": "array",
+  "items": {
+    "$ref": "#/definitions/NamerSource"
+  },
+  "definitions": {
+    "NamerSource": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "duplicatable_letters",
+            "method",
+            "seed_words"
+          ],
+          "properties": {
+            "duplicatable_letters": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 1,
+                "minLength": 1
+              }
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "Markov"
+              ]
+            },
+            "seed_words": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": [
+            "object",
+            "array"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "ListPicker"
+              ]
+            }
+          }
+        }
+      ],
+      "required": [
+        "name",
+        "state_name",
+        "state_suffix"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "state_name": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StateNameBehavior"
+          }
+        },
+        "state_suffix": {
+          "$ref": "#/definitions/StateSuffixBehavior"
+        }
+      }
+    },
+    "StateNameBehavior": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "TrimSuffixes"
+          ],
+          "properties": {
+            "TrimSuffixes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "TrimSuffixesIfLonger"
+          ],
+          "properties": {
+            "TrimSuffixesIfLonger": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "ForceVowel"
+          ],
+          "properties": {
+            "ForceVowel": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "ForcePrefix"
+          ],
+          "properties": {
+            "ForcePrefix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "ForcePrefixByLetterClass"
+          ],
+          "properties": {
+            "ForcePrefixByLetterClass": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "StateSuffixBehavior": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "NoSuffix",
+            "Default"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "Suffix"
+          ],
+          "properties": {
+            "Suffix": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "ProbableSuffix"
+          ],
+          "properties": {
+            "ProbableSuffix": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "number",
+                  "format": "double"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "ProbableSuffixIfShorter"
+          ],
+          "properties": {
+            "ProbableSuffixIfShorter": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0.0
+                },
+                {
+                  "type": "number",
+                  "format": "double"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "maxItems": 3,
+              "minItems": 3
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "Choice"
+          ],
+          "properties": {
+            "Choice": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StateSuffixBehavior"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
