@@ -460,13 +460,13 @@ These are things that really should be done before release, but they might take 
     * Once every tile has been iterated, go back and add that soil to the tile's elevation, (and update elevation_scaled? Unless that's done automatically by the terrain processor)
     * Input includes: amount to weather on every tile (which could be random), and possibly a number of iterations, which I don't think a random value would benefit. I might want a factor which defines how to calculate the percent based on slope, but I'm not certain right now how that's calculated anyway.
 [X] Check with AFMG about appropriateness of copying, converting and reusing name sets, culture sets and terrain templates in other tools.
-[ ] Edges and Wrapping
+[X] Edges and Wrapping
     [X] Handle tiles that point to edges
     [X] Calculate edges for tiles in voronoi generation
     [X] Go back and find the 'if let Neighbor::Tile' and turn them into matches, so we can add more neighbor types, which we will in a bit
     [X] In tiles::calculate_tile_neighbors, add an "Edge" neighbor if the tile is on the edge of the map.
     [X] Test with both worlds before continuing
-    [ ] Revisit tiles::calculate_tile_neighbors: Except if the extents are "full world" extents, then need to calculate neighbors across the extents:
+    [X] Revisit tiles::calculate_tile_neighbors: Except if the extents are "full world" extents, then need to calculate neighbors across the extents:
         [X] Such neighbors will be special "Wrapped" neighbors instead of Tile enum, which contains the 'id' and the edge.
         [X] East-west neighbors match if their 'edge' points would be on the edge of the other.
             [X] Neighbor directions have to be calculated over the edge of the map, not across to the other side.
@@ -504,6 +504,7 @@ These are things that really should be done before release, but they might take 
 [ ] Add a spheremode option which causes points to be generated at higher spacing at higher latitudes and changes how distance and area are calculated where that's important.
     [ ] RasterBounds::pixels_to_coords and coords_to_pixels -- make sure these are calculated correctly for spheremode
     [ ] I may need to bring in my own delaunay algorithm. First, I wouldn't need to collect points into a geometry. But second, when I add sphere_mode, the changes to the distance formula might change. Third, I might be able to remove an array collection step in there, before generating voronoi. Not sure.
+[ ] For schema documentation: If an enum type is an object, internally tagged, it should go into the definitions instead. Name it with the path to the enum from the parent. This is especially true for Recipe Set, where it would be nice to have a separate list of tasks.
 [ ] More informational error handling: Make user of the following to add in information about where errors occur.
     * https://doc.rust-lang.org/std/macro.module_path.html
     * https://doc.rust-lang.org/std/macro.line.html

@@ -407,6 +407,8 @@ const TAB: &str = "  ";
 
 fn write_root_schema(default_title: String, root: RootSchema, target: &mut File) -> Result<(),CommandError> {
 
+    // Output format inspired by https://pypi.org/project/jsonschema2md/
+
     let RootSchema{
         schema,
         definitions,
@@ -484,61 +486,71 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
     let indent = TAB.repeat(level);
 
-    // TODO: There must be a better way to do this. Why are there lines? Should this be in bullets?
-    // TODO: Turn this into something that writes out to target.
-    let description_line_base = describe_schema(&schema)?;
-    // TODO: If I simply don't allow \n\n in the description line, then I don't have to map.
-    // TODO: Also, if description line builds a string instead, then I don't need to join anything.
-    // TODO: Then again, maybe I want these to be properties.
-    let description_line = join_iter(description_line_base.into_iter().map(|line| line.replace("\n\n",&format!("<br>{indent}")))," ");
+    write!(target,"{indent}* ")?;
 
-    let optional_format = if let Some(format) = schema.format {
-        format!(", format: {format}")
-    } else {
-        String::new()
+    let mut has_term = false;
+
+    if let Some(anchor) = anchor {
+        has_term = true;
+        write!(target,"<a id=\"{anchor}\"></a>")?
     };
 
-    let name_formatted = if let Some((name,code_span)) = name {
+    if let Some((name,code_span)) = name {
+        has_term = true;
         if code_span {
-            format!("**`{name}`** ")
+            write!(target,"**`{name}`**")?;
         } else {
-            format!("**{name}** ")
+            write!(target,"**{name}**")?;
         }
-    } else {
-        String::new()
     };
 
-    let instance_type = if let Some(instance_types) = schema.instance_types {
-        let required = if required {
-            ", required"
+
+    if schema.instance_types.is_some() || schema.reference.is_some() || schema.format.is_some() || required {
+        let mut spacing = if has_term {
+            " "
         } else {
             ""
         };
 
-        let instance_types = join_iter(instance_types.into_iter().map(|i| instance_type_name(&i))," | ");
+        has_term = true;
 
-        format!("*({instance_types}{optional_format}{required})*")
-    } else {
-        String::new()
-    };
+        write!(target,"{spacing}*(")?;
+        spacing = "";
 
+        let mut has_type = false;
 
-    let anchor = if let Some(anchor) = anchor {
-        format!("<a id=\"{anchor}\"></a>")
-    } else {
-        String::new()
-    };
+        if let Some(instance_types) = &schema.instance_types {
+            has_type = true;
+            let instance_types = join_iter(instance_types.into_iter().map(|i| instance_type_name(&i))," | ");
+            write!(target,"{instance_types}")?;
+            spacing = ", ";
+        };
 
-    let name = format!("{anchor}{name_formatted}{instance_type}");
-    if name.is_empty() {
-        if !description_line.is_empty() {
-            writeln!(target,"{indent}* {description_line}")?;
+        if let Some(reference) = &schema.reference {
+            if has_type {
+                spacing = " | "
+            };
+            write!(target,"{spacing}[{reference}](#definitions/{reference})")?;
+            spacing = ", ";
         }
-    } else if description_line.is_empty() {
-        writeln!(target,"{indent}* {name}")?;
-    } else {
-        writeln!(target,"{indent}* {name}: {description_line}")?;
+
+        if let Some(format) = &schema.format {
+            write!(target,"{spacing}Format: {format}")?;
+            spacing = ", ";
+        }
+
+        if required {
+            write!(target,"{spacing}Required")?;
+        }
+
+        write!(target,")*")?;
+
+
     }
+
+    
+
+    write_description(&schema, has_term, target)?;
 
     // FUTURE: Support all_of in the same way as any_of
 
@@ -582,62 +594,71 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
 }
 
-// TODO: This should return a single line.
-fn describe_schema(schema: &UsableSchema) -> Result<Vec<String>,CommandError> {
-    let mut description_line = Vec::new();
+fn write_description(schema: &UsableSchema, has_term: bool, target: &mut File) -> Result<(), CommandError> {
+
+    let mut spacing = if has_term {
+        ": "
+    } else {
+        ""
+    };
 
     if let Some(description) = &schema.description {
-        description_line.push(description.clone());
+        write!(target,"{spacing}{description}")?;
+        spacing = " ";
     }
 
     if let Some(minimum) = schema.minimum {
-        description_line.push(format!("Minimum: `{minimum}`"))
+        write!(target,"{spacing}Minimum: `{minimum}`")?;
+        spacing = ", ";
     }
 
     if let Some(pattern) = &schema.pattern {
-        description_line.push(format!("Pattern: `{pattern}`"))
+        write!(target,"{spacing}Pattern: `{pattern}`")?;
+        spacing = ", ";
     }
 
-    match (schema.min_length,schema.max_length) {
-        (None,None) => (),
-        (Some(min_length),None) => description_line.push(format!("Length must be at least {min_length}")),
-        (None,Some(max_length)) => description_line.push(format!("Length must be at most {max_length}")),
-        (Some(min_length),Some(max_length)) if min_length == max_length => description_line.push(format!("Length must be equal to {min_length}")),
-        (Some(min_length),Some(max_length)) => description_line.push(format!("Length must be between {min_length} and {max_length} (inclusive).")),
+    if let Some(min_length) = &schema.min_length {
+        write!(target,"{spacing}Minimum Length: `{min_length}`")?;
+        spacing = ", ";
     }
 
-    match (schema.min_items,schema.max_items) {
-        (None,None) => (),
-        (Some(min_items),None) => description_line.push(format!("Length must be at least {min_items}")),
-        (None,Some(max_items)) => description_line.push(format!("Length must be at most {max_items}")),
-        (Some(min_items),Some(max_items)) if min_items == max_items => description_line.push(format!("Length must be equal to {min_items}")),
-        (Some(min_items),Some(max_items)) => description_line.push(format!("Length must be between {min_items} and {max_items} (inclusive)."))
+    if let Some(max_length) = &schema.max_length {
+        write!(target,"{spacing}Maximum Length: `{max_length}`")?;
+        spacing = ", ";
+    }
+
+    if let Some(min_items) = &schema.min_items {
+        write!(target,"{spacing}Minimum Items: `{min_items}`")?;
+        spacing = ", ";
+    }
+
+    if let Some(max_items) = &schema.max_items {
+        write!(target,"{spacing}Maximum Items: `{max_items}`")?;
+        spacing = ", ";
     }
 
     if let Some(enum_values) = &schema.enum_values {
         if enum_values.len() == 1 {
             let enum_values = serde_json::to_string(&enum_values[0])?;
-            description_line.push(format!("Must be: {enum_values}"))
+            write!(target,"{spacing}Must be: {enum_values}")?;
         } else {
             let enum_values = serde_json::to_string(&enum_values)?;
-            description_line.push(format!("Must be one of: {enum_values}"))
+            write!(target,"{spacing}Must be one of: {enum_values}")?;
         }
-
+        spacing = ", ";
     }
 
     if let Some(additional_properties) = &schema.additional_properties {
         match **additional_properties {
-            UsableSchemaOrBoolean::Boolean(false) => description_line.push("Can not contain additional properties.".to_owned()),
+            UsableSchemaOrBoolean::Boolean(false) => write!(target,"{spacing}Can not contain additional properties.")?,
             UsableSchemaOrBoolean::Boolean(true) |
-            UsableSchemaOrBoolean::Schema(_) => description_line.push("Can contain additional properties.".to_owned()),
+            UsableSchemaOrBoolean::Schema(_) => write!(target,"{spacing}Can contain additional properties.")?,
         }
     }
 
-    if let Some(reference) = &schema.reference {
-        description_line.push(format!("See *[{reference}](#definitions/{reference})*"))
-    }
+    writeln!(target)?;
 
-    Ok(description_line)
+    Ok(())
 }
 
 

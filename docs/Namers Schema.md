@@ -3,66 +3,66 @@
 ## Items
 
   * **Items**:
-    * See *[NamerSource](#definitions/NamerSource)*
+    * *([NamerSource](#definitions/NamerSource))*
 ## Definitions
   * <a id="definitions/NamerSource"></a>**`NamerSource`** *(Object)*
     * **One of**
       * *(Object)*
-        * **`duplicatable_letters`** *(Array, required)*
+        * **`duplicatable_letters`** *(Array, Required)*
           * **Items**:
-            * *(String)*: Length must be equal to 1
-        * **`method`** *(String, required)*: Must be: "Markov"
-        * **`seed_words`** *(Array, required)*
+            * *(String)*: Minimum Length: `1`, Maximum Length: `1`
+        * **`method`** *(String, Required)*: Must be: "Markov"
+        * **`seed_words`** *(Array, Required)*
           * **Items**:
             * *(String)*
       * *(Object | Array)*
         * **Items**:
           * *(String)*
-        * **`method`** *(String, required)*: Must be: "ListPicker"
-    * **`name`** *(String, required)*
-    * **`state_name`** *(Array, required)*
+        * **`method`** *(String, Required)*: Must be: "ListPicker"
+    * **`name`** *(String, Required)*
+    * **`state_name`** *(Array, Required)*
       * **Items**:
-        * See *[StateNameBehavior](#definitions/StateNameBehavior)*
-    * **`state_suffix`** : See *[StateSuffixBehavior](#definitions/StateSuffixBehavior)*
-  * <a id="definitions/StateNameBehavior"></a>**`StateNameBehavior`** 
+        * *([StateNameBehavior](#definitions/StateNameBehavior))*
+    * **`state_suffix`** *([StateSuffixBehavior](#definitions/StateSuffixBehavior), Required)*
+  * <a id="definitions/StateNameBehavior"></a>**`StateNameBehavior`**
     * **One of**
       * *(Object)*: Can not contain additional properties.
-        * **`TrimSuffixes`** *(Array, required)*
+        * **`TrimSuffixes`** *(Array, Required)*
           * **Items**:
             * *(String)*
       * *(Object)*: Can not contain additional properties.
-        * **`TrimSuffixesIfLonger`** *(Array, required)*: Length must be equal to 2
+        * **`TrimSuffixesIfLonger`** *(Array, Required)*: Minimum Items: `2`, Maximum Items: `2`
           * **Items**:
             * *(Array)*
               * **Items**:
                 * *(String)*
-            * *(Integer, format: uint)*: Minimum: `0`
+            * *(Integer, Format: uint)*: Minimum: `0`
       * *(Object)*: Can not contain additional properties.
-        * **`ForceVowel`** *(String, required)*
+        * **`ForceVowel`** *(String, Required)*
       * *(Object)*: Can not contain additional properties.
-        * **`ForcePrefix`** *(String, required)*
+        * **`ForcePrefix`** *(String, Required)*
       * *(Object)*: Can not contain additional properties.
-        * **`ForcePrefixByLetterClass`** *(Array, required)*: Length must be equal to 2
+        * **`ForcePrefixByLetterClass`** *(Array, Required)*: Minimum Items: `2`, Maximum Items: `2`
           * **Items**:
             * *(String)*
             * *(String)*
-  * <a id="definitions/StateSuffixBehavior"></a>**`StateSuffixBehavior`** 
+  * <a id="definitions/StateSuffixBehavior"></a>**`StateSuffixBehavior`**
     * **One of**
       * *(String)*: Must be one of: ["NoSuffix","Default"]
       * *(Object)*: Can not contain additional properties.
-        * **`Suffix`** *(String, required)*
+        * **`Suffix`** *(String, Required)*
       * *(Object)*: Can not contain additional properties.
-        * **`ProbableSuffix`** *(Array, required)*: Length must be equal to 2
+        * **`ProbableSuffix`** *(Array, Required)*: Minimum Items: `2`, Maximum Items: `2`
           * **Items**:
-            * *(Number, format: double)*
+            * *(Number, Format: double)*
             * *(String)*
       * *(Object)*: Can not contain additional properties.
-        * **`ProbableSuffixIfShorter`** *(Array, required)*: Length must be equal to 3
+        * **`ProbableSuffixIfShorter`** *(Array, Required)*: Minimum Items: `3`, Maximum Items: `3`
           * **Items**:
-            * *(Integer, format: uint)*: Minimum: `0`
-            * *(Number, format: double)*
+            * *(Integer, Format: uint)*: Minimum: `0`
+            * *(Number, Format: double)*
             * *(String)*
       * *(Object)*: Can not contain additional properties.
-        * **`Choice`** *(Array, required)*
+        * **`Choice`** *(Array, Required)*
           * **Items**:
-            * See *[StateSuffixBehavior](#definitions/StateSuffixBehavior)*
+            * *([StateSuffixBehavior](#definitions/StateSuffixBehavior))*
