@@ -437,7 +437,7 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
     if let Some(items) = schema.items {
         writeln!(target,"## Items")?;
         writeln!(target)?;
-        writeln!(target,"{TAB}- **Items**:")?;
+        writeln!(target,"{TAB}* **Items**:")?;
 
         for schema in items {
             write_schema(schema, None, None, false, 2, target)?
@@ -480,21 +480,17 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
 }
 
 
-// TODO: Change order of parameters if not logical.
-// TODO: name could be Option<String,bool>
 fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_span? */, anchor: Option<String>, required: bool, level: usize, target: &mut File) -> Result<(),CommandError> {
 
-    // TODO: name should be indent
-    let indentation = TAB.repeat(level);
-    // TODO: name should be item_indent.
-    let indentation_items = TAB.repeat(level + 1);
+    let indent = TAB.repeat(level);
 
-    // TODO: There must be a better way to do this. Why are there lines?
-    let description_line_base = construct_description_line(&schema)?;
+    // TODO: There must be a better way to do this. Why are there lines? Should this be in bullets?
+    // TODO: Turn this into something that writes out to target.
+    let description_line_base = describe_schema(&schema)?;
     // TODO: If I simply don't allow \n\n in the description line, then I don't have to map.
     // TODO: Also, if description line builds a string instead, then I don't need to join anything.
     // TODO: Then again, maybe I want these to be properties.
-    let description_line = join_iter(description_line_base.into_iter().map(|line| line.replace("\n\n",&format!("<br>{indentation_items}")))," ");
+    let description_line = join_iter(description_line_base.into_iter().map(|line| line.replace("\n\n",&format!("<br>{indent}")))," ");
 
     let optional_format = if let Some(format) = schema.format {
         format!(", format: {format}")
@@ -504,9 +500,9 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
     let name_formatted = if let Some((name,code_span)) = name {
         if code_span {
-            format!("**`{name}`**")
+            format!("**`{name}`** ")
         } else {
-            format!("**{name}")
+            format!("**{name}** ")
         }
     } else {
         String::new()
@@ -533,19 +529,20 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
         String::new()
     };
 
-    writeln!(target,"{indentation}- {anchor}{name_formatted}{instance_type}{description_line}")?;
+    // TODO: If there's nothing after the bullet, until the description, then don't insert the colon
+    writeln!(target,"{indent}* {anchor}{name_formatted}{instance_type}: {description_line}")?;
 
     // FUTURE: Support all_of in the same way as any_of
 
     if let Some(any_of) = schema.any_of {
-        writeln!(target,"{indentation_items}- **Any of**")?;
+        writeln!(target,"{indent}{TAB}* **Any of**")?;
         for schema in any_of {
             write_schema(schema, None, None, false, level + 2, target)?;
         }
     }
 
     if let Some(one_of) = schema.one_of {
-        writeln!(target,"{indentation_items}- **One of**")?;
+        writeln!(target,"{indent}{TAB}* **One of**")?;
         for schema in one_of {
             write_schema(schema, None, None, false, level + 2, target)?;
         }
@@ -553,7 +550,7 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
     if let Some(items) = schema.items {
 
-        writeln!(target,"{indentation}{TAB}- **Items**:")?;
+        writeln!(target,"{indent}{TAB}* **Items**:")?;
 
         for schema in items {
             write_schema(schema, None, None, false, level + 2, target)?
@@ -577,9 +574,8 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
 }
 
-
-
-fn construct_description_line(schema: &UsableSchema) -> Result<Vec<String>,CommandError> {
+// TODO: This should return a single line.
+fn describe_schema(schema: &UsableSchema) -> Result<Vec<String>,CommandError> {
     let mut description_line = Vec::new();
 
     if let Some(description) = &schema.description {
@@ -611,8 +607,14 @@ fn construct_description_line(schema: &UsableSchema) -> Result<Vec<String>,Comma
     }
 
     if let Some(enum_values) = &schema.enum_values {
-        let enum_values = serde_json::to_string(&enum_values)?;
-        description_line.push(format!("Must be on of: {enum_values}"))
+        if enum_values.len() == 1 {
+            let enum_values = serde_json::to_string(&enum_values[0])?;
+            description_line.push(format!("Must be: {enum_values}"))
+        } else {
+            let enum_values = serde_json::to_string(&enum_values)?;
+            description_line.push(format!("Must be one of: {enum_values}"))
+        }
+
     }
 
     if let Some(additional_properties) = &schema.additional_properties {
