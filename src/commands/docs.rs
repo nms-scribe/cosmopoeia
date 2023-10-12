@@ -83,6 +83,20 @@ fn write_world_file_schema_docs(target: PathBuf) -> Result<(), CommandError> {
 
     writeln!(&mut target,"# World File Schema")?;
 
+    writeln!(&mut target)?;
+
+    writeln!(&mut target, r#"
+The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This is a SQLite database that includes some pre-built tables for storing geographic information. It is best edited with GIS software that supports the format. Below is a description of the layers, or tables, contained inside the database, and field information. The field types given are internal to the software, and their database storage field type is defined in the Field Types scetion.
+
+**On the FID field and Table Order**: Every layer in the file has an identifier field called `fid`, which contains a unique identifier for the field. This is handled by the gdal library, which Cosmopoeia uses for access to the file. Here are a few details:
+
+* According to the [Geopackage standard](http://www.geopackage.org/spec131/index.html#feature_user_tables), the identifier field (which is called fid by default in gdal), is created with the following constraint in SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`.
+* According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
+* According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
+* According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map structure that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
+
+"#)?;
+
     let mut formats = IndexMap::new();
 
     for schema in list_schemas()? {

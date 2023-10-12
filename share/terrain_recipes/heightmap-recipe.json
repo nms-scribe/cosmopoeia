@@ -1,0 +1,22 @@
+[
+    {
+        "task": "Erode",
+        "weathering_amount": 1000,
+        "iterations": 100
+    },
+    {
+        "task": "SeedOcean",
+        "count": 5,
+        "x_filter": "50..=55",
+        "y_filter": "50..=55"
+    },
+    {
+        "task": "SeedOcean",
+        "count": 2,
+        "x_filter": "14..=16",
+        "y_filter": "37..=40"
+    },
+    {
+        "task": "FloodOcean"
+    }
+]

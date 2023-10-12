@@ -187,18 +187,17 @@ I'm wondering if generating river flow would be better done with a heightmap ins
 
 # Testing Commands:
 
-The following commands were used, in this order, to generate the testing maps of Inannak during development. `time` is not the bash command, but a GNU program you might have to install on your machine and call by path.
+The following commands were used, to generate the testing maps of my Inannak world during development. `time` is not the bash command, but a GNU program you might have to install on your machine and call by path.
 
 ```sh
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang testing_output/World.gpkg --overwrite-all --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe testing_output/inannak-recipe.json
+cargo run big-bang testing_output/World.gpkg --overwrite-all --cultures share/culture_sets/afmg_culture_antique.json --namers share/namers/afmg_namers.json --default-namer English --seed 9543572450198918714 from-heightmap ~/Cartography/Inannak/Inannak-Elevation.tif recipe --source share/terrain_recipes/heightmap-recipe.json
 ```
 
 The following was used to generate shared World.gpkg:
 
 ```sh
-/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang share/qgis/World.gpkg --overwrite --cultures testing_output/afmg_culture_antique.json --namers testing_output/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set testing_output/afmg_recipes.json --recipe continents
+/usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang share/qgis/World.gpkg --overwrite-all --cultures share/culture_sets/afmg_culture_antique.json --namers share/namers/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set --source share/terrain_recipes/afmg_recipes.json --recipe continents
 ```
-
 
 # Tasks
 
@@ -296,21 +295,9 @@ To proceed on this, I can break it down into the following steps:
 [X] Clean up and triage TODOs and FUTURE:s into things I must do now, simple things I could do now, and things that can wait until sometime later.
 [X] Work on "Simple Pre-release Tasks" below
 [X] Work on "Complex Pre-release Tasks" below
-[ ] Break world_map module into several modules:
-    [ ] typed_map: everything for typing a map
-        [ ] fields
-        [ ] features
-        [ ] entities
-        [ ] geometry (move this over)
-        [ ] layers
-        [ ] dataset? do I have something for this?
-    [ ] world_map:
-        [ ] field_types: all of the custom field types
-        [ ] layers: all of the layers
-        [ ] mod: the WorldMap construct itself.
-[ ] Documentation
+[X] Documentation
     [-] It's possible to have a separate executable in a bin/<name>.rs file which would give alternate access to code. Create a cosmopoeia-docs command there, perhaps. This will auto-generate some of the docs to a docs subfolder. Should look at github to see where the best place to put this is, though.
-    [ ] I need to document:
+    [X] I need to document:
         [X] Command line: There are clap-markdown crates or something like that
         [-] Database Schema: I might could put some rudimentary "Schema description" function in the layer macro which let's me write the documentation metadata to a function.
             [X] Replace the current "Serialization Documentation" with a simple PropertyType Documentation trait that would be impld on every field type.
@@ -326,39 +313,32 @@ To proceed on this, I can break it down into the following steps:
             [X] Terrain recipe file: Although this is partly done in the command line help, I need alternative information for the JSON file
             [X] Namer files
             [X] Culture set files
-        [ ] The QGIS file?
-        [ ] How to get started
-    [ ] The docs command should write each of the docs to a separate directory.
+        [X] The QGIS file?
+        [X] How to get started
+    [-] The docs command should write each of the docs to a separate directory.
     [ ] Can I set it up so it shows up as a wiki on github?
-    [ ] Need to edit the content on all of the above.
-    [ ] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
-    [ ] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool. It's predecessors were designed for generating lots of random maps over and over. This is designed for generating a few maps, which you can then modify in external tools as you need.
-    [ ] Make sure it's clear that, although the algorithms were inspired by AFMG, the tool is not guaranteed to, and indeed not designed to, behave exactly the same in regards to output given the same output parameters.
-    [ ] Add the following to documentation:
-
-    # On Crates
-
-    I will not release this as a crate, at least for a very long time. You can include it in your cargo file with a github address. For the following reasons:
-    * I do not consider this a professional program, as specified elsewhere, it is not based on scientific principles nor should it be used in scientific projects. So it is not built with the intention of being used by other projects.
-    * I do not intend to maintain the API or the output data backwards compatible. If I see something that isn't working, I will be changing it, hopefully with documentation on how to upgrade your own world files.
-    * I do not intend on writing tests which are necessary to make sure it works, and is safe to use.
-
-    # On Tests
-
-    I have not been good about creating test modules for this code, despite this being a standard of most rust packages. This is one reason I'm not releasing it as a crate. My testing has been done by simply running a few commands and looking at the results. This is more than just laziness, however, there are three reasons why testing this is difficult:
-    * Subjective results: Whether an algorithm produces "good" results is highly subjective. The only thing I can do is look at it, and possibly watch for error messages. While I could develop tests that guarantee that the same results are always output, this is not proof that the algorithm is working correctly.
-    * Nondeterministic results: Much of the program revolves around randomness, which means that it is often difficult to reproduce the same results, even with the same seed for the random number generator. This and the unstabilized api mean that any tests that are created are going to fail with even the smallest change.
-    * Dependency on external files: Most of the algorithms work on external database files, which are difficult to compare the results of. Mocking the database file wouldn't actually be an appropriate test for much of it. While I could write database comparison routines to compare against previous output -- such tests would take a long time, and combined with the other reasons stated above, I don't feel it is worth doing.
-
-    Many bugs have been discovered only when I accidentally changed some minor thing, and even then only because it happened to cause some radical appearance change. Example: After changing code which would lead to generating one more random number in a task, a whole new world was created which had a nation that was not dissolved-- it was a collection of the original tiles. It was caused by a geographic validity error caused by intersecting feature, except that the point where it intersected looked like it shouldn't be intersecting, the vertices were exactly the same values. I assume there was a difference at some precision I couldn't see in the output, and it was caused by some difference in obtaining that result. The error was in the gdal data, which I have no control over, it didn't cause any error messages, and could have been invisible for a long time -- I had run about thirty different worlds which hadn't had a noticeable problem before discovering this one. In any case, the only thing I could do was add a validity check and take action to make the shape valid.  
-
-    # On Layer FID fields:
-
-    * According to the [Geopackage standard](http://www.geopackage.org/spec131/index.html#feature_user_tables), the identifier field (which is called fid by default in gdal), is created with the following constraint in SQLite: `INTEGER PRIMARY KEY AUTOINCREMENT`.
-    * According to [SQLite documentation](https://www.sqlite.org/autoinc.html), a key defined in this way is guaranteed not to be reused, and appears to be possible to represent insertion order, as long as no parallel transactions are occurring, which I do not allow in the same instance of the program.
-    * According to tests, at least sometimes, when iterating through features, the features are returned from the database in fid order. I do not believe that this is guaranteed by any mechanism from gdal or sqlite.
-    * According to tests, a rust hashmap does not iterate over items in entry order. For this reason, I use a special map that iterates in fid order. This attempts to make it more likely that random operations with the same seed are always reproducible with the same input.
+    [-] Need to edit the content on all of the above.
+    [X] Include a caveat that this is not intended to be used for scientific purposes (analyzing streams, etc.) and the algorithms are not meant to model actual physical processes.
+    [X] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool. It's predecessors were designed for generating lots of random maps over and over. This is designed for generating a few maps, which you can then modify in external tools as you need.
+    [-] Make sure it's clear that, although the algorithms were inspired by AFMG, the tool is not guaranteed to, and indeed not designed to, behave exactly the same in regards to output given the same output parameters.
+    [X] Add notes on layer id fields to documentation:
+[ ] Break world_map module into several modules:
+    [ ] typed_map: everything for typing a map
+        [ ] fields
+        [ ] features
+        [ ] entities
+        [ ] geometry (move this over)
+        [ ] layers
+        [ ] dataset? do I have something for this?
+    [ ] world_map:
+        [ ] field_types: all of the custom field types
+        [ ] layers: all of the layers
+        [ ] mod: the WorldMap construct itself.
 [ ] As I have approval, move the recipes and things like that from AFMG into /share
+[ ] Consider, before final, a change to the way lakes fill. Instead of filling up to a level based on accumulation, always fill up to the lowest tile that has a neighbor with a lower elevation on the other side. This should create more interesting lakes than the little potholes I've got now.
+    [ ] What if there are more than one tile thus? they probably both outflow.
+    [ ] If the tile is already an outflow from another lake, it doesn't count, allowing us to fill in a deeper lake that encompasses the other.
+    [ ] In order to get endorheic lakes: if the biome of the accumulation is arid, then the lake is reduced to about a quarter of its depth and recalculated (any "swallowed" lakes also have to be recalculated). If it's a semi-arid biome (grassland, tundra?, etc.) then it can go up to half of its depth. This isn't really scientific, but it is a little more versimilar.
 [ ] Set up private github repository for now.
 [ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)
@@ -567,4 +547,7 @@ These are things that really should be done before release, but they might take 
 [ ] `enhance!` command: This will take a map and *add* random points and tiles to it. Perhaps it will base the new points off of the intersections of the tile boundaries. Heights will be randomly generated for the new points, although within a certain range so that I can try to keep a similar slope, and try to keep the water flow going between the same two tiles. Water will probably not be recalculated, but rivers do need to be rerouted, and lakeshores reshaped. Towns and nations will stay the same, but the new tiles will be assigned by "spreading" the cultures, and nations out based on their neighbors and what they were before. "enhance" comes from the TV show trope where they "enhance" a blurry image and somehow get details out of it that the camera could never have picked up.
     [ ] Combine this with a `clip` command to extract a smaller extent from the map, and you have the submap command.
 [ ] Curvy shapes could have a way of adding noise to the edges, depending on elevations and random knowledge: coastlines get bumpier curves around higher slopes, while rivers get more meanders on lower slopes.
-
+[ ] How about a way to output SVG files from the generated file. The files would create black and white outlines, but the objects would be divided into layers for most fields, possibly with class fields if those are available now, which would allow easy styling in any SVG editor of your choice.
+[ ] For wind directions: What if the wind is affected by the "slope" of the average temperatures -- the direction to the warmest temperature neighbor is averaged with the based direction (because warmer is usually lower pressure). This is closer to how prevailing winds work. Better would be to figure out how to do pressure.
+[ ] Terrain task: Fill sinks -- how much should I fill? Do I only do it for single tiles that are lower? How about more?
+[ ] Terrain task: cut through sinks: Calculate flow, and if it ends in a sink, it cuts the lowest neighboring tile (from a different direction) to just below the current. This should, in theory, create canyons through some highlands. There are many questions, such as: is there a limit to how much it will cut so we can still get Death Valleys and Caspian Seas? If it hits that limit, how do we backtrack and warn the algorithm not to try again? What happens if the cut just leads to another sink?
