@@ -335,11 +335,11 @@ To proceed on this, I can break it down into the following steps:
         [X] layers: all of the layers
         [X] mod: the WorldMap construct itself.
     [X] fix uses in the new modules.
-[ ] As I have approval, move the recipes and things like that from AFMG into /share
-[ ] Consider, before final, a change to the way lakes fill. Instead of filling up to a level based on accumulation, always fill up to the lowest tile that has a neighbor with a lower elevation on the other side. This should create more interesting lakes than the little potholes I've got now.
-    [ ] What if there are more than one tile thus? they probably both outflow.
-    [ ] If the tile is already an outflow from another lake, it doesn't count, allowing us to fill in a deeper lake that encompasses the other.
-    [ ] In order to get endorheic lakes: if the biome of the accumulation is arid, then the lake is reduced to about a quarter of its depth and recalculated (any "swallowed" lakes also have to be recalculated). If it's a semi-arid biome (grassland, tundra?, etc.) then it can go up to half of its depth. This isn't really scientific, but it is a little more versimilar.
+[X] As I have approval, move the recipes and things like that from AFMG into /share
+[-] Consider, before final, a change to the way lakes fill. Instead of filling up to a level based on accumulation, always fill up to the lowest tile that has a neighbor with a lower elevation on the other side. This should create more interesting lakes than the little potholes I've got now.
+    [-] What if there are more than one tile thus? they probably both outflow.
+    [-] If the tile is already an outflow from another lake, it doesn't count, allowing us to fill in a deeper lake that encompasses the other.
+    [-] In order to get endorheic lakes: if the biome of the accumulation is arid, then the lake is reduced to about a quarter of its depth and recalculated (any "swallowed" lakes also have to be recalculated). If it's a semi-arid biome (grassland, tundra?, etc.) then it can go up to half of its depth. This isn't really scientific, but it is a little more versimilar.
 [ ] Set up private github repository for now.
 [ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)

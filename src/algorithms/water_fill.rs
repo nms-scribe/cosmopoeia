@@ -136,8 +136,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
         }
 
 
-        // figure out what we've got to do.
-        // look for an existing lake
+        // figure out what we've got to do. I don't figure out the task until now in order to avoid having to do extra neighbor checks every time we fill.
         if let Some(task) = determine_water_fill_task(&tile_fid, tile, tile_accumulation, &tile_map, &mut next_lake_id, &mut tile_queue, &mut lake_map)? {
             match task {
                 WaterFillTask::AddToFlow(accumulation) => {
@@ -361,20 +360,33 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
     if outlet_tiles.is_empty() {
         // no outlet tiles, so we have to grow the lake.
 
+        // I will need to reduce the increase according to evaporation.
+        let (_,lake_evap) = lake.calc_temp_and_evap(); 
+
+        // Calculate how much it increases per tile, reducing by evaporation, it won't decrease
         let accumulation_per_tile = accumulation/lake.contained_tiles.len() as f64;
-        let spillover_difference = lake.spillover_elevation - lake.elevation;
-        let lake_increase = accumulation_per_tile.min(spillover_difference);
-        // I also need to reduce the increase according to evaporation.
-        let (_,lake_evap) = lake.calc_temp_and_evap();
-        let new_lake_elevation = (lake.elevation + lake_increase - lake_evap).min(lake.elevation);
+        let lake_increase = (accumulation_per_tile - lake_evap).max(0.0);
+
+        // If that would bring it over the spillover, then subtract that from increase, and the difference is the remaining accumulation
+        let spillover_increase = (lake.spillover_elevation - lake.elevation).max(0.0);
+        let (lake_increase,total_remaining_accumulation,overflow) = if lake_increase > spillover_increase {
+            let remaining_accumulation_per_tile = (lake_increase - spillover_increase).max(0.0);
+            let total_remaining_accumulation = remaining_accumulation_per_tile * lake.contained_tiles.len() as f64;
+            (spillover_increase,total_remaining_accumulation,true)
+        } else {
+            (lake_increase,0.0,false)
+        };
+
+        // get new values for the new lake.
+        let new_lake_elevation = lake.elevation + lake_increase;
         let mut new_bottom_elevation = lake.bottom_elevation;
         let new_lake_flow = lake.flow + accumulation;
-        let remaining_accum_per_tile = accumulation_per_tile - lake_increase;
-        let total_remaining_accumulation = remaining_accum_per_tile * lake.contained_tiles.len() as f64;
 
-        if remaining_accum_per_tile > 0.0 {
+        
+
+        if overflow {
             // we need to increase the size of the lake. Right now, we are at the spillover level.
-            // Basically, pretend that we are making the lake deeper by 0.0001 (or some small amount)
+            // Basically, pretend that we are making the lake deeper by 0.0001 (or some other small amount)
             // and walk the shoreline and beyond looking for:
             // * tiles that are in a lake already:
             //   * if the lake elevation is between this lake elevation and the test elevation, we need to "swallow" the lake.

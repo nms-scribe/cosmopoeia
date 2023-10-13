@@ -12,6 +12,8 @@ use super::tiles::find_lowest_tile;
 use crate::world_map::fields::Neighbor;
 use crate::typed_map::fields::IdRef;
 
+
+
 pub(crate) struct WaterFlowResult  { 
     pub(crate) tile_map: EntityIndex<TileSchema,TileForWaterFill>, 
     pub(crate) lake_queue: Vec<(IdRef,f64)> 
@@ -25,7 +27,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
     let cells_number_modifier = (layer.feature_count() as f64 / 10000.0).powf(0.25);
 
     let mut tile_list = Vec::new();
-    let mut lake_queue = Vec::new();
+    let mut potential_lakes = Vec::new();
 
     let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForWaterflow,_>(|fid,tile| {
         if !tile.grouping.is_ocean() {
@@ -75,7 +77,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
                 }
                 (0.0,lowest)
             } else {
-                lake_queue.push((fid.clone(),water_flow));
+                potential_lakes.push((fid.clone(),water_flow));
                 (water_flow,Vec::new())
             }
 
@@ -105,7 +107,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
     Ok(WaterFlowResult {
         tile_map: tile_map.into_iter().map(|(k,v)| (k,v.into())).collect(),
-        lake_queue,
+        lake_queue: potential_lakes,
     })
 
 
