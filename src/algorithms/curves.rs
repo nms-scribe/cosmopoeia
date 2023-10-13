@@ -74,7 +74,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
             polygons.push(polygon_geometry);
         }
         let multipolygon_geometry = MultiPolygon::from_variants(polygons)?;
-        let mut feature = layer.try_feature_by_id(&fid)?;
+        let mut feature = layer.try_feature_by_id(fid)?;
         feature.set_geometry(multipolygon_geometry)?;
         layer.update_feature(feature)?;
 

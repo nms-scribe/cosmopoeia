@@ -77,7 +77,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
             let name = if rng.gen_bool(0.5) {
                 // name by town
-                let town = town_map.try_get(&seat)?;
+                let town = town_map.try_get(seat)?;
                 town.name.clone()
             } else {
                 // new name by culture
@@ -132,7 +132,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
         let mut place_subnations = Vec::new();
 
-        let tile = tile_map.try_get(&tile_id.into())?;
+        let tile = tile_map.try_get(&tile_id)?;
         for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
 
             match neighbor_id {

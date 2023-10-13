@@ -258,7 +258,7 @@ pub(crate) trait ColorConversion {
 
     fn try_from_hex_str(value: &str) -> Result<Rgb<u8>,CommandError>;
 
-    fn into_hex_string(&self) -> String;
+    fn into_hex_string(self) -> String;
 
 }
 
@@ -275,7 +275,7 @@ impl ColorConversion for Rgb<u8> {
         Ok(Self::new(red,green,blue))
     }
 
-    fn into_hex_string(&self) -> String {
+    fn into_hex_string(self) -> String {
         let (red,green,blue) = (self.red(),self.green(),self.blue());
         format!("#{red:02X?}{green:02X?}{blue:02X?}")
     }
@@ -287,7 +287,7 @@ impl TypedField for Deg<f64> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTReal;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Ok(Deg(f64::get_field(feature,field_name,field_id)?))
+        Ok(Self(f64::get_field(feature,field_name,field_id)?))
     }
 
     fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {

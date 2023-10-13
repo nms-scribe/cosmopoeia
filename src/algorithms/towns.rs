@@ -312,7 +312,7 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
                     if harbor.temperature > 0.0 {
                         let on_large_water = if let Some(lake_id) = &harbor.lake_id {
                             // don't make it a port if the lake is only 1 tile big
-                            let lake = lake_map.try_get(&(lake_id))?;
+                            let lake = lake_map.try_get(lake_id)?;
                             lake.size > 1
                         } else {
                             harbor.grouping.is_ocean()

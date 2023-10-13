@@ -285,7 +285,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
     }
 
     pub(crate) fn try_feature_by_id(&'feature self, fid: &IdRef) -> Result<Feature,CommandError> {
-        self.layer.feature(fid.into_inner()).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,fid.clone())).map(Feature::from)
+        self.layer.feature(fid.to_inner()).ok_or_else(|| CommandError::MissingFeature(SchemaType::LAYER_NAME,fid.clone())).map(Feature::from)
     }
 
 

@@ -1,4 +1,6 @@
-use std::fmt::Display;
+use core::fmt::Display;
+use core::fmt::Formatter;
+use core::fmt::Result as FormatResult;
 
 use gdal::vector::Feature;
 use gdal::vector::field_type_to_name;
@@ -55,7 +57,7 @@ pub(crate) fn describe_variant_syntax(variants: &[(&str,&[&[FieldTypeDocumentati
             result.push_str(" | ")
         }
         result.push('"');
-        result.push_str(&variant);
+        result.push_str(variant);
         result.push('"');
         for tuple_items in *has_tuple {
             result.push_str(" (");
@@ -114,6 +116,7 @@ macro_rules! impl_documentation_for_tagged_enum {
         // This enforce that we have all of the same enum values
         impl $enum {
 
+            #[allow(clippy::missing_const_for_fn)] // no it can't be a const function because it owns 'self' and anyway it's not intended to ever be called.
             fn _documented_field_type_identity(self) -> Self {
                 match self {
                     $(
@@ -131,18 +134,18 @@ pub struct IdRef(u64);
 
 impl IdRef {
 
-    pub(crate) fn new(id: u64) -> Self {
+    pub(crate) const fn new(id: u64) -> Self {
         Self(id)
     }
 
-    pub(crate) fn into_inner(&self) -> u64 {
+    pub(crate) const fn to_inner(&self) -> u64 {
         self.0
     }
 
 }
 
 impl Display for IdRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FormatResult {
         write!(f,"{}",self.0)
     }
 }
@@ -229,7 +232,7 @@ impl TypedField for String {
 
 
     fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self)?)
+        Ok(feature.set_field_string(field_name, self)?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -247,12 +250,7 @@ impl TypedField for Option<String> {
 
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
         if let Some(value) = feature.field_as_string_by_name(field_name)? {
-            if value == "" {
-                // we're storing null strings as empty for now.
-                Ok(None)
-            } else {
-                Ok(Some(value))
-            }
+            Ok(Some(value))
         } else {
             Ok(None)
         }

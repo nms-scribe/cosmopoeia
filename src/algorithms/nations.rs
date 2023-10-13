@@ -211,7 +211,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for (fid,tile) in tile_map.iter().watch(progress,"Writing nations.","Nations written.") {
 
-        let mut feature = tiles.try_feature_by_id(&fid)?;
+        let mut feature = tiles.try_feature_by_id(fid)?;
 
         feature.set_nation_id(&tile.nation_id.clone())?;
 
@@ -401,7 +401,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
                     let neighbor = tile_map.try_get(neighbor_id)?;
 
                     if let Some(town_id) = &neighbor.town_id {
-                        let town = town_index.try_get(&town_id)?;
+                        let town = town_index.try_get(town_id)?;
                         if town.is_capital {
                             dont_overwrite = true; // don't overwrite near capital
                             break;

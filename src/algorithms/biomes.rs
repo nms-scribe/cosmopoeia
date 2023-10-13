@@ -60,7 +60,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
         } else {
             // is it a wetland?
             if (tile.water_flow > 400.0) || 
-               matches!(tile.lake_id.as_ref().map(|id| lake_map.try_get(&id).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
+               matches!(tile.lake_id.as_ref().map(|id| lake_map.try_get(id).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
                 biomes.wetland.clone()
             } else {
                 // The original calculation favored deserts too much

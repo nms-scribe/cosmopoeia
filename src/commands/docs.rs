@@ -70,7 +70,7 @@ fn map_field_types(field_type: &FieldTypeDocumentation, map: &mut IndexMap<Strin
     match map.get(&name) {
         Some(existing) => if field_type != existing {
             // This is a programming logic error. FUTURE: I should find some type safe way to do this.
-            panic!("Multiple documentation is listed for field type {}",name)
+            panic!("Multiple documentation is listed for field type {name}")
         },
         None => _ = map.insert(name.clone(), field_type.clone()),
     }
@@ -102,17 +102,17 @@ The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This i
     for schema in list_schemas()? {
         writeln!(&mut target,"## Layer `{}`",schema.name)?;
         writeln!(&mut target,"**geometry**: {}",schema.geometry)?;
-        writeln!(&mut target,"")?;
+        writeln!(&mut target)?;
         writeln!(&mut target,"{}",schema.description)?;
-        writeln!(&mut target,"")?;
+        writeln!(&mut target)?;
         for field in schema.fields {
             writeln!(&mut target,"### `{}`",field.name)?;
             writeln!(&mut target,"**database field type**: {}",map_field_types(&field.field_type,&mut formats))?;
-            writeln!(&mut target,"")?;
+            writeln!(&mut target)?;
             writeln!(&mut target,"{}",field.description)?;
-            writeln!(&mut target,"")?;
+            writeln!(&mut target)?;
         }
-        writeln!(&mut target,"")?;
+        writeln!(&mut target)?;
     }
 
     formats.sort_keys();
@@ -120,12 +120,12 @@ The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This i
     writeln!(&mut target,"## Field Types")?;
 
     for (name,field_type) in formats {
-        writeln!(&mut target,"### {}",name)?;
+        writeln!(&mut target,"### {name}")?;
         writeln!(&mut target,"**storage type**: {}",field_type.storage_type)?;
         writeln!(&mut target,"**syntax**: `{}`",field_type.syntax)?;
-        writeln!(&mut target,"")?;
+        writeln!(&mut target)?;
         writeln!(&mut target,"{}",field_type.description)?;
-        writeln!(&mut target,"")?;
+        writeln!(&mut target)?;
     }
 
     Ok(())
@@ -133,7 +133,7 @@ The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This i
 }
 
 
-fn instance_type_name(instance_type: &InstanceType) -> &'static str {
+const fn instance_type_name(instance_type: InstanceType) -> &'static str {
 
     match instance_type {
         InstanceType::Null => "Null",
@@ -199,6 +199,157 @@ impl UsableSchema {
 
     fn from(schema: SchemaObject) -> Self {
 
+        struct UsableObjectSchema {
+            required_props: BTreeSet<String>, 
+            properties: Option<BTreeMap<String, UsableSchema>>, 
+            additional_properties: Option<Box<UsableSchemaOrBoolean>>
+        }
+
+        fn usable_object_attribs(object: Option<Box<ObjectValidation>>) -> UsableObjectSchema {
+            let (required_props, properties, additional_properties) =  if let Some(object) = object {
+                let ObjectValidation{properties, additional_properties, max_properties, min_properties, required, pattern_properties, property_names } = *object;
+                if max_properties.is_some() {
+                    unimplemented!("max_properties isn't supported yet.")
+                }
+                if min_properties.is_some() {
+                    unimplemented!("min_properties isn't supported yet.")
+                }
+                if !pattern_properties.is_empty() {
+                    unimplemented!("pattern_properties isn't supported yet.")
+                }
+                if property_names.is_some() {
+                    unimplemented!("property_names isn't supported yet.")
+                }
+                let properties = if properties.is_empty() {
+                    None
+                } else {
+                    let properties = BTreeMap::from_iter(properties.into_iter().map(|(k,v)| {
+                        let v = match v {
+                            Schema::Bool(_) => unimplemented!("Boolean schemas for properties isn't supported yet."),
+                            Schema::Object(schema) => UsableSchema::from(schema),
+                        };
+                        (k,v)
+                    }));
+                    Some(properties)
+                };
+                let additional_properties = additional_properties.map(|ap| UsableSchemaOrBoolean::from(*ap).into());
+                (required, properties, additional_properties)
+            } else {
+                (BTreeSet::default(),None,None)
+            };
+            UsableObjectSchema {
+                required_props, 
+                properties, 
+                additional_properties
+            }
+        }
+        
+        fn usable_array_attribs(array: Option<Box<ArrayValidation>>) -> (Option<u32>, Option<u32>, Option<Vec<UsableSchema>>) {
+            let (min_items,max_items,items) = if let Some(array) = array {
+                let ArrayValidation{min_items,max_items,unique_items,items,additional_items,contains} = *array;
+                if additional_items.is_some() {
+                    unimplemented!("additional items isn't supported yet.")
+                }
+                if unique_items.is_some() {
+                    unimplemented!("unique items isn't supported yet.")
+                }
+                if contains.is_some() {
+                    unimplemented!("contains isn't supported yet.")
+                }
+                let items = if let Some(items) = items {
+                    match items {
+                        SingleOrVec::Single(schema) => match *schema {
+                            Schema::Bool(_) => unimplemented!("boolean schemas for single item isn't supported yet"),
+                            Schema::Object(schema) => Some(vec![UsableSchema::from(schema)]),
+                        },
+                        SingleOrVec::Vec(schemas) => Some(schemas.into_iter().map(|s| {
+                            match s {
+                                Schema::Bool(_) => unimplemented!("boolean schemas for items isn't supported yet"),
+                                Schema::Object(schema) => UsableSchema::from(schema),
+                            }
+                        }).collect()),
+                    }
+                } else {
+                    None
+                };
+                (min_items,max_items,items)
+            } else {
+                (None,None,None)
+            };
+            (min_items, max_items, items)
+        }
+        
+        fn usable_string_attribs(string: Option<Box<StringValidation>>) -> (Option<u32>, Option<u32>, Option<String>) {
+            let (min_length,max_length,pattern) = if let Some(string) = string {
+                let StringValidation{min_length,max_length,pattern} = *string;
+                (min_length,max_length,pattern)
+            } else {
+                (None,None,None)
+            };
+            (min_length, max_length, pattern)
+        }
+        
+        fn usable_number_attribs(number: Option<Box<NumberValidation>>) -> Option<f64> {
+            
+            if let Some(number) = number {
+                let NumberValidation{exclusive_minimum,minimum,maximum,exclusive_maximum,multiple_of} = *number;
+                if exclusive_minimum.is_some() {
+                    unimplemented!("exclusive minimum isn't supported yet.")
+                }
+                if exclusive_maximum.is_some() {
+                    unimplemented!("exclusive maximum isn't supported yet.")
+                }
+                if maximum.is_some() {
+                    unimplemented!("maximum isn't supported yet.")
+                }
+                if multiple_of.is_some() {
+                    unimplemented!("multiple_of isn't supported yet.")
+                }
+                minimum
+            } else {
+                None
+            }
+        }
+            
+            
+        fn usable_subschemas(subschemas: Option<Box<SubschemaValidation>>) -> (Option<Vec<UsableSchema>>, Option<Vec<UsableSchema>>) {
+            let (any_of,one_of) = if let Some(subschemas) = subschemas {
+                let SubschemaValidation{any_of,one_of,not, all_of, if_schema, then_schema, else_schema } = *subschemas;
+                if all_of.is_some() {
+                    unimplemented!("all_of isn't supported yet.")
+                }
+                if if_schema.is_some() {
+                    unimplemented!("if_schema isn't supported yet.")
+                }
+                if then_schema.is_some() {
+                    unimplemented!("then_schema isn't supported yet.")
+                }
+                if else_schema.is_some() {
+                    unimplemented!("else_schema isn't supported yet.")
+                }
+                if not.is_some() {
+                    unimplemented!("not isn't supported yet.")
+                }
+                let any_of = any_of.map(|ao| ao.into_iter().map(|s|{
+                        match s {
+                            Schema::Bool(_) => unimplemented!("boolean schemas in any_of are not supported yet."),
+                            Schema::Object(s) => UsableSchema::from(s),
+                        }
+                    }).collect());
+                let one_of = one_of.map(|oo| oo.into_iter().map(|s|{
+                        match s {
+                            Schema::Bool(_) => unimplemented!("boolean schemas in one_of are not supported yet."),
+                            Schema::Object(s) => UsableSchema::from(s),
+                        }
+                    }).collect());
+                (any_of,one_of)
+            } else {
+                (None,None)
+            };
+            (any_of, one_of)
+        }
+    
+    
         let SchemaObject {
             metadata,
             instance_type,
@@ -218,7 +369,7 @@ impl UsableSchema {
             unimplemented!("Extensions are not supported yet.")
         }
     
-        if let Some(_) = const_value {
+        if const_value.is_some() {
             unimplemented!("const_value isn't supported yet.");
         }
 
@@ -241,185 +392,57 @@ impl UsableSchema {
         };
     
         // default value
-        if let Some(_) = default {
+        if default.is_some() {
             unimplemented!("default value isn't supported yet.");
         }
     
         let instance_types = if let Some(instance_type) = &instance_type {
             match instance_type {
                 SingleOrVec::Single(instance_type) => Some(vec![**instance_type]),
-                SingleOrVec::Vec(vec) => Some(vec.into_iter().map(|t| *t).collect()),
+                SingleOrVec::Vec(vec) => Some(vec.clone()),
             }
         } else {
             None
         };
     
-        let minimum = if let Some(number) = number {
-            let NumberValidation{exclusive_minimum,minimum,maximum,exclusive_maximum,multiple_of} = *number;
-            if exclusive_minimum.is_some() {
-                unimplemented!("exclusive minimum isn't supported yet.")
-            }
-            if exclusive_maximum.is_some() {
-                unimplemented!("exclusive maximum isn't supported yet.")
-            }
-            if maximum.is_some() {
-                unimplemented!("maximum isn't supported yet.")
-            }
-            if multiple_of.is_some() {
-                unimplemented!("multiple_of isn't supported yet.")
-            }
-            minimum
-        } else {
-            None
-        };
+        let minimum = usable_number_attribs(number);
     
-        let (min_length,max_length,pattern) = if let Some(string) = string {
-            let StringValidation{min_length,max_length,pattern} = *string;
-            (min_length,max_length,pattern)
-        } else {
-            (None,None,None)
-        };
+        let (min_length, max_length, pattern) = usable_string_attribs(string);
     
-        let (min_items,max_items,items) = if let Some(array) = array {
-            let ArrayValidation{min_items,max_items,unique_items,items,additional_items,contains} = *array;
-            if additional_items.is_some() {
-                unimplemented!("additional items isn't supported yet.")
-            }
-            if unique_items.is_some() {
-                unimplemented!("unique items isn't supported yet.")
-            }
-            if contains.is_some() {
-                unimplemented!("contains isn't supported yet.")
-            }
-            let items = if let Some(items) = items {
-                match items {
-                    SingleOrVec::Single(schema) => match *schema {
-                        Schema::Bool(_) => unimplemented!("boolean schemas for single item isn't supported yet"),
-                        Schema::Object(schema) => Some(vec![UsableSchema::from(schema)]),
-                    },
-                    SingleOrVec::Vec(schemas) => Some(schemas.into_iter().map(|s| {
-                        match s {
-                            Schema::Bool(_) => unimplemented!("boolean schemas for items isn't supported yet"),
-                            Schema::Object(schema) => UsableSchema::from(schema),
-                        }
-                    }).collect()),
-                }
-            } else {
-                None
-            };
-            (min_items,max_items,items)
-        } else {
-            (None,None,None)
-        };
+        let (min_items, max_items, items) = usable_array_attribs(array);
     
-        let (required_props, properties, additional_properties) =  if let Some(object) = object {
-            let ObjectValidation{properties, additional_properties, max_properties, min_properties, required, pattern_properties, property_names } = *object;
-            if max_properties.is_some() {
-                unimplemented!("max_properties isn't supported yet.")
-            }
-            if min_properties.is_some() {
-                unimplemented!("min_properties isn't supported yet.")
-            }
-            if !pattern_properties.is_empty() {
-                unimplemented!("pattern_properties isn't supported yet.")
-            }
-            if property_names.is_some() {
-                unimplemented!("property_names isn't supported yet.")
-            }
-            let properties = if properties.is_empty() {
-                None
-            } else {
-                let properties = BTreeMap::from_iter(properties.into_iter().map(|(k,v)| {
-                    let v = match v {
-                        Schema::Bool(_) => unimplemented!("Boolean schemas for properties isn't supported yet."),
-                        Schema::Object(schema) => UsableSchema::from(schema),
-                    };
-                    (k,v)
-                }));
-                Some(properties)
-            };
-            let additional_properties = if let Some(additional_properties) = additional_properties {
-                Some(UsableSchemaOrBoolean::from(*additional_properties).into())
-            } else {
-                None
-            };
-            (required, properties, additional_properties)
-        } else {
-            (Default::default(),None,None)
-        };
+        let UsableObjectSchema{required_props, properties, additional_properties} = usable_object_attribs(object);
 
-        let (any_of,one_of) = if let Some(subschemas) = subschemas {
-            let SubschemaValidation{any_of,one_of,not, all_of, if_schema, then_schema, else_schema } = *subschemas;
-            if all_of.is_some() {
-                unimplemented!("all_of isn't supported yet.")
-            }
-            if if_schema.is_some() {
-                unimplemented!("if_schema isn't supported yet.")
-            }
-            if then_schema.is_some() {
-                unimplemented!("then_schema isn't supported yet.")
-            }
-            if else_schema.is_some() {
-                unimplemented!("else_schema isn't supported yet.")
-            }
-            if not.is_some() {
-                unimplemented!("not isn't supported yet.")
-            }
-            let any_of = if let Some(any_of) = any_of {
-                Some(any_of.into_iter().map(|s|{
-                    match s {
-                        Schema::Bool(_) => unimplemented!("boolean schemas in any_of are not supported yet."),
-                        Schema::Object(s) => UsableSchema::from(s),
-                    }
-                }).collect())
-            } else {
-                None
-            };
-            let one_of = if let Some(one_of) = one_of {
-                Some(one_of.into_iter().map(|s|{
-                    match s {
-                        Schema::Bool(_) => unimplemented!("boolean schemas in one_of are not supported yet."),
-                        Schema::Object(s) => UsableSchema::from(s),
-                    }
-                }).collect())
-            } else {
-                None
-            };
-            (any_of,one_of)
-        } else {
-            (None,None)
-        };
+        let (any_of, one_of) = usable_subschemas(subschemas);
 
-        Self{
-            title,
-            description,
-            instance_types,        
-            reference,
-            format,
-            enum_values,
-            minimum,
-            min_length,
-            max_length,
-            pattern,
-            min_items,
-            max_items,
-            items,
-            required_props,
-            properties,
-            additional_properties,
-            any_of,
-            one_of
-
+        Self { 
+            any_of, 
+            one_of, 
+            format, 
+            enum_values, 
+            title, description, 
+            instance_types, 
+            reference, 
+            minimum, 
+            min_length, 
+            max_length, 
+            pattern, 
+            min_items, 
+            max_items, 
+            items, 
+            required_props, 
+            properties, 
+            additional_properties 
         }
     }
+
 
 }
 
 
-
 const TAB: &str = "  ";
 
-fn write_root_schema(default_title: String, root: RootSchema, target: &mut File) -> Result<(),CommandError> {
+fn write_root_schema(default_title: &str, root: RootSchema, target: &mut File) -> Result<(),CommandError> {
 
     // Output format inspired by https://pypi.org/project/jsonschema2md/
 
@@ -455,8 +478,8 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
         writeln!(target)?;
         writeln!(target,"{TAB}* **Items**:")?;
 
-        for schema in items {
-            write_schema(schema, None, None, false, 2, target)?
+        for sub_schema in items {
+            write_schema(sub_schema, None, None, false, 2, target)?
         }
     }
 
@@ -478,13 +501,13 @@ fn write_root_schema(default_title: String, root: RootSchema, target: &mut File)
 
     if !definitions.is_empty() {
         writeln!(target,"## Definitions")?;
-        for (name,schema) in definitions {
-            match schema {
+        for (name,sub_schema) in definitions {
+            match sub_schema {
                 Schema::Bool(_) => unimplemented!("Boolean schemas in definitions are not yet supported."),
-                Schema::Object(schema) => {
-                    let schema = UsableSchema::from(schema);
+                Schema::Object(sub_schema) => {
+                    let sub_schema = UsableSchema::from(sub_schema);
                     let anchor = format!("definitions/{name}");
-                    write_schema(schema, Some((name,true)), Some(anchor), false, 1, target)?;
+                    write_schema(sub_schema, Some((name,true)), Some(anchor), false, 1, target)?;
                 },
             }
         }
@@ -535,7 +558,7 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
         if let Some(instance_types) = &schema.instance_types {
             has_type = true;
-            let instance_types = join_iter(instance_types.into_iter().map(|i| instance_type_name(&i))," | ");
+            let instance_types = join_iter(instance_types.iter().map(|i| instance_type_name(*i))," | ");
             write!(target,"{instance_types}")?;
             spacing = ", ";
         };
@@ -570,15 +593,15 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
     if let Some(any_of) = schema.any_of {
         writeln!(target,"{indent}{TAB}* **Any of**")?;
-        for schema in any_of {
-            write_schema(schema, None, None, false, level + 2, target)?;
+        for sub_schema in any_of {
+            write_schema(sub_schema, None, None, false, level + 2, target)?;
         }
     }
 
     if let Some(one_of) = schema.one_of {
         writeln!(target,"{indent}{TAB}* **One of**")?;
-        for schema in one_of {
-            write_schema(schema, None, None, false, level + 2, target)?;
+        for sub_schema in one_of {
+            write_schema(sub_schema, None, None, false, level + 2, target)?;
         }
     }
 
@@ -586,8 +609,8 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
         writeln!(target,"{indent}{TAB}* **Items**:")?;
 
-        for schema in items {
-            write_schema(schema, None, None, false, level + 2, target)?
+        for sub_schema in items {
+            write_schema(sub_schema, None, None, false, level + 2, target)?
         }
     }
 
@@ -596,9 +619,9 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
     }
 
     if let Some(properties) = schema.properties {
-        for (name,property_schema) in properties {
-            let is_required = schema.required_props.contains(&name);
-            write_schema(property_schema, Some((name,true)), None, is_required, level + 1, target)?;
+        for (property_name,property_schema) in properties {
+            let is_required = schema.required_props.contains(&property_name);
+            write_schema(property_schema, Some((property_name,true)), None, is_required, level + 1, target)?;
         }
     }
 
@@ -682,7 +705,7 @@ fn write_command_help(target: PathBuf) -> Result<(),CommandError> {
     Ok(())
 }
 
-fn write_schema_docs<Schema: JsonSchema>(title: String, schema_target: PathBuf, docs_target: PathBuf) -> Result<(),CommandError> {
+fn write_schema_docs<Schema: JsonSchema>(title: &str, schema_target: PathBuf, docs_target: PathBuf) -> Result<(),CommandError> {
     let mut schema_target = File::create(schema_target)?;
     let schema = schema_for!(Schema);
     write!(&mut schema_target,"{}",serde_json::to_string_pretty(&schema)?)?;
@@ -716,15 +739,15 @@ impl Task for Docs {
         
         let terrain_task_schema = self.schemas.join("terrain_tasks.schema.json");
         let terrain_task_doc = self.docs.join("Recipe Set Schema.md");
-        write_schema_docs::<HashMap<String,Vec<TerrainCommand>>>("Terrain Recipe Set".to_owned(),terrain_task_schema,terrain_task_doc)?;
+        write_schema_docs::<HashMap<String,Vec<TerrainCommand>>>("Terrain Recipe Set",terrain_task_schema,terrain_task_doc)?;
         
         let culture_set_schema = self.schemas.join("cultures.schema.json");
         let culture_set_doc = self.docs.join("Cultures Schema.md");
-        write_schema_docs::<Vec<CultureSetItemSource>>("Culture Set".to_owned(),culture_set_schema,culture_set_doc)?;
+        write_schema_docs::<Vec<CultureSetItemSource>>("Culture Set",culture_set_schema,culture_set_doc)?;
 
         let namer_schema = self.schemas.join("namers.schema.json");
         let namer_docs = self.docs.join("Namers Schema.md");
-        write_schema_docs::<Vec<NamerSource>>("Namer Set".to_owned(),namer_schema,namer_docs)?;
+        write_schema_docs::<Vec<NamerSource>>("Namer Set",namer_schema,namer_docs)?;
         Ok(())
 
         /*

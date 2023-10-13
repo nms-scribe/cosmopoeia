@@ -233,13 +233,13 @@ impl From<FloatIsNan> for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(value: std::io::Error) -> Self {
-        CommandError::IOError(format!("{value}"))
+        Self::IOError(format!("{value}"))
     }
 }
 
 impl From<serde_json::Error> for CommandError {
     fn from(value: serde_json::Error) -> Self {
-        CommandError::SerdeJSONError(format!("{value}"))
+        Self::SerdeJSONError(format!("{value}"))
     }
 }
 

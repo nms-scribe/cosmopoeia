@@ -246,7 +246,7 @@ pub(crate) fn generate_water_river_to_type(segment: &Rc<RiverSegment>, tile_to_i
         Neighbor::Tile(segment_to) | Neighbor::CrossMap(segment_to,_) => {
             // a segment ends with a confluence if more than one segment ends at the same to point.
             let ends_with_confluence = {
-                if let Some(tile) = tile_to_index.get(&segment_to) {
+                if let Some(tile) = tile_to_index.get(segment_to) {
                     tile.len() > 1
                 } else {
                     false
@@ -255,7 +255,7 @@ pub(crate) fn generate_water_river_to_type(segment: &Rc<RiverSegment>, tile_to_i
 
             // Get start and end topological types, as well as potential previous and next tiles for curve manipulation.
 
-            let (to_type,next_tile) = match tile_from_index.get(&segment_to) {
+            let (to_type,next_tile) = match tile_from_index.get(segment_to) {
                 // I am looking for what other segments come from the end of this segment.
                 // if no other segments, then it's a mouth
                 // if 1 segment, then it's continuing, Except it could be a confluence if multiple others go to that same point

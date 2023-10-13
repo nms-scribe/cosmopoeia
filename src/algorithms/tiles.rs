@@ -332,7 +332,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 }
 
 fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
-    let neighbor = tile_map.try_get(&neighbor_id)?;
+    let neighbor = tile_map.try_get(neighbor_id)?;
     let neighbor_angle = {
         let (site_x,site_y) = tile.site.to_tuple();
         let (neighbor_site_x,neighbor_site_y) = neighbor.site.to_tuple();

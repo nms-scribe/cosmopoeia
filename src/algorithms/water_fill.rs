@@ -186,7 +186,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                             // this is the same as above, but with the new lake.
                             // we can automatically flow to those tiles.
                             let neighbor_flow = accumulation/outlet_tiles.len() as f64;
-    
+
                             for (_,neighbor_fid) in outlet_tiles {
                                 match neighbor_fid {
                                     Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
@@ -432,7 +432,7 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
                             new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(check.elevation)).or(Some(check.elevation));
                         } else if let Some(lake_id) = &check.lake_id {
                             // it's in a lake already...
-                            if let Some(other_lake) = lake_map.get(&lake_id) {
+                            if let Some(other_lake) = lake_map.get(lake_id) {
                                 if (other_lake.elevation <= test_elevation) && (other_lake.elevation >= new_lake_elevation) {
                                     // the lakes are about the same elevation, so
                                     // merge the other one into this one.

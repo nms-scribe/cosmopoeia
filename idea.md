@@ -340,7 +340,10 @@ To proceed on this, I can break it down into the following steps:
     [-] What if there are more than one tile thus? they probably both outflow.
     [-] If the tile is already an outflow from another lake, it doesn't count, allowing us to fill in a deeper lake that encompasses the other.
     [-] In order to get endorheic lakes: if the biome of the accumulation is arid, then the lake is reduced to about a quarter of its depth and recalculated (any "swallowed" lakes also have to be recalculated). If it's a semi-arid biome (grassland, tundra?, etc.) then it can go up to half of its depth. This isn't really scientific, but it is a little more versimilar.
-[ ] Set up private github repository for now.
+[X] clippy
+[ ] Need some sample screenshots
+[ ] Set up private github repository for now, with docs...
+[ ] Need a readme, that includes the top part of the introduction.
 [ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)
 [ ] Make the github repository public.

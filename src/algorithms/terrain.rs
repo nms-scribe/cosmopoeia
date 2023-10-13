@@ -566,7 +566,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             let end = point_index.find_nearest_tile(&end_point)?;
 
             progress.start_unknown_endpoint(|| format!("Generating range #{}.",i+1));
-            let range = get_range(rng, tile_map, &mut used, start, end, 0.85)?;
+            let range = get_range(rng, tile_map, &mut used, start, &end, 0.85)?;
 
             // add height to ridge and neighboring cells
             let mut queue = range.clone();
@@ -642,12 +642,12 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
     }
 }
 
-fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchema, TileForTerrain>, used: &mut HashSet<IdRef>, start: IdRef, end: IdRef, jagged_probability: f64) -> Result<Vec<IdRef>, CommandError> {
+fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchema, TileForTerrain>, used: &mut HashSet<IdRef>, start: IdRef, end: &IdRef, jagged_probability: f64) -> Result<Vec<IdRef>, CommandError> {
     let mut cur_id = start;
-    let end_tile = tile_map.try_get(&end)?;
+    let end_tile = tile_map.try_get(end)?;
     let mut range = vec![cur_id.clone()];
     _ = used.insert(cur_id.clone());
-    while cur_id != end {
+    while &cur_id != end {
         let mut min = f64::INFINITY;
         let cur_tile = tile_map.try_get(&cur_id)?;
         // basically, find the neighbor that is closest to the end
@@ -745,7 +745,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
         let start = point_index.find_nearest_tile(&start_point)?;
         let end = point_index.find_nearest_tile(&end_point)?;
 
-        let mut range = get_range(rng, tile_map, &mut used, start, end, 0.8)?;
+        let mut range = get_range(rng, tile_map, &mut used, start, &end, 0.8)?;
 
         let mut next_queue = Vec::new();
 

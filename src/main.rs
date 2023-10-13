@@ -105,7 +105,6 @@ Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage f
 #![warn(clippy::tuple_array_conversions)]
 #![warn(clippy::type_repetition_in_bounds)]
 #![warn(clippy::unicode_not_nfc)]
-#![warn(clippy::unimplemented)]
 #![warn(clippy::uninlined_format_args)]
 #![warn(clippy::unnecessary_struct_initialization)]
 #![warn(clippy::unnecessary_wraps)]

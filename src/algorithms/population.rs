@@ -67,7 +67,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                         match water_cell {
                             Neighbor::Tile(water_cell) | Neighbor::CrossMap(water_cell, _) => {
                                 let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&water_cell)?;
-                                if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id.into())).transpose()?.map(|l| &l.type_) {
+                                if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id)).transpose()?.map(|l| &l.type_) {
                                     match lake_type {
                                         LakeType::Fresh => suitability += 30.0,
                                         LakeType::Salt => suitability += 10.0,
