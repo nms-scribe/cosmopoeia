@@ -3,12 +3,12 @@ use std::collections::HashSet;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::TileForGroupingCalc;
-use crate::world_map::Grouping;
+use crate::world_map::tile_layer::TileForGroupingCalc;
+use crate::world_map::fields::Grouping;
 use crate::errors::CommandError;
-use crate::world_map::NeighborAndDirection;
-use crate::world_map::Neighbor;
-use crate::world_map::IdRef;
+use crate::world_map::fields::NeighborAndDirection;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 

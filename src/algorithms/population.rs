@@ -3,14 +3,14 @@ use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
 use crate::errors::CommandError;
-use crate::world_map::BiomeForPopulation;
-use crate::world_map::TypedFeature;
-use crate::world_map::TileForPopulation;
-use crate::world_map::TileForPopulationNeighbor;
-use crate::world_map::LakeType;
-use crate::world_map::LakeForPopulation;
+use crate::world_map::biome_layer::BiomeForPopulation;
+use crate::typed_map::features::TypedFeature;
+use crate::world_map::tile_layer::TileForPopulation;
+use crate::world_map::tile_layer::TileForPopulationNeighbor;
+use crate::world_map::fields::LakeType;
+use crate::world_map::water_layers::LakeForPopulation;
 use crate::commands::RiverThresholdArg;
-use crate::world_map::Neighbor;
+use crate::world_map::fields::Neighbor;
 
 pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, estuary_threshold: &RiverThresholdArg, progress: &mut Progress) -> Result<(),CommandError> {
 

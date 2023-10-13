@@ -5,7 +5,7 @@ use std::collections::hash_map::IntoIter;
 
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::NewTileSite;
+use crate::world_map::tile_layer::NewTileSite;
 use crate::utils::extent::Extent;
 use crate::utils::coordinates::Coordinates;
 use crate::errors::CommandError;

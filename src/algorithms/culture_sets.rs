@@ -17,7 +17,7 @@ use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::random::RandomIndex;
 use crate::algorithms::naming::NamerSet;
-use crate::world_map::TileForCulturePrefSorting;
+use crate::world_map::tile_layer::TileForCulturePrefSorting;
 
 #[derive(Clone,Serialize,Deserialize,JsonSchema)]
 pub(crate) enum TilePreference {

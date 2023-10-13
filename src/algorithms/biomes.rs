@@ -1,17 +1,18 @@
 use crate::entity;
-use crate::world_map::TypedFeature;
-use crate::world_map::BiomeMatrix;
+use crate::typed_map::features::TypedFeature;
+use crate::world_map::biome_layer::BiomeMatrix;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::BiomeSchema;
+use crate::world_map::biome_layer::BiomeSchema;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::LakeType;
-use crate::world_map::LakeForBiomes;
-use crate::world_map::Grouping;
-use crate::world_map::TileSchema;
+use crate::world_map::fields::LakeType;
+use crate::world_map::water_layers::LakeForBiomes;
+use crate::world_map::fields::Grouping;
+use crate::world_map::tile_layer::TileSchema;
+use crate::world_map::tile_layer::TileFeature;
 use crate::commands::OverwriteBiomesArg;
-use crate::world_map::IdRef;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteBiomesArg, progress: &mut Progress) -> Result<(),CommandError> {
 

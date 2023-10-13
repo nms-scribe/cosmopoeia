@@ -322,18 +322,19 @@ To proceed on this, I can break it down into the following steps:
     [X] Include a note that unlike it's predecessors, there are certain things I won't touch, like Coats of Arms, random zones and markers. There has to be a point where your imagination gets to take over, otherwise there is no real purpose for this tool. It's predecessors were designed for generating lots of random maps over and over. This is designed for generating a few maps, which you can then modify in external tools as you need.
     [-] Make sure it's clear that, although the algorithms were inspired by AFMG, the tool is not guaranteed to, and indeed not designed to, behave exactly the same in regards to output given the same output parameters.
     [X] Add notes on layer id fields to documentation:
-[ ] Break world_map module into several modules:
-    [ ] typed_map: everything for typing a map
-        [ ] fields
-        [ ] features
-        [ ] entities
-        [ ] geometry (move this over)
-        [ ] layers
-        [ ] dataset? do I have something for this?
-    [ ] world_map:
-        [ ] field_types: all of the custom field types
-        [ ] layers: all of the layers
-        [ ] mod: the WorldMap construct itself.
+[X] Break world_map module into several modules:
+    [X] typed_map: everything for typing a map
+        [X] fields
+        [X] features
+        [X] entities
+        [X] geometry (move this over)
+        [X] layers
+        [X] dataset? do I have something for this?
+    [X] world_map:
+        [X] field_types: all of the custom field types
+        [X] layers: all of the layers
+        [X] mod: the WorldMap construct itself.
+    [X] fix uses in the new modules.
 [ ] As I have approval, move the recipes and things like that from AFMG into /share
 [ ] Consider, before final, a change to the way lakes fill. Instead of filling up to a level based on accumulation, always fill up to the lowest tile that has a neighbor with a lower elevation on the other side. This should create more interesting lakes than the little potholes I've got now.
     [ ] What if there are more than one tile thus? they probably both outflow.

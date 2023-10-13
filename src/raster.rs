@@ -6,7 +6,7 @@ use gdal::raster::GdalType;
 
 use crate::errors::CommandError;
 use crate::utils::extent::Extent;
-use crate::world_map::ElevationLimits;
+use crate::world_map::property_layer::ElevationLimits;
 
 pub(crate) struct RasterBounds {
     coord_min_x: f64,

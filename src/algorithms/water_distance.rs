@@ -8,10 +8,10 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
 use crate::progress::WatchablePriorityQueue;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::TileForWaterDistance;
+use crate::world_map::tile_layer::TileForWaterDistance;
 use crate::errors::CommandError;
-use crate::world_map::NeighborAndDirection;
-use crate::world_map::Neighbor;
+use crate::world_map::fields::NeighborAndDirection;
+use crate::world_map::fields::Neighbor;
 
 pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 

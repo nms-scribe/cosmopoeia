@@ -24,7 +24,7 @@ use crate::algorithms::naming::NamerSetSource;
 use crate::algorithms::naming::NamerSet;
 use crate::algorithms::culture_sets::CultureSet;
 use crate::algorithms::culture_sets::CultureSetItem;
-use crate::world_map::ElevationLimits;
+use crate::world_map::property_layer::ElevationLimits;
 use crate::command_def;
 use crate::progress::ProgressObserver;
 use crate::commands::ElevationSourceArg;
@@ -32,7 +32,7 @@ use crate::commands::ElevationLimitsArg;
 use crate::commands::RandomSeedArg;
 use crate::commands::OverwriteTilesArg;
 use crate::commands::NamerArg;
-use crate::world_map::TypedFeature;
+use crate::typed_map::features::TypedFeature;
 
 
 subcommand_def!{

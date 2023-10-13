@@ -668,15 +668,15 @@ mod test {
     use crate::utils::simple_serde::Deserialize as SimpleDeserialize;    
 
     use crate::utils::edge::Edge;
-    use crate::world_map::Neighbor; // and vec
-    use crate::world_map::NeighborAndDirection; // and vec
-    use crate::world_map::Grouping;
-    use crate::world_map::RiverSegmentFrom;
-    use crate::world_map::RiverSegmentTo;
-    use crate::world_map::LakeType;
-    use crate::world_map::BiomeCriteria;
-    use crate::world_map::CultureType;
-    use crate::world_map::IdRef;
+    use crate::world_map::fields::Neighbor; // and vec
+    use crate::world_map::fields::NeighborAndDirection; // and vec
+    use crate::world_map::fields::Grouping;
+    use crate::world_map::fields::RiverSegmentFrom;
+    use crate::world_map::fields::RiverSegmentTo;
+    use crate::world_map::fields::LakeType;
+    use crate::world_map::fields::BiomeCriteria;
+    use crate::world_map::fields::CultureType;
+    use crate::typed_map::fields::IdRef;
 
 
     fn test_serializing<Value: SimpleSerialize + SimpleDeserialize + PartialEq + core::fmt::Debug>(value: &Value, text: &str) {

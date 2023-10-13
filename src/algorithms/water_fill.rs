@@ -2,29 +2,29 @@ use core::ops::RangeFrom;
 use std::collections::HashSet;
 use std::collections::HashMap;
 
-use crate::world_map::NewLake;
+use crate::world_map::water_layers::NewLake;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
-use crate::world_map::TileLayer;
-use crate::world_map::LakeType;
+use crate::world_map::tile_layer::TileLayer;
+use crate::world_map::fields::LakeType;
 use crate::commands::OverwriteLakesArg;
 use crate::commands::BezierScaleArg;
 use crate::commands::LakeBufferScaleArg;
 use crate::algorithms::tiles::find_lowest_tile;
 use super::water_flow::WaterFlowResult;
-use crate::world_map::EntityIndex;
-use crate::world_map::TileSchema;
-use crate::world_map::TileForWaterFill;
+use crate::typed_map::entities::EntityIndex;
+use crate::world_map::tile_layer::TileSchema;
+use crate::world_map::tile_layer::TileForWaterFill;
 use crate::progress::QueueWatcher;
 use crate::geometry::VariantArealGeometry;
 use crate::geometry::MultiPolygon;
-use crate::world_map::TypedFeature;
-use crate::world_map::NeighborAndDirection;
-use crate::world_map::Neighbor;
-use crate::world_map::IdRef;
+use crate::typed_map::features::TypedFeature;
+use crate::world_map::fields::NeighborAndDirection;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::fields::IdRef;
 
 struct Lake {
     elevation: f64,

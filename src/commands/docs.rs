@@ -2,6 +2,8 @@ use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
 use std::collections::HashMap;
+use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use clap::Args;
 use clap_markdown::help_markdown;
@@ -18,6 +20,7 @@ use schemars::schema::StringValidation;
 use schemars::schema::ArrayValidation;
 use schemars::schema::ObjectValidation;
 use schemars::schema::SubschemaValidation;
+use schemars::schema::Schema;
 
 // I was going to put this in a separate binary, but doing so would require that some of the code by pub instead of pub(crate). As I'm currently only considering commands and errors to be pub, that would be a problem, even if I'm not supporting a stable API.
 use crate::Cosmopoeia;
@@ -25,25 +28,22 @@ use crate::commands::Task;
 use crate::errors::CommandError;
 use crate::subcommand_def;
 use crate::progress::ProgressObserver;
-use crate::world_map::LayerDocumentation;
-use crate::world_map::document_tile_layer;
-use crate::world_map::document_river_layer;
-use crate::world_map::document_lake_layer;
-use crate::world_map::document_biome_layer;
-use crate::world_map::document_culture_layer;
-use crate::world_map::document_town_layer;
-use crate::world_map::document_nation_layer;
-use crate::world_map::document_subnation_layer;
-use crate::world_map::document_coastline_layer;
-use crate::world_map::document_ocean_layer;
-use crate::world_map::document_property_layer;
-use crate::world_map::FieldTypeDocumentation;
+use crate::typed_map::layers::LayerDocumentation;
+use crate::world_map::tile_layer::document_tile_layer;
+use crate::world_map::water_layers::document_river_layer;
+use crate::world_map::water_layers::document_lake_layer;
+use crate::world_map::biome_layer::document_biome_layer;
+use crate::world_map::culture_layer::document_culture_layer;
+use crate::world_map::town_layer::document_town_layer;
+use crate::world_map::nation_layers::document_nation_layer;
+use crate::world_map::nation_layers::document_subnation_layer;
+use crate::world_map::water_layers::document_coastline_layer;
+use crate::world_map::water_layers::document_ocean_layer;
+use crate::world_map::property_layer::document_property_layer;
+use crate::typed_map::fields::FieldTypeDocumentation;
 use crate::commands::terrain::Command as TerrainCommand;
 use crate::algorithms::culture_sets::CultureSetItemSource;
 use crate::algorithms::naming::NamerSource;
-use std::collections::BTreeSet;
-use std::collections::BTreeMap;
-use schemars::schema::Schema;
 
 fn list_schemas() -> Result<Vec<LayerDocumentation>,CommandError> {
     Ok(vec![

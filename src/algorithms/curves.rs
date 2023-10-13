@@ -6,16 +6,16 @@ use crate::algorithms::tiles::Theme;
 use crate::errors::CommandError;
 use crate::progress::WatchableIterator;
 use crate::utils::coordinates::Coordinates;
-use crate::world_map::TypedFeature;
+use crate::typed_map::features::TypedFeature;
 use crate::algorithms::beziers::bezierify_points;
 use crate::commands::BezierScaleArg;
-use crate::world_map::TypedFeatureIterator;
+use crate::typed_map::features::TypedFeatureIterator;
 use crate::geometry::MultiPolygon;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
 use crate::geometry::GDALGeometryWrapper;
 use crate::geometry::VariantArealGeometry;
-use crate::world_map::IdRef;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, bezier_scale: &BezierScaleArg, progress: &mut Progress) -> Result<(),CommandError> {
 

@@ -1,16 +1,16 @@
 use core::cmp::Ordering;
 
-use crate::world_map::TileForWaterflow;
+use crate::world_map::tile_layer::TileForWaterflow;
 use crate::errors::CommandError;
-use crate::world_map::TileForWaterFill;
+use crate::world_map::tile_layer::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::EntityIndex;
-use crate::world_map::TileSchema;
+use crate::typed_map::entities::EntityIndex;
+use crate::world_map::tile_layer::TileSchema;
 use super::tiles::find_lowest_tile;
-use crate::world_map::Neighbor;
-use crate::world_map::IdRef;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) struct WaterFlowResult  { 
     pub(crate) tile_map: EntityIndex<TileSchema,TileForWaterFill>, 

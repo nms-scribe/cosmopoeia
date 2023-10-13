@@ -9,7 +9,7 @@ use gdal::vector::geometry_type_to_name;
 pub(crate) use clap::error::Error as ArgumentError;
 use crate::utils::edge::Edge;
 use crate::utils::simple_serde::Token;
-use crate::world_map::IdRef;
+use crate::typed_map::fields::IdRef;
 
 #[derive(Debug,Clone)]
 pub enum CommandError {

@@ -14,7 +14,7 @@ use crate::algorithms::tiles::BiomeTheme;
 use crate::algorithms::curves::curvify_layer_by_theme;
 use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
-use crate::world_map::BiomeMatrix;
+use crate::world_map::biome_layer::BiomeMatrix;
 use crate::commands::OverwriteBiomesArg;
 use crate::commands::BezierScaleArg;
 

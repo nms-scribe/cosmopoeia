@@ -5,7 +5,7 @@ use qutee::Boundary;
 use super::extent::Extent;
 use super::coordinates::Coordinates;
 use crate::errors::CommandError;
-use crate::world_map::IdRef;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) struct PointFinder {
   // It's kind of annoying, but the query method doesn't return the original point, so I have to store the point.

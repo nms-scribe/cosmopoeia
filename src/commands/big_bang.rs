@@ -16,7 +16,7 @@ use crate::commands::gen_climate::GenClimate;
 use crate::commands::gen_water::GenWater;
 use crate::commands::gen_biome::GenBiome;
 use crate::commands::gen_people::GenPeople;
-use crate::world_map::CultureForNations;
+use crate::world_map::culture_layer::CultureForNations;
 use crate::commands::gen_towns::GenTowns;
 use crate::commands::gen_nations::GenNations;
 use crate::commands::gen_subnations::GenSubnations;

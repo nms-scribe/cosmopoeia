@@ -4,22 +4,22 @@ use angular_units::Deg;
 use angular_units::Angle;
 
 use crate::entity;
-use crate::world_map::TileFeature;
-use crate::world_map::TileForWinds;
-use crate::world_map::TileForTemperatures;
+use crate::world_map::tile_layer::TileFeature;
+use crate::world_map::tile_layer::TileForWinds;
+use crate::world_map::tile_layer::TileForTemperatures;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
-use crate::world_map::Grouping;
-use crate::world_map::TileSchema;
+use crate::world_map::fields::Grouping;
+use crate::world_map::tile_layer::TileSchema;
 use crate::commands::TemperatureRangeArg;
 use crate::commands::WindsArg;
 use crate::commands::PrecipitationArg;
 use crate::progress::WatchableQueue;
-use crate::world_map::NeighborAndDirection;
-use crate::world_map::Neighbor;
-use crate::world_map::IdRef;
+use crate::world_map::fields::NeighborAndDirection;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, temperatures: &TemperatureRangeArg, progress: &mut Progress) -> Result<(),CommandError> {
 

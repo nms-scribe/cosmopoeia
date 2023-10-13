@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::world_map::TileForRiverConnect;
-use crate::world_map::TileLayer;
-use crate::world_map::RiverSegmentTo;
-use crate::world_map::RiverSegmentFrom;
-use crate::world_map::NewRiver;
+use crate::world_map::tile_layer::TileForRiverConnect;
+use crate::world_map::tile_layer::TileLayer;
+use crate::world_map::fields::RiverSegmentTo;
+use crate::world_map::fields::RiverSegmentFrom;
+use crate::world_map::water_layers::NewRiver;
 use crate::algorithms::beziers::bezierify_points_with_phantoms;
 use crate::algorithms::beziers::find_curve_making_point;
 use crate::errors::CommandError;
@@ -15,12 +15,12 @@ use crate::progress::WatchableIterator;
 use crate::progress::WatchableQueue;
 use crate::commands::OverwriteRiversArg;
 use crate::commands::BezierScaleArg;
-use crate::world_map::Neighbor;
-use crate::world_map::MapLayer;
-use crate::world_map::TileSchema;
-use crate::world_map::TileFeature;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::layers::MapLayer;
+use crate::world_map::tile_layer::TileSchema;
+use crate::world_map::tile_layer::TileFeature;
 use crate::utils::coordinates::Coordinates;
-use crate::world_map::IdRef;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) struct RiverSegment {
     pub(crate) from: IdRef,

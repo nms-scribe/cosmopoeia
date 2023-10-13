@@ -6,30 +6,30 @@ use ordered_float::OrderedFloat;
 use rand_distr::Normal;
 use rand_distr::Distribution;
 
-use crate::world_map::TownForPopulation;
-use crate::world_map::LakeForTownPopulation;
-use crate::world_map::TileForTownPopulation;
+use crate::world_map::town_layer::TownForPopulation;
+use crate::world_map::water_layers::LakeForTownPopulation;
+use crate::world_map::tile_layer::TileForTownPopulation;
 use crate::utils::coordinates::Coordinates;
-use crate::world_map::TileLayer;
+use crate::world_map::tile_layer::TileLayer;
 use crate::utils::point_finder::PointFinder;
 use crate::utils::extent::Extent;
-use crate::world_map::NewTown;
+use crate::world_map::town_layer::NewTown;
 use crate::errors::CommandError;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::WatchableIterator;
-use crate::world_map::CultureWithNamer;
-use crate::world_map::NamedEntity;
-use crate::world_map::TypedFeature;
+use crate::world_map::culture_layer::CultureWithNamer;
+use crate::typed_map::entities::NamedEntity;
+use crate::typed_map::features::TypedFeature;
 use crate::progress::ProgressObserver;
-use crate::world_map::TileForTowns;
-use crate::world_map::CultureSchema;
-use crate::world_map::EntityLookup;
+use crate::world_map::tile_layer::TileForTowns;
+use crate::world_map::culture_layer::CultureSchema;
+use crate::typed_map::entities::EntityLookup;
 use crate::commands::OverwriteTownsArg;
 use crate::commands::RiverThresholdArg;
 use crate::commands::TownCountsArg;
-use crate::world_map::Neighbor;
-use crate::world_map::IdRef;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::fields::IdRef;
 
 pub(crate) struct ScoredTileForTowns {
     pub(crate) tile: TileForTowns,

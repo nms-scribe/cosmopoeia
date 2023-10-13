@@ -16,7 +16,7 @@ use crate::algorithms::tiles::load_tile_layer;
 use crate::algorithms::tiles::calculate_tile_neighbors;
 use crate::algorithms::terrain::SampleElevationLoaded;
 use crate::algorithms::terrain::TerrainTask;
-use crate::world_map::ElevationLimits;
+use crate::world_map::property_layer::ElevationLimits;
 use crate::world_map::WorldMapTransaction;
 use crate::commands::TargetArg;
 use crate::commands::ElevationSourceArg;

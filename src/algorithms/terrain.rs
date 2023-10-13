@@ -7,15 +7,16 @@ use rand::Rng;
 use ordered_float::OrderedFloat;
 
 use crate::errors::CommandError;
-use crate::world_map::EntityIndex;
-use crate::world_map::TileSchema;
-use crate::world_map::TileForTerrain;
+use crate::typed_map::entities::EntityIndex;
+use crate::world_map::tile_layer::TileSchema;
+use crate::world_map::tile_layer::TileForTerrain;
+use crate::world_map::tile_layer::TileFeature;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
 use crate::progress::WatchableIterator;
 use crate::raster::RasterMap;
-use crate::world_map::Grouping;
-use crate::world_map::ElevationLimits;
+use crate::world_map::fields::Grouping;
+use crate::world_map::property_layer::ElevationLimits;
 use crate::utils::point_finder::TileFinder;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
@@ -40,9 +41,9 @@ use crate::commands::terrain::FloodOcean;
 use crate::commands::terrain::FillOcean;
 use crate::entity;
 use crate::algorithms::tiles::find_lowest_tile;
-use crate::world_map::NeighborAndDirection;
-use crate::world_map::Neighbor;
-use crate::world_map::IdRef;
+use crate::world_map::fields::NeighborAndDirection;
+use crate::world_map::fields::Neighbor;
+use crate::typed_map::fields::IdRef;
 
 
 enum RelativeHeightTruncation {
