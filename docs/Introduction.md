@@ -20,9 +20,21 @@ Cosmopoeia was inspired by a number of tools which generate worlds for the inter
 
 **Regions**. Once each of the elements are created on the tiles, those tiles are united together into larger shapes based on features such as biomes and nations, and placed into their own layers. The boundaries of these regions are then adjusted to follow bezier curves, creating a more natural look.
 
+# Screenshots
+
+Here are a few worlds created using Cosmopoeia, as shown in QGIS.
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-13_15-57-08.png)
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-14_08-58-49.png)
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-14_09-06-21.png)
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-14_09-12-40.png)
+
 # Getting Started
 
-To get started using Cosmopoeia, you will need a few configuration files. To make things easier, some pre-designed configuration files are provided with the software. Most of these are translations of the configuration files from Azgaar's Fantasy Map Generator. You will need to find the path where these are installed on your machine, or download them from the `share` directory in this repository. Once you have found this directory, you can run the following command, where `$share/` would be replaced with the path to that directory and `$target/` is the directory in which you want to create the world.
+To get started using Cosmopoeia, you will need a few configuration files. To make things easier, some pre-built files are provided with the software. You will need to find the path where these are installed on your machine, or download them from the `share` directory in this repository. Once you have found this directory, you can run the following command, where `$share/` would be replaced with the path to that directory and `$target/` is the directory in which you want to create the world.
 
 ```sh
 cosmopoeia big-bang $target/World.gpkg --overwrite-all --cultures $share/culture_sets/afmg_culture_antique.json --namers $share/namers/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set --source share/terrain_recipes/afmg_recipes.json --recipe continents
@@ -65,13 +77,11 @@ Cosmopoeia has a lot of configuration possibilities, and unfortunately my docume
 
 Cosmopoeia is developed in Rust. The strict typing of the language, and it's variable ownership system, makes it possible to ensure a stable program with whole categories of failure impossible. Unfortunately, this guarantee is limited by it's usage of the GDAL library for manipulation of the data files, as that library is built in C++ which is subject to the kinds of errors that Rust avoids.
 
-**Beta Stage**. Cosmopoeia is currently in beta stage of development. This means the configuration and algorithms will change, sometimes drastically. The cosmopoeia you run this year will not likely be the same one you run next year. Who knows if the name will even remain the same. There will never be a guarantee that a user would be able to create the same world twice, except by using the same random seeds in the same version of the software on the same platform.
+**Beta Stage**. Cosmopoeia is currently in beta stage of development, but that does not mean it is full of bugs. This only means the configuration and algorithms will change, sometimes drastically. The cosmopoeia you run this year will not likely be the same one you run next year. Who knows if the name will even remain the same. There will not be a guarantee that a user would be able to create the same world twice, except by using the same random seeds in the same version of the software on the same platform. 
 
-It is most likely it will remain in beta forever. I don't foresee a future where a final and complete version could even make sense. There will always be ways that it could be improved, and many improvements will require changes to the configuration and interface. For any given project, Cosmopoeia is only intended to be run a few times at the beginning. Any further editing would be done in GIS and graphics software. The user is unlikely to try to create the same world twice, and the innate randomness of the tool all but makes it impossible to do so. So backwards compatibility is a low priority.
+It will remain in beta for a long time. There will always be ways to improve it, and many improvements will require changes to the configuration and interface. So backwards compatibility is a non-existent priority.
 
-**Scope**. The scope of Cosmopoeia is a tool that generates random geography for use in designing worlds, where the final editing is done using other software. This scope is clear, and precludes many features that might be available in its inspirations. The tool is designed to do the tedious work of fantasy world-building, and leave you the fun parts, which require imagination.
-
-**Use as a Library**. Cosmopoeia will not be found as a crate on crates.io, or any other public repository of rust libraries. It is not a professional tool, the algorithms are not based on scientific principles, nor should it be used in scientific projects. This is further complicated by its indefinite beta status, and the complications of random algorithm testing. That said, if you do wish to use it as a library by calling the commands directly from your own program, you can include this project in your create by referencing the repository in your `Cargo.toml` file.
+**Scope**. The scope of Cosmopoeia is a tool that generates random geography for use in designing worlds. The tool is designed to do the tedious work of fantasy world-building, and leave you the fun and imaginative parts. For any given project, Cosmopoeia is only intended to be run a few times at the beginning. The rest of the project should be done using GIS and graphical editing tools.
 
 **Testing**. I have not been good about creating unit tests for this code, despite that being a standard of most rust programs. My testing is done by simply running commands and looking at the results. This is more than just laziness, there are three reasons why creating tests are difficult:
 
@@ -79,7 +89,7 @@ It is most likely it will remain in beta forever. I don't foresee a future where
 
 * *Nondeterministic results*: Most of cosmopoeia revolves around randomness, which means that slight changes to algorithms -- even switching the order of two lines of code -- can have drastic changes to final results. This means that even if I test for the same results from the same input, those tests are going to fail quickly and often to the point that they are useless.
 
-* *External file dependencies*: The software produces database files using an external library. It is not easy to mock this database access, and testing would require routines to compare database files against previous output. Combined with the reasons above, I don't feel like this is worth the work.
+* *External dependencies*: The software produces database files using an external library. It is not easy to mock this database access, and testing would require routines to compare database files against previous output. Combined with the reasons above, I don't feel like this is worth the work.
 
 Many bugs have been discovered only when I changed some minor thing, and even then only because it happened to cause some radical appearance change. For example: after changing code which would lead to generating exactly one more random number in a task, a whole new world was created which had a nation that was not unioned into a single polygon, but remained a collection of original tiles. This led to a reformatting of the union algorithm to make sure that geometries were valid and taking action if they weren't. The fix ensured that it wouldn't happen again, but I would never have discovered this problem if I had been using a different random seed for my test world.
 
