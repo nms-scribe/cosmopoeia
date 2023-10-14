@@ -4,7 +4,7 @@ fn close_gdal_layer() {
     use std::path::PathBuf;
     use gdal::Dataset;
 
-    let ds = Dataset::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("sample_data").join("wisconsin.tif")).expect("Dataset should have opened.");
+    let ds = Dataset::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("share").join("qgis").join("World.gpkg")).expect("Dataset should have opened.");
     ds.close().expect("Should have closed"); // Get a segmentation fault if this is called, I'm guessing they do it again on drop.
 
 

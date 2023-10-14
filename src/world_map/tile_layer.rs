@@ -77,8 +77,8 @@ layer!(#[hide_add(true)] #[hide_doc(false)] Tile["tiles"]: Polygon {
     nation_id: Option<IdRef>,
     /// if the tile is part of a subnation, this is the id of the nation which controls it
     subnation_id: Option<IdRef>,
-    /// If this tile is an outlet from a lake, this is the tile ID from which the water is flowing.
-    outlet_from_id: Option<IdRef>,
+    /// If this tile is an outlet from a lake, this is the neighbor from which the water is flowing.
+    outlet_from: Option<Neighbor>,
     /// A list of all tile neighbors and their angular directions (tile_id:direction)
     neighbors: Vec<NeighborAndDirection>,
     /// A value indicating whether the tile is on the edge of the map
@@ -175,7 +175,7 @@ entity!(TileForWaterFill: Tile {
     grouping: Grouping, 
     lake_id: Option<IdRef> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     neighbors: Vec<NeighborAndDirection>,
-    outlet_from_id: Option<IdRef> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
+    outlet_from: Option<Neighbor> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     temperature: f64,
     water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
     water_flow: f64,  // Initialized to blank in TileForWaterFlow
@@ -192,7 +192,7 @@ impl From<TileForWaterflow> for TileForWaterFill {
             water_flow: value.water_flow,
             water_accumulation: value.water_accumulation,
             flow_to: value.flow_to,
-            outlet_from_id: None,
+            outlet_from: None,
             lake_id: None
         }
     }
@@ -201,7 +201,7 @@ impl From<TileForWaterflow> for TileForWaterFill {
 entity!(TileForRiverConnect: Tile {
     water_flow: f64,
     flow_to: Vec<Neighbor>,
-    outlet_from_id: Option<IdRef>
+    outlet_from: Option<Neighbor>
 });
 
 entity!(TileForWaterDistance: Tile {
@@ -367,7 +367,7 @@ impl TileForTownPopulation {
         let mut common_vertices: Vec<_> = self_ring.into_iter().collect();
         common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
         common_vertices.retain(|p| edge.contains(p,extent));
-        if common_vertices.len() > 2 {
+        if common_vertices.len() == 2 {
             // NOTE: There will be a problem in cases where the edge is NE,NW,SE,SW, as there are likely going to 
             // be 3 points at least. However, this shouldn't happen since there shouldn't be any cross-map tiles in
             // those directions.

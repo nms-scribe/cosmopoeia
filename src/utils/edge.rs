@@ -82,6 +82,19 @@ impl Edge {
             Self::Northwest => (p.1 - extent.north()).abs() < f64::EPSILON || (p.0 - extent.west).abs() < f64::EPSILON,
         }
     }
+
+    pub(crate) const fn opposite(&self) -> Self {
+        match self {
+            Self::North => Self::South,
+            Self::Northeast => Self::Southwest,
+            Self::East => Self::West,
+            Self::Southeast => Self::Northwest,
+            Self::South => Self::North,
+            Self::Southwest => Self::Northeast,
+            Self::West => Self::East,
+            Self::Northwest => Self::Southeast,
+        }
+    }
 }
 
 

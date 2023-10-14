@@ -85,6 +85,20 @@ impl Coordinates {
 
     }
 
+    pub(crate) fn interpolate_at_longitude(&self, other: &Self, longitude: f64) -> Result<Self,CommandError> {
+        /*
+        (y - y0)/(x - x0) = (y1 - y0)/(x1 - x0)
+        (y - y0) = ((y1 - y0)/(x1 - x0))*(x - x0)
+        y = ((y1 - y0)/(x1 - x0))*(x - x0) + y0        
+         */
+        let longitude = NotNan::try_from(longitude)?;
+        let y = self.y + ((longitude - self.x)*((other.y - self.y)/(other.x - self.x)));
+        Ok(Self {
+            x: longitude,
+            y
+        })
+    }
+
     pub(crate) fn create_geometry(&self) -> Result<Point,CommandError> {
         Point::new(self.x.into(), self.y.into())
     }
@@ -231,7 +245,7 @@ impl Coordinates {
 
     pub(crate) fn clip_point_vec_across_antimeridian(line: Vec<Self>, extent: &Extent) -> Result<Vec<Vec<Self>>,CommandError> {
 
-        #[derive(PartialEq)]
+        #[derive(PartialEq,Debug)]
         pub(crate) enum Location {
             ToWest,
             InExtent,
@@ -274,11 +288,26 @@ impl Coordinates {
         let mut line = line.into_iter();
         if let Some(mut previous) = line.next() {
             let mut previous_location = get_location(&previous);
+            assert_eq!(previous_location,Location::InExtent);
             segment.push(fix_point(&previous,&previous_location));
             for next in line {
                 let next_location = get_location(&next);
-                if next_location != previous_location {
-                    let mid_point = previous.middle_point_between(&next);
+                let mid_point = match (&previous_location,&next_location) {
+                    (Location::ToWest, Location::InExtent) |
+                    (Location::InExtent, Location::ToWest) => Some(previous.interpolate_at_longitude(&next, extent.west)?),
+
+                    (Location::InExtent, Location::ToEast) |
+                    (Location::ToEast, Location::InExtent) => Some(previous.interpolate_at_longitude(&next, extent.east())?),
+
+                    (Location::ToWest, Location::ToEast) |
+                    (Location::ToEast, Location::ToWest) => panic!("Points should all be anchored on one side."),
+
+                    (Location::ToWest, Location::ToWest) |
+                    (Location::InExtent, Location::InExtent) |
+                    (Location::ToEast, Location::ToEast) => None, // no split here
+                };
+                if let Some(mid_point) = mid_point {
+                    // it's time to cut it
                     segment.push(fix_point(&mid_point,&previous_location));
                     result.push(segment);
                     segment = Vec::new();
@@ -369,4 +398,38 @@ impl<Iter: Iterator<Item=Result<Point,CommandError>>> ToGeometryCollection<Point
     }
 
 
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::Coordinates;
+    use super::Extent;
+    use ordered_float::NotNan;
+
+    #[test]
+    fn test_clip_point_vec_across_antimeridian() {
+
+        let line = vec![
+            Coordinates::new(NotNan::try_from(178.1579399076034).unwrap(), NotNan::try_from(4.993378037130952).unwrap()),
+            Coordinates::new(NotNan::try_from(-179.03189170475136).unwrap()+360.0, NotNan::try_from(5.381816241032141).unwrap()),
+        ];
+
+        let clipped = Coordinates::clip_point_vec_across_antimeridian(line, &Extent {
+            height: 180.0,
+            width: 360.0,
+            south: -90.0,
+            west: -180.0,
+        }).unwrap();
+
+        assert_eq!(clipped,vec![
+            vec![Coordinates::new(NotNan::try_from(178.1579399076034).unwrap(), NotNan::try_from(4.993378037130952).unwrap()),
+                 Coordinates::new(NotNan::try_from(180.0).unwrap(), NotNan::try_from(5.2479985491665895).unwrap())],
+            vec![Coordinates::new(NotNan::try_from(-180.0).unwrap(), NotNan::try_from(5.2479985491665895).unwrap()),
+                 Coordinates::new(NotNan::try_from(-179.03189170475136).unwrap(), NotNan::try_from(5.381816241032141).unwrap())]
+        ])
+
+
+
+    }
 }

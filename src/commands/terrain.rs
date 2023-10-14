@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::BufReader;
-use std::collections::HashMap;
 
 use clap::Args;
 use clap::Subcommand;
@@ -12,6 +11,7 @@ use serde::Deserialize;
 use serde_json::from_reader as from_json_reader;
 use serde_json::to_string_pretty as to_json_string_pretty;
 use schemars::JsonSchema;
+use indexmap::IndexMap;
 
 use crate::commands::Task;
 use crate::world_map::WorldMap;
@@ -88,7 +88,9 @@ impl LoadTerrainTask for RecipeSet {
         progress.start_unknown_endpoint(|| "Loading recipe set.");
         let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         let reader = BufReader::new(recipe_data);
-        let mut tasks: HashMap<String,Vec<Command>> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
+        let mut tasks: IndexMap<String,Vec<Command>> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
+        // Need to reproduce randomness
+        tasks.sort_keys();
         progress.finish(|| "Recipe set loaded.");
         if tasks.is_empty() {
             Err(CommandError::RecipeFileRead("Recipe set is empty.".to_owned()))

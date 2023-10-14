@@ -22,6 +22,7 @@ use crate::world_map::tile_layer::TileFeature;
 use crate::utils::coordinates::Coordinates;
 use crate::typed_map::fields::IdRef;
 
+#[derive(Debug)]
 pub(crate) struct RiverSegment {
     pub(crate) from: IdRef,
     pub(crate) to: Neighbor,
@@ -70,9 +71,11 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
         let to_flow = segment.to_flow;
         let from_tile = tiles.try_feature_by_id(&from_tile_id)?;
         let start_point = from_tile.site()?;
+        let to_tile_id = segment.to.clone();
 
 
-        let new_river_data = match &segment.to {
+
+        let new_river_data = match &to_tile_id {
             end_tile @ (Neighbor::Tile(segment_to) | Neighbor::CrossMap(segment_to, _))=> {
                 let across_map = match end_tile {
                     Neighbor::Tile(_) => false,
@@ -83,7 +86,6 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 let to_tile = tiles.try_feature_by_id(segment_to)?;
                 let from_lake = from_tile.lake_id()?;
                 let to_lake = to_tile.lake_id()?;
-                let to_tile_id = Neighbor::Tile(segment_to.clone());
 
                 if from_lake.is_none() || to_lake.is_none() || from_lake != to_lake {
 
@@ -140,13 +142,12 @@ pub(crate) fn generate_water_rivers<Progress: ProgressObserver>(target: &mut Wor
                 let previous_point = generate_previous_segment_point(previous_tile, &tiles, &end_point, &start_point)?;
                 let next_point = find_curve_making_point(&start_point,&end_point);
                 
-                let to_tile_id = Neighbor::OffMap(edge.clone());
-
                 Some((to_tile_id,previous_point,end_point,next_point))
             },
             
         };
 
+        #[allow(clippy::shadow_unrelated)] // to_tile_id *is* related
         if let Some((to_tile_id,previous_point,end_point,next_point)) = new_river_data {
             // create the bezier
             let line = bezierify_points_with_phantoms(Some(&previous_point), &[start_point,end_point], Some(&next_point), bezier_scale.bezier_scale)?;
@@ -379,11 +380,18 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
                 from_lake: false,
             }))
         }
-        if let Some(outlet_from) = &tile.outlet_from_id {
+        if let Some(outlet_from) = &tile.outlet_from {
+            let (from,to) = match outlet_from.clone() {
+                Neighbor::Tile(from) => (from,Neighbor::Tile(fid.clone())),
+                Neighbor::CrossMap(from, edge) => (from,Neighbor::CrossMap(fid.clone(), edge.opposite())),
+                Neighbor::OffMap(_) => unimplemented!("There should never be an outlet from off the edge of the map."),
+            };
+
+
             // get the flow for the outlet from the current tile?
             result.push(Rc::from(RiverSegment {
-                from: outlet_from.clone(),
-                to: Neighbor::Tile(fid.clone()),
+                from,
+                to,
                 to_flow: tile.water_flow,
                 from_lake: true,
             }));
