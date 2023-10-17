@@ -33,6 +33,9 @@ schemars = "0.8.15"
 serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 
+[package.metadata.release]
+pre-release-hook = ["/bin/sh","pre-flight.sh"]
+publish = false
 
 # tips from https://github.com/johnthagen/min-sized-rust -- this reduced the final binary size immensely
 # Speed also appears to be improved, I witnessed repeated running times of about 55% of the debug release (11 sec vs 29 sec), both targets already compiled and built.

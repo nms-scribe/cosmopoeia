@@ -1,14 +1,15 @@
 #/bin/sh
 
-# Regular Colors
-red='\033[0;31m'          # Red
-green='\033[0;32m'        # Green
-off='\033[0m'       # Text Reset
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+off='\033[0m'       
 
 
 
 while true; do
-    read -p "Did you update changelog.md (type 'yes' for yes)? " answer
+    echo -n -e "${yellow}Did you update changelog.md (type 'yes' for yes)? ${off}"
+    read answer
     case $answer in
         [Yy][Ee][Ss] ) echo -e "${green}☑ User claims that changelong.md is up to date.${off}"; break;;
         * ) echo -e "${red}☒ Please update changelog.md and try again.${off}"; exit 1;
@@ -39,6 +40,12 @@ else
     exit 1
 fi
 
+# Make sure everything's committed
+# (NOTE: This is a second check, since cargo release already does this, but 
+# I've just generated docs, which will change this value. Naturally, if the docs
+# did change something, the pre-flight will fail. However, that might indicate to
+# the user they might have forgotten a change to log. But, next time they run
+# this, it should succeed.)
 if [ -n "$(git status --porcelain)" ]; then
     echo -e "${red}☒ There are uncommitted changes for git.${off}"
     exit 1
@@ -47,6 +54,8 @@ else
 fi
 
 # Make sure remote and local are in sync
+# NOTE: cargo release does not seem to check this, At best it checks if remote
+# is ahead, not if it's behind.
 echo "Fetching from remote..."
 git fetch
 if [ "$(git rev-parse HEAD)" = "$(git rev-parse @{u})" ]; then
@@ -57,4 +66,5 @@ else
 fi  
 
 
-echo "Ready to Release"
+echo -e "${green}Ready to Release${off}"
+
