@@ -23,6 +23,7 @@ else
     exit 1
 fi
 
+# Make sure tests work
 if cargo test; then
     echo -e "${green}☑ All tests passed.${off}"
 else
@@ -30,6 +31,7 @@ else
     exit 1
 fi
 
+# Make sure docs can be generated
 if cargo run docs  --schemas json-schemas/ --docs docs/generated/; then
     echo -e "${green}☑ Documentation generated.${off}"
 else
@@ -43,6 +45,16 @@ if [ -n "$(git status --porcelain)" ]; then
 else
     echo -e "${green}☑ All changes committed.${off}"
 fi
+
+# Make sure remote and local are in sync
+echo "Fetching from remote..."
+git fetch
+if [ "$(git rev-parse HEAD)" = "$(git rev-parse @{u})" ]; then
+    echo -e "${green}☑ Local and remote are in sync.${off}"
+else
+    echo -e "${red}☒ Local and remote are not in sync.${off}"
+    exit 1
+fi  
 
 
 echo "Ready to Release"
