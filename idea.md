@@ -1,3 +1,5 @@
+**NOTE** The below are personal notes and comments during development of this project. It's not a specification document, and what is mentioned here may not resemble the code finally produced.
+
 Highly inspired by [Azgaar's Fantasy Map Generator](<https://azgaar.github.io/Fantasy-Map-Generator/>) (AFMG).
 
 This project would be a series of console commands, and possible QGIS extensions, and other tools which make it easier to generate fantasy maps using GIS data.
@@ -42,14 +44,11 @@ The following two words brought in a religious element to the naming which I was
 I ended up going with Cosmopeia
 *cosmopoeia* - From anglicized greek roots *cosmo-* "world" and *-poeia*, "creation"
 
-
-
-
 # Reasoning
 
 AFMG maps are a rectangle full of voronoi cells around randomly generated points. Each cell has an elevation, plus a number of other attributes, which make all land within that cell fairly uniform. In some ways this resembles hexagonal grid maps of role-playing games, and if you had uniform placement of points, it would look exactly like that. However, the random points and the voronoi give a more organic look to the output. With appropriate line smoothing and styling, the resulting maps look very much like a traditional fantasy map.
 
-The problem with AFMG is that it is a monolithic tool inseparable from the user interface built around it. While the creator has added a lot of features and customization to the system, additional features and customization are dependent on their schedule and vision. Due to its development as a browser application, it suffers from performance problems with very complex maps. 
+The problem I have with AFMG is that it is a monolithic tool inseparable from the user interface built around it. While the creator has added a lot of features and customization to the system, additional features and customization are dependent on their schedule and vision. Due to its development as a browser application, it suffers from performance problems with very complex maps. 
 
 Implementing much of the functionality as commands around open geographic file formats would mean: 
 
@@ -182,8 +181,6 @@ I'm wondering if generating river flow would be better done with a heightmap ins
 3) Convert those maps and rivers into polygons using appropriate digitization and smoothing algorithms.
 4) Pull those back in and intersect them with the tiles somehow to get a "water-infused" tile layer, where tiles are split by rivers and lakes. I just have to watch out for cases where the new tile areas become tiny because of a minor crossing. Maybe in that case we add the new tile to neighboring tiles.
 5) Use that layer for generating people things.
-
-# Algorithm Analysis
 
 # Testing Commands:
 
@@ -342,9 +339,9 @@ To proceed on this, I can break it down into the following steps:
     [-] In order to get endorheic lakes: if the biome of the accumulation is arid, then the lake is reduced to about a quarter of its depth and recalculated (any "swallowed" lakes also have to be recalculated). If it's a semi-arid biome (grassland, tundra?, etc.) then it can go up to half of its depth. This isn't really scientific, but it is a little more versimilar.
 [X] clippy
 [X] Need some sample screenshots
+[X] Need a readme, that includes the top part of the introduction.
+[X] Figure out a license, possibly MIT, but I wouldn't mind something a little more...
 [ ] Set up private github repository for now, with docs...
-[ ] Need a readme, that includes the top part of the introduction.
-[ ] Figure out a license, possibly MIT, but I wouldn't mind something a little more...
 [ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
 [ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)
 [ ] Make the github repository public.
@@ -486,6 +483,7 @@ These are things that really should be done before release, but they might take 
     [ ] Allow Branches --- current system
     [ ] Avoid Branches -- when the elevation is the same, pick only one in a reproducible manner
     [ ] Allow Branches on Flat Land -- allow branches if the elevation is the same and the flow_from elevation is very close to that elevation
+[ ] Culture/Nation expansionism: some of these still expand way to far with higher tile numbers.
 [ ] Add a spheremode option which causes points to be generated at higher spacing at higher latitudes and changes how distance and area are calculated where that's important.
     [ ] RasterBounds::pixels_to_coords and coords_to_pixels -- make sure these are calculated correctly for spheremode
     [ ] I may need to bring in my own delaunay algorithm. First, I wouldn't need to collect points into a geometry. But second, when I add sphere_mode, the changes to the distance formula might change. Third, I might be able to remove an array collection step in there, before generating voronoi. Not sure.
