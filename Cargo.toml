@@ -39,7 +39,7 @@ publish = false
 pre-release-replacements = [
   {file="changelog.md", search="Unreleased", replace="{{version}}"},
   {file="changelog.md", search="\\.\\.\\.HEAD", replace="...{{tag_name}}", exactly=1},
-  {file="changelog.md", search="ReleaseDate", replace="{{date}}"},
+  {file="changelog.md", search="Someday", replace="{{date}}"},
   {file="changelog.md", search="<!-- next-header -->", replace="<!-- next-header -->\n\n## [Unreleased] - ReleaseDate", exactly=1},
   {file="changelog.md", search="<!-- next-url -->", replace="<!-- next-url -->\n[Unreleased]: https://github.com/assert-rs/predicates-rs/compare/{{tag_name}}...HEAD", exactly=1},
 ]
