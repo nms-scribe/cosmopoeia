@@ -1,8 +1,15 @@
 [package]
 name = "cosmopoeia"
+description = "A tool to generate fantasy maps for GIS."
 version = "0.1.2"
 edition = "2021"
 authors = ["N M Sheldon"]
+repository = "https://github.com/nms-scribe/cosmopoeia"
+license-file = "license.txt"
+readme = "Readme.md"
+keywords = ["fantasy","gis","mapmaking","cartography"]
+# NOTE: the category 'science::geo' is only used because this program relates to GIS. The name 'science' in the category makes no declarations about the usability of cosmpopoeia for scientific purposes. The name of this category was chosen by the people behind cargo and crates.io and I have no way of changing it.
+categories = ["command-line-utilities","science::geo"] 
 
 [dependencies]
 adaptive-bezier = "0.1.0"
@@ -25,6 +32,7 @@ rangemap = "1.4.0"
 schemars = "0.8.15"
 serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
+
 
 # tips from https://github.com/johnthagen/min-sized-rust -- this reduced the final binary size immensely
 # Speed also appears to be improved, I witnessed repeated running times of about 55% of the debug release (11 sec vs 29 sec), both targets already compiled and built.

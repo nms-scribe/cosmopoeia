@@ -341,12 +341,46 @@ To proceed on this, I can break it down into the following steps:
 [X] Need some sample screenshots
 [X] Need a readme, that includes the top part of the introduction.
 [X] Figure out a license, possibly MIT, but I wouldn't mind something a little more...
-[ ] Set up private github repository for now, with docs...
-[ ] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
-[ ] Figure out how to compile and deploy this tool to various operating systems. At least arch linux and windows. (There are cargo-aur and cargo-deb crates, maybe there's a cargo-msi for windows?)
+[X] Set up private github repository for now, with docs...
+[X] Turn on #![warn(clippy::cargo_common_metadata)] and fix those warnings
+[ ] Deployment routine:
+    What needs to be done on a new release:
+        - run clippy
+        - run cargo test
+        - run docs subcommand
+        - make sure there's something in changelog
+        - create version tags and commits in git
+        - run cargo build --release
+        - create deployment executables
+    [X] Create a pre-flight script (can I use rust-script?)
+        [X] Run cargo clippy and return error if failed
+        [X] Run cargo test and return error if failed
+        [X] check changelog for data under [Unreleased], return error if empty
+        [X] Run `cargo run docs` to generate documentation in the generated folder
+    [ ] Can't get cargo release done, so I need to complete the same steps:
+        [ ] Check if any changes are unstaged
+        [ ] Check if any staged changes are not committed
+        [ ] Check if there are any remote code that isn't fetched.
+        [ ] edit Cargo.toml to increase version
+        [ ] git commit with a message indicating a new release with the version info
+        [ ] git tag with an appropriate version number
+        [ ] git push (`git push --atomic <remote-branch> refs/tags/v1.0.0`?)
+        [ ] https://github.com/crate-ci/cargo-release
+        [ ] Maintain changelog: https://github.com/crate-ci/cargo-release/blob/master/docs/faq.md#maintaining-changelog
+        [ ] Make sure I *absolutely do not publish to crates.io*
+        [ ] Make it run the pre-flight script in pre-release-hook, so that I can't accidently run this.
+    [ ] Configure deployment
+        [ ] https://crates.io/crates/cargo-aur
+        [ ] https://crates.io/crates/cargo-deb
+    [ ] Set up a "deployment" script:
+        [ ] Run cargo release (with pre-release-hook)
+        [ ] publish to github if it's not done automatically
+        [ ] run `cargo build --release`
+        [ ] run cargo-aur and cargo-deb
+        [ ] Anyway to automate upload of these things to github?
+[ ] Put the Post-Release Tasks into issues on github
 [ ] Make the github repository public.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
-[ ] Put the Post-Release Tasks into issues on github
 
 The following additional tasks need to be triaged:
 
@@ -393,7 +427,7 @@ They're simple in concept, that doesn't mean they won't lead to hours of refacto
 ## Complex Pre-release tasks
 These are things that really should be done before release, but they might take a bit of work to figure out.
 
-[ ] TypedGeometry -- similar to how I did TypedFeature, a TypedGeometry is a struct that can be created using TryFrom<Geometry>, and TryFrom<GeometryRef> (or two structs?). Each one is a specific type, not an enum, so you don't have to worry about whether a specific geometry supports many polygons, many points, etc. The type tells you.
+[X] TypedGeometry -- similar to how I did TypedFeature, a TypedGeometry is a struct that can be created using TryFrom<Geometry>, and TryFrom<GeometryRef> (or two structs?). Each one is a specific type, not an enum, so you don't have to worry about whether a specific geometry supports many polygons, many points, etc. The type tells you.
    -- Do a search for references to Gdal's Geography type to find all the places that need to be changed first (ignoring things like geometry.rs which need those things)
    [X] 'algorithms/tiles.rs'
    [X] 'algorithms/curves.rs' is next.
@@ -554,3 +588,4 @@ These are things that really should be done before release, but they might take 
 [ ] For wind directions: What if the wind is affected by the "slope" of the average temperatures -- the direction to the warmest temperature neighbor is averaged with the based direction (because warmer is usually lower pressure). This is closer to how prevailing winds work. Better would be to figure out how to do pressure.
 [ ] Terrain task: Fill sinks -- how much should I fill? Do I only do it for single tiles that are lower? How about more?
 [ ] Terrain task: cut through sinks: Calculate flow, and if it ends in a sink, it cuts the lowest neighboring tile (from a different direction) to just below the current. This should, in theory, create canyons through some highlands. There are many questions, such as: is there a limit to how much it will cut so we can still get Death Valleys and Caspian Seas? If it hits that limit, how do we backtrack and warn the algorithm not to try again? What happens if the cut just leads to another sink?
+[ ] Add installation for windows: [https://crates.io/crates/cargo-wix]. I'm not sure how to get gdal dependency on windows. Is it a DLL? Where would I find it? How does the program find it at runtime?

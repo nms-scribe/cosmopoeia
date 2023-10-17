@@ -23,6 +23,7 @@ Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage f
 #![allow(clippy::mem_replace_with_default)] // I feel that std::mem::replace is more explicit in its meaning than std::mem::take. It would be different if the function was called std::mem::replace_default
 
 // clippy lints as of clippy 1.72
+#![warn(clippy::cargo_common_metadata)]
 #![warn(clippy::assertions_on_result_states)]
 #![warn(clippy::bool_to_int_with_if)]
 #![warn(clippy::branches_sharing_code)]
