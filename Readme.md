@@ -24,13 +24,13 @@ Cosmopoeia was inspired by a number of tools which generate worlds for the inter
 
 Here are a few worlds created using Cosmopoeia, as shown in QGIS.
 
-![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-13_15-57-08.png)
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-13_15-57-08.png)
 
-![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-14_08-58-49.png)
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-14_08-58-49.png)
 
-![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-14_09-06-21.png)
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-14_09-06-21.png)
 
-![A screenshot showing the map of a fantasy world made using Cosmopoeia.](screen_shots/Screenshot_2023-10-14_09-12-40.png)
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-14_09-12-40.png)
 
 # Getting Started
 
@@ -63,15 +63,15 @@ cosmopoeia big-bang $target/World.gpkg --overwrite-all --cultures $share/culture
 
 Cosmopoeia has a lot of configuration possibilities, and unfortunately my documentation is not complete and concise yet. It also includes some pre-designed configuration files in the `share` folder of this repository, which should also be included in your installation package.
 
-**Commands**. Cosmopoeia requires a command to specify what task it should accomplish. The `big-bang` command is intended to be an all in one world generator, and is great for first time use. There are a lot of configuration options available for that command. You can also run the generation step-by-step instead of all at once, this allows you to have more control over the creation of world. For example, you can edit the terrain before climate generation is done, or edit the resulted biomes before nations are placed. For more information on what's possible, Cosmopoeia has a `help` command, or you can peruse the auto-generated [Commands](generated/Commands.md) documentation.
+**Commands**. Cosmopoeia requires a command to specify what task it should accomplish. The `big-bang` command is intended to be an all in one world generator, and is great for first time use. There are a lot of configuration options available for that command. You can also run the generation step-by-step instead of all at once, this allows you to have more control over the creation of world. For example, you can edit the terrain before climate generation is done, or edit the resulted biomes before nations are placed. For more information on what's possible, Cosmopoeia has a `help` command, or you can peruse the auto-generated [Commands](docs/generated/Commands.md) documentation.
 
-**Geopackage Schema**. The output data file includes a number of layers/tables, which can be pulled up in QGIS to edit and customize your maps. If you explore the provided QGIS project file, you can get a good feel on what data is available. You can also get detailed information on the tables and fields by reviewing the auto-generated [World File Schema](generated/World%20File%20Schema.md) documentation.
+**Geopackage Schema**. The output data file includes a number of layers/tables, which can be pulled up in QGIS to edit and customize your maps. If you explore the provided QGIS project file, you can get a good feel on what data is available. You can also get detailed information on the tables and fields by reviewing the auto-generated [World File Schema](docs/generated/World%20File%20Schema.md) documentation.
 
-**Terrain Recipes**. In order to generate terrain, Cosmopoeia must follow a list of tasks which provide parameters for random terrain and ocean generation. A few pre-curated terrain recipes are included in the `share/terrain_recipes` folder. The `afmg_recipes.json` is a recipe set (a collection of named recipes) based on terrain generation templates from Azgaar's Fantasy Map Generator. The `heighmapt-recipe.json` is a single recipe which I've used to touch up a heightmap I used to generate a particular world of my own. For more information on the JSON structure required by these recipe files, see the auto-generated [Recipe Set Schema](generated/Recipe%20Set%20Schema.md) documentation.
+**Terrain Recipes**. In order to generate terrain, Cosmopoeia must follow a list of tasks which provide parameters for random terrain and ocean generation. A few pre-curated terrain recipes are included in the `share/terrain_recipes` folder. The `afmg_recipes.json` is a recipe set (a collection of named recipes) based on terrain generation templates from Azgaar's Fantasy Map Generator. The `heighmapt-recipe.json` is a single recipe which I've used to touch up a heightmap I used to generate a particular world of my own. For more information on the JSON structure required by these recipe files, see the auto-generated [Recipe Set Schema](docs/generated/Recipe%20Set%20Schema.md) documentation.
 
-**Namers**. In order to generate names for your world's political features, Cosmopoeia uses sample data from real-world and fantasy languages to create "Namers". These namers either make use of a Markov process to generate random names, or more simply randomly pick from a list of pre-generated words. Some pre-curated namer configuration files are found in the `share/namers` folder. The `afmg_namers.json` file is based off of "name bases" from Azgaar's Fantasy Map Generator. For more information on the JSON structure required for these namers, see the auto-generated [Namers Schema](generated/Namers%20Schema.md) documentation.
+**Namers**. In order to generate names for your world's political features, Cosmopoeia uses sample data from real-world and fantasy languages to create "Namers". These namers either make use of a Markov process to generate random names, or more simply randomly pick from a list of pre-generated words. Some pre-curated namer configuration files are found in the `share/namers` folder. The `afmg_namers.json` file is based off of "name bases" from Azgaar's Fantasy Map Generator. For more information on the JSON structure required for these namers, see the auto-generated [Namers Schema](docs/generated/Namers%20Schema.md) documentation.
 
-**Culture Sets**. In order to generate cultures for your world, Cosmopoeia uses some pre-configured culture data. Some pre-curated culture sets, as well as examples on how to generate random cultures, are found in the `share/culture_sets` folder. The `afmg_*.json` files are based off of culture sets from Azgaar's Fantasy Map Generator. The `random_cultures.json` file shows how you can configure the generation of random cultures using name generators only. For more information on the JSON structure required by these culture set files, see the auto-generated [Culture Schema](generated/Cultures%20Schema.md) documentation.
+**Culture Sets**. In order to generate cultures for your world, Cosmopoeia uses some pre-configured culture data. Some pre-curated culture sets, as well as examples on how to generate random cultures, are found in the `share/culture_sets` folder. The `afmg_*.json` files are based off of culture sets from Azgaar's Fantasy Map Generator. The `random_cultures.json` file shows how you can configure the generation of random cultures using name generators only. For more information on the JSON structure required by these culture set files, see the auto-generated [Culture Schema](docs/generated/Cultures%20Schema.md) documentation.
 
 # Development Status
 
