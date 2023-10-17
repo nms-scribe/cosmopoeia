@@ -11,4 +11,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial public release.
 
 <!-- next-url -->
-[unreleased]: https://github.com/nms-scribe/cosmopoeia/v1.1.1...HEAD
+[unreleased]: https://github.com/nms-scribe/cosmopoeia/v0.1.2...HEAD
