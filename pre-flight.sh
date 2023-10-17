@@ -47,6 +47,12 @@ fi
 # did change something, the pre-flight will fail. However, that might indicate to
 # the user they might have forgotten a change to log. But, next time they run
 # this, it should succeed.)
+# Make sure everything's committed
+# (NOTE: This is a second check, since cargo release already does this, but 
+# I've just generated docs, which will change this value. Naturally, if the docs
+# did change something, the pre-flight will fail. However, that might indicate to
+# the user they might have forgotten a change to log. But, next time they run
+# this, it should succeed.)
 if [ -n "$(git status --porcelain)" ]; then
     echo -e "${red}☒ There are uncommitted changes for git.${off}"
     exit 1
@@ -55,6 +61,8 @@ else
 fi
 
 # Make sure remote and local are in sync
+# NOTE: cargo release does not seem to check this, At best it checks if remote
+# is ahead, not if it's behind.
 # NOTE: cargo release does not seem to check this, At best it checks if remote
 # is ahead, not if it's behind.
 echo "Fetching from remote..."
