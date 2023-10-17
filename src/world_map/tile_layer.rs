@@ -276,7 +276,6 @@ impl TileForCulturePrefSorting<'_> {
                 Neighbor::Tile(closest_water) | Neighbor::CrossMap(closest_water,_) => {
                     let closest_water = tiles.try_feature_by_id(&closest_water)?;
                     if let Some(lake_id) = closest_water.lake_id()? {
-                        let lake_id = lake_id;
                         let lake = lakes.try_get(&lake_id)?;
                         Some(lake.size)
                     } else {

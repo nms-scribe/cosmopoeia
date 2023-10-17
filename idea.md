@@ -357,18 +357,11 @@ To proceed on this, I can break it down into the following steps:
         [X] Run cargo test and return error if failed
         [X] check changelog for data under [Unreleased], return error if empty
         [X] Run `cargo run docs` to generate documentation in the generated folder
-    [ ] Can't get cargo release done, so I need to complete the same steps:
-        [ ] Check if any changes are unstaged
-        [ ] Check if any staged changes are not committed
-        [ ] Check if there are any remote code that isn't fetched.
-        [ ] edit Cargo.toml to increase version
-        [ ] git commit with a message indicating a new release with the version info
-        [ ] git tag with an appropriate version number
-        [ ] git push (`git push --atomic <remote-branch> refs/tags/v1.0.0`?)
-        [ ] https://github.com/crate-ci/cargo-release
+    [ ] Get cargo release configured
+        [X] https://github.com/crate-ci/cargo-release
+        [X] Make sure I *absolutely do not publish to crates.io*
+        [X] Make it run the pre-flight script in pre-release-hook, so that I can't accidently run this.
         [ ] Maintain changelog: https://github.com/crate-ci/cargo-release/blob/master/docs/faq.md#maintaining-changelog
-        [ ] Make sure I *absolutely do not publish to crates.io*
-        [ ] Make it run the pre-flight script in pre-release-hook, so that I can't accidently run this.
     [ ] Configure deployment
         [ ] https://crates.io/crates/cargo-aur
         [ ] https://crates.io/crates/cargo-deb
