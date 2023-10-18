@@ -132,3 +132,5 @@ if [ "$level" != "rc" ]; then
         exit 1
     fi
 fi
+
+echo -e "${green}It's all done. Don't forget to upload the release to github with the correct version tag.${off}"
