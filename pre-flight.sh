@@ -1,12 +1,19 @@
-#/bin/sh
+#!/bin/sh
+
+set -e
 
 red='\033[0;31m'
 green='\033[0;32m'
 yellow='\033[0;33m'
 off='\033[0m'       
 
+if [ "$1" != "release" ]; then
+    echo -e "${red}Please let this be run by cargo release as a pre-release hook.${off}";
+    exit 1
+fi    
+
+
 echo -e "${yellow}Running pre-release checks.${off}"
-    
 
 while true; do
     echo -n -e "${yellow}Did you update changelog.md (type 'yes' for yes)? ${off}"

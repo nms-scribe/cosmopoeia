@@ -35,7 +35,7 @@ serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 
 [package.metadata.release]
-pre-release-hook = ["/bin/sh","pre-flight.sh"]
+pre-release-hook = ["/bin/sh","pre-flight.sh","release"]
 publish = false
 pre-release-replacements = [
   {file="changelog.md", search="Unreleased", replace="{{version}}"},
@@ -48,6 +48,20 @@ pre-release-replacements = [
 [package.metadata.aur]
 depends = ["gdal"]
 optdepends = ["qgis"]
+files = [  
+  ["share/culture_sets/afmg_culture_all_world.json","usr/local/share/cosmopoeia/culture_sets/afmg_culture_all_world.json"],
+  ["share/culture_sets/afmg_culture_antique.json","usr/local/share/cosmopoeia/culture_sets/afmg_culture_antique.json"],
+  ["share/culture_sets/afmg_culture_dark_fantasy.json","usr/local/share/cosmopoeia/culture_sets/afmg_culture_dark_fantasy.json"],
+  ["share/culture_sets/afmg_culture_european.json","usr/local/share/cosmopoeia/culture_sets/afmg_culture_european.json"],
+  ["share/culture_sets/afmg_culture_high_fantasy.json","usr/local/share/cosmopoeia/culture_sets/afmg_culture_high_fantasy.json"],
+  ["share/culture_sets/afmg_culture_oriental.json","usr/local/share/cosmopoeia/culture_sets/afmg_culture_oriental.json"],
+  ["share/culture_sets/random_cultures.json","usr/local/share/cosmopoeia/culture_sets/random_cultures.json"],
+  ["share/namers/Earth/namers.json","usr/local/share/cosmopoeia/namers/Earth/namers.json"],
+  ["share/namers/afmg_namers.json","usr/local/share/cosmopoeia/namers/afmg_namers.json"],
+  ["share/qgis/World.qgz","usr/local/share/cosmopoeia/qgis/World.qgz"],
+  ["share/terrain_recipes/afmg_recipes.json","usr/local/share/cosmopoeia/terrain_recipes/afmg_recipes.json"],
+  ["share/terrain_recipes/heightmap-recipe.json","usr/local/share/cosmopoeia/terrain_recipes/heightmap-recipe.json"],
+]
 
 # tips from https://github.com/johnthagen/min-sized-rust -- this reduced the final binary size immensely
 # Speed also appears to be improved, I witnessed repeated running times of about 55% of the debug release (11 sec vs 29 sec), both targets already compiled and built.

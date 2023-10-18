@@ -357,26 +357,38 @@ To proceed on this, I can break it down into the following steps:
         [X] Run cargo test and return error if failed
         [X] check changelog for data under [Unreleased], return error if empty
         [X] Run `cargo run docs` to generate documentation in the generated folder
-    [ ] Get cargo release configured
+    [X] Get cargo release configured
         [X] https://github.com/crate-ci/cargo-release
         [X] Make sure I *absolutely do not publish to crates.io*
         [X] Make it run the pre-flight script in pre-release-hook, so that I can't accidently run this.
         [X] Maintain changelog: https://github.com/crate-ci/cargo-release/blob/master/docs/faq.md#maintaining-changelog
-    [ ] Test `cargo release minor` (will be patch in the deployment)
+    [X] Test `cargo release minor` (will be patch in the deployment)
     [ ] Configure deployment
         [ ] https://crates.io/crates/cargo-aur
-            [ ] How and where do I put the sample data files? (/usr/local/share/<appname>)
-        [ ] https://crates.io/crates/cargo-deb
-            [ ] How do I specify dependencies?
-            [ ] How do I add sample data files?
+            [X] fork crate and redo this
+            [X] cargo install [options] --git url [crate…]
+            [X] Test that to see if I can create a good aur package.
+            [-] Tag that fork and Add a pull request for the tag. (can I just do that and then add stuff in?)
+            [ ] As long as I'm forking the crate, I could also fix the license thingie and some other things:
+                [ ] Reference to x86_64 should be changed to $CARCH
+                [ ] Put the files into a directory inside target/cargo-aur instead to make things easier to delete.
+                [ ] Should use license-file field if set.
+                [ ] If there's no way to "discover" the license from the license file, then allow a license field on the metadata.aur to specify the license.
+                [ ] I would much prever if LICENSE was placed into the tar the same way as files were, using the original name for it.
+        [-] https://crates.io/crates/cargo-deb
+            [-] How do I specify dependencies?
+            [-] How do I add sample data files?
     [ ] Set up a "deployment" script:
-        [ ] Maybe make this a bunch of questions to ask instead?
-        [ ] Run `cargo release patch` 
-            [ ] Need to include an option to make it 'minor' instead of 'patch'.
-            [ ] Need an option to make it executable, so it's a dry run by default.
+        [X] Maybe make this a bunch of questions to ask instead?
+        [X] Run `cargo release patch` 
+            [X] Need to include an option to make it 'minor' instead of 'patch'.
+            [X] Need an option to make it executable, so it's a dry run by default.
         [ ] push to github if it's not done automatically
         [ ] run `cargo build --release`
-        [ ] run cargo-aur and cargo-deb
+        [ ] run `cargo aur`
+        [ ] test the aur package if possible
+        [-] run cargo-deb
+        [-] test the deb package if possible
         [ ] Anyway to automate upload of these things to github?
         [ ] Run `cargo release rc` -- This adds an `rc.1` tag at the end, which can be used to show it's a development version. Makes it easier for checking if my real version is running or the development version is. May come in handy as well if I put the version in as a property.
 [ ] Put the Post-Release Tasks into issues on github
