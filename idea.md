@@ -361,12 +361,19 @@ To proceed on this, I can break it down into the following steps:
         [X] https://github.com/crate-ci/cargo-release
         [X] Make sure I *absolutely do not publish to crates.io*
         [X] Make it run the pre-flight script in pre-release-hook, so that I can't accidently run this.
-        [ ] Maintain changelog: https://github.com/crate-ci/cargo-release/blob/master/docs/faq.md#maintaining-changelog
+        [X] Maintain changelog: https://github.com/crate-ci/cargo-release/blob/master/docs/faq.md#maintaining-changelog
+    [ ] Test `cargo release minor` (will be patch in the deployment)
     [ ] Configure deployment
         [ ] https://crates.io/crates/cargo-aur
+            [ ] How and where do I put the sample data files? (/usr/local/share/<appname>)
         [ ] https://crates.io/crates/cargo-deb
+            [ ] How do I specify dependencies?
+            [ ] How do I add sample data files?
     [ ] Set up a "deployment" script:
-        [ ] Run `cargo release minor`
+        [ ] Maybe make this a bunch of questions to ask instead?
+        [ ] Run `cargo release patch` 
+            [ ] Need to include an option to make it 'minor' instead of 'patch'.
+            [ ] Need an option to make it executable, so it's a dry run by default.
         [ ] push to github if it's not done automatically
         [ ] run `cargo build --release`
         [ ] run cargo-aur and cargo-deb
