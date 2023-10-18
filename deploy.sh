@@ -31,7 +31,7 @@ while true; do
     echo -n -e "${yellow}Did you update changelog.md (type 'yes' for yes)? ${off}"
     read answer
     case $answer in
-        [Yy][Ee][Ss] ) echo -e "${green}☑ User claims that changelong.md is up to date.${off}"; break;;
+        [Yy][Ee][Ss] ) echo -e "${green}☑ User claims that changelog.md is up to date.${off}"; break;;
         * ) echo -e "${red}☒ Please update changelog.md and try again.${off}"; exit 1;
     esac
 done
