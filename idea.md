@@ -390,7 +390,8 @@ To proceed on this, I can break it down into the following steps:
         [-] run cargo-deb
         [-] test the deb package if possible
         [ ] Anyway to automate upload of these things to github?
-        [ ] Run `cargo release rc` -- This adds an `rc.1` tag at the end, which can be used to show it's a development version. Makes it easier for checking if my real version is running or the development version is. May come in handy as well if I put the version in as a property.
+        [X] Run `cargo release rc` -- This adds an `rc.1` tag at the end, which can be used to show it's a development version. Makes it easier for checking if my real version is running or the development version is. May come in handy as well if I put the version in as a property.
+    [ ] Okay, since my deploy script is calling cargo release twice, it also calls pre-flight twice. So, I think I'll just have to merge all of that code into deploy.sh instead.
 [ ] Put the Post-Release Tasks into issues on github
 [ ] Make the github repository public.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
