@@ -35,4 +35,10 @@ done
 
 cargo release $level $execarg
 
+cargo aur
+
+if [ "$level" != "rc" ]; then 
+   cargo release rc $execarg
+fi
+
 

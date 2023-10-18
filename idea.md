@@ -383,9 +383,9 @@ To proceed on this, I can break it down into the following steps:
         [X] Run `cargo release patch` 
             [X] Need to include an option to make it 'minor' instead of 'patch'.
             [X] Need an option to make it executable, so it's a dry run by default.
-        [ ] push to github if it's not done automatically
-        [ ] run `cargo build --release`
-        [ ] run `cargo aur`
+        [X] push to github if it's not done automatically
+        [-] run `cargo build --release`
+        [X] run `cargo aur`
         [ ] test the aur package if possible
         [-] run cargo-deb
         [-] test the deb package if possible
