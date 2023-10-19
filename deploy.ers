@@ -1,0 +1,220 @@
+#!/usr/bin/env rust-script
+/*!
+This file is intended to be run using [rust-script](https://rust-script.org/). The fenced code-block for the 'cargo' language specifies it's dependencies.
+
+This script makes some pre-flight checks to ensure that everything's ready for deployment, then uses `cargo release` to create appropriate version tags, and some other tools to generate installation packages. It finishes by retagging into release candidate mode, preparing for next version.
+
+```cargo
+[dependencies]
+console = "0.15.7"
+```
+*/
+use std::process::ExitCode;
+use std::process::Command;
+use std::io::Write;
+use console::Term;
+use console::style;
+
+
+
+fn main() -> ExitCode {
+
+    macro_rules! printredln {
+        ($message: expr) => {
+            println!("{}",style($message).red())
+        }
+    }
+
+    macro_rules! printyellowln {
+        ($message: expr) => {
+            println!("{}",style($message).yellow())
+        };
+        ($message: expr, bold) => {
+            println!("{}",style($message).yellow().bold())
+        }
+    }
+
+    macro_rules! printgreenln {
+        ($message: expr) => {
+            println!("{}",style($message).green())
+        }
+    }
+
+    macro_rules! prompt {
+        () => {
+            print!("> ");
+            std::io::stdout().flush().unwrap();
+    
+        }
+    }
+
+    if !console::user_attended() {
+        eprintln!("{}",style("This script is intended to be run by a real human being.").red());
+        return ExitCode::FAILURE;
+    }
+
+    let stdout = Term::stdout();
+
+    printredln!("This script hasn't been tested yet. Are you sure you want to run this? (type 'yes' for yes')?");
+    loop {
+        prompt!();
+        let answer = stdout.read_line().unwrap();
+        if answer.to_lowercase() == "yes" {
+            printgreenln!("Running deployment script");
+            break;
+        } else {
+            printredln!("You're welcome to try again later, just check that each step is running correctly as you go.");
+            return ExitCode::FAILURE;
+        }
+    }
+
+
+    // Need to know what version level is being bumped
+
+    printyellowln!("What version level are you bumping (patch is most likely)?");
+    printyellowln!("major  (x.0.0)");
+    printyellowln!("minor  (x.y.0)");
+    printyellowln!("patch  (x.y.z)",bold);
+    printyellowln!("rc     (x.y.z-rc.M)");
+    let level = loop {
+        prompt!();
+        let level = stdout.read_line().unwrap();
+        match level.as_str() {
+            "major" => printgreenln!("Bumping major version."),
+            "minor" => printgreenln!("Bumping minor version."),
+            "patch" => printgreenln!("Bumping patch version."),
+            "rc" => printgreenln!("Bumping release candidate version."),
+            _ => {
+                printredln!("Please enter 'major', 'minor', 'patch' or 'rc'.");
+                continue
+            }
+        }
+        break level;        
+    };
+
+    // now do some pre-checks.
+
+    printyellowln!("Running pre-release checks.");
+
+    printyellowln!("Did you update changelog.md (type 'yes' for yes')?");
+    loop {
+        prompt!();
+        let answer = stdout.read_line().unwrap();
+        if answer.to_lowercase() == "yes" {
+            printgreenln!("☑ User says that changelog.md is up to date.");
+            break;
+        } else {
+            printredln!("☒ Please update changelog.md and try again.");
+            return ExitCode::FAILURE;
+        }
+    }
+
+    // The -D turns all warnings into errors, ensuring we get an exit code of 1 for this script.
+    if Command::new("cargo").args(["clippy","--","-D","warnings"]).status().unwrap().success() {
+        printgreenln!("☑ Clippy is happy.");
+    } else {
+        printredln!("☒ Fix clippy warnings and try again.");
+        return ExitCode::FAILURE;
+    };
+
+    // make sure tests pass
+    if Command::new("cargo").args(["test"]).status().unwrap().success() {
+        printgreenln!("☑ All tests passed.")
+    } else {
+        printredln!("☒ Fix test errors and try again.");
+        return ExitCode::FAILURE
+    };
+
+    // make sure docs can be generated
+    if Command::new("cargo").args(["run","docs","--schemas","json-schemas/","--docs","docs/generated/"]).status().unwrap().success() {
+        printgreenln!("☑ Documentation generated.")
+    } else {
+        printredln!("☒ Fix documentation errors and try again.");
+        return ExitCode::FAILURE
+    }
+
+
+    // Make sure everything's committed
+    // (NOTE: This is a redundant check, since cargo release will also do this, but 
+    // cargo release doesn't check whether local and remote are in sync, which I do.
+    // But this should really be checked before that.)
+    // (NOTE: (2) I've just generated docs, which will change this value. If the docs
+    // did change something, the pre-flight will fail here. However, that might indicate to
+    // the user they might have forgotten to log a change. But, next time they run
+    // this, it should succeed.)
+    if Command::new("git").args(["status","--porcelain"]).output().unwrap().stdout.is_empty() {
+        printgreenln!("☑ All changes committed.")
+    } else {
+        printredln!("☒ There are uncommitted changes for git.");
+        return ExitCode::FAILURE;
+    }
+
+    // Make sure remote and local are in sync
+    println!("Fetching from remote...");
+    Command::new("git").arg("fetch").status().unwrap();
+    let git_head = Command::new("git").args(["rev-parse","HEAD"]).output().unwrap().stdout;
+    let git_upstream = Command::new("git").args(["rev-parse","@{u}"]).output().unwrap().stdout;
+    if git_head == git_upstream {
+        printgreenln!("☑ Local and remote are in sync.")
+    } else {
+        printredln!("☒ Local and remote are not in sync.");
+        return ExitCode::FAILURE;
+    }
+
+    printgreenln!("☑ Ready to Release");
+
+    printyellowln!("Are you serious about this? (type '--execute' if you are, return if you aren't)");
+    let actually_execute = loop {
+        prompt!();
+        let answer = stdout.read_line().unwrap();
+        match answer.as_str() {
+            "--execute" => {
+                printgreenln!("Okay, let's go.");
+                break true;
+            },
+            "" => {
+                printgreenln!("Okay, this will be a dry run only.");
+                break false;
+            }
+            _ => printredln!("Enter the argument or press return.")
+        }
+    };
+
+    let mut release_args = vec!["release",&level];
+    if actually_execute {
+        release_args.push("--execute");
+    }
+
+    if Command::new("cargo").args(release_args).status().unwrap().success() {
+        printgreenln!("☑ Version bumped.");
+    } else {
+        printredln!("☒ Version could not be bumped, something's wrong.");
+        return ExitCode::FAILURE;
+    }
+
+    if Command::new("cargo").arg("aur").status().unwrap().success() {
+        printgreenln!("☑ Arch PKGBUILD and tarball generated.")
+    } else {
+        printredln!("☒ PKGBUILD could not be generated, something's wrong.");
+        printredln!("NOTE: As the version has already been bumped, run 'cargo aur' directly when you have it fixed.")
+    }
+
+    if level != "rc" {
+        let mut release_args = vec!["release","rc"];
+        if actually_execute {
+            release_args.push("--execute");
+        }
+    
+        if Command::new("cargo").args(release_args).status().unwrap().success() {
+            printgreenln!("☑ Next release candidate generated for further development.");
+        } else {
+            printredln!("☒ Version could not be bumped, something's wrong.");
+            return ExitCode::FAILURE;
+        }
+    
+    }
+
+    printgreenln!("It's all done. Don't forget to upload the release to github with the correct version tag.");
+    
+    ExitCode::SUCCESS
+}

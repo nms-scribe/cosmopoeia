@@ -378,6 +378,7 @@ To proceed on this, I can break it down into the following steps:
         [-] https://crates.io/crates/cargo-deb
             [-] How do I specify dependencies?
             [-] How do I add sample data files?
+        [ ] For windows: https://crates.io/crates/cargo-dist
     [ ] Set up a "deployment" script:
         [X] Maybe make this a bunch of questions to ask instead?
         [X] Run `cargo release patch` 
@@ -392,9 +393,13 @@ To proceed on this, I can break it down into the following steps:
         [ ] Anyway to automate upload of these things to github?
         [X] Run `cargo release rc` -- This adds an `rc.1` tag at the end, which can be used to show it's a development version. Makes it easier for checking if my real version is running or the development version is. May come in handy as well if I put the version in as a property.
     [X] Okay, since my deploy script is calling cargo release twice, it also calls pre-flight twice. So, I think I'll just have to merge all of that code into deploy.sh instead.
+[ ] Work on a windows distribution.
 [ ] Put the Post-Release Tasks into issues on github
 [ ] Make the github repository public.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
+
+[ ] In deploy script, automate upload to github.
+
 
 The following additional tasks need to be triaged:
 
@@ -527,6 +532,12 @@ These are things that really should be done before release, but they might take 
 
 ## Post-release tasks and feature requests.
 
+[ ] For the configuration files (namers, culture_sets, etc.) I could automatically "search" for these files on a simple path. The paths would depend on the running os, but on linux, I can assume `usr/local/share/<entity>/`, then `$XDG_CONFIG_HOME/appname/<entity>/` or `$HOME/.config/appname/<entity>/`. and finally the same directory as the project, with the entity directory name and without. (`/<entity>/` means 'namers', 'culture_sets', etc.)
+[ ] The auto-generated docs need a lot of love. I'm wondering if the only way I can do this is to write them myself.
+    [ ] Commands show every freaking possibility in a long list, instead of breaking into sections on the variou subcommands. This ends up repeating each of the terrain commands at least four different ways.
+    [ ] The JSON schemas are nice, but they're not straightforward for human readability.
+    [ ] It would be nice to generate the documentation with an external tool, so the crate isn't hanging on to the doc generation code. The issue with that right now is that it would require making a lot of the code `pub` instead of `pub(crate)`. I suppose I could add a 'docs' feature and do conditional compilation and only compile with that feature when I generate them. Perhaps there's a way rust-script can load in the files as if they were part of it's crate? (That's a heavy load, however). 
+        [ ] How about looking for a tool that can parse rust files and return an AST, maybe the stuff from various proc-macro tools? rust-analyzer?a If such a tool would give access to doc tags, serde tags and clap tags, then I could generate my own documentation (and even get rid of some of the 'documented' code for field types and such) by scanning through that.
 [ ] Add a branching option to the water flow operation:
     [ ] Allow Branches --- current system
     [ ] Avoid Branches -- when the elevation is the same, pick only one in a reproducible manner
