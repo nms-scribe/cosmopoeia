@@ -394,6 +394,11 @@ To proceed on this, I can break it down into the following steps:
         [X] Run `cargo release rc` -- This adds an `rc.1` tag at the end, which can be used to show it's a development version. Makes it easier for checking if my real version is running or the development version is. May come in handy as well if I put the version in as a property.
     [X] Okay, since my deploy script is calling cargo release twice, it also calls pre-flight twice. So, I think I'll just have to merge all of that code into deploy.sh instead.
 [ ] Work on a windows distribution.
+    [ ] Set up cargo-dist to create a windows distribution for cosmopoeia
+    [ ] Test the distribution make sure we can somehow use it.
+        [ ] Will need gdal
+            [ ] If we just install qgis, will I need to add gdal to the requirements?
+        [ ] If there are a lot of problems, defer the windows distribution until after the release
 [ ] Put the Post-Release Tasks into issues on github
 [ ] Make the github repository public.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
@@ -613,4 +618,3 @@ These are things that really should be done before release, but they might take 
 [ ] For wind directions: What if the wind is affected by the "slope" of the average temperatures -- the direction to the warmest temperature neighbor is averaged with the based direction (because warmer is usually lower pressure). This is closer to how prevailing winds work. Better would be to figure out how to do pressure.
 [ ] Terrain task: Fill sinks -- how much should I fill? Do I only do it for single tiles that are lower? How about more?
 [ ] Terrain task: cut through sinks: Calculate flow, and if it ends in a sink, it cuts the lowest neighboring tile (from a different direction) to just below the current. This should, in theory, create canyons through some highlands. There are many questions, such as: is there a limit to how much it will cut so we can still get Death Valleys and Caspian Seas? If it hits that limit, how do we backtrack and warn the algorithm not to try again? What happens if the cut just leads to another sink?
-[ ] Add installation for windows: [https://crates.io/crates/cargo-wix]. I'm not sure how to get gdal dependency on windows. Is it a DLL? Where would I find it? How does the program find it at runtime?
