@@ -55,6 +55,12 @@ fn main() -> ExitCode {
 
     let stdout = Term::stdout();
 
+    printyellowln!("This script will walk you through a few final checks before tagging a new release. Just answer a few questions, and if everything's good, the project will be tagged with a new version number.");
+    println!();
+
+
+    // This script was originally written as a /bin/sh file, and only translated to rust-script after a release was made. So it actually hasn't
+    // been tested yet.
     printredln!("This script hasn't been tested yet. Are you sure you want to run this? (type 'yes' for yes')?");
     loop {
         prompt!();
@@ -192,29 +198,15 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if Command::new("cargo").arg("aur").status().unwrap().success() {
-        printgreenln!("☑ Arch PKGBUILD and tarball generated.")
-    } else {
-        printredln!("☒ PKGBUILD could not be generated, something's wrong.");
-        printredln!("NOTE: As the version has already been bumped, run 'cargo aur' directly when you have it fixed.")
-    }
-
     if level != "rc" {
-        let mut release_args = vec!["release","rc"];
-        if actually_execute {
-            release_args.push("--execute");
-        }
-    
-        if Command::new("cargo").args(release_args).status().unwrap().success() {
-            printgreenln!("☑ Next release candidate generated for further development.");
-        } else {
-            printredln!("☒ Version could not be bumped, something's wrong.");
-            return ExitCode::FAILURE;
-        }
-    
+        printgreenln!("The version has been bumped. But your job isn't done yet. You still need to complete the following tasks:");
+        printyellowln!("☐ Generate release binary for Arch linux (run `cargo aur` on an Arch Linux system)");
+        printyellowln!("☐ Generate release binary for Windows (run `deploy_windows.ers` with rust-script on a Windows system)");
+        printyellowln!("☐ Re-run this script to start the next release candidate in the cycle (`release.ers` but answer `rc` for version level)");    
+    } else {
+        printgreenln!("The version has been bumped. You're ready to continue the next cycle of development.");
     }
 
-    printgreenln!("It's all done. Don't forget to upload the release to github with the correct version tag.");
     
     ExitCode::SUCCESS
 }

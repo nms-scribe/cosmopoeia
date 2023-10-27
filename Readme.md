@@ -32,6 +32,26 @@ Here are a few worlds created using Cosmopoeia, as shown in QGIS.
 
 ![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-14_09-12-40.png)
 
+# Installation
+
+You can get binary files for installation [here](/releases/latest). Currently, I have an installation package for Arch Linux and a ZIP file containing the executable for Windows. If you are willing to support an installation package for another operating system, or a better installation package for Windows, please let me know. Otherwise, you may need to [build your own](/Compiling.md).
+
+## Linux
+
+If you have Arch Linux (x86_64), you should be able to download the `PKGBUILD` and the tarball and use `makepkg` to install it on your machine. If you have another `x86_64` distribution of linux, such as Debian or Ubuntu, you might be able to manually install using the files in the tarball.
+
+## Windows
+
+The ZIP file available in the releases contains the executable for 64-bit Windows, and the shared files. Unzip them to an appropriate location, and add it to your `PATH` if you wish.
+
+The executable will not run without gdal installed on your system. The following instructions are one way to install gdal, there may be other options. For example OSGEO4W might work, but wasn't tested because this worked. Miniconda is a Python package manager, and I'm not familiar with it or Python, so if you are having trouble you may need to find help elsewhere.
+
+1) Install [`miniconda`](https://docs.conda.io/projects/miniconda/en/latest/) I installed it for "Just Me", and checked "Add Miniconda3 to PATH", despite the warning given. Without the PATH addition, the next steps fail.
+2) Open `cmd`, check if installation worked by running `conda list`.
+3) For some reason, the next step installs an older version of gdal, which doesn't include support GEOS 3.10 or greater, unless I do this: `conda upgrade -c conda-forge --all`
+4) run `conda install -c conda-forge gdal`, which will take a long time.
+5) run `conda install -c conda-forge krb5`, which is apparently required to run any of the gdal tools, but somehow isn't included as a requirement.
+
 # Getting Started
 
 To get started using Cosmopoeia, you will need a few configuration files. To make things easier, some pre-built files are provided with the software. You will need to find the path where these are installed on your machine, or download them from the `share` directory in this repository. Once you have found this directory, you can run the following command, where `$share/` would be replaced with the path to that directory and `$target/` is the directory in which you want to create the world.
