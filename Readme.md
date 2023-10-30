@@ -36,6 +36,8 @@ Here are a few worlds created using Cosmopoeia, as shown in QGIS.
 
 You can get binary files for installation [here](/releases/latest). Currently, I have an installation package for Arch Linux and a ZIP file containing the executable for Windows. If you are willing to support an installation package for another operating system, or a better installation package for Windows, please let me know. Otherwise, you may need to [build your own](/Compiling.md).
 
+I apologize for how difficult the installation process is outside of Linux. I made the decision early on to depend on a library called GDAL for accessing the data files. I did not realize how hard it was to install that library on Windows until I had finished the project. I had assumed that the library came with QGIS or other tools, or at least was just a small distributable I could include with it. Unfortunately, it's the best way for accessing Geopackage files, which is the best modern file format for my purposes.
+
 ## Linux
 
 If you have Arch Linux (x86_64), you should be able to download the `PKGBUILD` and the tarball and use `makepkg` to install it on your machine. If you have another `x86_64` distribution of linux, such as Debian or Ubuntu, you might be able to manually install using the files in the tarball.
@@ -51,6 +53,10 @@ The executable will not run without gdal installed on your system. The following
 3) For some reason, the next step installs an older version of gdal, which doesn't include support GEOS 3.10 or greater, unless I do this: `conda upgrade -c conda-forge --all`
 4) run `conda install -c conda-forge gdal`, which will take a long time.
 5) run `conda install -c conda-forge krb5`, which is apparently required to run any of the gdal tools, but somehow isn't included as a requirement.
+
+## Macintosh
+
+I don't have any support for installing this on any Apple products, yet.
 
 # Getting Started
 
