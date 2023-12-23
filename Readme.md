@@ -6,7 +6,7 @@ Cosmopoeia can generate a world, either from scratch or from an existing heightm
 
 # How It Works
 
-Cosmopoeia was inspired by a number of tools which generate worlds for the internet. The biggest inspiration is a tool is [Fantasy Map Generator](https://azgaar.github.io/Fantasy-Map-Generator/) created by Azgaar ([Github site here](https://github.com/Azgaar/Fantasy-Map-Generator)). That itself was inspired by several other tools and experiments by [Martin O'Leary (link broken)](https://mewo2.com/notes/terrain) , [Amit Patel](http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation), and [Scott Turner](https://heredragonsabound.blogspot.com/).
+Cosmopoeia was inspired by a number of tools which generate worlds for the internet. The biggest inspiration is a tool called [Fantasy Map Generator](https://azgaar.github.io/Fantasy-Map-Generator/) created by Azgaar ([Github site here](https://github.com/Azgaar/Fantasy-Map-Generator)). That itself was inspired by several other tools and experiments by [Martin O'Leary (link broken)](https://mewo2.com/notes/terrain) , [Amit Patel](http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation), and [Scott Turner](https://heredragonsabound.blogspot.com/).
 
 **Interface**. Cosmpoeia runs from the command line. Options and results are entered as arguments. The world can be generated all at once, or in steps, allowing for manipulation and adjustment of data in between. The output is a data file which can be edited using GIS software. This architecture allows cosmopoeia to focus on generating terrain, and not on user interface design. The graphical user interface is provided by the GIS software used for editing the maps after generation.
 
