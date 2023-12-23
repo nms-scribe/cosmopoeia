@@ -48,7 +48,7 @@ impl Task for Coastline {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -87,7 +87,7 @@ impl Task for Flow {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         _ = target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -133,7 +133,7 @@ impl Task for Lakes {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let water_flow_result = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
@@ -175,7 +175,7 @@ impl Task for Rivers {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_rivers_arg, progress, transaction)
@@ -212,7 +212,7 @@ impl Task for ShoreDistance {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -248,7 +248,7 @@ impl Task for Grouping {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -318,7 +318,7 @@ impl Task for GenWater {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(args) = self.default_args {
-            let mut target = WorldMap::edit(args.target_arg.target)?;
+            let mut target = WorldMap::edit(&args.target_arg.target)?;
 
             Self::run_default(&args.bezier_scale_arg, 
                 &args.buffer_scale_arg, 

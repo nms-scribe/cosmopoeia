@@ -56,6 +56,7 @@ use crate::world_map::fields::NeighborAndDirection;
 use crate::world_map::fields::Neighbor;
 use crate::utils::edge::Edge;
 use crate::typed_map::fields::IdRef;
+use crate::utils::world_shape::WorldShape;
 
 
 pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
@@ -78,7 +79,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
 
 
 
-pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, world_shape: &WorldShape, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut tiles = target.create_tile_layer(overwrite_layer)?;
 
@@ -97,6 +98,8 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,Comman
     let mut props = target.create_properties_layer()?;
 
     _ = props.set_elevation_limits(limits)?;
+
+    _ = props.set_world_shape(world_shape)?;
 
     Ok(())
 

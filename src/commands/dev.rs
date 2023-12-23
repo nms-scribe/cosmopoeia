@@ -29,6 +29,7 @@ use crate::command_def;
 use crate::progress::ProgressObserver;
 use crate::commands::ElevationSourceArg;
 use crate::commands::ElevationLimitsArg;
+use crate::commands::WorldShapeArg;
 use crate::commands::RandomSeedArg;
 use crate::commands::OverwriteTilesArg;
 use crate::commands::NamerArg;
@@ -63,7 +64,7 @@ impl Task for PointsFromHeightmap {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let source = RasterMap::open(self.heightmap_arg.source)?;
         let extent = source.bounds()?.extent();
-        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
+        let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
         let random = random_number_generator(&self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.points);
 
@@ -118,7 +119,7 @@ impl Task for PointsFromExtent {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
-        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
+        let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
         let random = random_number_generator(&self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.points);
         
@@ -151,7 +152,7 @@ impl Task for TrianglesFromPoints {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let mut points = target.points_layer()?;
     
@@ -185,6 +186,9 @@ subcommand_def!{
         pub elevation_limits_arg: ElevationLimitsArg,
 
         #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
+
+        #[clap(flatten)]
         pub overwrite_tiles_arg: OverwriteTilesArg,
 
     }
@@ -201,7 +205,7 @@ impl Task for VoronoiFromTriangles {
 
         let limits = ElevationLimits::new(self.elevation_limits_arg.min_elevation,self.elevation_limits_arg.max_elevation)?;
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             let mut triangles = transaction.edit_triangles_layer()?;
@@ -216,7 +220,7 @@ impl Task for VoronoiFromTriangles {
             #[allow(clippy::needless_collect)]
             let voronoi: Vec<_> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
     
-            load_tile_layer(transaction,&self.overwrite_tiles_arg,voronoi.into_iter(),&limits,progress)
+            load_tile_layer(transaction,&self.overwrite_tiles_arg,voronoi.into_iter(),&limits,&self.world_shape_arg.world_shape,progress)
         })?;
 
         target.save(progress)

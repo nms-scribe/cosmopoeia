@@ -47,7 +47,7 @@ impl Task for Population {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -106,7 +106,7 @@ impl Task for CreateCultures {
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(&mut random, &self.cultures_arg, &mut loaded_namers, &self.size_variance_arg, &self.river_threshold_arg, &self.overwrite_cultures_arg, transaction, progress)
@@ -150,7 +150,7 @@ impl Task for ExpandCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
         target.with_transaction(|transaction| {
             Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, transaction, progress)
         })?;
@@ -185,7 +185,7 @@ impl Task for DissolveCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -226,7 +226,7 @@ impl Task for CurvifyCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
         let bezier_scale = self.bezier_scale_arg;
 
         target.with_transaction(|transaction| {
@@ -319,7 +319,7 @@ impl Task for GenPeople {
 
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
     
-            let mut target = WorldMap::edit(default_args.target_arg.target)?;
+            let mut target = WorldMap::edit(&default_args.target_arg.target)?;
     
             Self::run_default(
                 &default_args.river_threshold_arg, 

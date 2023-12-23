@@ -62,7 +62,7 @@ impl Task for Create {
 
         let mut random = random_number_generator(&self.random_seed_arg);
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let mut loaded_namers = NamerSet::load_from(self.namers_arg, &mut random, progress)?;
 
@@ -109,7 +109,7 @@ impl Task for Expand {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
         target.with_transaction(|transaction| {
             Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, transaction, progress)
         })?;
@@ -145,7 +145,7 @@ impl Task for Normalize {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -182,7 +182,7 @@ impl Task for Dissolve {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -223,7 +223,7 @@ impl Task for Curvify {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(&self.bezier_scale_arg, transaction, progress)
@@ -309,7 +309,7 @@ impl Task for GenNations {
         if let Some(default_args) = self.default_args {
             let mut random = random_number_generator(&default_args.random_seed_arg);
 
-            let mut target = WorldMap::edit(default_args.target_arg.target)?;
+            let mut target = WorldMap::edit(&default_args.target_arg.target)?;
     
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
 

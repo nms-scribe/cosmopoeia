@@ -14,6 +14,7 @@ use schemars::JsonSchema;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
+use crate::utils::world_shape::WorldShape;
 
 
 mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
@@ -181,6 +182,14 @@ pub struct TileCountArg {
     #[arg(long,default_value="10000")]
     /// The rough number of tiles to generate for the image
     pub tile_count: usize,
+
+}
+
+#[derive(Args)]
+pub struct WorldShapeArg {
+    #[arg(long,default_value="cylinder")]
+    /// The "shape" of the world for generating points, calculating distance, area, etc.
+    pub world_shape: WorldShape,
 
 }
 

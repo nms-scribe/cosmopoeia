@@ -38,7 +38,7 @@ impl Task for Data {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -76,7 +76,7 @@ impl Task for Apply {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
 
@@ -119,7 +119,7 @@ impl Task for Dissolve {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -160,7 +160,7 @@ impl Task for Curvify {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(&self.bezier_scale_arg, transaction, progress)
@@ -222,7 +222,7 @@ impl Task for GenBiome {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(args) = self.default_args {
-            let mut target = WorldMap::edit(args.target_arg.target)?;
+            let mut target = WorldMap::edit(&args.target_arg.target)?;
 
             Self::run_default(&args.overwrite_biomes_arg, &args.bezier_scale_arg, &mut target, progress)
     

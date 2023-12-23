@@ -6,21 +6,24 @@ use super::extent::Extent;
 use super::coordinates::Coordinates;
 use crate::errors::CommandError;
 use crate::typed_map::fields::IdRef;
+use crate::utils::world_shape::WorldShape;
 
 pub(crate) struct PointFinder {
   // It's kind of annoying, but the query method doesn't return the original point, so I have to store the point.
   inner: QuadTree<f64,Coordinates>,
   bounds: Boundary<f64>, // it also doesn't give us access to this, which is useful for cloning
+  world_shape: WorldShape, // for calculating final distance
   capacity: usize // or this
 }
 
 impl PointFinder {
 
-    pub(crate) fn new(extent: &Extent, capacity: usize) -> Self {
+    pub(crate) fn new(extent: &Extent, world_shape: WorldShape, capacity: usize) -> Self {
         let bounds = Boundary::between_points((extent.west,extent.south),(extent.east(),extent.north()));
         Self {
             inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
             bounds,
+            world_shape,
             capacity
         }
     }
@@ -42,7 +45,7 @@ impl PointFinder {
         let east = point.y + spacing;
         let boundary = Boundary::between_points((west.into(),south.into()),(east.into(),north.into()));
         for item in self.inner.query(boundary) {
-            if item.distance(point) <= spacing {
+            if item.distance(point,&self.world_shape) <= spacing {
                 return true;
             }
         }
@@ -56,6 +59,7 @@ impl PointFinder {
         let mut result = Self {
             inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
             bounds,
+            world_shape: other.world_shape.clone(),
             capacity
         };
         for point in other.inner.iter() {
@@ -69,17 +73,19 @@ pub(crate) struct TileFinder {
   inner: QuadTree<f64,(Coordinates,IdRef)>, // I need the original point to test distance
   bounds: Boundary<f64>, // see PointFinder
   //capacity: usize, // see PointFinder
+  world_shape: WorldShape,
   initial_search_radius: f64
 }
 
 impl TileFinder {
 
-    pub(crate) fn new(extent: &Extent, capacity: usize, tile_spacing: f64) -> Self {
+    pub(crate) fn new(extent: &Extent, world_shape: WorldShape, capacity: usize, tile_spacing: f64) -> Self {
         let bounds = Boundary::between_points((extent.west,extent.south),(extent.east(),extent.north()));
         Self {
             inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
             bounds,
             //capacity,
+            world_shape,
             initial_search_radius: tile_spacing
         }
     }
@@ -116,9 +122,9 @@ impl TileFinder {
                 let mut found = None;
                 for item in self.inner.query(search_boundary) {
                     match &found {
-                        None => found = Some((item.1.clone(),item.0.distance(point))),
+                        None => found = Some((item.1.clone(),item.0.distance(point,&self.world_shape))),
                         Some(last_found) => {
-                            let this_distance = item.0.distance(point);
+                            let this_distance = item.0.distance(point,&self.world_shape);
                             if this_distance < last_found.1 {
                                 found = Some((item.1.clone(),this_distance))
                             }

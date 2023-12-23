@@ -23,6 +23,7 @@ use crate::commands::ElevationSourceArg;
 use crate::commands::terrain::Command as TerrainCommand;
 use crate::commands::ElevationLimitsArg;
 use crate::commands::TileCountArg;
+use crate::commands::WorldShapeArg;
 use crate::commands::RandomSeedArg;
 use crate::commands::OverwriteTilesArg;
 
@@ -53,7 +54,7 @@ impl Task for CreateCalcNeighbors {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -228,6 +229,9 @@ subcommand_def!{
         pub target_arg: TargetArg,
 
         #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
+
+        #[clap(flatten)]
         pub tile_count_arg: TileCountArg,
 
         #[clap(flatten)]
@@ -244,12 +248,12 @@ subcommand_def!{
 
 impl CreateTiles {
 
-    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: &ElevationLimits, tiles: &TileCountArg, overwrite: &OverwriteTilesArg, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
+    fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: &ElevationLimits, world_shape: &WorldShapeArg, tiles: &TileCountArg, overwrite: &OverwriteTilesArg, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
         let voronois = generate_random_tiles(random, extent, tiles.tile_count, progress)?;
     
         progress.announce("Create tiles from voronoi polygons");
 
-        load_tile_layer(target, overwrite, voronois, limits, progress)    
+        load_tile_layer(target, overwrite, voronois, limits, &world_shape.world_shape, progress)    
     }
 
 }
@@ -263,11 +267,11 @@ impl Task for CreateTiles {
 
         let loaded_source = self.source.load(&mut random, progress)?;
 
-        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
+        let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(loaded_source.extent, &loaded_source.limits, &self.tile_count_arg, &self.overwrite_tiles_arg, &mut random, transaction, progress)
+            Self::run_with_parameters(loaded_source.extent, &loaded_source.limits, &self.world_shape_arg, &self.tile_count_arg, &self.overwrite_tiles_arg, &mut random, transaction, progress)
 
         })?;
 
@@ -286,6 +290,9 @@ subcommand_def!{
 
         #[clap(flatten)]
         pub tile_count_arg: TileCountArg,
+
+        #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
 
         #[clap(flatten)]
         pub random_seed_arg: RandomSeedArg,
@@ -308,17 +315,17 @@ impl Task for Create {
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
-        let mut target = WorldMap::create_or_edit(self.target_arg.target)?;
+        let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
 
-        Self::run_default(&self.tile_count_arg,&self.overwrite_tiles_arg,loaded_source, &mut target, &mut random, progress)
+        Self::run_default(&self.tile_count_arg,&self.world_shape_arg,&self.overwrite_tiles_arg,loaded_source, &mut target, &mut random, progress)
 
     }
 }
 
 impl Create {
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: &TileCountArg, overwrite_tiles: &OverwriteTilesArg, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(tiles: &TileCountArg, world_shape: &WorldShapeArg, overwrite_tiles: &OverwriteTilesArg, loaded_source: LoadedSource, target: &mut WorldMap, random: &mut Random, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|transaction| {
-            CreateTiles::run_with_parameters(loaded_source.extent, &loaded_source.limits, tiles, overwrite_tiles, random, transaction, progress)?;
+            CreateTiles::run_with_parameters(loaded_source.extent, &loaded_source.limits, world_shape, tiles, overwrite_tiles, random, transaction, progress)?;
 
             CreateCalcNeighbors::run_with_parameters(transaction, progress)?;
 

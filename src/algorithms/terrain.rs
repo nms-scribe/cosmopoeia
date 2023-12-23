@@ -20,6 +20,7 @@ use crate::world_map::property_layer::ElevationLimits;
 use crate::utils::point_finder::TileFinder;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
+use crate::utils::world_shape::WorldShape;
 use crate::progress::WatchableDeque;
 use crate::progress::WatchableQueue;
 use crate::commands::terrain::Multiply;
@@ -54,6 +55,7 @@ enum RelativeHeightTruncation {
 
 struct TerrainParameters {
     elevations: ElevationLimits,
+    world_shape: WorldShape,
     positive_elevation_scale: f64,
     negative_elevation_scale: f64,
     expanse_above_sea_level: f64,
@@ -104,7 +106,7 @@ impl TerrainParameters {
     }
         
 
-    fn new(elevations: ElevationLimits, extents: Extent, tile_count: usize) -> Self {
+    fn new(world_shape: WorldShape, elevations: ElevationLimits, extents: Extent, tile_count: usize) -> Self {
         let expanse_above_sea_level = elevations.max_elevation - (elevations.min_elevation.max(0.0));
         let blob_power = Self::get_blob_power(tile_count);
         let line_power = Self::get_line_power(tile_count);
@@ -118,6 +120,7 @@ impl TerrainParameters {
 
         Self { 
             elevations, 
+            world_shape,
             positive_elevation_scale, 
             negative_elevation_scale, 
             expanse_above_sea_level, 
@@ -554,7 +557,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                 let end_x = parameters.gen_end_x(rng);
                 let end_y = parameters.gen_end_y(rng);
                 end_point = (end_x, end_y).try_into()?;
-                let dist = start_point.distance(&end_point);
+                let dist = start_point.distance(&end_point,&parameters.world_shape);
                 if (limit >= 50) || (dist >= lower_dist_limit) && (dist <= upper_dist_limit) {
                     break;
                 }
@@ -566,7 +569,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
             let end = point_index.find_nearest_tile(&end_point)?;
 
             progress.start_unknown_endpoint(|| format!("Generating range #{}.",i+1));
-            let range = get_range(rng, tile_map, &mut used, start, &end, 0.85)?;
+            let range = get_range(rng, tile_map, &parameters.world_shape, &mut used, start, &end, 0.85)?;
 
             // add height to ridge and neighboring cells
             let mut queue = range.clone();
@@ -642,7 +645,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
     }
 }
 
-fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchema, TileForTerrain>, used: &mut HashSet<IdRef>, start: IdRef, end: &IdRef, jagged_probability: f64) -> Result<Vec<IdRef>, CommandError> {
+fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchema, TileForTerrain>, world_shape: &WorldShape, used: &mut HashSet<IdRef>, start: IdRef, end: &IdRef, jagged_probability: f64) -> Result<Vec<IdRef>, CommandError> {
     let mut cur_id = start;
     let end_tile = tile_map.try_get(end)?;
     let mut range = vec![cur_id.clone()];
@@ -659,7 +662,7 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
                     }
 
                     let neighbor_tile = tile_map.try_get(neighbor_id)?;
-                    let diff = end_tile.site.distance(&neighbor_tile.site);
+                    let diff = end_tile.site.distance(&neighbor_tile.site,world_shape);
                     let diff = if rng.gen_bool(jagged_probability) {
                         // every once in a while, make the neighbor seem closer, to create more jagged ridges.
                         diff / 2.0
@@ -745,7 +748,7 @@ impl ProcessTerrainTilesWithPointIndex for AddStrait {
         let start = point_index.find_nearest_tile(&start_point)?;
         let end = point_index.find_nearest_tile(&end_point)?;
 
-        let mut range = get_range(rng, tile_map, &mut used, start, &end, 0.8)?;
+        let mut range = get_range(rng, tile_map, &parameters.world_shape, &mut used, start, &end, 0.8)?;
 
         let mut next_queue = Vec::new();
 
@@ -998,7 +1001,7 @@ impl ProcessTerrainTiles for Smooth {
 
 impl ProcessTerrainTiles for Erode {
 
-    fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
+    fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
         
         entity!(TileForSoil: Tile {
             site: Coordinates,
@@ -1057,9 +1060,9 @@ impl ProcessTerrainTiles for Erode {
                             // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
                             // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
                             let run = if across_map {
-                                entity.site.distance(&t.site.across_antimeridian(&entity.site))
+                                entity.site.distance(&t.site.across_antimeridian(&entity.site),&parameters.world_shape)
                             } else {
-                                entity.site.distance(&t.site)
+                                entity.site.distance(&t.site,&parameters.world_shape)
                             } * 111200.0;
                             rise/run
                         },
@@ -1341,12 +1344,14 @@ impl TerrainTask {
 
             progress.announce("Preparing for processes.");
 
-            let limits = target.edit_properties_layer()?.get_elevation_limits()?;
+            let mut properties = target.edit_properties_layer()?;
+            let limits = properties.get_elevation_limits()?;
+            let world_shape = properties.get_world_shape()?;
     
             let mut layer = target.edit_tile_layer()?;
             let tile_extents = layer.get_extent()?;
             let tile_count = layer.feature_count();
-            let parameters = TerrainParameters::new(limits, tile_extents.clone(), tile_count);
+            let parameters = TerrainParameters::new(world_shape, limits, tile_extents.clone(), tile_count);
     
     
     
@@ -1360,7 +1365,7 @@ impl TerrainTask {
                 let tile_search_radius = tile_spacing * 2.0; // multiply by two to make darn sure we cover something.
     
     
-                let mut point_index = TileFinder::new(&tile_extents, tile_count, tile_search_radius);
+                let mut point_index = TileFinder::new(&tile_extents, parameters.world_shape.clone(), tile_count, tile_search_radius);
                 let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForTerrain,_>(|fid,tile| {
                     point_index.add_tile(tile.site.clone(), fid.clone())
                 }, progress)?;

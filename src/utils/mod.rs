@@ -7,6 +7,7 @@ pub(crate) mod namers_pretty_print;
 pub(crate) mod point_finder;
 pub(crate) mod arg_range;
 pub(crate) mod simple_serde;
+pub(crate) mod world_shape;
 
 pub(crate) fn split_string_from_end(string: &str, char_index_from_end: usize) -> (&str, &str) {
 

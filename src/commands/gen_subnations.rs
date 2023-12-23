@@ -65,7 +65,7 @@ impl Task for Create {
 
         let mut random = random_number_generator(&self.random_seed_arg);
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
@@ -118,7 +118,7 @@ impl Task for Expand {
 
         let mut random = random_number_generator(&self.random_seed_arg);
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
         
 
         target.with_transaction(|transaction| {
@@ -169,7 +169,7 @@ impl Task for FillEmpty {
 
         let mut random = random_number_generator(&self.random_seed_arg);
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
         
         let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
 
@@ -212,7 +212,7 @@ impl Task for Normalize {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -253,7 +253,7 @@ impl Task for AssignColors {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let mut random = random_number_generator(&self.random_seed_arg);
 
@@ -292,7 +292,7 @@ impl Task for Dissolve {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
             Self::run_with_parameters(transaction, progress)
@@ -331,7 +331,7 @@ impl Task for Curvify {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         let bezier_scale = self.bezier_scale_arg;
         target.with_transaction(|transaction| {
@@ -416,7 +416,7 @@ impl Task for GenSubnations {
 
             let mut random = random_number_generator(&default_args.random_seed_arg);
 
-            let mut target = WorldMap::edit(default_args.target_arg.target)?;
+            let mut target = WorldMap::edit(&default_args.target_arg.target)?;
 
             let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
 

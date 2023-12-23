@@ -34,7 +34,7 @@ impl Task for Temperature {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -76,7 +76,7 @@ impl Task for Winds {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -119,7 +119,7 @@ impl Task for Precipitation {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         target.with_transaction(|transaction| {
 
@@ -189,7 +189,7 @@ impl Task for GenClimate {
         if let Some(command) = self.command {
             command.run(progress)
         } else if let Some(all) = self.default_args {
-            let mut target = WorldMap::edit(all.target_arg.target)?;
+            let mut target = WorldMap::edit(&all.target_arg.target)?;
 
             Self::run_default(&all.temperature_arg, &all.winds_arg, &all.precipitation_arg, &mut target, progress)
 

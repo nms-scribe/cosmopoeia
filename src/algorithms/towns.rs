@@ -13,6 +13,7 @@ use crate::utils::coordinates::Coordinates;
 use crate::world_map::tile_layer::TileLayer;
 use crate::utils::point_finder::PointFinder;
 use crate::utils::extent::Extent;
+use crate::utils::world_shape::WorldShape;
 use crate::world_map::town_layer::NewTown;
 use crate::errors::CommandError;
 use crate::algorithms::naming::NamerSet;
@@ -41,13 +42,15 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
 
     // a lot of this is ported from AFMG
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     let mut tiles_layer = target.edit_tile_layer()?;
 
     let mut tiles = gather_tiles_for_towns(rng, &mut tiles_layer, progress)?;
 
     let extent = tiles_layer.get_extent()?;
 
-    let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, town_counts.capital_count, progress);
+    let (capitals, capitals_finder) = generate_capitals(&mut tiles, &extent, &world_shape, town_counts.capital_count, progress);
 
     let towns = place_towns(rng, &mut tiles, &extent, capitals.len(), &town_counts.town_count, &capitals_finder, progress)?;
 
@@ -169,7 +172,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
     Ok(towns)
 }
 
-pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, capital_count: Option<usize>, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
+pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<ScoredTileForTowns>, extent: &Extent, world_shape: &WorldShape, capital_count: Option<usize>, progress: &mut Progress) -> (Vec<(ScoredTileForTowns, bool)>, PointFinder) {
     let mut capitals_finder;
     let mut capitals;
     let mut capital_cultures;
@@ -202,7 +205,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
     macro_rules! reset_capital_search {
         () => {
             // this is a 2d index of points
-            capitals_finder = PointFinder::new(&extent,capital_count);
+            capitals_finder = PointFinder::new(&extent,world_shape.clone(),capital_count);
             capitals = vec![];
             capital_cultures = HashSet::new();
             // sort the tiles so highest scores is at 0

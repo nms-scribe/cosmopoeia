@@ -638,7 +638,7 @@ impl Task for Terrain {
 
         let mut random = random_number_generator(&self.random_seed_arg);
 
-        let mut target = WorldMap::edit(self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
 
         if self.serialize {
             println!("{}",self.command.to_json()?);

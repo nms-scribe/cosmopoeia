@@ -4,10 +4,10 @@
 * If you see something that doesn't match those standards, go ahead and fix that.
 * If you see inconsistencies in style, you're welcome to bring them up and fix them if asked to do so.
 * Comment well (not just doc comments) and use code practices (full-word identifiers, etc.) that turn the code into the comment.
-* Run clippy as often as you want, but before pushing changes
+* Run clippy as often as you want, but especially before pushing changes
 * The additional clippy warnings are in main.rs, don't remove any of them.
 * All warnings, both compilation and clippy, should be gone before pushing changes.
-* Add to the changelog as new features are added, majore bugs are fixed.
+* Add to the changelog as new features are added, major bugs are fixed.
   * Keep the changelog human-readable.
 * To tag a new version: run `release.ers` using rust-script (`cargo install rust-script`).
 * After tagging, create deployment packages on all platforms:

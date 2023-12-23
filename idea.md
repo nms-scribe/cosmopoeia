@@ -198,6 +198,6 @@ The following was used to generate shared World.gpkg:
 
 # Tasks
 
-[ ] Make the github repository public.
+[X] Make the github repository public.
 [ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
 [ ] Start working on issues, starting with #1 and triaging the others.

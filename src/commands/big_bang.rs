@@ -21,6 +21,7 @@ use crate::commands::gen_towns::GenTowns;
 use crate::commands::gen_nations::GenNations;
 use crate::commands::gen_subnations::GenSubnations;
 use crate::commands::TileCountArg;
+use crate::commands::WorldShapeArg;
 use crate::commands::RandomSeedArg;
 use crate::commands::OverwriteAllArg;
 use crate::commands::BezierScaleArg;
@@ -43,6 +44,9 @@ pub struct PrimitiveArgs {
 
     #[clap(flatten)]
     pub tile_count_arg: TileCountArg,
+
+    #[clap(flatten)]
+    pub world_shape_arg: WorldShapeArg,
 
     #[clap(flatten)]
     pub temperature_arg: TemperatureRangeArg,
@@ -115,7 +119,7 @@ impl Task for BigBang {
 
         let loaded_source = self.source.load(&mut random, progress)?; 
 
-        Self::run_default(&mut random,&self.primitive_args,&self.cultures_arg,&mut loaded_namers,loaded_source,self.target_arg,progress)
+        Self::run_default(&mut random,&self.primitive_args,&self.cultures_arg,&mut loaded_namers,loaded_source,&self.target_arg,progress)
 
     }
 }
@@ -123,29 +127,13 @@ impl Task for BigBang {
 impl BigBang {
 
 
-    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: &PrimitiveArgs, cultures: &CulturesGenArg, namers: &mut NamerSet, loaded_source: LoadedSource, target_arg: TargetArg, progress: &mut Progress) -> Result<(), CommandError> {
+    pub(crate) fn run_default<Random: Rng, Progress: ProgressObserver>(random: &mut Random, primitive_args: &PrimitiveArgs, cultures: &CulturesGenArg, namers: &mut NamerSet, loaded_source: LoadedSource, target_arg: &TargetArg, progress: &mut Progress) -> Result<(), CommandError> {
 
-        let mut target = WorldMap::create_or_edit(target_arg.target)?;
+        let mut target = WorldMap::create_or_edit(&target_arg.target)?;
 
-        Create::run_default(&primitive_args.tile_count_arg, &primitive_args.overwrite_all_arg.overwrite_tiles(), loaded_source, &mut target, random, progress)?;
+        Create::run_default(&primitive_args.tile_count_arg, &primitive_args.world_shape_arg, &primitive_args.overwrite_all_arg.overwrite_tiles(), loaded_source, &mut target, random, progress)?;
 
         GenClimate::run_default(&primitive_args.temperature_arg, &primitive_args.wind_arg, &primitive_args.precipitation_arg, &mut target, progress)?;
-
-        // FUTURE: If I don't do the next line, I get an error in the next command parts from SQLite that 'coastlines' table is locked. If I remove the 
-        // algorithm immediately following, I get the same error for a different table instead. The previous algorithms don't even touch those items, and if the
-        // file already exists (which it did when I was running this error), 'create_or_edit' is the same as 'edit', so there isn't some
-        // special case create locking going on.
-        // - Maybe some future version of gdal or the gdal crate will fix this. If it does it's a simple matter of removing this line.
-        // - I do not know if there's another way to fix it, but this was my first thought, and it works, and I don't want to go any further because I'm being triggered with memories of Windows 2000 DLL and ActiveX code integrations where this sort of thing was the only answer. Shudder.
-        /* The specific error messages:
-            ERROR 1: sqlite3_exec(DROP TABLE "rtree_coastlines_geom") failed: database table is locked
-            ERROR 1: sqlite3_exec(DROP TABLE "coastlines") failed: database table is locked
-            ERROR 1: sqlite3_exec(CREATE TABLE "coastlines" ( "fid" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, "geom" POLYGON)) failed: table "coastlines" already exists
-            ERROR 1: sqlite3_exec(CREATE VIRTUAL TABLE "rtree_coastlines_geom" USING rtree(id, minx, maxx, miny, maxy)) failed: table "rtree_coastlines_geom" already exists
-            gdal: OGR method 'OGR_L_CreateFeature' returned error: '6'
-
-         */
-        let mut target = target.reedit()?;
 
         GenWater::run_default(&primitive_args.bezier_scale_arg, &primitive_args.lake_buffer_scale_arg, &primitive_args.overwrite_all_arg.overwrite_coastline(), &primitive_args.overwrite_all_arg.overwrite_ocean(), &primitive_args.overwrite_all_arg.overwrite_lakes(), &primitive_args.overwrite_all_arg.overwrite_rivers(), &mut target, progress)?;
 

@@ -77,7 +77,7 @@ impl LineLayer<'_,'_> {
 
 
 pub(crate) struct WorldMap {
-    path: PathBuf,
+    //path: PathBuf, Removed after reedit bug was fixed
     dataset: Dataset
 }
 
@@ -85,40 +85,41 @@ impl WorldMap {
 
     const GDAL_DRIVER: &str = "GPKG";
 
-    fn new(dataset: Dataset, path: PathBuf) -> Self {
+    fn new(dataset: Dataset/* , path: PathBuf*/) -> Self {
         Self { 
-            path, 
+            //path, 
             dataset 
         }
     }
 
-    fn open_dataset<FilePath: AsRef<Path>>(path: FilePath) -> Result<Dataset, CommandError> {
-        Ok(Dataset::open_ex(&path, DatasetOptions { 
+    fn open_dataset<FilePath: AsRef<Path>>(path: &FilePath) -> Result<Dataset, CommandError> {
+        Ok(Dataset::open_ex(path, DatasetOptions { 
             open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
             ..Default::default()
         })?)
     }
 
-    pub(crate) fn edit<FilePath: AsRef<Path> + Into<PathBuf>>(path: FilePath) -> Result<Self,CommandError> {
-        Ok(Self::new(Self::open_dataset(&path)?,path.into()))
+    pub(crate) fn edit<FilePath: AsRef<Path> + Into<PathBuf>>(path: &FilePath) -> Result<Self,CommandError> {
+        Ok(Self::new(Self::open_dataset(path)?/*,path.into()*/))
     }
 
-    pub(crate) fn create_or_edit<FilePath: AsRef<Path> + Into<PathBuf>>(path: FilePath) -> Result<Self,CommandError> {
+    pub(crate) fn create_or_edit<FilePath: AsRef<Path> + Into<PathBuf>>(path: &FilePath) -> Result<Self,CommandError> {
         if path.as_ref().exists() {
             Self::edit(path)
         } else {
             let driver = DriverManager::get_driver_by_name(Self::GDAL_DRIVER)?;
-            let dataset = driver.create_vector_only(&path)?;
-            Ok(Self::new(dataset,path.into()))
+            let dataset = driver.create_vector_only(path)?;
+            Ok(Self::new(dataset/*,path.into()*/))
         }
 
     }
 
-    pub(crate) fn reedit(self) -> Result<Self,CommandError> {
-        // This function is necessary to work around a bug in big-bang that reminds me of days long before rust and I don't want to investigate further.
-        self.dataset.close()?;
-        Self::edit(self.path)
-    }
+    // This had been created to work around a bug which caused a database locked error in specific situations. That bug is fixed.
+    //pub(crate) fn reedit(self) -> Result<Self,CommandError> {
+    //    // This function is necessary to work around a bug in big-bang that reminds me of days long before rust and I don't want to investigate further.
+    //    self.dataset.close()?;
+    //    Self::edit(self.path)
+    //}
 
     pub(crate) fn with_transaction<ResultType, Callback: FnOnce(&mut WorldMapTransaction) -> Result<ResultType,CommandError>>(&mut self, callback: Callback) -> Result<ResultType,CommandError> {
         let transaction = self.dataset.start_transaction()?;

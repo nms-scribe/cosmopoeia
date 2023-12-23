@@ -8,6 +8,7 @@ use crate::utils::simple_serde::Serialize;
 use crate::typed_map::fields::IdRef;
 use crate::typed_map::features::TypedFeature;
 use crate::typed_map::features::TypedFeatureIterator;
+use crate::utils::world_shape::WorldShape;
 
 layer!(#[hide_read(true)] Property["properties"]: NoGeometry {
     #[set(allow(dead_code))] name: String,
@@ -16,6 +17,7 @@ layer!(#[hide_read(true)] Property["properties"]: NoGeometry {
 
 impl PropertySchema {
     pub(crate) const PROP_ELEVATION_LIMITS: &str = "elevation-limits";
+    pub(crate) const PROP_WORLD_SHAPE: &str = "world-shape";
 
 }
 
@@ -67,13 +69,17 @@ impl TryFrom<String> for ElevationLimits {
 impl PropertyLayer<'_,'_> {
 
     pub(crate) fn get_property(&mut self, name: &str) -> Result<String,CommandError> {
+        let mut result = None;
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
             if feature.name()? == name {
-                return feature.value()
+                result = Some(feature.value()?)
             }
         }
-        Err(CommandError::PropertyNotSet(name.to_owned()))
-
+        if let Some(result) = result {
+            Ok(result)
+        } else {
+            Err(CommandError::PropertyNotSet(name.to_owned()))
+        }
     }
 
     pub(crate) fn get_elevation_limits(&mut self) -> Result<ElevationLimits,CommandError> {
@@ -104,6 +110,14 @@ impl PropertyLayer<'_,'_> {
 
     pub(crate) fn set_elevation_limits(&mut self, value: &ElevationLimits) -> Result<IdRef,CommandError> {
         self.set_property(PropertySchema::PROP_ELEVATION_LIMITS, &Into::<String>::into(value))
+    }
+
+    pub(crate) fn get_world_shape(&mut self) -> Result<WorldShape,CommandError> {
+        self.get_property(PropertySchema::PROP_WORLD_SHAPE)?.try_into()
+    }
+
+    pub(crate) fn set_world_shape(&mut self, value: &WorldShape) -> Result<IdRef,CommandError> {
+        self.set_property(PropertySchema::PROP_WORLD_SHAPE, &Into::<String>::into(value))
     }
 
 

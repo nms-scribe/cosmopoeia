@@ -14,6 +14,7 @@ use crate::utils::edge::Edge;
 use crate::errors::CommandError;
 use super::extent::Extent;
 use crate::progress::WatchableIterator;
+use crate::utils::world_shape::WorldShape;
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
 pub(crate) struct Coordinates {
@@ -39,8 +40,12 @@ impl Coordinates {
         Self::new(self.x - other.x, self.y - other.y)
     }
 
+    // normalizing creates a point on a unit circle in the same direction from 0,0. This function is used by bezierify operations for curves.
+    // I don't think I need to worry about WorldShape for this, since it will still make nice beziers even if we don't. However, what if I
+    // end up using it in a different algorithm?
+    // FUTURE: Do I need to worry about WorldShape with this one?
     pub(crate) fn normalized(&self) -> Self {
-        let length = (self.x * self.x + self.y * self.y).sqrt();
+        let length = self.abs();//(self.x * self.x + self.y * self.y).sqrt();
         if length == 0.0 {
             Self::new(NotNan::from(0), NotNan::from(0))
         } else {
@@ -56,12 +61,16 @@ impl Coordinates {
         Self::new(self.x * factor, self.y * factor)
     }
 
+    // FUTURE: Do I need to worry about WorldShape with this?
     pub(crate) fn abs(&self) -> f64 {
         // -- the absolute value for a point is the distance from 0, just as the absolute value of an integer is it's distance from 0.
         self.x.hypot(self.y.into_inner())
         // (x.hypot(y) = (x.powi(2) + y.powi(2)).sqrt();
     }
 
+    // This is used to find a perpendicular for a normalized coordinate in bezier curves. I don't think I need to worry about WorldShape
+    // for this.
+    // FUTURE: Do I need to worry about WorldShape with this?
     pub(crate) fn perpendicular(&self, negate_second: bool) -> Self {
         if negate_second {
             Self::new(self.y,-self.x)
@@ -70,11 +79,8 @@ impl Coordinates {
         }
     }
 
-    pub(crate) fn distance(&self, other: &Self) -> f64 {
-        // FUTURE: Is there some way to improve this by using the hypot function? 
-        (other.x.into_inner() - self.x.into_inner()).hypot(other.y.into_inner() - self.y.into_inner())
-        // (x.hypot(y) = (x.powi(2) + y.powi(2)).sqrt();
-        // (other.x - self.x).hypot(other.y - self.y) = ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt() 
+    pub(crate) fn distance(&self, other: &Self, shape: &WorldShape) -> f64 {
+        shape.calculate_distance_between(self,other)
     }
 
     pub(crate) fn middle_point_between(&self, other: &Self) -> Self {
@@ -429,7 +435,6 @@ mod test {
                  Coordinates::new(NotNan::try_from(-179.03189170475136).unwrap(), NotNan::try_from(5.381816241032141).unwrap())]
         ])
 
-
-
     }
+
 }
