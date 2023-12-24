@@ -139,10 +139,10 @@ use progress::ConsoleProgressBar;
 /**
 Runs Cosmopoeia with arbitrary arguments. The first item in the arguments will be ignored. All output will be printed to Stdout or Stderr.
 */
-pub fn run<Arg, Args>(args: &mut Args) -> Result<(),ProgramError> 
+pub fn run<Arg, Args>(args: Args) -> Result<(),ProgramError> 
 where 
     Arg: Clone + Into<std::ffi::OsString>, 
-    Args: Iterator<Item = Arg> 
+    Args: IntoIterator<Item = Arg> 
 {
     let mut progress = ConsoleProgressBar::new();
     let command = Cosmopoeia::try_parse_from(args)?;

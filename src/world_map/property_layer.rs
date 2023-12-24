@@ -72,14 +72,14 @@ impl PropertyLayer<'_,'_> {
         let mut result = None;
         for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
             if feature.name()? == name {
-                result = Some(feature.value()?)
+                result = Some(feature.value()?);
+                break;
             }
         }
-        if let Some(result) = result {
-            Ok(result)
-        } else {
-            Err(CommandError::PropertyNotSet(name.to_owned()))
-        }
+        // I'm not sure whether this should be done in the gdal layer or not, but it is necessary if the 
+        // loop isn't completed.
+        self.layer.reset_feature_reading();
+        result.ok_or_else(|| CommandError::PropertyNotSet(name.to_owned()))
     }
 
     pub(crate) fn get_elevation_limits(&mut self) -> Result<ElevationLimits,CommandError> {
