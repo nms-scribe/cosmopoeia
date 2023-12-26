@@ -83,6 +83,7 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
 
 pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
 
     let nations = target.edit_nations_layer()?.read_features().into_entities_vec::<_,NationForPlacement>(progress)?;
 
@@ -102,7 +103,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     let mut capitals = HashSet::new();
 
-    let tile_size = tiles.estimate_average_tile_area()?;
+    let tile_size = tiles.estimate_average_tile_area(&world_shape)?;
 
     // This is how far the nations will be able to spread.
     // This is a arbitrary number, it basically limits the size of the nation to about 5,000 "square degrees" (half the size of a culture). Although once

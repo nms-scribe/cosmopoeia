@@ -249,7 +249,7 @@ subcommand_def!{
 impl CreateTiles {
 
     fn run_with_parameters<Random: Rng, Progress: ProgressObserver>(extent: Extent, limits: &ElevationLimits, world_shape: &WorldShapeArg, tiles: &TileCountArg, overwrite: &OverwriteTilesArg, random: &mut Random, target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
-        let voronois = generate_random_tiles(random, extent, tiles.tile_count, progress)?;
+        let voronois = generate_random_tiles(random, extent, world_shape.world_shape.clone(), tiles.tile_count, progress)?;
     
         progress.announce("Create tiles from voronoi polygons");
 

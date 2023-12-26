@@ -16,6 +16,8 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
 
     // This algorithm is almost the same as found in AFMG
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     // we need a lake information map
     let mut lakes_layer = target.edit_lakes_layer()?;
 
@@ -36,7 +38,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
         let water_flow = feature.water_flow()?;
         flow_sum += water_flow;
         flow_max = flow_max.max(water_flow);
-        area_sum += feature.geometry()?.area();
+        area_sum += feature.geometry()?.area(&world_shape);
         work_queue.push(fid);
 
     }

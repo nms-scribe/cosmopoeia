@@ -83,12 +83,8 @@ impl Coordinates {
         shape.calculate_distance_between(self,other)
     }
 
-    pub(crate) fn middle_point_between(&self, other: &Self) -> Self {
-        Self {
-            x: (self.x + other.x) / 2.0,
-            y: (self.y + other.y) / 2.0,
-        }
-
+    pub(crate) fn middle_point_between(&self, other: &Self, shape: &WorldShape) -> Self {
+        shape.calculate_midpoint_between(self,other)
     }
 
     pub(crate) fn interpolate_at_longitude(&self, other: &Self, longitude: f64) -> Result<Self,CommandError> {
@@ -109,21 +105,11 @@ impl Coordinates {
         Point::new(self.x.into(), self.y.into())
     }
 
-    pub(crate) fn circumcenter(points: (&Self,&Self,&Self)) -> Self {
-        // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
-
-        let (a,b,c) = points;
-        let d = (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) * 2.0;
-        let d_recip = d.recip();
-        let (ax2,ay2,bx2,by2,cx2,cy2) = ((a.x*a.x),(a.y*a.y),(b.x*b.x),(b.y*b.y),(c.x*c.x),(c.y*c.y));
-        let (ax2_ay2,bx2_by2,cx2_cy2) = (ax2+ay2,bx2+by2,cx2+cy2);
-        let ux = ((ax2_ay2)*(b.y - c.y) + (bx2_by2)*(c.y - a.y) + (cx2_cy2)*(a.y - b.y)) * d_recip;
-        let uy = ((ax2_ay2)*(c.x - b.x) + (bx2_by2)*(a.x - c.x) + (cx2_cy2)*(b.x - a.x)) * d_recip;
-
-        (ux,uy).into()
-
+    pub(crate) fn circumcenter(points: (&Self,&Self,&Self), shape: &WorldShape) -> Self {
+        shape.calculate_circumcenter(points)
     }
 
+    // FUTURE: I believe that despite the distortion, the order of points by angle will still be the same on a sphere. Maybe have to revisit this someday?
     pub(crate) fn order_clockwise(a: &Self, b: &Self, center: &Self) -> Ordering
     {
 

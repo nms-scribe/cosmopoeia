@@ -108,9 +108,11 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
 
 pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, subnation_percentage: &SubnationPercentArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     let mut tile_layer = target.edit_tile_layer()?;
 
-    let max = subnation_max_cost(rng, tile_layer.estimate_average_tile_area()?, subnation_percentage.subnation_percentage);
+    let max = subnation_max_cost(rng, tile_layer.estimate_average_tile_area(&world_shape)?, subnation_percentage.subnation_percentage);
 
     let mut tile_map = tile_layer.read_features().into_entities_index::<_,TileForSubnationExpand>(progress)?;
 
@@ -226,9 +228,11 @@ pub(crate) fn subnation_expansion_cost(neighbor: &TileForSubnationExpand, subnat
 
 pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     let mut tile_layer = target.edit_tile_layer()?;
 
-    let max = subnation_max_cost(rng, tile_layer.estimate_average_tile_area()?, subnation_percentage.subnation_percentage);
+    let max = subnation_max_cost(rng, tile_layer.estimate_average_tile_area(&world_shape)?, subnation_percentage.subnation_percentage);
 
     let mut tiles_by_nation = HashMap::new();
 

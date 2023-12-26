@@ -12,6 +12,7 @@ use crate::progress::ProgressObserver;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::edge::Edge;
 use crate::utils::extent::Extent;
+use crate::utils::world_shape::WorldShape;
 use crate::world_map::biome_layer::BiomeForCultureGen;
 use crate::world_map::biome_layer::BiomeSchema;
 use crate::world_map::fields::Grouping;
@@ -32,6 +33,8 @@ layer!(#[hide_add(true)] #[hide_doc(false)] Tile["tiles"]: Polygon {
     #[set(allow(dead_code))] site_x: f64,
     /// latitude of the node point for the tile's voronoi
     #[set(allow(dead_code))] site_y: f64,
+    /// calculated area based on shape of world (this may not be the same as the area calculated by GDAL)
+    area: f64,
     /// elevation in meters of the node point for the tile's voronoi
     elevation: f64,
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
@@ -111,7 +114,8 @@ pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
 entity!(NewTileSite: Tile {
     geometry: Polygon,
     site: Coordinates,
-    edge: Option<Edge>
+    edge: Option<Edge>,
+    area: f64
 });
 
 entity!(TileForCalcNeighbors: Tile {
@@ -225,9 +229,7 @@ entity!(TileForPopulation: Tile {
     biome: String,
     shore_distance: i32,
     water_count: Option<i32>,
-    area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry()?.area())
-    },
+    area: f64,
     harbor_tile_id: Option<Neighbor>,
     lake_id: Option<IdRef>
 });
@@ -313,9 +315,7 @@ entity!(TileForCultureExpand: Tile {
     water_flow: f64,
     neighbors: Vec<NeighborAndDirection>,
     lake_id: Option<IdRef>,
-    area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry()?.area())
-    },
+    area: f64,
     culture: Option<String> = |_| Ok::<_,CommandError>(None)
 
 });
@@ -344,7 +344,7 @@ entity!(TileForTownPopulation: Tile {
 
 impl TileForTownPopulation {
 
-    pub(crate) fn find_middle_point_between(&self, other: &Self) -> Result<Coordinates,CommandError> {
+    pub(crate) fn find_middle_point_between(&self, other: &Self, shape: &WorldShape) -> Result<Coordinates,CommandError> {
         let self_ring = self.geometry.get_ring(0)?;
         let other_ring = other.geometry.get_ring(0)?;
         let other_vertices: Vec<_> = other_ring.into_iter().collect();
@@ -354,14 +354,14 @@ impl TileForTownPopulation {
         if common_vertices.len() == 2 {
             let point1: Coordinates = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
-            Ok(point1.middle_point_between(&point2))
+            Ok(point1.middle_point_between(&point2, shape))
         } else {
             Err(CommandError::CantFindMiddlePoint(self.fid.clone(),other.fid.clone(),common_vertices.len()))
         }
 
     }
 
-    pub(crate) fn find_middle_point_on_edge(&self, edge: &Edge, extent: &Extent) -> Result<Coordinates,CommandError> {
+    pub(crate) fn find_middle_point_on_edge(&self, edge: &Edge, extent: &Extent, shape: &WorldShape) -> Result<Coordinates,CommandError> {
         let self_ring = self.geometry.get_ring(0)?;
         let mut common_vertices: Vec<_> = self_ring.into_iter().collect();
         common_vertices.truncate(common_vertices.len() - 1); // remove the last point, which matches the first
@@ -372,7 +372,7 @@ impl TileForTownPopulation {
             // those directions.
             let point1: Coordinates = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
-            Ok(point1.middle_point_between(&point2))
+            Ok(point1.middle_point_between(&point2,shape))
         } else {
             Err(CommandError::CantFindMiddlePointOnEdge(self.fid.clone(),edge.clone(),common_vertices.len()))
         }
@@ -392,9 +392,7 @@ entity!(TileForNationExpand: Tile {
     lake_id: Option<IdRef>,
     culture: Option<String>,
     nation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
-    area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry()?.area())
-    },
+    area: f64,
 });
 
 entity!(TileForNationNormalize: Tile {
@@ -418,9 +416,7 @@ entity!(TileForSubnationExpand: Tile {
     elevation_scaled: i32,
     nation_id: Option<IdRef>,
     subnation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
-    area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry()?.area())
-    },
+    area: f64,
 });
 
 entity!(TileForEmptySubnations: Tile {
@@ -431,9 +427,7 @@ entity!(TileForEmptySubnations: Tile {
     town_id: Option<IdRef>,
     population: i32,
     culture: Option<String>,
-    area: f64 = |feature: &TileFeature| {
-        Ok::<_,CommandError>(feature.geometry()?.area())
-    },
+    area: f64,
 });
 
 entity!(TileForSubnationNormalize: Tile {
@@ -561,6 +555,7 @@ impl TileLayer<'_,'_> {
         _ = self.add_feature_with_geometry(tile.geometry,&[
                 TileSchema::FIELD_SITE_X,
                 TileSchema::FIELD_SITE_Y,
+                TileSchema::FIELD_AREA,
                 TileSchema::FIELD_EDGE,
                 TileSchema::FIELD_ELEVATION,
                 TileSchema::FIELD_ELEVATION_SCALED,
@@ -568,6 +563,7 @@ impl TileLayer<'_,'_> {
             ],&[
                 x.to_field_value()?,
                 y.to_field_value()?,
+                tile.area.to_field_value()?,
                 tile.edge.to_field_value()?,
                 // initial tiles start with 0 elevation, terrain commands will edit this...
                 0.0.to_field_value()?, // FUTURE: Watch that this type stays correct
@@ -588,10 +584,11 @@ impl TileLayer<'_,'_> {
     }
 
     /// Gets average tile area in "square degrees" by dividing the width * height of the map by the number of tiles.
-    pub(crate) fn estimate_average_tile_area(&self) -> Result<f64,CommandError> {
-        let (width,height) = self.get_layer_size()?;
+    pub(crate) fn estimate_average_tile_area(&self, world_shape: &WorldShape) -> Result<f64,CommandError> {
+        let extent = self.get_extent()?;
         let tiles = self.feature_count();
-        Ok((width*height)/tiles as f64)
+        let result = world_shape.estimate_average_tile_area(extent, tiles);
+        Ok(result)
     }
 
     pub(crate) fn get_extent(&self) -> Result<Extent,CommandError> {
@@ -625,3 +622,4 @@ impl TileLayer<'_,'_> {
 
 
 }
+

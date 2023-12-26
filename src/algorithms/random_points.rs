@@ -18,12 +18,12 @@ pub(crate) enum PointGeneratorPhase {
 
 /// FUTURE: This one would be so much easier to read if I had real Function Generators. However, even in unstable rust, they are only intended for closures.
 pub(crate) struct PointGenerator<Random: Rng> {
-    pub(crate) random: Random,
-    pub(crate) extent: Extent,
-    pub(crate) spacing: f64,
-    pub(crate) jitter_shift: f64,
-    pub(crate) jitter_spread: f64,
-    pub(crate) phase: PointGeneratorPhase,
+    random: Random,
+    extent: Extent,
+    spacing: f64,
+    jitter_shift: f64,
+    jitter_spread: f64,
+    phase: PointGeneratorPhase,
 
 }
 

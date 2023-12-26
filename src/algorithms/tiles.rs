@@ -3,7 +3,6 @@ use std::collections::HashSet;
 
 use rand::Rng;
 use angular_units::Deg;
-use angular_units::Angle;
 use ordered_float::OrderedFloat;
 
 use crate::world_map::WorldMapTransaction;
@@ -59,7 +58,7 @@ use crate::typed_map::fields::IdRef;
 use crate::utils::world_shape::WorldShape;
 
 
-pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
+pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(random: &mut Random, extent: Extent, shape: WorldShape, tile_count: usize, progress: &mut Progress) -> Result<VoronoiGenerator<DelaunayGenerator>, CommandError> {
 
     progress.announce("Generate random tiles");
 
@@ -70,7 +69,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
     let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?);
     
     triangles.start(progress)?;
-    let mut voronois = VoronoiGenerator::new(triangles,extent)?;
+    let mut voronois = VoronoiGenerator::new(triangles,extent,shape)?;
     
     voronois.start(progress)?;
     
@@ -119,6 +118,8 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         East,
         West
     }
+
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
 
     let mut layer = target.edit_tile_layer()?;
 
@@ -252,7 +253,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         let mut neighbors = Vec::new();
         for neighbor_id in &tile.neighbor_set {
-            let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, false)?;
+            let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, &world_shape, false)?;
 
             neighbors.push(NeighborAndDirection(Neighbor::Tile(neighbor_id.clone()),neighbor_angle))
 
@@ -261,7 +262,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // handle the cross neighbors, if they were calculated, but this should only happen if they were on the edge
         if let Some(edge) = &tile.edge {
             for neighbor_id in &tile.cross_neighbor_set {
-                let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, true)?;
+                let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, &world_shape, true)?;
     
                 neighbors.push(NeighborAndDirection(Neighbor::CrossMap(neighbor_id.clone(),edge.clone()),neighbor_angle))
     
@@ -334,7 +335,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
 }
 
-fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
+fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, world_shape: &WorldShape, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
     let neighbor = tile_map.try_get(neighbor_id)?;
     let neighbor_angle = {
         let (site_x,site_y) = tile.site.to_tuple();
@@ -346,15 +347,8 @@ fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, ti
             neighbor_site_x
         };
 
-        // needs to be clockwise, from the north, with a value from 0..360
+        world_shape.calculate_bearing(site_x,site_y,neighbor_site_x,neighbor_site_y)
 
-        // the result below is counter clockwise from the east, but also if it's in the south it's negative.
-        let counter_clockwise_from_east = Deg(((neighbor_site_y-site_y).atan2(neighbor_site_x-site_x).to_degrees()).round());
-        // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
-        let clockwise_from_north = Deg(450.0) - counter_clockwise_from_east; 
-
-        // And, the Deg structure allows me to normalize it
-        clockwise_from_north.normalize()
     };
     Ok(neighbor_angle)
 }

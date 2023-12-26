@@ -8,6 +8,7 @@ use crate::progress::WatchableIterator;
 use crate::world_map::tile_layer::NewTileSite;
 use crate::utils::extent::Extent;
 use crate::utils::coordinates::Coordinates;
+use crate::utils::world_shape::WorldShape;
 use crate::errors::CommandError;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
@@ -22,6 +23,7 @@ pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Pol
 
 pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
     pub(crate) phase: VoronoiGeneratorPhase<GeometryIterator>,
+    pub(crate) world_shape: WorldShape,
     pub(crate) extent: Extent,
     pub(crate) extent_geo: Polygon
 
@@ -33,17 +35,18 @@ pub(crate) struct VoronoiInfo {
 
 impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGenerator<GeometryIterator> {
 
-    pub(crate) fn new(source: GeometryIterator, extent: Extent) -> Result<Self,CommandError> {
+    pub(crate) fn new(source: GeometryIterator, extent: Extent, shape: WorldShape) -> Result<Self,CommandError> {
         let phase = VoronoiGeneratorPhase::Unstarted(source);
         let extent_geo = extent.create_polygon()?;
         Ok(Self {
             phase,
             extent,
+            world_shape: shape,
             extent_geo
         })
     }
 
-    pub(crate) fn create_voronoi(site: &Coordinates, voronoi: VoronoiInfo, extent: &Extent, extent_geo: &Polygon) -> Result<Option<NewTileSite>,CommandError> {
+    pub(crate) fn create_voronoi(site: &Coordinates, voronoi: VoronoiInfo, extent: &Extent, world_shape: &WorldShape, extent_geo: &Polygon) -> Result<Option<NewTileSite>,CommandError> {
         if (voronoi.vertices.len() >= 3) && extent.contains(site) {
             // * if there are less than 3 vertices, its either a line or a point, not even a sliver.
             // * if the site is not contained in the extent, it's one of our infinity points created to make it easier for us
@@ -104,10 +107,13 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                 edge
             };
 
+            let area = polygon.area(world_shape);
+
             Ok(Some(NewTileSite {
                 geometry: polygon,
                 edge,
-                site: site.clone()
+                site: site.clone(),
+                area
             }))
         } else {
             // In any case, these would result in either a line or a point, not even a sliver.
@@ -116,7 +122,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
 
     }
 
-    pub(crate) fn generate_voronoi<Progress: ProgressObserver>(source: &mut GeometryIterator, progress: &mut Progress) -> Result<IntoIter<Coordinates,VoronoiInfo>,CommandError> {
+    pub(crate) fn generate_voronoi<Progress: ProgressObserver>(source: &mut GeometryIterator, shape: &WorldShape, progress: &mut Progress) -> Result<IntoIter<Coordinates,VoronoiInfo>,CommandError> {
 
         // Calculate a map of sites with a list of triangle circumcenters
         let mut sites: HashMap<Coordinates, VoronoiInfo> = HashMap::new(); // site, voronoi info
@@ -135,7 +141,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                .try_into()
                .map_err(|e| CommandError::VoronoiExpectsTriangles(format!("{e:?}")))?;
 
-            let circumcenter = Coordinates::circumcenter((&points[0],&points[1],&points[2]));
+            let circumcenter = Coordinates::circumcenter((&points[0],&points[1],&points[2]),shape);
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {
@@ -165,7 +171,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
 
         if let VoronoiGeneratorPhase::Unstarted(source) = &mut self.phase {
             let len = source.size_hint().1;
-            let voronoi = Self::generate_voronoi(source,progress)?; // FUTURE: Should this be configurable?
+            let voronoi = Self::generate_voronoi(source,&self.world_shape,progress)?; // FUTURE: Should this be configurable?
             self.phase = VoronoiGeneratorPhase::Started(voronoi.into_iter(),len)
         }
         Ok(())
@@ -190,7 +196,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> Iterator for
                 for value in iter.by_ref() {
                     // create_voronoi returns none for various reasons if the polygon shouldn't be written. 
                     // If it does that, I have to keep trying. 
-                    result = Self::create_voronoi(&value.0, value.1,&self.extent,&self.extent_geo).transpose();
+                    result = Self::create_voronoi(&value.0, value.1,&self.extent,&self.world_shape,&self.extent_geo).transpose();
                     if result.is_some() {
                         break;
                     }

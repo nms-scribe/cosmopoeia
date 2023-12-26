@@ -210,7 +210,7 @@ impl Task for VoronoiFromTriangles {
         target.with_transaction(|transaction| {
             let mut triangles = transaction.edit_triangles_layer()?;
     
-            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),extent)?;
+            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),extent,self.world_shape_arg.world_shape.clone())?;
     
             progress.announce("Create tiles from voronoi polygons");
         

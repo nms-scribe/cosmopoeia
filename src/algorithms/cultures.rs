@@ -298,6 +298,8 @@ fn too_close(point_vec: &Vec<Coordinates>, new_point: &Coordinates, spacing: f64
 
 pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapTransaction, river_threshold: &RiverThresholdArg, limit_factor: &ExpansionFactorArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     let cultures = target.edit_cultures_layer()?.read_features().into_entities_vec::<_,CultureForPlacement>(progress)?;
 
     let biome_map = target.edit_biomes_layer()?.read_features().into_named_entities_index::<_,BiomeForCultureExpand>(progress)?;
@@ -314,7 +316,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     // empty hashmap of tile ids
     let mut costs = HashMap::new();
 
-    let tile_size = tiles.estimate_average_tile_area()?;
+    let tile_size = tiles.estimate_average_tile_area(&world_shape)?;
 
     // This is how far the cultures will be able to spread.
     // This is a arbitrary number, it basically limits the size of the culture to about 10,000 "square degrees". Although once

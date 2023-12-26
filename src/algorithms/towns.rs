@@ -280,6 +280,8 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
         new_location: Option<Coordinates>
     }
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     let mut tile_layer = target.edit_tile_layer()?;
     let extent = tile_layer.get_extent()?;
 
@@ -324,8 +326,8 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
                         // it's a port if it's on the large water and either it's a capital or has a good harbor (only one water tile next to it)
                         if on_large_water && (town.is_capital || matches!(tile.water_count,Some(1))) {
                             match neighbor {
-                                Neighbor::Tile(_) => Some(tile.find_middle_point_between(harbor)?),
-                                Neighbor::CrossMap(_, edge) => Some(tile.find_middle_point_on_edge(edge,&extent)?),
+                                Neighbor::Tile(_) => Some(tile.find_middle_point_between(harbor,&world_shape)?),
+                                Neighbor::CrossMap(_, edge) => Some(tile.find_middle_point_on_edge(edge,&extent,&world_shape)?),
                                 Neighbor::OffMap(_) => unreachable!("`neighbor` was only matched with Tile and CrossMap."),
                             }
                             

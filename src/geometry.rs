@@ -6,6 +6,7 @@ use crate::gdal_fixes::GeometryFix;
 use crate::algorithms::beziers::bezierify_points;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
+use crate::utils::world_shape::WorldShape;
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
@@ -313,8 +314,10 @@ fn validate_options_structure() -> Result<gdal::cpl::CslStringList, CommandError
 macro_rules! areal_fns {
     () => {
         #[allow(dead_code)] // not all implementations use this
-        pub(crate) fn area(&self) -> f64 {
-            self.inner.area()
+        pub(crate) fn area(&self, world_shape: &WorldShape) -> f64 {
+            match world_shape {
+                WorldShape::Cylinder => self.inner.area()
+            }
         }
             
         pub(crate) fn union(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
@@ -931,10 +934,10 @@ impl_variant_geometry!(VariantArealGeometry {
 impl VariantArealGeometry {
 
     #[allow(dead_code)] // not used, but I feel I should have it.
-    pub(crate) fn area(&self) -> f64 {
+    pub(crate) fn area(&self, world_shape: &WorldShape) -> f64 {
         match self {
-            Self::Polygon(inner) => inner.area(),
-            Self::MultiPolygon(inner) => inner.area(),
+            Self::Polygon(inner) => inner.area(world_shape),
+            Self::MultiPolygon(inner) => inner.area(world_shape),
         }
     }
 

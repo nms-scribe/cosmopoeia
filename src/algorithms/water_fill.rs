@@ -114,6 +114,8 @@ enum WaterFillTask {
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
 pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, water_flow_result: WaterFlowResult, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+    let world_shape = target.edit_properties_layer()?.get_world_shape()?;
+
     let mut tiles_layer = target.edit_tile_layer()?;
 
     let mut tile_queue = water_flow_result.lake_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
@@ -220,7 +222,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
 
     // figure out some numbers for generating curvy lakes.
-    let tile_area = tiles_layer.estimate_average_tile_area()?;
+    let tile_area = tiles_layer.estimate_average_tile_area(&world_shape)?;
     let tile_width = tile_area.sqrt();
     let buffer_distance = (tile_width/10.0) * -lake_buffer_scale.lake_buffer_scale;
     // the next isn't customizable, it just seems to work right. 
