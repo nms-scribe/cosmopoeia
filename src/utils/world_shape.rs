@@ -17,8 +17,10 @@ pub enum WorldShape {
     /// This world wraps around so that west and east meet (at 180E,180W), and weird dimensional distortions cause the north and south bounds (90N, 90S) to meet at a single point. This is the simplest representation of a world, and is fine for small regions near the middle of the world, but gets weird further north and south. It is also good for representing a flat world. 
     Cylinder
     // TODO: Sphere - this is much closer to reality
-    // FUTURE: Elipsoid - this is the closest to reality, but complex to do, even distance calculations are weird.
+
+    // NOTE: I'm not planning to ever support Elipsoids. Cosmopoeia is not a scientific model.
 }
+
 impl WorldShape {
     pub(crate) fn calculate_distance_between(&self, from: &Coordinates, to: &Coordinates) -> f64 {
         match self {
@@ -27,6 +29,7 @@ impl WorldShape {
                 // (x.hypot(y) = (x.powi(2) + y.powi(2)).sqrt();
                 // (other.x - self.x).hypot(other.y - self.y) = ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt() 
             },
+            // TODO: https://en.wikipedia.org/wiki/Great-circle_distance
         }
     }
 
@@ -36,10 +39,9 @@ impl WorldShape {
                 Coordinates {
                     x: (from.x + other.x) / 2.0,
                     y: (from.y + other.y) / 2.0,
-                }
-        
-        
+                }        
             }
+            // TODO: https://math.stackexchange.com/questions/35990/formula-for-the-coordinate-of-the-midpoint-in-spherical-coordinate-system
         }
     }
 
@@ -82,11 +84,54 @@ impl WorldShape {
     }
 
     pub(crate) fn estimate_average_tile_area(&self, extent: Extent, tiles: usize) -> f64 {
+        self.calculate_extent_area(&extent)/tiles as f64
+    }
+
+    pub(crate) fn calculate_extent_area(&self, extent: &Extent) -> f64 {
         match self {
             Self::Cylinder => {
-                (extent.width*extent.height)/tiles as f64        
+                extent.width*extent.height
+            }
+            /*
+            TODO: 
+            Take the surface area of a sphere
+            subtract the area of the "cap" above and below the extent:
+            - https://en.wikipedia.org/wiki/Spherical_cap
+            And multiply that by extent width/full circumference
+             */
+        }
+    }
+
+    /// Calculates the spacing of random points on a specific line of latitude, given a standard spacing.
+    pub(crate) fn calculate_longitudinal_spacing_for_latitude(&self, spacing: f64, _y: f64) -> f64 {
+        match self {
+            Self::Cylinder => {
+                // spacing is the same for both y and x.
+                spacing
             }
         }
+        /* TODO:
+        the length of a degree of longitude is:
+            L = (π/180) * a * cos(phi)
+            where: 
+                a is the radius of the sphere
+                phi is the latitude
+        
+        However, I don't have the radius. But I do have the circumference. Since I'm measuring these values in degrees, the circumference of the world is 360. And I can get the radius from that:
+            a = C / (2 * π)
+            a = 360 / (2 * π)
+            a = 180 / π
+
+        From there, I can figure out that the length of a degree of longitude is cos(phi)
+            L = (π/180) * a * cos(phi)
+            L = (π/180) * (180 / π) * cos(phi)
+            L = ((π * 180)/(180 * π) * cos(phi)
+            L = cos(phi)
+
+        The units for spacing is degrees, so I just need to multiply times that value:
+            spacing_x = cos(phi)*spacing
+
+        */
     }
 }
 

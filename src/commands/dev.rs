@@ -44,6 +44,9 @@ subcommand_def!{
         pub heightmap_arg: ElevationSourceArg,
 
         #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
+
+        #[clap(flatten)]
         pub target_arg: TargetArg,
 
         #[arg(long,default_value="10000")]
@@ -66,7 +69,7 @@ impl Task for PointsFromHeightmap {
         let extent = source.bounds()?.extent();
         let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
         let random = random_number_generator(&self.random_seed_arg);
-        let generator = PointGenerator::new(random, extent, self.points);
+        let generator = PointGenerator::new(random, extent, self.world_shape_arg.world_shape, self.points);
 
         target.with_transaction(|transaction| {
             progress.announce("Generating random points");
@@ -85,6 +88,9 @@ subcommand_def!{
     pub struct PointsFromExtent {
         #[clap(flatten)]
         pub target_arg: TargetArg,
+
+        #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
 
         #[arg(allow_hyphen_values=true)]
         pub west: f64,
@@ -121,7 +127,7 @@ impl Task for PointsFromExtent {
         let extent = Extent::new(self.west,self.south,self.east,self.north);
         let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
         let random = random_number_generator(&self.random_seed_arg);
-        let generator = PointGenerator::new(random, extent, self.points);
+        let generator = PointGenerator::new(random, extent, self.world_shape_arg.world_shape, self.points);
         
         target.with_transaction(|transaction| {
             progress.announce("Generating random points");

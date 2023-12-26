@@ -1,6 +1,7 @@
 use rand::Rng;
 
 use crate::utils::extent::Extent;
+use crate::utils::world_shape::WorldShape;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
@@ -16,13 +17,14 @@ pub(crate) enum PointGeneratorPhase {
     Done
 }
 
+
 /// FUTURE: This one would be so much easier to read if I had real Function Generators. However, even in unstable rust, they are only intended for closures.
 pub(crate) struct PointGenerator<Random: Rng> {
     random: Random,
     extent: Extent,
+    world_shape: WorldShape,
     spacing: f64,
-    jitter_shift: f64,
-    jitter_spread: f64,
+    estimated_points: usize,
     phase: PointGeneratorPhase,
 
 }
@@ -33,31 +35,34 @@ impl<Random: Rng> PointGenerator<Random> {
     // FUTURE: Revisit this, could this have just been bad starting data?
     pub(crate) const START_Y: f64 = 1.0;
 
-    pub(crate) fn new(random: Random, extent: Extent, est_point_count: usize) -> Self {
-        let density = est_point_count as f64/(extent.width*extent.height); // number of points per unit square
+    pub(crate) fn new(random: Random, extent: Extent, world_shape: WorldShape, estimated_points: usize) -> Self {
+        let density = estimated_points as f64/world_shape.calculate_extent_area(&extent); // number of points per unit square
         let unit_point_count = density.sqrt(); // number of points along a line of unit length
         let spacing = 1.0/unit_point_count; // if there are x points along a unit, then it divides it into x spaces.
-        let jitter_shift = (spacing / 2.0) * 0.9; // This is subtracted from the randomly generated jitter so the range is -0.9*spacing to 0.9*spacing
-        let jitter_spread = jitter_shift * 2.0; // This + jitter_shift causes the jitter to move by up to 0.9*spacing. If it were 1 times spacing, there might be some points on top of each other (although this would probably be rare)
         let phase = PointGeneratorPhase::NortheastInfinity;
 
         Self {
             random,
             extent,
+            world_shape,
             spacing,
-            jitter_shift,
-            jitter_spread,
+            estimated_points,
             phase
         }
 
     }
 
-    pub(crate) fn estimate_points(&self) -> usize {
-        ((self.extent.width/self.spacing).floor() as usize * (self.extent.height/self.spacing).floor() as usize) + 4
-    }
-
     pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Point,CommandError> {
         Point::new(self.extent.west + x,self.extent.south + y)
+    }
+
+    fn jitter(random: &mut Random, spacing: f64) -> f64 {
+        let jitter_shift = (spacing / 2.0) * 0.9;
+        // This is subtracted from the randomly generated jitter so the range is -0.9*spacing to 0.9*spacing
+        let jitter_spread = jitter_shift * 2.0;
+        // This + jitter_shift causes the jitter to move by up to 0.9*spacing. If it were 1 times spacing, there might 
+        let jitter = random.gen::<f64>().mul_add(jitter_spread, -jitter_shift);
+        jitter
     }
 
 
@@ -71,13 +76,6 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
 
         // Randomizing algorithms borrowed from AFMG with many modifications
 
-
-        macro_rules! jitter {
-            () => {
-                // gen creates random number between >= 0.0, < 1.0
-                self.random.gen::<f64>().mul_add(self.jitter_spread, -self.jitter_shift)
-            };
-        }
 
         match &self.phase { 
             PointGeneratorPhase::NortheastInfinity => {
@@ -97,13 +95,19 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
                 Some(self.make_point(-self.extent.width, self.extent.height*2.0))
             },
             PointGeneratorPhase::Random(x, y) => if y < &self.extent.height {
+                let y_spacing = self.spacing;
                 if x < &self.extent.width {
-                    let x_j = (x + jitter!()).clamp(Self::START_X,self.extent.width);
-                    let y_j = (y + jitter!()).clamp(Self::START_Y,self.extent.height);
-                    self.phase = PointGeneratorPhase::Random(x + self.spacing, *y);
-                    Some(self.make_point(x_j,y_j))
+                    let x_spacing = self.world_shape.calculate_longitudinal_spacing_for_latitude(self.spacing,*y);
+                    let x_jitter = Self::jitter(&mut self.random,x_spacing);
+                    let jittered_x = (x + x_jitter).clamp(Self::START_X,self.extent.width);
+
+                    let y_jitter = Self::jitter(&mut self.random, y_spacing);
+                    let jittered_y = (y + y_jitter).clamp(Self::START_Y,self.extent.height);
+
+                    self.phase = PointGeneratorPhase::Random(x + x_spacing, *y);
+                    Some(self.make_point(jittered_x,jittered_y))
                 } else {
-                    self.phase = PointGeneratorPhase::Random(Self::START_X, y + self.spacing);
+                    self.phase = PointGeneratorPhase::Random(Self::START_X, y + y_spacing);
                     self.next()
                 }
             
@@ -120,7 +124,7 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
         // size_hint is supposed to talk about how many remaining, not a range from start to end
         // but this is still fair, because I don't know how many are remaining and it's too difficult
         // to estimate that. Also, the results are allowed to be buggy.
-        (0,Some(self.estimate_points()))
+        (0,Some(self.estimated_points))
     }
 }
 

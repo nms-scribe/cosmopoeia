@@ -65,7 +65,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
     // yes, the random variable is a mutable reference, and PointGenerator doesn't take a reference as it's generic, 
     // but the reference implements the random number generator stuff so it works.
     // I assume if I was leaking the PointGenerator out of the function that I would get an error.
-    let mut points = PointGenerator::new(random, extent.clone(), tile_count);
+    let mut points = PointGenerator::new(random, extent.clone(), shape.clone(), tile_count);
     let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?);
     
     triangles.start(progress)?;

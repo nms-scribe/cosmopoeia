@@ -313,10 +313,14 @@ fn validate_options_structure() -> Result<gdal::cpl::CslStringList, CommandError
 // possible to run area on a 2D or less feature. (Union might be different)
 macro_rules! areal_fns {
     () => {
-        #[allow(dead_code)] // not all implementations use this
+
         pub(crate) fn area(&self, world_shape: &WorldShape) -> f64 {
             match world_shape {
                 WorldShape::Cylinder => self.inner.area()
+                // TODO: Calculating the area on the sphere gets more complex. 
+                // - file:///home/neil/Downloads/SD-122_Final_PDF.pdf -- but I'm not sure how the algorithm works for spheres.
+                //   Maybe I could use a similar mechanism by calculating a triangle and rectangle to the equator, but what about if it goes across the equator?
+                // - file:///home/neil/Downloads/bevis1987mathgeol-1.pdf seems to be an algorithm I can use.
             }
         }
             
