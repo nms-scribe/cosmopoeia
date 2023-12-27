@@ -557,7 +557,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                 let end_x = parameters.gen_end_x(rng);
                 let end_y = parameters.gen_end_y(rng);
                 end_point = (end_x, end_y).try_into()?;
-                let dist = start_point.distance(&end_point,&parameters.world_shape);
+                let dist = start_point.shaped_distance(&end_point,&parameters.world_shape);
                 if (limit >= 50) || (dist >= lower_dist_limit) && (dist <= upper_dist_limit) {
                     break;
                 }
@@ -662,7 +662,7 @@ fn get_range<Random: Rng>(rng: &mut Random, tile_map: &mut EntityIndex<TileSchem
                     }
 
                     let neighbor_tile = tile_map.try_get(neighbor_id)?;
-                    let diff = end_tile.site.distance(&neighbor_tile.site,world_shape);
+                    let diff = end_tile.site.shaped_distance(&neighbor_tile.site,world_shape);
                     let diff = if rng.gen_bool(jagged_probability) {
                         // every once in a while, make the neighbor seem closer, to create more jagged ridges.
                         diff / 2.0
@@ -1060,9 +1060,9 @@ impl ProcessTerrainTiles for Erode {
                             // FUTURE: Once I get "spheremode" I will have to use that to calculate the distance.
                             // FUTURE: Another issue I'm going to have: the grades are going to be steeper for smaller tile sizes. However, I might not need to account for this, because the extra relief will smooth out over iterations.
                             let run = if across_map {
-                                entity.site.distance(&t.site.across_antimeridian(&entity.site),&parameters.world_shape)
+                                entity.site.shaped_distance(&t.site.across_antimeridian(&entity.site),&parameters.world_shape)
                             } else {
-                                entity.site.distance(&t.site,&parameters.world_shape)
+                                entity.site.shaped_distance(&t.site,&parameters.world_shape)
                             } * 111200.0;
                             rise/run
                         },

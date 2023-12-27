@@ -3,6 +3,7 @@ use gdal::vector::OGRwkbGeometryType;
 
 use crate::errors::CommandError;
 use crate::gdal_fixes::GeometryFix;
+use geo::ChamberlainDuquetteArea;
 use crate::algorithms::beziers::bezierify_points;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
@@ -314,15 +315,22 @@ fn validate_options_structure() -> Result<gdal::cpl::CslStringList, CommandError
 macro_rules! areal_fns {
     () => {
 
-        pub(crate) fn area(&self, world_shape: &WorldShape) -> f64 {
+        pub(crate) fn spherical_area(&self) -> Result<f64,CommandError> {
+            Ok(self.to_geo_type()?.chamberlain_duquette_unsigned_area())
+        }
+
+        pub(crate) fn area(&self) -> f64 {
+            self.inner.area()
+        }
+
+        pub(crate) fn shaped_area(&self, world_shape: &WorldShape) -> Result<f64,CommandError> {
             match world_shape {
-                WorldShape::Cylinder => self.inner.area()
-                // TODO: Calculating the area on the sphere gets more complex. 
-                // - file:///home/neil/Downloads/SD-122_Final_PDF.pdf -- but I'm not sure how the algorithm works for spheres.
-                //   Maybe I could use a similar mechanism by calculating a triangle and rectangle to the equator, but what about if it goes across the equator?
-                // - file:///home/neil/Downloads/bevis1987mathgeol-1.pdf seems to be an algorithm I can use.
+                WorldShape::Cylinder => Ok(self.area())
+                // TODO: spherical_area
             }
         }
+            
+
             
         pub(crate) fn union(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
             if let Some(united) = self.inner.union(&rhs.inner) {
@@ -410,6 +418,16 @@ impl Polygon {
     // For some reason, polygons return LineStrings, but require a LinearRing when building. At least that's what appears to be happening.
     pub(crate) fn push_ring(&mut self, ring: LinearRing) -> Result<(),CommandError> {
         Ok(self.inner.add_geometry(ring.into())?)
+    }
+
+    pub(crate) fn to_geo_type(&self) -> Result<geo::Polygon,CommandError> {
+        let result: Result<geo::Polygon, geo_types::Error> = self.inner.to_geo()?.try_into();
+        match result {
+            Ok(polygon) => Ok(polygon),
+            Err(err) => match err {
+                geo_types::Error::MismatchedGeometry { expected, found } => Err(CommandError::CantConvert{expected,found}),
+            },
+        }
     }
 
     areal_fns!();
@@ -560,6 +578,16 @@ impl MultiPolygon {
 
     pub(crate) fn push_polygon(&mut self, polygon: Polygon) -> Result<(),CommandError> {
         Ok(self.inner.add_geometry(polygon.into())?)
+    }
+
+    pub(crate) fn to_geo_type(&self) -> Result<geo::MultiPolygon,CommandError> {
+        let result: Result<geo::MultiPolygon, geo_types::Error> = self.inner.to_geo()?.try_into();
+        match result {
+            Ok(shape) => Ok(shape),
+            Err(err) => match err {
+                geo_types::Error::MismatchedGeometry { expected, found } => Err(CommandError::CantConvert{expected,found}),
+            },
+        }
     }
 
     areal_fns!();
@@ -938,10 +966,10 @@ impl_variant_geometry!(VariantArealGeometry {
 impl VariantArealGeometry {
 
     #[allow(dead_code)] // not used, but I feel I should have it.
-    pub(crate) fn area(&self, world_shape: &WorldShape) -> f64 {
+    pub(crate) fn area(&self) -> f64 {
         match self {
-            Self::Polygon(inner) => inner.area(world_shape),
-            Self::MultiPolygon(inner) => inner.area(world_shape),
+            Self::Polygon(inner) => inner.area(),
+            Self::MultiPolygon(inner) => inner.area(),
         }
     }
 
@@ -1097,3 +1125,4 @@ impl From<NoGeometry> for GDALGeometry {
     }
 
 }
+

@@ -36,7 +36,7 @@ impl<Random: Rng> PointGenerator<Random> {
     pub(crate) const START_Y: f64 = 1.0;
 
     pub(crate) fn new(random: Random, extent: Extent, world_shape: WorldShape, estimated_points: usize) -> Self {
-        let density = estimated_points as f64/world_shape.calculate_extent_area(&extent); // number of points per unit square
+        let density = estimated_points as f64/extent.shaped_area(&world_shape); // number of points per unit square
         let unit_point_count = density.sqrt(); // number of points along a line of unit length
         let spacing = 1.0/unit_point_count; // if there are x points along a unit, then it divides it into x spaces.
         let phase = PointGeneratorPhase::NortheastInfinity;
@@ -63,6 +63,33 @@ impl<Random: Rng> PointGenerator<Random> {
         // This + jitter_shift causes the jitter to move by up to 0.9*spacing. If it were 1 times spacing, there might 
         let jitter = random.gen::<f64>().mul_add(jitter_spread, -jitter_shift);
         jitter
+    }
+
+    /// Calculates the spherical spacing of random points on a specific line of latitude, given a standard spacing.
+    pub(crate) fn spherical_spacing(&self, lat: &f64) -> f64 {
+        /* 
+        the length of a degree of longitude is:
+            L = (π/180) * a * cos(phi)
+            where: 
+                a is the radius of the sphere
+                phi is the latitude
+        
+        However, I don't have the radius. But I do have the circumference. Since I'm measuring these values in degrees, the circumference of the world is 360. And I can get the radius from that:
+            a = C / (2 * π)
+            a = 360 / (2 * π)
+            a = 180 / π
+
+        From there, I can figure out that the length of a degree of longitude is cos(phi)
+            L = (π/180) * a * cos(phi)
+            L = (π/180) * (180 / π) * cos(phi)
+            L = ((π * 180)/(180 * π) * cos(phi)
+            L = cos(phi)
+
+        The units for spacing is degrees, so I just need to multiply times that value:
+            spacing_x = cos(lat)*spacing
+
+        */
+        lat.to_radians().cos()*self.spacing
     }
 
 
@@ -97,7 +124,17 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
             PointGeneratorPhase::Random(x, y) => if y < &self.extent.height {
                 let y_spacing = self.spacing;
                 if x < &self.extent.width {
-                    let x_spacing = self.world_shape.calculate_longitudinal_spacing_for_latitude(self.spacing,*y);
+                    
+                    let x_spacing = {
+                        match self.world_shape {
+                            WorldShape::Cylinder => {
+                                // spacing is the same for both y and x.
+                                self.spacing
+                            }
+                            // TODO: spherical_spacing
+                        }
+                    };
+
                     let x_jitter = Self::jitter(&mut self.random,x_spacing);
                     let jittered_x = (x + x_jitter).clamp(Self::START_X,self.extent.width);
 

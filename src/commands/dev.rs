@@ -148,6 +148,9 @@ subcommand_def!{
         #[clap(flatten)]
         pub target_arg: TargetArg,
 
+        #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
+
         #[arg(long)]
         /// If true and the layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
         pub overwrite: bool
@@ -162,7 +165,7 @@ impl Task for TrianglesFromPoints {
 
         let mut points = target.points_layer()?;
     
-        let mut generator = DelaunayGenerator::new(points.read_features().map(|f| f.geometry()).to_geometry_collection(progress)?);
+        let mut generator = DelaunayGenerator::new(points.read_features().map(|f| f.geometry()).to_geometry_collection(progress)?,self.world_shape_arg.world_shape);
     
         progress.announce("Generating delaunay triangles");
 

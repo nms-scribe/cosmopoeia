@@ -5,6 +5,12 @@ use core::cmp::Ordering;
 use adaptive_bezier::Vector2;
 use ordered_float::NotNan;
 use ordered_float::FloatIsNan;
+use geo::algorithm::HaversineDistance;
+use geo::algorithm::HaversineIntermediate;
+use geo::algorithm::HaversineBearing;
+use angular_units::Deg;
+use angular_units::Angle;
+
 
 use crate::geometry::Collection;
 use crate::progress::ProgressObserver;
@@ -79,12 +85,48 @@ impl Coordinates {
         }
     }
 
-    pub(crate) fn distance(&self, other: &Self, shape: &WorldShape) -> f64 {
-        shape.calculate_distance_between(self,other)
+    pub(crate) fn spherical_distance(&self, other: &Self) -> f64 {
+        let this: geo::Point = self.into();
+        let other: geo::Point = other.into();
+        this.haversine_distance(&other)
     }
 
-    pub(crate) fn middle_point_between(&self, other: &Self, shape: &WorldShape) -> Self {
-        shape.calculate_midpoint_between(self,other)
+    pub(crate) fn distance(&self, other: &Self) -> f64 {
+        (other.x.into_inner() - self.x.into_inner()).hypot(other.y.into_inner() - self.y.into_inner())
+        // (x.hypot(y) = (x.powi(2) + y.powi(2)).sqrt();
+        // (other.x - self.x).hypot(other.y - self.y) = ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt() 
+    }
+
+    pub(crate) fn shaped_distance(&self, other: &Self, shape: &WorldShape) -> f64 {
+        match shape {
+            WorldShape::Cylinder => {
+                self.distance(other)
+            },
+            // TODO: spherical_distance
+        }
+    }
+
+    pub(crate) fn spherical_middle_point_between(&self, other: &Self) -> Result<Self,CommandError> {
+        let this: geo::Point = self.into();
+        let other: geo::Point = other.into();
+        let result = this.haversine_intermediate(&other,0.5);
+        Ok(result.try_into()?)
+    }
+
+    pub(crate) fn middle_point_between(&self, other: &Self) -> Self {
+        Coordinates {
+            x: (self.x + other.x) / 2.0,
+            y: (self.y + other.y) / 2.0,
+        }        
+    }
+
+    pub(crate) fn shaped_middle_point_between(&self, other: &Self, shape: &WorldShape) -> Result<Self,CommandError> {
+        match shape {
+            WorldShape::Cylinder => {
+                Ok(self.middle_point_between(other))
+            }
+            // TODO: spherical_middle_point_between
+        }
     }
 
     pub(crate) fn interpolate_at_longitude(&self, other: &Self, longitude: f64) -> Result<Self,CommandError> {
@@ -105,8 +147,66 @@ impl Coordinates {
         Point::new(self.x.into(), self.y.into())
     }
 
-    pub(crate) fn circumcenter(points: (&Self,&Self,&Self), shape: &WorldShape) -> Self {
-        shape.calculate_circumcenter(points)
+    pub(crate) fn spherical_circumcenter(points: (&Self,&Self,&Self)) -> Result<Self,CommandError> {
+        // https://web.archive.org/web/20171023010630/http://mathforum.org/library/drmath/view/68373.html
+        macro_rules! to_cartesian {
+            ($point: ident) => {{
+                let lon_r = $point.x.to_radians();
+                let lat_r = $point.y.to_radians();
+                //x = cos(lon)*cos(lat)
+                let x = lon_r.cos() * lat_r.cos();
+                //y = sin(lon)*cos(lat)
+                let y = lon_r.sin() * lat_r.cos();
+                //z = sin(lat)                
+                let z = lat_r.sin();
+                (x,y,z)
+            }};
+        }
+
+        let (a,b,c) = points;
+        let (x1,y1,z1) = to_cartesian!(a);
+        let (x2,y2,z2) = to_cartesian!(b);
+        let (x3,y3,z3) = to_cartesian!(c);
+
+        // cross-product
+        //let n = (B-A) * (C-A);
+        //let n = (x2-x1, y2-y1, z2-z1) * (x3-x1, y3-y1, z3-z1);
+        let (xn,yn,zn) = ((y2-y1)*(z3-z1)-(z2-z1)*(y3-y1),
+                          (z2-z1)*(x3-x1)-(x2-x1)*(z3-z1),
+                          (x2-x1)*(y3-y1)-(y2-y1)*(x3-x1));
+
+        // radius of n, which is needed for lat/lon
+        let r = (xn.powi(2) + yn.powi(2) + zn.powi(2)).sqrt();
+
+        let lat = (zn/r).asin().to_degrees();
+        let lon = yn.atan2(xn).to_degrees();
+
+        Ok(Self::try_from((lon,lat))?)
+
+    }
+
+
+    pub(crate) fn circumcenter(points: (&Self,&Self,&Self)) -> Self {
+        // Finding the Circumcenter: https://en.wikipedia.org/wiki/Circumcircle#Cartesian_coordinates_2
+
+        let (a,b,c) = points;
+        let d = (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y)) * 2.0;
+        let d_recip = d.recip();
+        let (ax2,ay2,bx2,by2,cx2,cy2) = ((a.x*a.x),(a.y*a.y),(b.x*b.x),(b.y*b.y),(c.x*c.x),(c.y*c.y));
+        let (ax2_ay2,bx2_by2,cx2_cy2) = (ax2+ay2,bx2+by2,cx2+cy2);
+        let ux = ((ax2_ay2)*(b.y - c.y) + (bx2_by2)*(c.y - a.y) + (cx2_cy2)*(a.y - b.y)) * d_recip;
+        let uy = ((ax2_ay2)*(c.x - b.x) + (bx2_by2)*(a.x - c.x) + (cx2_cy2)*(b.x - a.x)) * d_recip;
+
+        (ux,uy).into()
+
+    
+    }
+
+    pub(crate) fn shaped_circumcenter(points: (&Self,&Self,&Self), shape: &WorldShape) -> Result<Self,CommandError> {
+        match shape {
+            WorldShape::Cylinder => Ok(Self::circumcenter(points)),
+        }
+        // TODO: spherical_circumcenter
     }
 
     // FUTURE: I believe that despite the distortion, the order of points by angle will still be the same on a sphere. Maybe have to revisit this someday?
@@ -315,6 +415,33 @@ impl Coordinates {
         Ok(result)
     }
 
+    pub(crate) fn shaped_bearing(&self, neighbor_site: &Coordinates, world_shape: &WorldShape) -> Deg<f64> {
+        match world_shape {
+            WorldShape::Cylinder => self.bearing(neighbor_site),
+        }
+            // TODO: geo::HaversineBearing, but I need to test whether it's in the same ranges.
+    }
+
+    fn spherical_bearing(&self, neighbor_site: &Coordinates) -> Deg<f64> {
+        let this: geo::Point = self.into();
+        let other: geo::Point = neighbor_site.into();
+        // TODO: Need to test whether its in the same ranges, with the name "bearing" it should be
+        Deg(this.haversine_bearing(other))
+    }
+
+    fn bearing(&self, neighbor_site: &Coordinates) -> Deg<f64> {
+        // needs to be clockwise, from the north, with a value from 0..360
+
+        // the result below is counter clockwise from the east, but also if it's in the south it's negative.
+        let counter_clockwise_from_east = Deg(((neighbor_site.y-self.y).atan2(neighbor_site.x.into_inner()-self.x.into_inner()).to_degrees()).round());
+        // 360 - theta would convert the direction from counter clockwise to clockwise. Adding 90 shifts the origin to north.
+        let clockwise_from_north = Deg(450.0) - counter_clockwise_from_east; 
+
+        // And, the Deg structure allows me to normalize it
+        clockwise_from_north.normalize()
+
+    }
+
 }
 
 impl TryFrom<(f64,f64,f64)> for Coordinates {
@@ -349,6 +476,22 @@ impl TryFrom<(f64,f64)> for Coordinates {
             y: value.1.try_into()?
         })
     }
+}
+
+impl From<&Coordinates> for geo_types::Point {
+    fn from(value: &Coordinates) -> Self {
+        Self::new(value.x.into_inner(),value.y.into_inner())
+    }
+}
+
+impl TryFrom<geo_types::Point> for Coordinates {
+
+    type Error = FloatIsNan;
+
+    fn try_from(value: geo_types::Point) -> Result<Self, Self::Error> {
+        Ok(Self::new(NotNan::new(value.0.x)?,NotNan::new(value.0.y)?))
+    }
+
 }
 
 impl Sub for &Coordinates {

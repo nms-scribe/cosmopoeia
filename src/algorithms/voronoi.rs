@@ -107,7 +107,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                 edge
             };
 
-            let area = polygon.area(world_shape);
+            let area = polygon.shaped_area(world_shape)?;
 
             Ok(Some(NewTileSite {
                 geometry: polygon,
@@ -141,7 +141,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                .try_into()
                .map_err(|e| CommandError::VoronoiExpectsTriangles(format!("{e:?}")))?;
 
-            let circumcenter = Coordinates::circumcenter((&points[0],&points[1],&points[2]),shape);
+            let circumcenter = Coordinates::shaped_circumcenter((&points[0],&points[1],&points[2]),shape)?;
 
             // collect a list of neighboring circumcenters for each site.
             for point in points {

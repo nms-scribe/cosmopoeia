@@ -7,6 +7,7 @@ use crate::geometry::Collection;
 use crate::geometry::Point;
 use crate::geometry::CollectionIter;
 use crate::geometry::Polygon;
+use crate::utils::world_shape::WorldShape;
 
 pub(crate) enum DelaunayGeneratorPhase {
     Unstarted(Collection<Point>),
@@ -15,16 +16,18 @@ pub(crate) enum DelaunayGeneratorPhase {
 }
 
 pub(crate) struct DelaunayGenerator {
-    pub(crate) phase: DelaunayGeneratorPhase
+    pub(crate) phase: DelaunayGeneratorPhase,
+    world_shape: WorldShape
 
 }
 
 impl DelaunayGenerator {
 
-    pub(crate) const fn new(source: Collection<Point>) -> Self {
+    pub(crate) const fn new(source: Collection<Point>, world_shape: WorldShape) -> Self {
         let phase = DelaunayGeneratorPhase::Unstarted(source);
         Self {
-            phase
+            phase,
+            world_shape
         }
     }
 
@@ -37,7 +40,11 @@ impl DelaunayGenerator {
             // the delaunay_triangulation procedure requires a single geometry. Which means I've got to read all the points into one thingie.
             // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
             progress.start_unknown_endpoint(|| "Generating triangles.");
-            let triangles = source.delaunay_triangulation(None)?;
+            let triangles = match self.world_shape {
+                WorldShape::Cylinder => source.delaunay_triangulation(None)?
+                // TODO: Could replace with algorithm copied from https://docs.rs/geo/latest/geo/algorithm/triangulate_spade/trait.TriangulateSpade.html
+                // and then I can possibly redo that for spherical operations instead.
+            };
             progress.finish(|| "Triangles generated.");
             self.phase = DelaunayGeneratorPhase::Started(triangles.into_iter())
         }

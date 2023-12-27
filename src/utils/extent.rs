@@ -1,11 +1,15 @@
 use core::cmp::Ordering;
 
+use geo::polygon;
+use geo::ChamberlainDuquetteArea;
+
 use crate::geometry::VariantArealGeometry;
 use crate::geometry::LinearRing;
 use crate::geometry::Polygon;
 use crate::errors::CommandError;
 use crate::utils::edge::Edge;
 use crate::utils::coordinates::Coordinates;
+use crate::utils::world_shape::WorldShape;
 
 #[derive(Clone)]
 pub(crate) struct Extent {
@@ -158,6 +162,29 @@ impl Extent {
 
     pub(crate) fn reaches_north_pole(&self) -> bool {
         (self.north() - 90.0).abs() < f64::EPSILON
+    }
+
+    pub(crate) fn spherical_area(&self) -> f64 {
+        let polygon = polygon![
+            (x: self.west, y: self.south),
+            (x: self.east(), y: self.south),
+            (x: self.east(), y: self.north()),
+            (x: self.west, y: self.north()),
+            (x: self.west, y: self.south)
+        ];
+        polygon.chamberlain_duquette_unsigned_area()
+    }
+
+    pub(crate) fn area(&self) -> f64 {
+        self.width * self.height
+    }
+
+    pub(crate) fn shaped_area(&self, world_shape: &WorldShape) -> f64 {
+        match world_shape {
+            WorldShape::Cylinder => self.area(),
+            // TODO: spherical_area
+        }
+
     }
 
 }

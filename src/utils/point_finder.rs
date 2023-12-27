@@ -45,7 +45,7 @@ impl PointFinder {
         let east = point.y + spacing;
         let boundary = Boundary::between_points((west.into(),south.into()),(east.into(),north.into()));
         for item in self.inner.query(boundary) {
-            if item.distance(point,&self.world_shape) <= spacing {
+            if item.shaped_distance(point,&self.world_shape) <= spacing {
                 return true;
             }
         }
@@ -122,9 +122,9 @@ impl TileFinder {
                 let mut found = None;
                 for item in self.inner.query(search_boundary) {
                     match &found {
-                        None => found = Some((item.1.clone(),item.0.distance(point,&self.world_shape))),
+                        None => found = Some((item.1.clone(),item.0.shaped_distance(point,&self.world_shape))),
                         Some(last_found) => {
-                            let this_distance = item.0.distance(point,&self.world_shape);
+                            let this_distance = item.0.shaped_distance(point,&self.world_shape);
                             if this_distance < last_found.1 {
                                 found = Some((item.1.clone(),this_distance))
                             }

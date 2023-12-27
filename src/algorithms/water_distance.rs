@@ -49,8 +49,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     
                         on_shore = true;
                         let neighbor_water_distance = match neighbor_tile {
-                            Neighbor::Tile(_) => tile.site.distance(&neighbor.site,&world_shape),
-                            Neighbor::CrossMap(_, _) => tile.site.distance(&neighbor.site.across_antimeridian(&tile.site),&world_shape),
+                            Neighbor::Tile(_) => tile.site.shaped_distance(&neighbor.site,&world_shape),
+                            Neighbor::CrossMap(_, _) => tile.site.shaped_distance(&neighbor.site.across_antimeridian(&tile.site),&world_shape),
                             Neighbor::OffMap(_) => unreachable!("neighbor_tile should only be set if Tile or CrossMap"),
                         };
 

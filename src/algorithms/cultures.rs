@@ -288,7 +288,7 @@ fn too_close(point_vec: &Vec<Coordinates>, new_point: &Coordinates, spacing: f64
     for point in point_vec {
         // FUTURE: This won't return true if the point's are across the antimeridian from each other, but I'm not sure how often this will
         // be a problem.
-        if point.distance(new_point,world_shape) < spacing {
+        if point.shaped_distance(new_point,world_shape) < spacing {
             return true;
         }
     }

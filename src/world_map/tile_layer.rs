@@ -354,7 +354,7 @@ impl TileForTownPopulation {
         if common_vertices.len() == 2 {
             let point1: Coordinates = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
-            Ok(point1.middle_point_between(&point2, shape))
+            Ok(point1.shaped_middle_point_between(&point2, shape)?)
         } else {
             Err(CommandError::CantFindMiddlePoint(self.fid.clone(),other.fid.clone(),common_vertices.len()))
         }
@@ -372,7 +372,7 @@ impl TileForTownPopulation {
             // those directions.
             let point1: Coordinates = (common_vertices[0].0,common_vertices[0].1).try_into()?;
             let point2 = (common_vertices[1].0,common_vertices[1].1).try_into()?;
-            Ok(point1.middle_point_between(&point2,shape))
+            Ok(point1.shaped_middle_point_between(&point2,shape)?)
         } else {
             Err(CommandError::CantFindMiddlePointOnEdge(self.fid.clone(),edge.clone(),common_vertices.len()))
         }
@@ -587,7 +587,7 @@ impl TileLayer<'_,'_> {
     pub(crate) fn estimate_average_tile_area(&self, world_shape: &WorldShape) -> Result<f64,CommandError> {
         let extent = self.get_extent()?;
         let tiles = self.feature_count();
-        let result = world_shape.estimate_average_tile_area(extent, tiles);
+        let result = extent.shaped_area(world_shape)/tiles as f64;
         Ok(result)
     }
 

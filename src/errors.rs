@@ -5,8 +5,8 @@ pub(crate) use gdal::errors::GdalError;
 use gdal::raster::GdalDataType;
 use ordered_float::FloatIsNan;
 use gdal::vector::geometry_type_to_name;
-
 pub(crate) use clap::error::Error as ArgumentError;
+
 use crate::utils::edge::Edge;
 use crate::utils::simple_serde::Token;
 use crate::typed_map::fields::IdRef;
@@ -85,6 +85,8 @@ pub enum CommandError {
     NamerDistributionError(String,String),
     IOError(String),
     SerdeJSONError(String),
+    /// This one is thrown by attempting to convert geo_types
+    CantConvert { expected: &'static str, found: &'static str },
 }
 
 impl Error for CommandError {
@@ -210,7 +212,8 @@ impl Display for CommandError {
             Self::InvalidEnumValueInInSerializedValue(value) => write!(f,"While parsing field value: found invalid enum value '{value}'."),
             Self::NamerDistributionError(namer,message) => write!(f,"While loading namer '{namer}', the length distribution could not be calculated. ('{message}')"),
             Self::IOError(message) => write!(f,"Error writing to file: ('{message}')."),
-            Self::SerdeJSONError(message) => write!(f,"Error serializing data: ('{message}').")
+            Self::SerdeJSONError(message) => write!(f,"Error serializing data: ('{message}')."),
+            Self::CantConvert { expected, found } => write!(f,"Error converting geo types. Expected {expected}, found {found}.")
 
         }
     }

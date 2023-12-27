@@ -66,7 +66,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
     // but the reference implements the random number generator stuff so it works.
     // I assume if I was leaking the PointGenerator out of the function that I would get an error.
     let mut points = PointGenerator::new(random, extent.clone(), shape.clone(), tile_count);
-    let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?);
+    let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?, shape.clone());
     
     triangles.start(progress)?;
     let mut voronois = VoronoiGenerator::new(triangles,extent,shape)?;
@@ -338,16 +338,16 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, tile_map: &EntityIndex<TileSchema, TileForCalcNeighbors>, world_shape: &WorldShape, across_anti_meridian: bool) -> Result<Deg<f64>, CommandError> {
     let neighbor = tile_map.try_get(neighbor_id)?;
     let neighbor_angle = {
-        let (site_x,site_y) = tile.site.to_tuple();
-        let (neighbor_site_x,neighbor_site_y) = neighbor.site.to_tuple();
 
-        let neighbor_site_x = if across_anti_meridian {
-            Coordinates::longitude_across_antimeridian(neighbor_site_x,&site_x)
+        let tile_site = &tile.site;
+
+        let neighbor_site = if across_anti_meridian {
+            neighbor.site.across_antimeridian(&tile_site)
         } else {
-            neighbor_site_x
+            neighbor.site.clone()
         };
-
-        world_shape.calculate_bearing(site_x,site_y,neighbor_site_x,neighbor_site_y)
+        
+        tile_site.shaped_bearing(&neighbor_site,world_shape)
 
     };
     Ok(neighbor_angle)
