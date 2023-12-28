@@ -123,14 +123,6 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    // make sure tests pass
-    if Command::new("cargo").args(["test"]).status().unwrap().success() {
-        printgreenln!("☑ All tests passed.")
-    } else {
-        printredln!("☒ Fix test errors and try again.");
-        return ExitCode::FAILURE
-    };
-
     // make sure docs can be generated
     if Command::new("cargo").args(["run","docs","--schemas","json-schemas/","--docs","docs/generated/"]).status().unwrap().success() {
         printgreenln!("☑ Documentation generated.")
@@ -166,6 +158,14 @@ fn main() -> ExitCode {
         printredln!("☒ Local and remote are not in sync.");
         return ExitCode::FAILURE;
     }
+
+    // make sure tests pass
+    if Command::new("cargo").args(["test"]).status().unwrap().success() {
+        printgreenln!("☑ All tests passed.")
+    } else {
+        printredln!("☒ Fix test errors and try again.");
+        return ExitCode::FAILURE
+    };
 
     printgreenln!("☑ Ready to Release");
 
