@@ -2,9 +2,20 @@
 fn close_gdal_layer() {
     // NOTE: This test will fail until they release the code with the fix: https://github.com/georust/gdal/pull/420, which will make the close function take ownership so no call to drop.
     use std::path::PathBuf;
-    use gdal::Dataset;
 
-    let ds = Dataset::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("share").join("qgis").join("World.gpkg")).expect("Dataset should have opened.");
+    let test_file: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("tmp").join("test_close_gdal_layer.gpkg");
+
+    let ds = if (&test_file).exists() {
+        gdal::Dataset::open_ex(&test_file, gdal::DatasetOptions { 
+            open_flags: gdal::GdalOpenFlags::GDAL_OF_UPDATE, 
+            ..Default::default()
+        }).expect("open dataset")
+    } else {
+        let driver = gdal::DriverManager::get_driver_by_name("GPKG").expect("get driver");
+        driver.create_vector_only(&test_file).expect("create dataset")
+    };
+
+
     ds.close().expect("Should have closed"); // Get a segmentation fault if this is called, I'm guessing they do it again on drop.
 
 
@@ -42,7 +53,7 @@ fn test_run_command() {
         "--source".into(),
         "share/terrain_recipes/afmg_recipes.json".into(),
         "--recipe".into(),
-        "continents".into(),
+        "shattered".into(),
     ]).expect("Command should have run.");
     
 
