@@ -114,7 +114,7 @@ impl Coordinates {
     }
 
     pub(crate) fn middle_point_between(&self, other: &Self) -> Self {
-        Coordinates {
+        Self {
             x: (self.x + other.x) / 2.0,
             y: (self.y + other.y) / 2.0,
         }        
@@ -156,8 +156,7 @@ impl Coordinates {
         // if I'm wrong. That means I only have to compare the a and b ordering as clockwise around c, and if it is not, then swap a and b.
         // if you can get a different order out of that. 
         let (a,b,c) = match Self::order_clockwise(a, b, c) {
-            Ordering::Less => (a,b,c), // ordering is correct
-            Ordering::Equal => (a,b,c), // shouldn't happen, but just leave the order
+            Ordering::Less | Ordering::Equal => (a,b,c), // ordering is correct
             Ordering::Greater => (b,a,c), // ordering is incorrect, so swap to re-order.
         };
         let polygon = polygon![
@@ -444,21 +443,21 @@ impl Coordinates {
         Ok(result)
     }
 
-    pub(crate) fn shaped_bearing(&self, neighbor_site: &Coordinates, world_shape: &WorldShape) -> Deg<f64> {
+    pub(crate) fn shaped_bearing(&self, neighbor_site: &Self, world_shape: &WorldShape) -> Deg<f64> {
         match world_shape {
             WorldShape::Cylinder => self.bearing(neighbor_site),
             WorldShape::Sphere => self.spherical_bearing(neighbor_site)
         }
     }
 
-    fn spherical_bearing(&self, neighbor_site: &Coordinates) -> Deg<f64> {
+    fn spherical_bearing(&self, neighbor_site: &Self) -> Deg<f64> {
         let this: geo::Point = self.into();
         let other: geo::Point = neighbor_site.into();
         // TODO: Need to test whether its in the same ranges, with the name "bearing" it should be
         Deg(this.haversine_bearing(other))
     }
 
-    fn bearing(&self, neighbor_site: &Coordinates) -> Deg<f64> {
+    fn bearing(&self, neighbor_site: &Self) -> Deg<f64> {
         // needs to be clockwise, from the north, with a value from 0..360
 
         // the result below is counter clockwise from the east, but also if it's in the south it's negative.

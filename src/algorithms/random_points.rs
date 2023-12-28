@@ -60,13 +60,12 @@ impl<Random: Rng> PointGenerator<Random> {
         Point::new(self.extent.west + x,self.extent.south + y)
     }
 
-    fn jitter(random: &mut Random, spacing: &f64) -> f64 {
+    fn jitter(random: &mut Random, spacing: f64) -> f64 {
         let jitter_shift = (spacing / 2.0) * 0.9;
         // This is subtracted from the randomly generated jitter so the range is -0.9*spacing to 0.9*spacing
         let jitter_spread = jitter_shift * 2.0;
         // This + jitter_shift causes the jitter to move by up to 0.9*spacing. If it were 1 times spacing, there might 
-        let jitter = random.gen::<f64>().mul_add(jitter_spread, -jitter_shift);
-        jitter
+        random.gen::<f64>().mul_add(jitter_spread, -jitter_shift)
     }
 
     /**
@@ -169,10 +168,10 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
                 if x < &self.extent.width {
                     // if x_spacing is None, then we are at the poles. I want to skip that.
                     
-                    let x_jitter = Self::jitter(&mut self.random,&x_spacing);
+                    let x_jitter = Self::jitter(&mut self.random,*x_spacing);
                     let jittered_x = (x + x_jitter).clamp(Self::START_X,self.extent.width);
 
-                    let y_jitter = Self::jitter(&mut self.random,&y_spacing);
+                    let y_jitter = Self::jitter(&mut self.random,y_spacing);
                     let jittered_y = (y + y_jitter).clamp(Self::START_Y,self.extent.height);
 
                     self.phase = PointGeneratorPhase::Random{
@@ -184,12 +183,12 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
                 } else {
 
                     let y = y + y_spacing;
-                    let x_spacing = init_x_spacing!(y);
+                    let next_x_spacing = init_x_spacing!(y);
     
                     self.phase = PointGeneratorPhase::Random{
-                        x: Self::START_X + (x_spacing/2.0), 
+                        x: Self::START_X + (next_x_spacing/2.0), 
                         y,
-                        x_spacing
+                        x_spacing: next_x_spacing
                     };
                     self.next()
                 }

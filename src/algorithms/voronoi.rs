@@ -63,10 +63,10 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                     match edge {
                         Some(Ok(previous_edge)) => {
                             edge = Some(match point_edge.combine_with(previous_edge) {
-                                Ok(edge) => Ok(edge),
+                                Ok(new_edge) => Ok(new_edge),
                                 Err(err) => match err {
                                     CommandError::InvalidTileEdge(_, _) => Err(()),
-                                    err => Err(err)?
+                                    err => return Err(err)
                                 },
                             });
                         },
@@ -105,17 +105,17 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             let edge = if let Some(corner) = edge {
                 match corner {
                     Err(()) |
-                    Ok(Edge::Northeast) |
-                    Ok(Edge::Southeast) |
-                    Ok(Edge::Southwest) |
-                    Ok(Edge::Northwest) => {
+                    Ok(Edge::Northeast |
+                       Edge::Southeast |
+                       Edge::Southwest |
+                       Edge::Northwest) => {
                         let bounds = polygon.get_envelope();
                         extent.is_extent_on_edge(&bounds)?
                     },
-                    Ok(edge @ Edge::North) |
-                    Ok(edge @ Edge::East) |
-                    Ok(edge @ Edge::South) |
-                    Ok(edge @ Edge::West) => Some(edge)
+                    Ok(edge @ (Edge::North |
+                               Edge::East |
+                               Edge::South |
+                               Edge::West)) => Some(edge)
                     
                 }
 

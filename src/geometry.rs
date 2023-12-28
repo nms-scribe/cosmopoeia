@@ -26,8 +26,7 @@ impl<CDA: ChamberlainDuquetteArea<f64>> ChamberlainDuquetteAreaInDegrees for CDA
         // If the earth radius 6378137.0, then it's circumference is 40075017 at the equator. And a degree along the equator is 111319.49 meters.
         // This means that my square degree unit is 111319.49^2 m2, or 12392029000 m2.
         // So, to convert from square meters to square degrees, I need to divide the result by 12392029000
-        let result = result/12392029000.0;
-        result
+        result/12392029000.0
     }
 }
 
