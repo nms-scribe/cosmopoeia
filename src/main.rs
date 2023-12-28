@@ -151,11 +151,11 @@ where
 }
 
 fn main() -> std::process::ExitCode {
-    let mut args = std::env::args();
+    let args = std::env::args();
     // I could just return a Result<(),Box<dyn Error>> except the built-ins format that with debug instead of
     // display, so I don't get a good error message. At some point in the future, there's going to be a Report
     // trait that might be useful once it becomes stable. https://doc.rust-lang.org/stable/std/error/struct.Report.html#return-from-main
-    match run(&mut args) {
+    match run(args) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("{err}");

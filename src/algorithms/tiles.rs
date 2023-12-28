@@ -342,7 +342,7 @@ fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, ti
         let tile_site = &tile.site;
 
         let neighbor_site = if across_anti_meridian {
-            neighbor.site.across_antimeridian(&tile_site)
+            neighbor.site.across_antimeridian(tile_site)
         } else {
             neighbor.site.clone()
         };

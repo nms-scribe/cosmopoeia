@@ -176,8 +176,7 @@ impl Extent {
     }
 
     pub(crate) fn area(&self) -> f64 {
-        let result = self.width * self.height;
-        result
+        self.width * self.height
     }
 
     pub(crate) fn shaped_area(&self, world_shape: &WorldShape) -> f64 {
