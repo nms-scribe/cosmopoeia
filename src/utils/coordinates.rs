@@ -8,8 +8,10 @@ use ordered_float::FloatIsNan;
 use geo::algorithm::HaversineDistance;
 use geo::algorithm::HaversineIntermediate;
 use geo::algorithm::HaversineBearing;
+use geo::algorithm::Centroid;
 use angular_units::Deg;
 use angular_units::Angle;
+use geo::polygon;
 
 
 use crate::geometry::Collection;
@@ -99,10 +101,8 @@ impl Coordinates {
 
     pub(crate) fn shaped_distance(&self, other: &Self, shape: &WorldShape) -> f64 {
         match shape {
-            WorldShape::Cylinder => {
-                self.distance(other)
-            },
-            // TODO: spherical_distance
+            WorldShape::Cylinder => self.distance(other),
+            WorldShape::Sphere => self.spherical_distance(other)
         }
     }
 
@@ -122,10 +122,8 @@ impl Coordinates {
 
     pub(crate) fn shaped_middle_point_between(&self, other: &Self, shape: &WorldShape) -> Result<Self,CommandError> {
         match shape {
-            WorldShape::Cylinder => {
-                Ok(self.middle_point_between(other))
-            }
-            // TODO: spherical_middle_point_between
+            WorldShape::Cylinder => Ok(self.middle_point_between(other)),
+            WorldShape::Sphere => self.spherical_middle_point_between(other)
         }
     }
 
@@ -148,6 +146,36 @@ impl Coordinates {
     }
 
     pub(crate) fn spherical_circumcenter(points: (&Self,&Self,&Self)) -> Result<Self,CommandError> {
+
+        // FUTURE: The code after this calculates an actual spherical circumcenter, but it doesn't work. See there. For now,
+        // I think that a simple planar centroid might make more sense anyway, since the tiles aren't going to be big enough to notice weirdness,
+        // and I think it will look better than a circumcenter anyway.
+        let (a,b,c) = points;
+        // sort the points clockwise. There are only three points, which means there are only two orders: a,b,c and a,c,b. 
+        // It doesn't matter where you start, so b,c,a is the same as a,b,c and c,b,a is the same as a,b,c. Try it out and tell me
+        // if I'm wrong. That means I only have to compare the a and b ordering as clockwise around c, and if it is not, then swap a and b.
+        // if you can get a different order out of that. 
+        let (a,b,c) = match Self::order_clockwise(a, b, c) {
+            Ordering::Less => (a,b,c), // ordering is correct
+            Ordering::Equal => (a,b,c), // shouldn't happen, but just leave the order
+            Ordering::Greater => (b,a,c), // ordering is incorrect, so swap to re-order.
+        };
+        let polygon = polygon![
+            (x: a.x.into_inner(), y: a.y.into_inner()),
+            (x: b.x.into_inner(), y: b.y.into_inner()),
+            (x: c.x.into_inner(), y: c.y.into_inner()),
+            (x: a.x.into_inner(), y: a.y.into_inner()),
+        ];
+        let centroid = polygon.centroid().expect("Why wouldn't a triangle have a centroid?");
+        Ok(Self::try_from((centroid.x(),centroid.y()))?)
+
+
+
+        /*
+        // FUTURE: The following produces tiles that spread all over the place. I think I'm getting some antipodal values from
+        // this. I tried sorting the points in clockwise and counterclockwise order before calculation, as suggested in the 
+        // source, but that didn't fix it. Maybe there's something else going on.
+
         // https://web.archive.org/web/20171023010630/http://mathforum.org/library/drmath/view/68373.html
         macro_rules! to_cartesian {
             ($point: ident) => {{
@@ -171,9 +199,9 @@ impl Coordinates {
         // cross-product
         //let n = (B-A) * (C-A);
         //let n = (x2-x1, y2-y1, z2-z1) * (x3-x1, y3-y1, z3-z1);
-        let (xn,yn,zn) = ((y2-y1)*(z3-z1)-(z2-z1)*(y3-y1),
-                          (z2-z1)*(x3-x1)-(x2-x1)*(z3-z1),
-                          (x2-x1)*(y3-y1)-(y2-y1)*(x3-x1));
+        let (xn,yn,zn) = (((y2-y1)*(z3-z1))-((z2-z1)*(y3-y1)),
+                          ((z2-z1)*(x3-x1))-((x2-x1)*(z3-z1)),
+                          ((x2-x1)*(y3-y1))-((y2-y1)*(x3-x1)));
 
         // radius of n, which is needed for lat/lon
         let r = (xn.powi(2) + yn.powi(2) + zn.powi(2)).sqrt();
@@ -182,6 +210,7 @@ impl Coordinates {
         let lon = yn.atan2(xn).to_degrees();
 
         Ok(Self::try_from((lon,lat))?)
+        */
 
     }
 
@@ -205,8 +234,8 @@ impl Coordinates {
     pub(crate) fn shaped_circumcenter(points: (&Self,&Self,&Self), shape: &WorldShape) -> Result<Self,CommandError> {
         match shape {
             WorldShape::Cylinder => Ok(Self::circumcenter(points)),
+            WorldShape::Sphere => Self::spherical_circumcenter(points)
         }
-        // TODO: spherical_circumcenter
     }
 
     // FUTURE: I believe that despite the distortion, the order of points by angle will still be the same on a sphere. Maybe have to revisit this someday?
@@ -418,8 +447,8 @@ impl Coordinates {
     pub(crate) fn shaped_bearing(&self, neighbor_site: &Coordinates, world_shape: &WorldShape) -> Deg<f64> {
         match world_shape {
             WorldShape::Cylinder => self.bearing(neighbor_site),
+            WorldShape::Sphere => self.spherical_bearing(neighbor_site)
         }
-            // TODO: geo::HaversineBearing, but I need to test whether it's in the same ranges.
     }
 
     fn spherical_bearing(&self, neighbor_site: &Coordinates) -> Deg<f64> {

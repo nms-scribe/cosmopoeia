@@ -4,6 +4,14 @@ For years I've wanted a tool to generate fantasy maps for [GIS](https://en.wikip
 
 Cosmopoeia can generate a world, either from scratch or from an existing heightmap, complete with water features, biomes, towns, and nations. The result is a [geopackage](https://en.wikipedia.org/wiki/GeoPackage) file. This file can then be opened in [QGIS](https://en.wikipedia.org/wiki/QGIS) and similar software, to touch up and create nice maps of the world in whatever style you want.
 
+# Unique Features
+
+Cosmopoeia offers two features which I haven't seen in many world generators.
+
+**Wrapping**. When you specify a world that extends across the entire globe, the world wraps around, connecting both sides. This means that all generating algorithms from terrain to climate to people extend around the entire world. You won't find weird linear borders between nations on both sides of the map. Climates will match up on both sides. Rivers should even flow across the edge to the other side.
+
+**World Shape**. Cosmopoeia offers the ability to generate spherical worlds. While you include the arguments `--world-shape sphere` in the command line, the generated tiles (see below) will increase in visual size towards the poles on a rectangular map. However, they are actually closer to the size of the other tiles. This overcomes the distortion caused by projecting the map onto a rectangular surface. In addition, other processes which depend on distance, bearing, and land area make use of algorithms defined for a sphere instead of a flat map.
+
 # How It Works
 
 Cosmopoeia was inspired by a number of tools which generate worlds for the internet. The biggest inspiration is a tool called [Fantasy Map Generator](https://azgaar.github.io/Fantasy-Map-Generator/) created by Azgaar ([Github site here](https://github.com/Azgaar/Fantasy-Map-Generator)). That itself was inspired by several other tools and experiments by [Martin O'Leary (link broken)](https://mewo2.com/notes/terrain) , [Amit Patel](http://www-cs-students.stanford.edu/~amitp/game-programming/polygon-map-generation), and [Scott Turner](https://heredragonsabound.blogspot.com/).
@@ -31,6 +39,15 @@ Here are a few worlds created using Cosmopoeia, as shown in QGIS.
 ![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-14_09-06-21.png)
 
 ![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-10-14_09-12-40.png)
+
+These screenshots take advantage of the new "sphere" world shape.
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-12-28_10-45-22.png)
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-12-28_10-47-46.png)
+
+![A screenshot showing the map of a fantasy world made using Cosmopoeia.](docs/screen_shots/Screenshot_2023-12-28_11-04-12.png)
+
 
 # Installation
 

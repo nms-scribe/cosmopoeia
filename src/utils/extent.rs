@@ -1,11 +1,11 @@
 use core::cmp::Ordering;
 
 use geo::polygon;
-use geo::ChamberlainDuquetteArea;
 
 use crate::geometry::VariantArealGeometry;
 use crate::geometry::LinearRing;
 use crate::geometry::Polygon;
+use crate::geometry::ChamberlainDuquetteAreaInDegrees;
 use crate::errors::CommandError;
 use crate::utils::edge::Edge;
 use crate::utils::coordinates::Coordinates;
@@ -172,19 +172,21 @@ impl Extent {
             (x: self.west, y: self.north()),
             (x: self.west, y: self.south)
         ];
-        polygon.chamberlain_duquette_unsigned_area()
+        polygon.chamberlain_duquette_area_in_degrees()
     }
 
     pub(crate) fn area(&self) -> f64 {
-        self.width * self.height
+        let result = self.width * self.height;
+        result
     }
 
     pub(crate) fn shaped_area(&self, world_shape: &WorldShape) -> f64 {
         match world_shape {
             WorldShape::Cylinder => self.area(),
-            // TODO: spherical_area
+            WorldShape::Sphere => self.spherical_area()
         }
 
     }
 
 }
+

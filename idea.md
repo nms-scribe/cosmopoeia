@@ -195,9 +195,3 @@ The following was used to generate shared World.gpkg:
 ```sh
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang share/qgis/World.gpkg --overwrite-all --cultures share/culture_sets/afmg_culture_antique.json --namers share/namers/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set --source share/terrain_recipes/afmg_recipes.json --recipe continents
 ```
-
-# Tasks
-
-[X] Make the github repository public.
-[ ] Announce beta release on Blog, Mammoth, Reddit (AFMG list, imaginarymapping, maybe the rust forums?), and start updating those places when changes are made.
-[ ] Start working on issues, starting with #1 and triaging the others.

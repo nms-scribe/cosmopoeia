@@ -13,7 +13,11 @@ pub(crate) enum PointGeneratorPhase {
     SoutheastInfinity,
     SouthwestInfinity,
     NorthwestInfinity,
-    Random(f64,f64),
+    Random{ 
+        x: f64, 
+        y: f64,
+        x_spacing: f64
+    },
     Done
 }
 
@@ -56,7 +60,7 @@ impl<Random: Rng> PointGenerator<Random> {
         Point::new(self.extent.west + x,self.extent.south + y)
     }
 
-    fn jitter(random: &mut Random, spacing: f64) -> f64 {
+    fn jitter(random: &mut Random, spacing: &f64) -> f64 {
         let jitter_shift = (spacing / 2.0) * 0.9;
         // This is subtracted from the randomly generated jitter so the range is -0.9*spacing to 0.9*spacing
         let jitter_spread = jitter_shift * 2.0;
@@ -65,31 +69,55 @@ impl<Random: Rng> PointGenerator<Random> {
         jitter
     }
 
-    /// Calculates the spherical spacing of random points on a specific line of latitude, given a standard spacing.
-    pub(crate) fn spherical_spacing(&self, lat: &f64) -> f64 {
+    /**
+    Calculates the spherical spacing of random points on a specific row of random points, given a standard spacing. 
+    
+    The calculation requires taking the reciprocal of the cosine of the latitude. In order to avoid a division by 0 or negative value, a result below f64::EPSILON is maximized to that. This simply creates a very large spacing that likely results in no points being generated at all.
+    */
+    pub(crate) fn spherical_spacing(&self, y: f64) -> f64 {
         /* 
-        the length of a degree of longitude is:
+        What I want it to do here is increase spacing depending on the line of latitude. Think of the intial spacing as being
+        in units of 1 degree at the equator. The spherical length of that spacing does not change, but it's ratio to the length
+        of the latitude does. 
+
+        So, what I want is a ratio of the length of the equator to the specified line of latitude. This will be the ratio that the spacing increases by.
+            R = Le/L(phi)
+            where: 
+                Le is the length of the equator
+                L(phi) is the length of a given line of latitude
+
+        The length of the equator is constant 360 degrees.
+
+        The length of a degree of longitude at a given latitude is:
             L = (π/180) * a * cos(phi)
             where: 
                 a is the radius of the sphere
                 phi is the latitude
+
+        There are 360 degrees of longitude in a line of latitude. So, the length of a line of latitude is:
+            L = (π/180) * 360 * a * cos(phi)
+            L = 2π * a * cos(phi)
         
-        However, I don't have the radius. But I do have the circumference. Since I'm measuring these values in degrees, the circumference of the world is 360. And I can get the radius from that:
+        I don't have a radius. But I do have the circumference. Since I'm measuring these values in degrees, the circumference of the world is 360. And I can get the radius from that:
             a = C / (2 * π)
             a = 360 / (2 * π)
             a = 180 / π
 
-        From there, I can figure out that the length of a degree of longitude is cos(phi)
-            L = (π/180) * a * cos(phi)
-            L = (π/180) * (180 / π) * cos(phi)
-            L = ((π * 180)/(180 * π) * cos(phi)
-            L = cos(phi)
+        Now, solve for L given that value for a:
+            L = 2π * (180 / π) * cos(phi)
+            L = 2 * 180 * cos(phi)
+            L = 360 * cos(phi)
 
-        The units for spacing is degrees, so I just need to multiply times that value:
-            spacing_x = cos(lat)*spacing
+        Finally, we have the ratio:
+            R = 360/L
+            R = 360/(360 * cos(phi))
+            R = 1/cos(phi)
 
         */
-        lat.to_radians().cos()*self.spacing
+        let lat = self.extent.south + y; // remember, 'y' is not the actual latitude.
+        let length_of_lat_degree = lat.to_radians().cos().max(f64::EPSILON);
+        let ratio = length_of_lat_degree.recip();
+        ratio * self.spacing
     }
 
 
@@ -102,6 +130,15 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
     fn next(&mut self) -> Option<Self::Item> {
 
         // Randomizing algorithms borrowed from AFMG with many modifications
+
+        macro_rules! init_x_spacing {
+            ($y: ident) => {
+                match self.world_shape {
+                    WorldShape::Cylinder => self.spacing,
+                    WorldShape::Sphere => self.spherical_spacing($y)
+                }
+            };
+        }
 
 
         match &self.phase { 
@@ -118,33 +155,42 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
                 Some(self.make_point(-self.extent.width, -self.extent.height))
             },
             PointGeneratorPhase::NorthwestInfinity => {
-                self.phase = PointGeneratorPhase::Random(Self::START_X,Self::START_Y);
+                let y = Self::START_Y;
+                let x_spacing = init_x_spacing!(y);
+                self.phase = PointGeneratorPhase::Random{ 
+                    x: Self::START_X + (x_spacing/2.0), 
+                    y,
+                    x_spacing
+                };
                 Some(self.make_point(-self.extent.width, self.extent.height*2.0))
             },
-            PointGeneratorPhase::Random(x, y) => if y < &self.extent.height {
+            PointGeneratorPhase::Random{x, y, x_spacing} => if y < &self.extent.height {
                 let y_spacing = self.spacing;
                 if x < &self.extent.width {
+                    // if x_spacing is None, then we are at the poles. I want to skip that.
                     
-                    let x_spacing = {
-                        match self.world_shape {
-                            WorldShape::Cylinder => {
-                                // spacing is the same for both y and x.
-                                self.spacing
-                            }
-                            // TODO: spherical_spacing
-                        }
-                    };
-
-                    let x_jitter = Self::jitter(&mut self.random,x_spacing);
+                    let x_jitter = Self::jitter(&mut self.random,&x_spacing);
                     let jittered_x = (x + x_jitter).clamp(Self::START_X,self.extent.width);
 
-                    let y_jitter = Self::jitter(&mut self.random, y_spacing);
+                    let y_jitter = Self::jitter(&mut self.random,&y_spacing);
                     let jittered_y = (y + y_jitter).clamp(Self::START_Y,self.extent.height);
 
-                    self.phase = PointGeneratorPhase::Random(x + x_spacing, *y);
+                    self.phase = PointGeneratorPhase::Random{
+                        x: x + x_spacing, 
+                        y: *y,
+                        x_spacing: *x_spacing
+                    };
                     Some(self.make_point(jittered_x,jittered_y))
                 } else {
-                    self.phase = PointGeneratorPhase::Random(Self::START_X, y + y_spacing);
+
+                    let y = y + y_spacing;
+                    let x_spacing = init_x_spacing!(y);
+    
+                    self.phase = PointGeneratorPhase::Random{
+                        x: Self::START_X + (x_spacing/2.0), 
+                        y,
+                        x_spacing
+                    };
                     self.next()
                 }
             

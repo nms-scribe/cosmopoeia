@@ -181,9 +181,36 @@ impl Task for TrianglesFromPoints {
     }
 }
 
+macro_rules! voronoi_from_triangle {
+    ($self: ident, $extent: ident, $progress: ident) => {{
+        let limits = ElevationLimits::new($self.elevation_limits_arg.min_elevation,$self.elevation_limits_arg.max_elevation)?;
+
+        let mut target = WorldMap::edit(&$self.target_arg.target)?;
+
+        target.with_transaction(|transaction| {
+            let mut triangles = transaction.edit_triangles_layer()?;
+    
+            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),$extent,$self.world_shape_arg.world_shape.clone())?;
+    
+            $progress.announce("Create tiles from voronoi polygons");
+        
+            generator.start($progress)?;
+        
+            // I need to collect this because I can't borrow the transaction as mutable with an active iterator.
+            #[allow(clippy::needless_collect)]
+            let voronoi: Vec<_> = generator.watch($progress,"Copying voronoi.","Voronoi copied.").collect();
+    
+            load_tile_layer(transaction,&$self.overwrite_tiles_arg,voronoi.into_iter(),&limits,&$self.world_shape_arg.world_shape,$progress)
+        })?;
+
+        target.save($progress)
+         
+    }};
+}
+
 subcommand_def!{
-    /// Creates voronoi tiles out of a delaunay triangles layer
-    pub struct VoronoiFromTriangles {
+    /// Creates voronoi tiles out of a delaunay triangles layer, using a heightmap to calculate extent
+    pub struct VoronoiFromTrianglesHeightmap {
 
         #[clap(flatten)]
         pub target_arg: TargetArg,
@@ -203,7 +230,7 @@ subcommand_def!{
     }
 }
 
-impl Task for VoronoiFromTriangles {
+impl Task for VoronoiFromTrianglesHeightmap {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -212,31 +239,58 @@ impl Task for VoronoiFromTriangles {
             source.bounds()?.extent()
         };
 
-        let limits = ElevationLimits::new(self.elevation_limits_arg.min_elevation,self.elevation_limits_arg.max_elevation)?;
-
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
-
-        target.with_transaction(|transaction| {
-            let mut triangles = transaction.edit_triangles_layer()?;
-    
-            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),extent,self.world_shape_arg.world_shape.clone())?;
-    
-            progress.announce("Create tiles from voronoi polygons");
-        
-            generator.start(progress)?;
-        
-            // I need to collect this because I can't borrow the transaction as mutable with an active iterator.
-            #[allow(clippy::needless_collect)]
-            let voronoi: Vec<_> = generator.watch(progress,"Copying voronoi.","Voronoi copied.").collect();
-    
-            load_tile_layer(transaction,&self.overwrite_tiles_arg,voronoi.into_iter(),&limits,&self.world_shape_arg.world_shape,progress)
-        })?;
-
-        target.save(progress)
-    
+        voronoi_from_triangle!(self,extent,progress)
+   
     
     }
 }
+
+
+subcommand_def!{
+    /// Creates voronoi tiles out of a delaunay triangles layer, using a given extent
+    pub struct VoronoiFromTrianglesExtent {
+
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
+
+        #[arg(allow_hyphen_values=true)]
+        pub west: f64,
+
+        #[arg(allow_hyphen_values=true)]
+        pub south: f64,
+
+        #[arg(allow_hyphen_values=true)]
+        pub north: f64,
+
+        #[arg(allow_hyphen_values=true)]
+        pub east: f64,
+
+
+        #[clap(flatten)]
+        pub elevation_limits_arg: ElevationLimitsArg,
+
+        #[clap(flatten)]
+        pub world_shape_arg: WorldShapeArg,
+
+        #[clap(flatten)]
+        pub overwrite_tiles_arg: OverwriteTilesArg,
+
+    }
+}
+
+impl Task for VoronoiFromTrianglesExtent {
+
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+
+        let extent = Extent::new(self.west,self.south,self.east,self.north);
+        
+        voronoi_from_triangle!(self,extent,progress)
+   
+    
+    }
+}
+
+
 
 
 subcommand_def!{
@@ -376,7 +430,8 @@ command_def!(
         PointsFromHeightmap,
         PointsFromExtent,
         TrianglesFromPoints,
-        VoronoiFromTriangles,
+        VoronoiFromTrianglesHeightmap,
+        VoronoiFromTrianglesExtent,
         Namers,
         Cultures
     }
