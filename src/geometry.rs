@@ -9,6 +9,28 @@ use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
 use crate::utils::world_shape::WorldShape;
 
+// special wrapper for the geo type.
+pub(crate) trait ChamberlainDuquetteAreaInDegrees {
+
+    fn chamberlain_duquette_area_in_degrees(&self) -> f64;
+    
+}
+
+impl<CDA: ChamberlainDuquetteArea<f64>> ChamberlainDuquetteAreaInDegrees for CDA {
+    fn chamberlain_duquette_area_in_degrees(&self) -> f64 {
+        let result = self.chamberlain_duquette_unsigned_area();
+            
+        // result of above is multiplied twice by 6378137.0 to get square meters. This number is the equatorial earth radius in meters.
+        // I need it in square degrees. 
+    
+        // If the earth radius 6378137.0, then it's circumference is 40075017 at the equator. And a degree along the equator is 111319.49 meters.
+        // This means that my square degree unit is 111319.49^2 m2, or 12392029000 m2.
+        // So, to convert from square meters to square degrees, I need to divide the result by 12392029000
+        let result = result/12392029000.0;
+        result
+    }
+}
+
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
     const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type;
@@ -315,23 +337,10 @@ fn validate_options_structure() -> Result<gdal::cpl::CslStringList, CommandError
 macro_rules! areal_fns {
     () => {
 
-        pub(crate) fn spherical_area(&self) -> Result<f64,CommandError> {
-            Ok(self.to_geo_type()?.chamberlain_duquette_unsigned_area())
-        }
-
         pub(crate) fn area(&self) -> f64 {
             self.inner.area()
         }
 
-        pub(crate) fn shaped_area(&self, world_shape: &WorldShape) -> Result<f64,CommandError> {
-            match world_shape {
-                WorldShape::Cylinder => Ok(self.area())
-                // TODO: spherical_area
-            }
-        }
-            
-
-            
         pub(crate) fn union(&self, rhs: &Self) -> Result<VariantArealGeometry,CommandError> {
             if let Some(united) = self.inner.union(&rhs.inner) {
                 let united = if !united.is_valid() {
@@ -429,6 +438,20 @@ impl Polygon {
             },
         }
     }
+
+    // Yes, this should be defined for MultiPolygon, but it's not used for that anywhere. If I ever need to define it, it will be exactly like this.
+    pub(crate) fn spherical_area(&self) -> Result<f64,CommandError> {
+        Ok(self.to_geo_type()?.chamberlain_duquette_area_in_degrees())
+    }
+
+    // Yes, this should be defined for MultiPolygon, but it's not used for that anywhere. If I ever need to define it, it will be exactly like this.
+    pub(crate) fn shaped_area(&self, world_shape: &WorldShape) -> Result<f64,CommandError> {
+        match world_shape {
+            WorldShape::Cylinder => Ok(self.area()),
+            WorldShape::Sphere => self.spherical_area()
+        }
+    }
+        
 
     areal_fns!();
 
@@ -580,6 +603,7 @@ impl MultiPolygon {
         Ok(self.inner.add_geometry(polygon.into())?)
     }
 
+    #[allow(dead_code)] // If I ever need to support spherical_area, I will need this.
     pub(crate) fn to_geo_type(&self) -> Result<geo::MultiPolygon,CommandError> {
         let result: Result<geo::MultiPolygon, geo_types::Error> = self.inner.to_geo()?.try_into();
         match result {

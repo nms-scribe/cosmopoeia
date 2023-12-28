@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <!-- next-header -->
 
 ## [Unreleased] - (Someday)
+
+* Added `--world-shape` argument to terrain generation commands. Default value is `cylinder` which defines traditional behavior.
+* Added `sphere` option for `--world-shape` which generates worlds which behave more like they are on a sphere.
+
 ## [0.2.0] - 2023-10-18
 
 Initial public release.

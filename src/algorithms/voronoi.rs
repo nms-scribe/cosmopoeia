@@ -54,16 +54,30 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             let mut vertices = voronoi.vertices;
 
             // figure out if it lay off the edge of the map:
-            let mut edge: Option<Edge> = None;
+            // Note that there may be cases where the vertices are in edges that conflict (such as northeast and southeast). While
+            // this will be an error for the end, it is not an error here. Mark those as erroneous edges instead, so they will still
+            // get clipped to the extent.
+            let mut edge: Option<Result<Edge,()>> = None;
             for point in &vertices {
                 if let Some(point_edge) = extent.is_off_edge(point) {
-                    if let Some(previous_edge) = edge {
-                        edge = Some(point_edge.combine_with(previous_edge)?);
-                    } else {
-                        edge = Some(point_edge)
+                    match edge {
+                        Some(Ok(previous_edge)) => {
+                            edge = Some(match point_edge.combine_with(previous_edge) {
+                                Ok(edge) => Ok(edge),
+                                Err(err) => match err {
+                                    CommandError::InvalidTileEdge(_, _) => Err(()),
+                                    err => Err(err)?
+                                },
+                            });
+                        },
+                        Some(Err(_)) => {
+                            edge = Some(Err(()));
+                        }
+                        _ => edge = Some(Ok(point_edge)),
                     }
                 } // else keep previous edge
 
+                
             }
 
             // Sort the points clockwise to create a polygon: https://stackoverflow.com/a/6989383/300213
@@ -86,25 +100,27 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
             };
 
             // there were some false positives for the diagonal edges, these need to be fixed, and it's best done now.
+            // Also need to fix those which got an invalid edge originally.
             // This will usually only apply to eight or ten, so it's a small task.
-            let edge = if let Some(corner) = &edge {
+            let edge = if let Some(corner) = edge {
                 match corner {
-                    Edge::Northeast |
-                    Edge::Southeast |
-                    Edge::Southwest |
-                    Edge::Northwest => {
+                    Err(()) |
+                    Ok(Edge::Northeast) |
+                    Ok(Edge::Southeast) |
+                    Ok(Edge::Southwest) |
+                    Ok(Edge::Northwest) => {
                         let bounds = polygon.get_envelope();
                         extent.is_extent_on_edge(&bounds)?
                     },
-                    Edge::North |
-                    Edge::East |
-                    Edge::South |
-                    Edge::West => edge
+                    Ok(edge @ Edge::North) |
+                    Ok(edge @ Edge::East) |
+                    Ok(edge @ Edge::South) |
+                    Ok(edge @ Edge::West) => Some(edge)
                     
                 }
 
             } else {
-                edge
+                None
             };
 
             let area = polygon.shaped_area(world_shape)?;
