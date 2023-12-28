@@ -1,17 +1,22 @@
+
+
 #[test]
 fn close_gdal_layer() {
     // NOTE: This test will fail until they release the code with the fix: https://github.com/georust/gdal/pull/420, which will make the close function take ownership so no call to drop.
     use std::path::PathBuf;
+    use gdal::Dataset;
+    use gdal::GdalOpenFlags;
+    use gdal::DriverManager;
 
     let test_file: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target").join("tmp").join("test_close_gdal_layer.gpkg");
 
     let ds = if (&test_file).exists() {
-        gdal::Dataset::open_ex(&test_file, gdal::DatasetOptions { 
-            open_flags: gdal::GdalOpenFlags::GDAL_OF_UPDATE, 
+        Dataset::open_ex(&test_file, gdal::DatasetOptions { 
+            open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
             ..Default::default()
         }).expect("open dataset")
     } else {
-        let driver = gdal::DriverManager::get_driver_by_name("GPKG").expect("get driver");
+        let driver = DriverManager::get_driver_by_name("GPKG").expect("get driver");
         driver.create_vector_only(&test_file).expect("create dataset")
     };
 
@@ -64,56 +69,65 @@ fn test_run_command() {
 #[should_panic(expected="create should not return an an error here, but it does for now: OgrError { err: 6, method_name: \"OGR_L_CreateFeature\" }")]
 fn test_database_lock_issue() {
     use std::path::PathBuf;
+    use gdal::Dataset;
+    use gdal::GdalOpenFlags;
+    use gdal::DriverManager;
+    use gdal::LayerOptions;
+    use gdal_sys::OGRwkbGeometryType;
+    use gdal::vector::LayerAccess;
+    use gdal::vector::Feature;
+    use gdal::spatial_ref::SpatialRef;
 
     fn edit_dataset(test_file: PathBuf, finish_loop: bool) {
         let mut dataset = if (&test_file).exists() {
-            gdal::Dataset::open_ex(&test_file, gdal::DatasetOptions { 
-                open_flags: gdal::GdalOpenFlags::GDAL_OF_UPDATE, 
+            Dataset::open_ex(&test_file, gdal::DatasetOptions { 
+                open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
                 ..Default::default()
             }).expect("open dataset")
         } else {
-            let driver = gdal::DriverManager::get_driver_by_name("GPKG").expect("get driver");
+            let driver = DriverManager::get_driver_by_name("GPKG").expect("get driver");
             driver.create_vector_only(&test_file).expect("create dataset")
         };
     
         let mut transaction = dataset.start_transaction().expect("start transaction");
     
         const RIVERS: &str = "rivers";
-        let mut rivers = transaction.create_layer(gdal::LayerOptions {
+        let mut rivers = transaction.create_layer(LayerOptions {
                     name: RIVERS,
-                    ty: gdal_sys::OGRwkbGeometryType::wkbNone,
+                    ty: OGRwkbGeometryType::wkbNone,
                     srs: None,
                     options: Some(&["OVERWRITE=YES"])
                 }).expect("create layer");
-        gdal::vector::LayerAccess::create_defn_fields(&rivers, &[]).expect("define fields");
+        rivers.create_defn_fields(&[]).expect("define fields");
     
         { // put in a block so we can borrow rivers as mutable again.
-            let feature = gdal::vector::Feature::new(gdal::vector::LayerAccess::defn(&rivers)).expect("new feature");
+            let feature = Feature::new(&rivers.defn()).expect("new feature");
             feature.create(&rivers).expect("create feature");
         }
     
         // I think this is where the problem is...
-        for _ in gdal::vector::LayerAccess::features(&mut rivers) {
+        for _ in rivers.features() {
             // break early...
             if !finish_loop {
                 break;
             }
         };
-        //gdal::vector::LayerAccess::reset_feature_reading(&mut rivers);
+        //gdal::vector::LayerAccess::reset_feature_reading(&mut rivers); // FIX IS HERE!
     
     
         const COASTLINES: &str = "coastlines";
-        let coastlines = transaction.create_layer(gdal::LayerOptions {
+        let coastlines = transaction.create_layer(LayerOptions {
             name: COASTLINES,
-            ty: gdal_sys::OGRwkbGeometryType::wkbPolygon,
-            srs: Some(&gdal::spatial_ref::SpatialRef::from_epsg(4326).expect("srs")),
+            ty: OGRwkbGeometryType::wkbPolygon,
+            srs: Some(&SpatialRef::from_epsg(4326).expect("srs")),
             options: Some(&["OVERWRITE=YES"])
         }).expect("create layer");
     
-        gdal::vector::LayerAccess::create_defn_fields(&coastlines, &[]).expect("defn_fields");
+        coastlines.create_defn_fields(&[]).expect("defn_fields");
     
         { // in a block so transaction can be borrowed again.
-            let feature = gdal::vector::Feature::new(gdal::vector::LayerAccess::defn(&coastlines)).expect("new feature");
+            let feature = Feature::new(coastlines.defn()).expect("new feature");
+            // ERROR HAPPENS HERE.
             feature.create(&coastlines).expect("create should not return an an error here, but it does for now");
         }
     
