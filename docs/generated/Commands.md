@@ -70,6 +70,10 @@ This document contains the help content for the `cosmopoeia` command-line progra
 * [`cosmopoeia terrain sample-ocean-below`↴](#cosmopoeia-terrain-sample-ocean-below)
 * [`cosmopoeia terrain sample-elevation`↴](#cosmopoeia-terrain-sample-elevation)
 * [`cosmopoeia gen-climate`↴](#cosmopoeia-gen-climate)
+* [`cosmopoeia gen-climate all`↴](#cosmopoeia-gen-climate-all)
+* [`cosmopoeia gen-climate temperature`↴](#cosmopoeia-gen-climate-temperature)
+* [`cosmopoeia gen-climate winds`↴](#cosmopoeia-gen-climate-winds)
+* [`cosmopoeia gen-climate precipitation`↴](#cosmopoeia-gen-climate-precipitation)
 * [`cosmopoeia gen-water`↴](#cosmopoeia-gen-water)
 * [`cosmopoeia gen-biome`↴](#cosmopoeia-gen-biome)
 * [`cosmopoeia gen-people`↴](#cosmopoeia-gen-people)
@@ -161,6 +165,16 @@ Creates a world map
 * `--tile-count <TILE_COUNT>` — The rough number of tiles to generate for the image
 
   Default value: `10000`
+* `--world-shape <WORLD_SHAPE>` — The "shape" of the world for generating points, calculating distance, area, etc
+
+  Default value: `cylinder`
+
+  Possible values:
+  - `cylinder`:
+    This world wraps around so that west and east meet (at 180E,180W), and weird dimensional distortions cause the north and south bounds (90N, 90S) to meet at a single point. This is the simplest representation of a world, and is fine for small regions near the middle of the world, but gets weird further north and south. It is also good for representing a flat world
+  - `sphere`:
+    A world on a sphere, with longitude distances becoming closer together at higher latitudes until they reach the poles. This is not quite the same as Earth, but it is close enough
+
 * `--seed <SEED>` — Seed for the random number generator, note that this might not reproduce the same over different versions and configurations of nfmt
 * `--overwrite-tiles` — If true and the [<$layer>] layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists
 
@@ -1063,10 +1077,22 @@ Replaces elevations by sampling from a heightmap
 
 Generates climate data for a world
 
-**Usage:** `cosmopoeia gen-climate [OPTIONS] <TARGET>`
+**Usage:** `cosmopoeia gen-climate <COMMAND>`
 
 ###### **Subcommands:**
 
+* `all` — Generates all climate data
+* `temperature` — Generates temperature data
+* `winds` — Generates wind data
+* `precipitation` — Generates precipitation data (requires wind and temperatures)
+
+
+
+## `cosmopoeia gen-climate all`
+
+Generates all climate data
+
+**Usage:** `cosmopoeia gen-climate all [OPTIONS] <TARGET>`
 
 ###### **Arguments:**
 
@@ -1099,6 +1125,79 @@ Generates climate data for a world
 
   Default value: `315`
 * `--wind-range <WIND_RANGE>` — Specify a range of latitudes and a wind direction (S lat..N lat:Direction), later mappings will override earlier
+* `--precipitation-factor <PRECIPITATION_FACTOR>` — Amount of global moisture on a scale of roughly 0-5, but there is no limit
+
+  Default value: `1`
+
+
+
+## `cosmopoeia gen-climate temperature`
+
+Generates temperature data
+
+**Usage:** `cosmopoeia gen-climate temperature [OPTIONS] <TARGET>`
+
+###### **Arguments:**
+
+* `<TARGET>` — The path to the world map GeoPackage file
+
+###### **Options:**
+
+* `--equator-temp <EQUATOR_TEMP>` — The rough temperature (in celsius) at the equator
+
+  Default value: `27`
+* `--polar-temp <POLAR_TEMP>` — The rough temperature (in celsius) at the poles
+
+  Default value: `-30`
+
+
+
+## `cosmopoeia gen-climate winds`
+
+Generates wind data
+
+**Usage:** `cosmopoeia gen-climate winds [OPTIONS] <TARGET>`
+
+###### **Arguments:**
+
+* `<TARGET>` — The path to the world map GeoPackage file
+
+###### **Options:**
+
+* `--north-polar-wind <NORTH_POLAR_WIND>` — Wind direction above latitude 60 N
+
+  Default value: `225`
+* `--north-middle-wind <NORTH_MIDDLE_WIND>` — Wind direction from latitude 30 N to 60 N
+
+  Default value: `45`
+* `--north-tropical-wind <NORTH_TROPICAL_WIND>` — Wind direction from the equator to latitude 30 N
+
+  Default value: `225`
+* `--south-tropical-wind <SOUTH_TROPICAL_WIND>` — Wind direction from the equator to latitude 30 S
+
+  Default value: `315`
+* `--south-middle-wind <SOUTH_MIDDLE_WIND>` — Wind direction from latitude 30 S to 60 S
+
+  Default value: `135`
+* `--south-polar-wind <SOUTH_POLAR_WIND>` — Wind direction below latitude 60 S
+
+  Default value: `315`
+* `--wind-range <WIND_RANGE>` — Specify a range of latitudes and a wind direction (S lat..N lat:Direction), later mappings will override earlier
+
+
+
+## `cosmopoeia gen-climate precipitation`
+
+Generates precipitation data (requires wind and temperatures)
+
+**Usage:** `cosmopoeia gen-climate precipitation [OPTIONS] <TARGET>`
+
+###### **Arguments:**
+
+* `<TARGET>` — The path to the world map GeoPackage file
+
+###### **Options:**
+
 * `--precipitation-factor <PRECIPITATION_FACTOR>` — Amount of global moisture on a scale of roughly 0-5, but there is no limit
 
   Default value: `1`
@@ -1310,6 +1409,16 @@ Creates a world map, generates natural features, and populates it with nations a
 * `--tile-count <TILE_COUNT>` — The rough number of tiles to generate for the image
 
   Default value: `10000`
+* `--world-shape <WORLD_SHAPE>` — The "shape" of the world for generating points, calculating distance, area, etc
+
+  Default value: `cylinder`
+
+  Possible values:
+  - `cylinder`:
+    This world wraps around so that west and east meet (at 180E,180W), and weird dimensional distortions cause the north and south bounds (90N, 90S) to meet at a single point. This is the simplest representation of a world, and is fine for small regions near the middle of the world, but gets weird further north and south. It is also good for representing a flat world
+  - `sphere`:
+    A world on a sphere, with longitude distances becoming closer together at higher latitudes until they reach the poles. This is not quite the same as Earth, but it is close enough
+
 * `--equator-temp <EQUATOR_TEMP>` — The rough temperature (in celsius) at the equator
 
   Default value: `27`

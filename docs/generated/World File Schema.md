@@ -26,6 +26,11 @@ longitude of the node point for the tile's voronoi
 
 latitude of the node point for the tile's voronoi
 
+### `area`
+**database field type**: Real
+
+calculated area based on shape of world (this may not be the same as the area calculated by GDAL)
+
 ### `elevation`
 **database field type**: Real
 
