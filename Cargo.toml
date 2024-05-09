@@ -43,7 +43,7 @@ pre-release-replacements = [
   {file="changelog.md", search="\\.\\.\\.HEAD", replace="...{{tag_name}}", exactly=1},
   {file="changelog.md", search="(Someday)", replace="{{date}}"},
   {file="changelog.md", search="<!-- next-header -->", replace="<!-- next-header -->\n\n## [Unreleased] - (Someday)", exactly=1},
-  {file="changelog.md", search="<!-- next-url -->", replace="<!-- next-url -->\n[Unreleased]: https://github.com/assert-rs/predicates-rs/compare/{{tag_name}}...HEAD", exactly=1},
+  {file="changelog.md", search="<!-- next-url -->", replace="<!-- next-url -->\n[Unreleased]: https://github.com/nms-scribe/cosmopoeia/{{tag_name}}...HEAD", exactly=1},
 ]
 
 [package.metadata.aur]
