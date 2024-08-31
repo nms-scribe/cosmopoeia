@@ -125,7 +125,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     // is, I'm uncomfortable with my algorithm as it is and whenever I look at it I consider rewriting it.
     // So, I don't want to spend a lot of time trying to figure out where the exact problem is, so, instead,
     // this will keep the algorithm out of that cycle.
-    let max_cycles_per_tile = tiles_layer.feature_count() * 100;
+    let max_cycles_per_tile = tiles_layer.feature_count();
 
     let mut tile_queue = water_flow_result.lake_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
 
