@@ -445,7 +445,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
             continue;
         }
 
-        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count).map(|(adversary,count)| (adversary,count)) {
+        if let Some((worst_adversary,count)) = adversaries.into_iter().max_by_key(|(_,count)| *count) {
             if count > buddy_count {
                 let mut change_tile = tiles_layer.try_feature_by_id(&tile_id)?;
                 change_tile.set_nation_id(&worst_adversary)?;

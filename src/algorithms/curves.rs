@@ -236,7 +236,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
     })
 }
 
-fn find_segment_match(match_segments: &[Vec<Coordinates>], segment: &Vec<Coordinates>, reverse: bool) -> Option<UniqueSegment> {
+fn find_segment_match(match_segments: &[Vec<Coordinates>], segment: &[Coordinates], reverse: bool) -> Option<UniqueSegment> {
     for (index,match_segment) in match_segments.iter().enumerate() {
         if (!match_segment.is_empty()) && match_segment.len() == segment.len() {
             // search by reversed

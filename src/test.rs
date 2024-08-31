@@ -149,3 +149,21 @@ fn test_database_lock_issue() {
 
 
 }
+
+#[test]
+fn split_and_remove_chars_should_be_the_same() {
+    use crate::utils::remove_n_chars_from_end;
+    use crate::utils::split_string_from_end;
+
+    let str1 = "This is a test";
+    let mut str2 = str1.to_owned();
+    let test_count = 3;
+    remove_n_chars_from_end(&mut str2, test_count);
+    let str1 = split_string_from_end(str1, test_count).0;
+    assert_eq!(str2,str1);
+    let test_count = 1;
+    remove_n_chars_from_end(&mut str2, test_count);
+    let str1 = split_string_from_end(str1, test_count).0;
+    assert_eq!(str2,str1);
+
+}

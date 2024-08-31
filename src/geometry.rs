@@ -32,7 +32,7 @@ impl<CDA: ChamberlainDuquetteArea<f64>> ChamberlainDuquetteAreaInDegrees for CDA
 
 pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> + Into<GDALGeometry> {
 
-    const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type;
+    const INTERNAL_TYPE: OGRwkbGeometryType::Type;
 
     fn get_envelope(&self) -> Extent;
 
@@ -715,7 +715,7 @@ impl<ItemType: GDALGeometryWrapper> From<Collection<ItemType>> for GDALGeometry 
 
 impl GDALGeometryWrapper for Collection<VariantGeometry> {
 
-    const INTERNAL_TYPE: gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbGeometryCollection;
+    const INTERNAL_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbGeometryCollection;
 
     fn get_envelope(&self) -> Extent {
         let envelope = self.inner.envelope();
@@ -1120,7 +1120,7 @@ pub(crate) struct NoGeometry;
 
 impl GDALGeometryWrapper for NoGeometry {
     // This marks it for use in generic objects so they know not to manipulate the geometry on this one.
-    const INTERNAL_TYPE:gdal::vector::OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbNone;
+    const INTERNAL_TYPE: OGRwkbGeometryType::Type = OGRwkbGeometryType::wkbNone;
 
     fn get_envelope(&self) -> Extent {
         unreachable!("This program should never be getting extent for 'None' geometry.")

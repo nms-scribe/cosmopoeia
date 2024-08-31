@@ -16,7 +16,6 @@ Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage f
 #![warn(unused_macro_rules)] // This caught some macro branches that weren't followed after a refactor
 #![warn(unused_qualifications)] // This caught a few bits of code that looked bad
 #![warn(unused_results)] // This one will be controversial, but I think it's useful. Most of the warnings should occur with map inserts, and a few of the removes. If it's something else, then I should think about it. It's easy to get around by adding a `_ = ` before the code (not a variable assignment, but a pattern assignment)
-#![warn(unused_tuple_struct_fields)]
 #![warn(variant_size_differences)]
 #![allow(clippy::upper_case_acronyms)] // I disagree
 #![allow(clippy::too_many_arguments)] // I'm fully aware that functions should be shorter, and can check this myself. But sometimes many parameters is just the simpler choice.

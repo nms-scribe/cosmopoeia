@@ -72,19 +72,19 @@ impl<'feature> NamedFeature<'feature,BiomeSchema> for BiomeFeature<'feature> {
 
 impl BiomeSchema {
 
-    pub(crate) const OCEAN: &str = "Ocean";
-    pub(crate) const HOT_DESERT: &str = "Hot desert";
-    pub(crate) const COLD_DESERT: &str = "Cold desert";
-    pub(crate) const SAVANNA: &str = "Savanna";
-    pub(crate) const GRASSLAND: &str = "Grassland";
-    pub(crate) const TROPICAL_SEASONAL_FOREST: &str = "Tropical seasonal forest";
-    pub(crate) const TEMPERATE_DECIDUOUS_FOREST: &str = "Temperate deciduous forest";
-    pub(crate) const TROPICAL_RAINFOREST: &str = "Tropical rainforest";
-    pub(crate) const TEMPERATE_RAINFOREST: &str = "Temperate rainforest";
-    pub(crate) const TAIGA: &str = "Taiga";
-    pub(crate) const TUNDRA: &str = "Tundra";
-    pub(crate) const GLACIER: &str = "Glacier";
-    pub(crate) const WETLAND: &str = "Wetland";
+    pub(crate) const OCEAN: &'static str = "Ocean";
+    pub(crate) const HOT_DESERT: &'static str = "Hot desert";
+    pub(crate) const COLD_DESERT: &'static str = "Cold desert";
+    pub(crate) const SAVANNA: &'static str = "Savanna";
+    pub(crate) const GRASSLAND: &'static str = "Grassland";
+    pub(crate) const TROPICAL_SEASONAL_FOREST: &'static str = "Tropical seasonal forest";
+    pub(crate) const TEMPERATE_DECIDUOUS_FOREST: &'static str = "Temperate deciduous forest";
+    pub(crate) const TROPICAL_RAINFOREST: &'static str = "Tropical rainforest";
+    pub(crate) const TEMPERATE_RAINFOREST: &'static str = "Temperate rainforest";
+    pub(crate) const TAIGA: &'static str = "Taiga";
+    pub(crate) const TUNDRA: &'static str = "Tundra";
+    pub(crate) const GLACIER: &'static str = "Glacier";
+    pub(crate) const WETLAND: &'static str = "Wetland";
 
     pub(crate) const DEFAULT_BIOMES: [BiomeDefault; 13] = [ // name, index, habitability, supports_nomadic, supports_hunting
         BiomeDefault { name: Self::OCEAN, habitability: 0, criteria: BiomeCriteria::Ocean, movement_cost: 10, supports_nomadic: false, supports_hunting: false, color: (0x1F, 0x78, 0xB4)},
@@ -103,18 +103,18 @@ impl BiomeSchema {
     ];
 
     //these constants make the default matrix easier to read.
-    pub(crate) const HDT: &str = Self::HOT_DESERT;
-    pub(crate) const CDT: &str = Self::COLD_DESERT;
-    pub(crate) const SAV: &str = Self::SAVANNA;
-    pub(crate) const GRA: &str = Self::GRASSLAND;
-    pub(crate) const TRF: &str = Self::TROPICAL_SEASONAL_FOREST;
-    pub(crate) const TEF: &str = Self::TEMPERATE_DECIDUOUS_FOREST;
-    pub(crate) const TRR: &str = Self::TROPICAL_RAINFOREST;
-    pub(crate) const TER: &str = Self::TEMPERATE_RAINFOREST;
-    pub(crate) const TAI: &str = Self::TAIGA;
-    pub(crate) const TUN: &str = Self::TUNDRA;
+    pub(crate) const HDT: &'static str = Self::HOT_DESERT;
+    pub(crate) const CDT: &'static str = Self::COLD_DESERT;
+    pub(crate) const SAV: &'static str = Self::SAVANNA;
+    pub(crate) const GRA: &'static str = Self::GRASSLAND;
+    pub(crate) const TRF: &'static str = Self::TROPICAL_SEASONAL_FOREST;
+    pub(crate) const TEF: &'static str = Self::TEMPERATE_DECIDUOUS_FOREST;
+    pub(crate) const TRR: &'static str = Self::TROPICAL_RAINFOREST;
+    pub(crate) const TER: &'static str = Self::TEMPERATE_RAINFOREST;
+    pub(crate) const TAI: &'static str = Self::TAIGA;
+    pub(crate) const TUN: &'static str = Self::TUNDRA;
 
-    pub(crate) const DEFAULT_MATRIX: [[&str; 26]; 5] = [
+    pub(crate) const DEFAULT_MATRIX: [[&'static str; 26]; 5] = [
         // hot ↔ cold [>19°C; <-4°C]; dry ↕ wet
         [Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::HDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::CDT, Self::TUN],
         [Self::SAV, Self::SAV, Self::SAV, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::GRA, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN, Self::TUN],
@@ -173,7 +173,7 @@ impl BiomeSchema {
                     for (moist,temp) in list {
                         let (moist,temp) = (*moist,*temp);
                         if matrix[moist][temp].is_empty() {
-                            matrix[moist][temp] = biome.name.clone()
+                            matrix[moist][temp].clone_from(&biome.name)
 
                         } else {
                             return Err(CommandError::DuplicateBiomeMatrixSlot(moist,temp))

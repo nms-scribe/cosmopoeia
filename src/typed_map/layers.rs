@@ -81,11 +81,11 @@ macro_rules! layer {
             impl [<$name Schema>] {
                 // constant field names
                 paste::paste!{
-                    $(pub(crate) const [<FIELD_ $prop:snake:upper>]: &str = stringify!($prop);)*
+                    $(pub(crate) const [<FIELD_ $prop:snake:upper>]: &'static str = stringify!($prop);)*
                 }
 
                 // field definitions
-                const FIELD_DEFS: [(&str,gdal::vector::OGRFieldType::Type); $crate::count_ids!($($prop),*)] = [
+                const FIELD_DEFS: [(&'static str,gdal::vector::OGRFieldType::Type); $crate::count_ids!($($prop),*)] = [
                     $((paste::paste!{Self::[<FIELD_ $prop:snake:upper>]},<$prop_type as $crate::typed_map::fields::TypedField>::STORAGE_TYPE)),*
                 ];
 

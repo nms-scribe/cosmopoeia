@@ -51,7 +51,7 @@ impl LoadTerrainTask for Recipe {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
         progress.start_unknown_endpoint(|| "Loading recipe tasks.");
-        let recipe_data = File::open(&self.source).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
+        let recipe_data = File::open(self.source).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         let reader = BufReader::new(recipe_data);
         let tasks: Vec<Command> = from_json_reader(reader).map_err(|e| CommandError::RecipeFileRead(format!("{e}")))?;
         progress.finish(|| "Recipe tasks loaded.");

@@ -93,23 +93,6 @@ impl Error for CommandError {
 
 }
 
-pub(crate) trait MissingErrorToOption<ValueType> {
-
-    fn missing_to_option(self) -> Result<Option<ValueType>,CommandError>;
-    
-}
-
-impl<OkType> MissingErrorToOption<OkType> for Result<OkType,CommandError> {
-
-    fn missing_to_option(self) -> Result<Option<OkType>,CommandError> {
-        match self {
-            Ok(value) => Ok(Some(value)),
-            Err(CommandError::MissingField(_)) => Ok(None),
-            Err(err) => Err(err)
-        }
-    }
-}
-
 impl Display for CommandError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {

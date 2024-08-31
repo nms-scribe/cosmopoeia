@@ -9,6 +9,7 @@ pub(crate) mod arg_range;
 pub(crate) mod simple_serde;
 pub(crate) mod world_shape;
 
+/// Splits a string given an index from the end of the string.
 pub(crate) fn split_string_from_end(string: &str, char_index_from_end: usize) -> (&str, &str) {
 
     let char_indexes = string.char_indices();
@@ -17,6 +18,16 @@ pub(crate) fn split_string_from_end(string: &str, char_index_from_end: usize) ->
         string.split_at(index.0)
     } else {
         (string,"")
+    }
+
+}
+
+pub(crate) fn remove_n_chars_from_end(string: &mut String, char_index_from_end: usize) {
+
+    let char_indexes = string.char_indices();
+    let mut reversed = char_indexes.rev();
+    if let Some(index) = reversed.nth(char_index_from_end) {
+        string.truncate(index.0)
     }
 
 }

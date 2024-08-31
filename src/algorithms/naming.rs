@@ -23,6 +23,7 @@ use schemars::JsonSchema;
 //use crate::utils::ToTitleCase;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::split_string_from_end;
+use crate::utils::remove_n_chars_from_end;
 use crate::utils::random::RandomIndex;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
@@ -231,7 +232,7 @@ struct Chain {
 impl MarkovGenerator {
 
     // calculate Markov chain for a namesbase
-    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &Vec<String>, progress: &mut NamerLoadObserver<Progress>) -> Result<Chain,CommandError> {
+    fn calculate_chain<Progress: ProgressObserver>(name: &str, array: &[String], progress: &mut NamerLoadObserver<Progress>) -> Result<Chain,CommandError> {
         if array.is_empty() {
             Err(CommandError::EmptyNamerInput(name.to_owned()))
         } else {
@@ -398,7 +399,7 @@ impl MarkovGenerator {
             }
 
             word.push_str(&cur);
-            cur = choices.choose(rng).clone();
+            cur.clone_from(choices.choose(rng));
         }
 
         // parse word to get a final name
@@ -445,7 +446,7 @@ impl MarkovGenerator {
         }
 
         if name.len() < 2 {
-            name = self.seed_words.choose(rng).clone();
+            name.clone_from(self.seed_words.choose(rng));
         }
 
         name
@@ -619,24 +620,26 @@ impl Namer {
 
         if name.ends_with(s1) {
             // remove name last letter if it's same as suffix first letter
-            name = split_string_from_end(&name, 1).0.to_owned();
+            //split_string_from_end(&name, 1).0.to_owned();
+            remove_n_chars_from_end(&mut name, 1);
         }
 
-        let (beginning,ending) = split_string_from_end(&name, 2);
+        let (_,ending) = split_string_from_end(&name, 2);
         if ending.len() > 1 {
             let ending: Vec<char> = ending.chars().collect();
     
             if is_vowel(s1) == is_vowel(ending[0]) && is_vowel(s1) == is_vowel(ending[1]) {
                  // remove name last char if 2 last chars are the same type as suffix's 1st
-                name = beginning.to_owned();
-                name.push(ending[0]);
+                 remove_n_chars_from_end(&mut name, 1);
+                 //name = beginning.to_owned();
+                 //name.push(ending[0]);
             }
     
         }
 
         if name.ends_with(s1) {
             // remove name last letter if it's a suffix first letter (Again)
-            name = split_string_from_end(&name, 1).0.to_owned();
+            remove_n_chars_from_end(&mut name,1); // name = split_string_from_end(&name, 1).0.to_owned();
         }; 
         name + suffix
     }

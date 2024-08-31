@@ -204,7 +204,8 @@ pub(crate) trait Deserializer {
 
     fn expect_signed_integer(&mut self, size: u32) -> Result<i64,CommandError>;
 
-    fn peek_token(&mut self) -> Result<Option<&Token>,CommandError>;
+    // Not used anywhere
+    //fn peek_token(&mut self) -> Result<Option<&Token>,CommandError>;
 
 }
 
@@ -333,6 +334,7 @@ impl Deserializer for Peekable<Tokenizer<'_>> {
         }
     }
 
+    /* This one isn't used anywhere, but here it is if I ever do need something like it
     fn peek_token(&mut self) -> Result<Option<&Token>,CommandError> {
         match self.peek() {
             Some(value) => match value {
@@ -342,16 +344,13 @@ impl Deserializer for Peekable<Tokenizer<'_>> {
             None => Ok(None),
         }
     }
+    */
 
 }
 
 pub(crate) trait Serializer: Sized {
 
     fn write_token(&mut self, token: Token);
-
-    fn serialize_value<Value: Serialize>(&mut self, value: Value) {
-        value.write_value(self)
-    }
 
 }
 

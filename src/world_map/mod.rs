@@ -83,7 +83,7 @@ pub(crate) struct WorldMap {
 
 impl WorldMap {
 
-    const GDAL_DRIVER: &str = "GPKG";
+    const GDAL_DRIVER: &'static str = "GPKG";
 
     fn new(dataset: Dataset/* , path: PathBuf*/) -> Self {
         Self { 

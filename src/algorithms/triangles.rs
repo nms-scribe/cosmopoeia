@@ -41,8 +41,8 @@ impl DelaunayGenerator {
             // FUTURE: Would it be more efficient to have my own algorithm which outputs triangles as they are generated?
             progress.start_unknown_endpoint(|| "Generating triangles.");
             let triangles = match self.world_shape {
-                WorldShape::Cylinder => source.delaunay_triangulation(None)?,
-                WorldShape::Sphere => source.delaunay_triangulation(None)? // TODO: Does this need to change?
+                WorldShape::Cylinder |
+                WorldShape::Sphere => source.delaunay_triangulation(None)? // TODO: Does this need to change for sphere?
                 // TODO: Could replace with algorithm copied from https://docs.rs/geo/latest/geo/algorithm/triangulate_spade/trait.TriangulateSpade.html
                 // and then I can possibly redo that for spherical operations instead.
             };

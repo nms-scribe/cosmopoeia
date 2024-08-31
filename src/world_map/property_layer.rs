@@ -16,8 +16,8 @@ layer!(#[hide_read(true)] Property["properties"]: NoGeometry {
 });
 
 impl PropertySchema {
-    pub(crate) const PROP_ELEVATION_LIMITS: &str = "elevation-limits";
-    pub(crate) const PROP_WORLD_SHAPE: &str = "world-shape";
+    pub(crate) const PROP_ELEVATION_LIMITS: &'static str = "elevation-limits";
+    pub(crate) const PROP_WORLD_SHAPE: &'static str = "world-shape";
 
 }
 

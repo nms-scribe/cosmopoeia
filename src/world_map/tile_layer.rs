@@ -34,7 +34,7 @@ layer!(#[hide_add(true)] #[hide_doc(false)] Tile["tiles"]: Polygon {
     /// latitude of the node point for the tile's voronoi
     #[set(allow(dead_code))] site_y: f64,
     /// calculated area based on shape of world (this may not be the same as the area calculated by GDAL)
-    area: f64,
+    #[set(allow(dead_code))] area: f64,
     /// elevation in meters of the node point for the tile's voronoi
     elevation: f64,
     // NOTE: This field is used in various places which use algorithms ported from AFMG, which depend on a height from 0-100. 
