@@ -180,9 +180,59 @@ impl Curvify {
 }
 
 
+
+subcommand_def!{
+    /// Generates all climate data
+    pub struct All {
+
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
+    
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
+    
+        #[clap(flatten)]
+        pub overwrite_biomes_arg: OverwriteBiomesArg,
+    
+    }
+}
+
+impl Task for All {
+
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+
+
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
+
+        Self::run_with_parameters(&self.overwrite_biomes_arg, &self.bezier_scale_arg, &mut target, progress)
+    
+    }
+}
+
+impl All {
+    fn run_with_parameters<Progress: ProgressObserver>(ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+        target.with_transaction(|transaction| {            
+            Data::run_with_parameters(ovewrite_biomes, transaction, progress)
+
+        })?;
+        let biomes = target.biomes_layer()?.get_matrix(progress)?;
+        target.with_transaction(|transaction| {            
+            Apply::run_with_parameters(transaction, &biomes, progress)?;
+
+            Dissolve::run_with_parameters(transaction, progress)?;
+
+            Curvify::run_with_parameters(bezier_scale, transaction, progress)
+
+        })?;
+
+        target.save(progress)
+    }
+}
+
 command_def!{
     #[command(disable_help_subcommand(true))]
     pub BiomeCommand {
+        All,
         Data,
         Apply,
         Dissolve,
@@ -190,29 +240,13 @@ command_def!{
     }
 }
 
-#[derive(Args)]
-pub struct DefaultArgs {
-
-    #[clap(flatten)]
-    pub target_arg: TargetArg,
-
-    #[clap(flatten)]
-    pub bezier_scale_arg: BezierScaleArg,
-
-    #[clap(flatten)]
-    pub overwrite_biomes_arg: OverwriteBiomesArg,
-}
-
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(args_conflicts_with_subcommands = true)]
     pub struct GenBiome {
 
-        #[clap(flatten)]
-        pub default_args: Option<DefaultArgs>,
-
         #[command(subcommand)]
-        pub command: Option<BiomeCommand>
+        pub command: BiomeCommand
 
     }
 }
@@ -221,17 +255,7 @@ impl Task for GenBiome {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        if let Some(args) = self.default_args {
-            let mut target = WorldMap::edit(&args.target_arg.target)?;
-
-            Self::run_default(&args.overwrite_biomes_arg, &args.bezier_scale_arg, &mut target, progress)
-    
-        } else if let Some(command) = self.command {
-
-            command.run(progress)
-        } else {
-            unreachable!("Command should have been called with one of the arguments")
-        }
+        self.command.run(progress)
 
     }
 }
