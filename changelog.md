@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+* Lowered the water fill cycle limit
+
 ## [0.2.3] - (2024-08-31)
 
 * Fixed problem with importing partial-world heightmaps
