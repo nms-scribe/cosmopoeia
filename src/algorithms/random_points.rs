@@ -57,7 +57,8 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Point,CommandError> {
-        Point::new(self.extent.west + x,self.extent.south + y)
+        let result = Point::new(self.extent.west + x,self.extent.south + y)?;
+        Ok(result)
     }
 
     fn jitter(random: &mut Random, spacing: f64) -> f64 {

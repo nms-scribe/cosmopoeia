@@ -268,9 +268,63 @@ impl Grouping {
 }
 
 
+subcommand_def!{
+    /// generates all water data
+    pub struct All {
+
+        #[clap(flatten)]
+        pub target_arg: TargetArg,
+    
+        #[clap(flatten)]
+        pub bezier_scale_arg: BezierScaleArg,
+    
+        #[clap(flatten)]
+        pub buffer_scale_arg: LakeBufferScaleArg,
+    
+        #[clap(flatten)]
+        pub overwrite_all_water_arg: OverwriteAllWaterArg,
+    
+    }
+}
+
+impl Task for All {
+
+    fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
+
+
+        let mut target = WorldMap::edit(&self.target_arg.target)?;
+
+        target.with_transaction(|transaction| {
+            Self::run_with_parameters(&self.bezier_scale_arg,&self.buffer_scale_arg,&self.overwrite_all_water_arg.overwrite_coastline(),&self.overwrite_all_water_arg.overwrite_ocean(),&self.overwrite_all_water_arg.overwrite_lakes(),&self.overwrite_all_water_arg.overwrite_rivers(),transaction,progress)
+        })?;
+
+        target.save(progress)
+
+    }
+}
+
+impl All {
+    fn run_with_parameters<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_coastline: &OverwriteCoastlineArg, overwrite_ocean: &OverwriteOceanArg, overwrite_lakes: &OverwriteLakesArg, overwrite_rivers: &OverwriteRiversArg, transaction: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(), CommandError> {
+        Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, transaction, progress)?;
+
+        let water_flow_result = Flow::run_with_parameters(transaction, progress)?;
+
+        Lakes::run_with_parameters(water_flow_result, bezier_scale, lake_buffer_scale, overwrite_lakes, transaction, progress)?;
+
+        Rivers::run_with_parameters(bezier_scale, overwrite_rivers, progress, transaction)?;
+
+        ShoreDistance::run_with_parameters(transaction, progress)?;
+
+        Grouping::run_with_parameters(transaction, progress)
+    
+    }
+    
+}
+
 command_def!{
     #[command(disable_help_subcommand(true))]
     pub WaterCommand {
+        All,
         Coastline,
         Flow,
         Lakes,
@@ -281,33 +335,13 @@ command_def!{
 }
 
 
-#[derive(Args)]
-pub struct DefaultArgs {
-
-    #[clap(flatten)]
-    pub target_arg: TargetArg,
-
-    #[clap(flatten)]
-    pub bezier_scale_arg: BezierScaleArg,
-
-    #[clap(flatten)]
-    pub buffer_scale_arg: LakeBufferScaleArg,
-
-    #[clap(flatten)]
-    pub overwrite_all_water_arg: OverwriteAllWaterArg,
-
-}
-
 subcommand_def!{
     /// Generates precipitation data (requires wind and temperatures)
     #[command(args_conflicts_with_subcommands = true)]
     pub struct GenWater {
 
-        #[clap(flatten)]
-        pub default_args: Option<DefaultArgs>,
-
         #[command(subcommand)]
-        pub command: Option<WaterCommand>
+        pub command: WaterCommand
 
 
     }
@@ -317,25 +351,7 @@ impl Task for GenWater {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        if let Some(args) = self.default_args {
-            let mut target = WorldMap::edit(&args.target_arg.target)?;
-
-            Self::run_default(&args.bezier_scale_arg, 
-                &args.buffer_scale_arg, 
-                &args.overwrite_all_water_arg.overwrite_coastline(), 
-                &args.overwrite_all_water_arg.overwrite_ocean(), 
-                &args.overwrite_all_water_arg.overwrite_lakes(), 
-                &args.overwrite_all_water_arg.overwrite_rivers(), 
-                &mut target, 
-                progress)
-    
-    
-        } else if let Some(command) = self.command {
-
-            command.run(progress)
-        } else {
-            unreachable!("Command should have been called with one of the arguments")
-        }
+        self.command.run(progress)
 
     }
 }
@@ -343,18 +359,9 @@ impl Task for GenWater {
 impl GenWater {
     pub(crate) fn run_default<Progress: ProgressObserver>(bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_coastline: &OverwriteCoastlineArg, overwrite_ocean: &OverwriteOceanArg, overwrite_lakes: &OverwriteLakesArg, overwrite_rivers: &OverwriteRiversArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|transaction| {
+
+            All::run_with_parameters(bezier_scale, lake_buffer_scale, overwrite_coastline, overwrite_ocean, overwrite_lakes, overwrite_rivers, transaction, progress)
         
-            Coastline::run_with_parameters(bezier_scale, overwrite_coastline, overwrite_ocean, transaction, progress)?;
-
-            let water_flow_result = Flow::run_with_parameters(transaction, progress)?;
-
-            Lakes::run_with_parameters(water_flow_result, bezier_scale, lake_buffer_scale, overwrite_lakes, transaction, progress)?;
-
-            Rivers::run_with_parameters(bezier_scale, overwrite_rivers, progress, transaction)?;
-
-            ShoreDistance::run_with_parameters(transaction, progress)?;
-
-            Grouping::run_with_parameters(transaction, progress)
         
         })?;
         

@@ -11,7 +11,7 @@ use crate::utils::edge::Edge;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::world_shape::WorldShape;
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub(crate) struct Extent {
     pub(crate) height: f64,
     pub(crate) width: f64,

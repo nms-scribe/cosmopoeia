@@ -42,7 +42,7 @@ pub(crate) trait GDALGeometryWrapper: TryFrom<GDALGeometry,Error=CommandError> +
 macro_rules! non_collection_geometry {
     ($struct: ident, $geo_type: ident) => {
 
-        #[derive(Clone)]
+        #[derive(Clone,Debug)]
         pub(crate) struct $struct {
             inner: GDALGeometry,
         }
