@@ -63,7 +63,7 @@ pub(crate) fn generate_water_flow<Progress: ProgressObserver>(target: &mut World
 
         let (water_accumulation,flow_to) = if let Some(lowest_elevation) = lowest_elevation {
 
-            if &lowest_elevation < elevation {
+            if &lowest_elevation <= elevation {
                 let neighbor_flow = water_flow/lowest.len() as f64;
                 //println!("flowing {} to {} neighbors",neighbor_flow,lowest.len());
                 for neighbor in &lowest {
