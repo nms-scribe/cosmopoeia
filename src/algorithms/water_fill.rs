@@ -114,17 +114,38 @@ enum WaterFillTask {
 // this one is quite tight with generate_water_flow, it even shares some pre-initialized data.
 pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut WorldMapTransaction, water_flow_result: WaterFlowResult, lake_bezier_scale: &BezierScaleArg, lake_buffer_scale: &LakeBufferScaleArg, overwrite_layer: &OverwriteLakesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
+
     let world_shape = target.edit_properties_layer()?.get_world_shape()?;
 
     let mut tiles_layer = target.edit_tile_layer()?;
+
+    // FUTURE: This is actually a kludge to get around a bug in the algorithm that I haven't found yet.
+    // Every once in a while, water will fill a lake, the lake's level will rise above the neighbors, causing
+    // the water to be pushed back into the neighbor that sent the water to the lake originally. The thing
+    // is, I'm uncomfortable with my algorithm as it is and whenever I look at it I consider rewriting it.
+    // So, I don't want to spend a lot of time trying to figure out where the exact problem is, so, instead,
+    // this will keep the algorithm out of that cycle.
+    let max_cycles_per_tile = tiles_layer.feature_count() * 100;
 
     let mut tile_queue = water_flow_result.lake_queue.watch_queue(progress,"Filling lakes.","Lakes filled.");
 
     let mut tile_map = water_flow_result.tile_map;
     let mut next_lake_id = 1..;
     let mut lake_map = HashMap::new();
+    let mut cycle_map = HashMap::new();
 
     while let Some((tile_fid,tile_accumulation)) = tile_queue.pop() {
+
+        match cycle_map.get_mut(&tile_fid) {
+            Some(count) => if *count >= max_cycles_per_tile {
+                break;
+            } else {
+                *count += 1;
+            },
+            None => {
+                _ = cycle_map.insert(tile_fid.clone(), 1);
+            },
+        }
 
         let tile = tile_map.try_get(&tile_fid)?; 
         // we don't bother with accumulation in ocean.
