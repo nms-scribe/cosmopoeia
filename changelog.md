@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+* Fixed problem with importing partial-world heightmaps
+* Deferred fix to water fill cycle
+* Added all commands to gen-water and gen-biome.
+
 ## [0.2.2] - (2024-08-31)
 
 * Updated code to compile in rust 1.78.0 without warnings

@@ -75,7 +75,9 @@ This document contains the help content for the `cosmopoeia` command-line progra
 * [`cosmopoeia gen-climate winds`↴](#cosmopoeia-gen-climate-winds)
 * [`cosmopoeia gen-climate precipitation`↴](#cosmopoeia-gen-climate-precipitation)
 * [`cosmopoeia gen-water`↴](#cosmopoeia-gen-water)
+* [`cosmopoeia gen-water all`↴](#cosmopoeia-gen-water-all)
 * [`cosmopoeia gen-biome`↴](#cosmopoeia-gen-biome)
+* [`cosmopoeia gen-biome all`↴](#cosmopoeia-gen-biome-all)
 * [`cosmopoeia gen-people`↴](#cosmopoeia-gen-people)
 * [`cosmopoeia gen-towns`↴](#cosmopoeia-gen-towns)
 * [`cosmopoeia gen-nations`↴](#cosmopoeia-gen-nations)
@@ -1208,10 +1210,20 @@ Generates precipitation data (requires wind and temperatures)
 
 Generates water features for a world
 
-**Usage:** `cosmopoeia gen-water [OPTIONS] <TARGET>`
+**Usage:** `cosmopoeia gen-water
+       gen-water <COMMAND>`
 
 ###### **Subcommands:**
 
+* `all` — generates all water data
+
+
+
+## `cosmopoeia gen-water all`
+
+generates all water data
+
+**Usage:** `cosmopoeia gen-water all [OPTIONS] <TARGET>`
 
 ###### **Arguments:**
 
@@ -1237,10 +1249,20 @@ Generates water features for a world
 
 Generates biomes for a world
 
-**Usage:** `cosmopoeia gen-biome [OPTIONS] <TARGET>`
+**Usage:** `cosmopoeia gen-biome
+       gen-biome <COMMAND>`
 
 ###### **Subcommands:**
 
+* `all` — Generates all climate data
+
+
+
+## `cosmopoeia gen-biome all`
+
+Generates all climate data
+
+**Usage:** `cosmopoeia gen-biome all [OPTIONS] <TARGET>`
 
 ###### **Arguments:**
 
