@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+## [0.2.2] - (2024-08-31)
+
 * Updated code to compile in rust 1.78.0 without warnings
 * Updated code to use gdal crate 0.17.0
 * Updated to work with gdal 3.9.0
@@ -23,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial public release.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/assert-rs/predicates-rs/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/nms-scribe/cosmopoeia/v0.2.2...HEAD
+[0.2.2]: https://github.com/assert-rs/predicates-rs/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/assert-rs/predicates-rs/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nms-scribe/cosmopoeia/v0.1.2...v0.2.0
