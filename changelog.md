@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+* Updated code to compile in rust 1.78.0 without warnings
+* Updated code to use gdal crate 0.17.0
+* Updated to work with gdal 3.9.0
+
 ## [0.2.1] - (2023-12-28)
 
 * Added `--world-shape` argument to terrain generation commands. Default value is `cylinder` which defines traditional behavior.
