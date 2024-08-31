@@ -72,8 +72,8 @@ fn test_database_lock_issue() {
     use gdal::Dataset;
     use gdal::GdalOpenFlags;
     use gdal::DriverManager;
-    use gdal::LayerOptions;
-    use gdal_sys::OGRwkbGeometryType;
+    use gdal::vector::LayerOptions;
+    use gdal::vector::OGRwkbGeometryType;
     use gdal::vector::LayerAccess;
     use gdal::vector::Feature;
     use gdal::spatial_ref::SpatialRef;

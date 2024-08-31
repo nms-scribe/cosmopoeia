@@ -6,7 +6,6 @@ use gdal::vector::OGRFieldType;
 use prisma::Rgb;
 
 use crate::errors::CommandError;
-use crate::gdal_fixes::FeatureFix;
 use crate::impl_documentation_for_tagged_enum;
 use crate::impl_simple_serde_tagged_enum;
 use crate::utils::edge::Edge;
@@ -29,7 +28,7 @@ impl TypedField for Edge {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -47,7 +46,7 @@ impl TypedField for Option<Edge> {
         feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(feature.set_field_string(field_name, &value.write_to_string())?)
         } else {
@@ -102,7 +101,7 @@ impl TypedField for Neighbor {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -121,7 +120,7 @@ impl TypedField for Option<Neighbor> {
         feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(value.set_field(feature,field_name)?)
         } else {
@@ -148,7 +147,7 @@ impl TypedField for Vec<Neighbor> {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -212,7 +211,7 @@ impl TypedField for Vec<NeighborAndDirection> {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -290,7 +289,7 @@ impl TypedField for Deg<f64> {
         Ok(Self(f64::get_field(feature,field_name,field_id)?))
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         self.0.set_field(feature, field_name)
     }
 
@@ -326,7 +325,7 @@ impl TypedField for Rgb<u8> {
     }
 
     
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.into_hex_string())?)
     }
 
@@ -383,7 +382,7 @@ impl TypedField for Grouping {
     }
 
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -460,7 +459,7 @@ impl TypedField for RiverSegmentFrom {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -535,7 +534,7 @@ impl TypedField for RiverSegmentTo {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -625,7 +624,7 @@ impl TypedField for LakeType {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -707,7 +706,7 @@ impl TypedField for BiomeCriteria {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -763,7 +762,7 @@ impl TypedField for CultureType {
         Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 

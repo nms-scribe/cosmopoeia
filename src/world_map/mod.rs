@@ -5,7 +5,7 @@ use gdal::Dataset;
 use gdal::DatasetOptions;
 use gdal::DriverManager;
 use gdal::GdalOpenFlags;
-use gdal::Transaction;
+use gdal::vector::Transaction;
 
 use crate::commands::OverwriteBiomesArg;
 use crate::commands::OverwriteCoastlineArg;

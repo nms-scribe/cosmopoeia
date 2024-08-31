@@ -1,6 +1,11 @@
+// FUTURE: This module was originall used to fake some implementations that were incomplete in the gdal crate. Those
+// have now been implemented, so I don't need this anymore. But... just in case I need some more stuff later, this
+// remains here.
+
+
+/*
 use gdal::errors::GdalError;
 use gdal::vector::Feature;
-use gdal::vector::Geometry;
 use std::ffi::CString;
 
 pub(crate) trait FeatureFix {
@@ -25,34 +30,4 @@ impl FeatureFix for Feature<'_> {
         Ok(())
     }
 }
-
-pub(crate) trait GeometryFix: Sized {
-    fn difference(&self, other: &Self) -> Option<Self>;
-}
-
-impl GeometryFix for Geometry {
-    // FUTURE: Remove this once it's implemented in gdal itself.
-    fn difference(&self, other: &Self) -> Option<Self>  {
-        if !self.has_gdal_ptr() {
-            return None;
-        }
-        if !other.has_gdal_ptr() {
-            return None;
-        }
-        unsafe {
-            let ogr_geom = gdal_sys::OGR_G_Difference(self.c_geometry(), other.c_geometry());
-            if ogr_geom.is_null() {
-                return None;
-            }
-            // Unfortunately, with_c_geometry is private, so I can't use it.
-            let geometry = Self::lazy_feature_geometry();
-            geometry.set_c_geometry(ogr_geom);
-            // DANGER!: I can't set owned = true on the thing, there's no way.
-            // However, I *think* cloning will take care of that. Because the original
-            // value won't dereference the API handle, as it's not owned, but clone
-            // will set it to owned.
-            #[allow(clippy::redundant_clone)] // this clone *must* be called or the code breaks
-            Some(geometry.clone())
-        }
-    }
-}
+*/

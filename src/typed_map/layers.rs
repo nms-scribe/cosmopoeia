@@ -1,5 +1,5 @@
 use gdal::Dataset;
-use gdal::LayerOptions;
+use gdal::vector::LayerOptions;
 use gdal::spatial_ref::SpatialRef;
 use gdal::vector::FieldValue;
 use gdal::vector::Layer;
@@ -7,7 +7,6 @@ use gdal::vector::LayerAccess;
 use gdal::vector::OGRwkbGeometryType;
 
 use crate::errors::CommandError;
-use crate::gdal_fixes::FeatureFix;
 use crate::geometry::GDALGeometryWrapper;
 use crate::typed_map::fields::IdRef;
 use crate::typed_map::features::TypedFeature;
@@ -149,7 +148,7 @@ macro_rules! layer {
                     paste::paste!{
                         $(#[doc = $field_doc_attr])?
                         $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: &$prop_type) -> Result<(),CommandError> {
-                            $crate::typed_map::fields::TypedField::set_field(value,&self.feature,[<$name Schema>]::[<FIELD_ $prop:snake:upper>])
+                            $crate::typed_map::fields::TypedField::set_field(value,&mut self.feature,[<$name Schema>]::[<FIELD_ $prop:snake:upper>])
                         }            
     
                     }
@@ -316,7 +315,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         // This function is used for lookup tables, like biomes.
 
         // I had to dig into the source to get this stuff...
-        let feature = gdal::vector::Feature::new(self.layer.defn())?;
+        let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
                 feature.set_field(field, value)?;

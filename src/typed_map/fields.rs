@@ -9,7 +9,6 @@ use gdal::vector::OGRFieldType;
 use ordered_float::NotNan;
 
 use crate::errors::CommandError;
-use crate::gdal_fixes::FeatureFix;
 use crate::utils::simple_serde::Deserialize;
 use crate::utils::simple_serde::Serialize;
 use crate::utils::simple_serde::Deserializer;
@@ -41,7 +40,7 @@ pub(crate) trait TypedField: Sized + DocumentedFieldType {
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError>;
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError>;
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError>;
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError>;
 }
@@ -174,7 +173,7 @@ impl TypedField for IdRef {
     }
 
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, &self.write_to_string())?)
     }
 
@@ -192,7 +191,7 @@ impl TypedField for Option<IdRef> {
         feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(value.set_field(feature,field_name)?)
         } else {
@@ -231,7 +230,7 @@ impl TypedField for String {
     }
 
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_string(field_name, self)?)
     }
 
@@ -257,7 +256,7 @@ impl TypedField for Option<String> {
 
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(value.set_field(feature,field_name)?)
         } else {
@@ -328,7 +327,7 @@ impl TypedField for bool {
         Ok(Self::get_required(feature.field_as_integer_by_name(field_name)?, field_id)? != 0)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_integer(field_name, (*self).into())?)
 
     }
@@ -363,7 +362,7 @@ impl TypedField for f64 {
         Self::get_required(feature.field_as_double_by_name(field_name)?, field_id)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         // The NotNan thing verifies that the value is not NaN, which would be treated as null.
         // This can help me catch math problems early...
         Ok(feature.set_field_double(field_name, NotNan::try_from(*self)?.into_inner())?)
@@ -397,7 +396,7 @@ impl TypedField for i32 {
         Self::get_required(feature.field_as_integer_by_name(field_name)?, field_id)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         Ok(feature.set_field_integer(field_name,*self)?)
     }
 
@@ -418,7 +417,7 @@ impl TypedField for Option<i32> {
         Ok(feature.field_as_integer_by_name(field_name)?)
     }
 
-    fn set_field(&self, feature: &Feature, field_name: &str) -> Result<(),CommandError> {
+    fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(feature.set_field_integer(field_name, *value)?)
         } else {

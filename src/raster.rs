@@ -78,8 +78,9 @@ impl<DataType: GdalType> RasterBandBuffer<DataType> {
     pub(crate) fn get_value(&self, x: f64, y: f64) -> Option<&DataType> {
         if y.is_sign_positive() && x.is_sign_positive() {
             let idx = ((y.floor() as usize) * self.width) + (x.floor() as usize);
-            if idx < self.buffer.data.len() {
-                Some(&self.buffer.data[idx])
+            let data = self.buffer.data();
+            if idx < data.len() {
+                Some(&data[idx])
             } else {
                 None
             }
@@ -113,7 +114,7 @@ impl RasterMap {
         Ok(Self::new(Dataset::open(path)?))
     }
 
-    pub(crate) fn read_band<DataType: GdalType + Copy>(&self,index: isize) -> Result<RasterBandBuffer<DataType>,CommandError> {
+    pub(crate) fn read_band<DataType: GdalType + Copy>(&self,index: usize) -> Result<RasterBandBuffer<DataType>,CommandError> {
         let band = if self.dataset.raster_count() > (index - 1) {
             self.dataset.rasterband(index)? // 1-based array
         } else {
@@ -144,7 +145,7 @@ impl RasterMap {
 
     }
 
-    pub(crate) fn compute_min_max(&self, index: isize, is_approx_ok: bool) -> Result<ElevationLimits,CommandError> {
+    pub(crate) fn compute_min_max(&self, index: usize, is_approx_ok: bool) -> Result<ElevationLimits,CommandError> {
         let band = if self.dataset.raster_count() > (index - 1) {
             self.dataset.rasterband(index)? // 1-based array
         } else {

@@ -2,7 +2,6 @@ use gdal::vector::Geometry as GDALGeometry;
 use gdal::vector::OGRwkbGeometryType;
 
 use crate::errors::CommandError;
-use crate::gdal_fixes::GeometryFix;
 use geo::ChamberlainDuquetteArea;
 use crate::algorithms::beziers::bezierify_points;
 use crate::utils::coordinates::Coordinates;
