@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Lowered the water fill cycle limit
 * Allow water flow across flat tiles
+* Allow override of glacier and wetland biome criteria
 
 ## [0.2.3] - (2024-08-31)
 

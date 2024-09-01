@@ -666,8 +666,8 @@ impl TryFrom<String> for LakeType {
 #[derive(Clone,PartialEq,Debug)]
 pub(crate) enum BiomeCriteria {
     Matrix(Vec<(usize,usize)>), // moisture band, temperature band
-    Wetland,
-    Glacier,
+    Wetland(f64), // waterflow above which climate is considered wetland
+    Glacier(f64), // temperature below which climate is considered glacier
     Ocean
 }
 
@@ -688,13 +688,13 @@ impl_documentation_for_tagged_enum!{
     /// Criteria for how the biome is to be mapped to the world based on generated climate data.
     BiomeCriteria {
         /// This biome should be used for glacier -- only one is allowed
-        Glacier,
+        Glacier(temp: f64),
         /// The biome should be placed in the following locations in the moisture and temperature matrix -- coordinates must not be used for another biome
         Matrix(list: Vec<(usize,usize)>),
         /// The biome should be used for ocean -- only one is allowed
         Ocean,
         /// The biome should be used for wetland -- only one is allowed
-        Wetland,
+        Wetland(water_flow: f64),
     }
 }
 
@@ -720,10 +720,10 @@ impl TypedField for BiomeCriteria {
 
 impl_simple_serde_tagged_enum!{
     BiomeCriteria {
-        Glacier,
+        Glacier(temp: f64),
         Matrix(list: Vec<(usize,usize)>),
         Ocean,
-        Wetland,
+        Wetland(water_flow: f64),
     }
 }
 

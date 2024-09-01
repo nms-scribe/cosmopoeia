@@ -1273,6 +1273,8 @@ Generates all climate data
 * `--bezier-scale <BEZIER_SCALE>` — This number is used for generating points to make curvy lines. The higher the number, the smoother the curves
 
   Default value: `100`
+* `--max-glacier-temp <MAX_GLACIER_TEMP>` — A temperature at and below which glacier biomes are applied, default is -5
+* `--min-wetland-flow <MIN_WETLAND_FLOW>` — A number at and above which waterflow that wetlands are applied, default is 400
 * `--overwrite-biomes` — If true and the [<$layer>] layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists
 
 
@@ -1478,6 +1480,8 @@ Creates a world map, generates natural features, and populates it with nations a
 * `--river-threshold <RIVER_THRESHOLD>` — A waterflow threshold above which the tile will count as a river
 
   Default value: `10`
+* `--max-glacier-temp <MAX_GLACIER_TEMP>` — A temperature at and below which glacier biomes are applied, default is -5
+* `--min-wetland-flow <MIN_WETLAND_FLOW>` — A number at and above which waterflow that wetlands are applied, default is 400
 * `--size-variance <SIZE_VARIANCE>` — A number, clamped to 0-10, which controls how much cultures can vary in size
 
   Default value: `1`

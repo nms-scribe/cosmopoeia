@@ -36,6 +36,7 @@ use crate::commands::CulturesGenArg;
 use crate::commands::SubnationPercentArg;
 use crate::commands::TownCountsArg;
 use crate::commands::LakeBufferScaleArg;
+use crate::commands::OverrideBiomeCriteriaArg;
 use crate::utils::random::random_number_generator;
 
 
@@ -65,6 +66,9 @@ pub struct PrimitiveArgs {
 
     #[clap(flatten)]
     pub river_threshold_arg: RiverThresholdArg,
+
+    #[clap(flatten)]
+    pub override_biome_criteria_arg: OverrideBiomeCriteriaArg,
 
     #[clap(flatten)]
     pub size_variance_arg: SizeVarianceArg,
@@ -137,7 +141,7 @@ impl BigBang {
 
         GenWater::run_default(&primitive_args.bezier_scale_arg, &primitive_args.lake_buffer_scale_arg, &primitive_args.overwrite_all_arg.overwrite_coastline(), &primitive_args.overwrite_all_arg.overwrite_ocean(), &primitive_args.overwrite_all_arg.overwrite_lakes(), &primitive_args.overwrite_all_arg.overwrite_rivers(), &mut target, progress)?;
 
-        GenBiome::run_default(&primitive_args.overwrite_all_arg.overwrite_biomes(), &primitive_args.bezier_scale_arg, &mut target, progress)?;
+        GenBiome::run_default(&primitive_args.override_biome_criteria_arg,&primitive_args.overwrite_all_arg.overwrite_biomes(), &primitive_args.bezier_scale_arg, &mut target, progress)?;
 
         // The 'namer_set' here is not loaded, it's only used to verify that a namer exists for a culture while creating. Just to be clear, I'm not loading the namers twice, they are only loaded in `get_lookup_and_namers` below.
         GenPeople::run_default(&primitive_args.river_threshold_arg, cultures, namers, &primitive_args.size_variance_arg, &primitive_args.overwrite_all_arg.overwrite_cultures(), &primitive_args.expansion_factor_arg, &primitive_args.bezier_scale_arg, &mut target, random, progress)?;

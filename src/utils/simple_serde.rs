@@ -737,7 +737,7 @@ mod test {
 
     #[test]
     fn test_serde_biome_criteria() {
-        test_serializing(&BiomeCriteria::Glacier, "Glacier");
+        test_serializing(&BiomeCriteria::Glacier(-4.0), "Glacier(-4)");
         test_serializing(&BiomeCriteria::Matrix(vec![(23,24),(12,20),(13,4)]), "Matrix([(23,24),(12,20),(13,4)])")
     }
 

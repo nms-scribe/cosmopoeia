@@ -331,6 +331,20 @@ fn validate_size_variance(value: &str) -> Result<f64,String> {
 }
 
 #[derive(Args)]
+pub struct OverrideBiomeCriteriaArg {
+
+    #[arg(long,allow_negative_numbers=true,)]
+    /// A temperature at and below which glacier biomes are applied, default is -5.
+    pub max_glacier_temp: Option<f64>,
+
+    #[arg(long)]
+    /// A number at and above which waterflow that wetlands are applied, default is 400.
+    pub min_wetland_flow: Option<f64>
+
+
+}
+
+#[derive(Args)]
 pub struct SizeVarianceArg {
 
     #[arg(long,default_value("1"),value_parser(validate_size_variance))]

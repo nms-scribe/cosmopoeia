@@ -12,17 +12,19 @@ use crate::world_map::fields::Grouping;
 use crate::world_map::tile_layer::TileSchema;
 use crate::world_map::tile_layer::TileFeature;
 use crate::commands::OverwriteBiomesArg;
+use crate::commands::OverrideBiomeCriteriaArg;
 use crate::typed_map::fields::IdRef;
 
-pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteBiomesArg, progress: &mut Progress) -> Result<(),CommandError> {
+pub(crate) fn fill_biome_defaults<Progress: ProgressObserver>(target: &mut WorldMapTransaction, override_criteria: &OverrideBiomeCriteriaArg, overwrite_layer: &OverwriteBiomesArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let mut biomes = target.create_biomes_layer(overwrite_layer)?;
 
-    let default_biomes = BiomeSchema::get_default_biomes();
+    let default_biomes = BiomeSchema::get_default_biomes(override_criteria);
 
     progress.start_known_endpoint(|| ("Writing biomes.",default_biomes.len()));
 
     for data in &default_biomes {
+
         _ = biomes.add_biome(data)?;
     }
 
@@ -55,13 +57,13 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
         let biome = if tile.grouping.is_ocean() {
             biomes.ocean.clone()
-        } else if tile.temperature < -5.0 {
-            biomes.glacier.clone()
+        } else if tile.temperature < biomes.glacier.1 {
+            biomes.glacier.0.clone()
         } else {
             // is it a wetland?
-            if (tile.water_flow > 400.0) || 
+            if (tile.water_flow > biomes.wetland.1) || 
                matches!(tile.lake_id.as_ref().map(|id| lake_map.try_get(id).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
-                biomes.wetland.clone()
+                biomes.wetland.0.clone()
             } else {
                 // The original calculation favored deserts too much
                 //let moisture_band = ((tile.precipitation/5.0).floor() as usize).min(4); // 0-4

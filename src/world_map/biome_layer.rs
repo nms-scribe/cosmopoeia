@@ -15,6 +15,7 @@ use crate::typed_map::entities::NamedEntity;
 use crate::typed_map::features::NamedFeature;
 use crate::typed_map::features::TypedFeature;
 use crate::typed_map::features::TypedFeatureIterator;
+use crate::commands::OverrideBiomeCriteriaArg;
 
 pub(crate) struct BiomeDefault {
     pub(crate) name: &'static str,
@@ -29,8 +30,8 @@ pub(crate) struct BiomeDefault {
 pub(crate) struct BiomeMatrix {
     pub(crate) matrix: [[String; 26]; 5],
     pub(crate) ocean: String,
-    pub(crate) glacier: String,
-    pub(crate) wetland: String
+    pub(crate) glacier: (String,f64),
+    pub(crate) wetland: (String,f64)
 }
 
 layer!(Biome["biomes"]: MultiPolygon {
@@ -42,6 +43,7 @@ layer!(Biome["biomes"]: MultiPolygon {
     #[set(allow(dead_code))] supports_hunting: bool,
     #[set(allow(dead_code))] color: Rgb<u8>,
 });
+
 
 impl Entity<BiomeSchema> for NewBiome {
 
@@ -98,8 +100,8 @@ impl BiomeSchema {
         BiomeDefault { name: Self::TEMPERATE_RAINFOREST, habitability: 90, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 90, supports_nomadic: false, supports_hunting: true, color: (0x40, 0x9C, 0x43)},
         BiomeDefault { name: Self::TAIGA, habitability: 12, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 200, supports_nomadic: false, supports_hunting: true, color: (0x4B, 0x6B, 0x32)},
         BiomeDefault { name: Self::TUNDRA, habitability: 4, criteria: BiomeCriteria::Matrix(vec![]), movement_cost: 1000, supports_nomadic: false, supports_hunting: true, color: (0x96, 0x78, 0x4B)},
-        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier, movement_cost: 5000, supports_nomadic: false, supports_hunting: false, color: (0xD5, 0xE7, 0xEB)},
-        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland, movement_cost: 150, supports_nomadic: false, supports_hunting: true, color: (0x0B, 0x91, 0x31)},
+        BiomeDefault { name: Self::GLACIER, habitability: 0, criteria: BiomeCriteria::Glacier(-5.0), movement_cost: 5000, supports_nomadic: false, supports_hunting: false, color: (0xD5, 0xE7, 0xEB)},
+        BiomeDefault { name: Self::WETLAND, habitability: 12, criteria: BiomeCriteria::Wetland(400.0), movement_cost: 150, supports_nomadic: false, supports_hunting: true, color: (0x0B, 0x91, 0x31)},
     ];
 
     //these constants make the default matrix easier to read.
@@ -123,7 +125,7 @@ impl BiomeSchema {
         [Self::TRR, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TER, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TAI, Self::TUN, Self::TUN]
     ];
 
-    pub(crate) fn get_default_biomes() -> Vec<NewBiome> {
+    pub(crate) fn get_default_biomes(override_criteria: &OverrideBiomeCriteriaArg) -> Vec<NewBiome> {
         let mut matrix_criteria = HashMap::new();
         // map the matrix numbers to biome names
         for (moisture,row) in Self::DEFAULT_MATRIX.iter().enumerate() {
@@ -140,10 +142,25 @@ impl BiomeSchema {
 
         // now insert the matrix numbers into the output biomes criteria fields and return the biome entities.
         Self::DEFAULT_BIOMES.iter().map(|default| {
-            let criteria = if let BiomeCriteria::Matrix(_) = default.criteria {
-                BiomeCriteria::Matrix(matrix_criteria.get(&default.name).expect("Someone messed up the default biome constants.").clone())
-            } else {
-                default.criteria.clone()
+            let criteria = match default.criteria {
+                BiomeCriteria::Matrix(_) => {
+                    BiomeCriteria::Matrix(matrix_criteria.get(&default.name).expect("Someone messed up the default biome constants.").clone())
+                },
+                BiomeCriteria::Glacier(_) => {
+                    if let Some(override_temp) = override_criteria.max_glacier_temp {
+                        BiomeCriteria::Glacier(override_temp)
+                    } else {
+                        default.criteria.clone()
+                    }
+                },
+                BiomeCriteria::Wetland(_) => {
+                    if let Some(override_flow) = override_criteria.min_wetland_flow {
+                        BiomeCriteria::Wetland(override_flow)
+                    } else {
+                        default.criteria.clone()
+                    }
+                },
+                _ => default.criteria.clone(),
             };
             NewBiome {
                 name: (*default.name).to_owned(),
@@ -180,15 +197,15 @@ impl BiomeSchema {
                         }
                     }
                 },
-                BiomeCriteria::Wetland => if wetland.is_some() {
+                BiomeCriteria::Wetland(waterflow) => if wetland.is_some() {
                     return Err(CommandError::DuplicateWetlandBiome)
                 } else {
-                    wetland = Some(biome.name.clone())
+                    wetland = Some((biome.name.clone(),*waterflow))
                 },
-                BiomeCriteria::Glacier => if glacier.is_some() {
+                BiomeCriteria::Glacier(temperature) => if glacier.is_some() {
                     return Err(CommandError::DuplicateGlacierBiome)
                 } else {
-                    glacier = Some(biome.name.clone())
+                    glacier = Some((biome.name.clone(),*temperature))
                 },
                 BiomeCriteria::Ocean => if ocean.is_some() {
                     return Err(CommandError::DuplicateOceanBiome)

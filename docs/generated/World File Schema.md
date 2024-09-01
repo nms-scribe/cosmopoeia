@@ -461,7 +461,7 @@ A real number from 0 to 360.
 
 ### BiomeCriteria
 **storage type**: String
-**syntax**: `"Glacier" | "Matrix" (List of Unsigned Integer Pair) | "Ocean" | "Wetland"`
+**syntax**: `"Glacier" (Real) | "Matrix" (List of Unsigned Integer Pair) | "Ocean" | "Wetland" (Real)`
 
 Criteria for how the biome is to be mapped to the world based on generated climate data.
 * Glacier: This biome should be used for glacier -- only one is allowed

@@ -17,6 +17,7 @@ use crate::world_map::WorldMapTransaction;
 use crate::world_map::biome_layer::BiomeMatrix;
 use crate::commands::OverwriteBiomesArg;
 use crate::commands::BezierScaleArg;
+use crate::commands::OverrideBiomeCriteriaArg;
 
 subcommand_def!{
     /// Creates default biome layer
@@ -25,6 +26,9 @@ subcommand_def!{
 
         #[clap(flatten)]
         pub target_arg: TargetArg,
+
+        #[clap(flatten)]
+        pub override_criteria_arg: OverrideBiomeCriteriaArg,
 
 
         #[clap(flatten)]
@@ -42,7 +46,7 @@ impl Task for Data {
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.overwrite_biomes_arg, transaction, progress)
+            Self::run_with_parameters(&self.override_criteria_arg, &self.overwrite_biomes_arg, transaction, progress)
 
         })?;
 
@@ -52,11 +56,11 @@ impl Task for Data {
 
 impl Data {
 
-    fn run_with_parameters<Progress: ProgressObserver>(overwrite: &OverwriteBiomesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(override_criteria: &OverrideBiomeCriteriaArg, overwrite: &OverwriteBiomesArg, target: &mut WorldMapTransaction<'_>, progress: &mut Progress) -> Result<(), CommandError> {
 
         progress.announce("Filling biome defaults");
 
-        fill_biome_defaults(target, overwrite, progress)
+        fill_biome_defaults(target, override_criteria, overwrite, progress)
     }
 }
 
@@ -192,6 +196,9 @@ subcommand_def!{
         pub bezier_scale_arg: BezierScaleArg,
     
         #[clap(flatten)]
+        pub override_criteria_arg: OverrideBiomeCriteriaArg,
+
+        #[clap(flatten)]
         pub overwrite_biomes_arg: OverwriteBiomesArg,
     
     }
@@ -204,15 +211,15 @@ impl Task for All {
 
         let mut target = WorldMap::edit(&self.target_arg.target)?;
 
-        Self::run_with_parameters(&self.overwrite_biomes_arg, &self.bezier_scale_arg, &mut target, progress)
+        Self::run_with_parameters(&self.override_criteria_arg, &self.overwrite_biomes_arg, &self.bezier_scale_arg, &mut target, progress)
     
     }
 }
 
 impl All {
-    fn run_with_parameters<Progress: ProgressObserver>(ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+    fn run_with_parameters<Progress: ProgressObserver>(override_criteria: &OverrideBiomeCriteriaArg, ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
         target.with_transaction(|transaction| {            
-            Data::run_with_parameters(ovewrite_biomes, transaction, progress)
+            Data::run_with_parameters(override_criteria, ovewrite_biomes, transaction, progress)
 
         })?;
         let biomes = target.biomes_layer()?.get_matrix(progress)?;
@@ -261,21 +268,7 @@ impl Task for GenBiome {
 }
 
 impl GenBiome {
-    pub(crate) fn run_default<Progress: ProgressObserver>(ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
-        target.with_transaction(|transaction| {            
-            Data::run_with_parameters(ovewrite_biomes, transaction, progress)
-
-        })?;
-        let biomes = target.biomes_layer()?.get_matrix(progress)?;
-        target.with_transaction(|transaction| {            
-            Apply::run_with_parameters(transaction, &biomes, progress)?;
-
-            Dissolve::run_with_parameters(transaction, progress)?;
-
-            Curvify::run_with_parameters(bezier_scale, transaction, progress)
-
-        })?;
-
-        target.save(progress)
+    pub(crate) fn run_default<Progress: ProgressObserver>(override_criteria: &OverrideBiomeCriteriaArg, ovewrite_biomes: &OverwriteBiomesArg, bezier_scale: &BezierScaleArg, target: &mut WorldMap, progress: &mut Progress) -> Result<(), CommandError> {
+        All::run_with_parameters(override_criteria, ovewrite_biomes, bezier_scale, target, progress)
     }
 }
