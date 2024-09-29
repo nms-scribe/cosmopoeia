@@ -18,6 +18,10 @@ use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::random::RandomIndex;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::tile_layer::TileForCulturePrefSorting;
+use core::slice::Iter;
+use core::ops::Index;
+use std::io::Read;
+use crate::typed_map::entities::NamedEntity;
 
 #[derive(Clone,Serialize,Deserialize,JsonSchema)]
 pub(crate) enum TilePreference {
@@ -52,17 +56,17 @@ impl TilePreference {
 
         // formulaes borrowed from AFMG
         Ok(match self {
-            Self::Habitability => OrderedFloat::from(tile.habitability),
-            Self::ShoreDistance => OrderedFloat::from(tile.shore_distance as f64),
-            Self::Elevation => OrderedFloat::from(tile.elevation_scaled as f64),
-            Self::NormalizedHabitability => OrderedFloat::from((tile.habitability / max_habitability) * 3.0),
-            Self::Temperature(goal) => OrderedFloat::from((tile.temperature - goal).abs() + 1.0),
-            Self::Biomes(preferred_biomes, fee) => OrderedFloat::from(if preferred_biomes.contains(&tile.biome.name) {
+            Self::Habitability => OrderedFloat::from(tile.habitability()),
+            Self::ShoreDistance => OrderedFloat::from(tile.shore_distance() as f64),
+            Self::Elevation => OrderedFloat::from(tile.elevation_scaled() as f64),
+            Self::NormalizedHabitability => OrderedFloat::from((tile.habitability() / max_habitability) * 3.0),
+            Self::Temperature(goal) => OrderedFloat::from((tile.temperature() - goal).abs() + 1.0),
+            Self::Biomes(preferred_biomes, fee) => OrderedFloat::from(if preferred_biomes.contains(tile.biome().name()) {
                 1.0
             } else {
                 *fee
             }),
-            Self::OceanCoast(fee) => OrderedFloat::from(if tile.water_count.is_some() && tile.neighboring_lake_size.is_none() {
+            Self::OceanCoast(fee) => OrderedFloat::from(if tile.water_count().is_some() && tile.neighboring_lake_size().is_none() {
                 1.0
             } else {
                 *fee
@@ -218,7 +222,7 @@ impl CultureSet {
         self.source.push(data);
     }
     
-    pub(crate) fn extend_from_json<Reader: std::io::Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_json<Reader: Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
         let data = from_json_reader::<_,Vec<CultureSetItemSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{e}")))?;
         for datum in data {
             for item in CultureSetItem::from(&datum,rng,namers) {
@@ -281,7 +285,7 @@ impl CultureSet {
 }
 
 // allow indexing the culture set by usize.
-impl core::ops::Index<usize> for CultureSet {
+impl Index<usize> for CultureSet {
     type Output = CultureSetItem;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -293,7 +297,7 @@ impl core::ops::Index<usize> for CultureSet {
 impl<'data_life> IntoIterator for &'data_life CultureSet {
     type Item = &'data_life CultureSetItem;
 
-    type IntoIter = core::slice::Iter<'data_life, CultureSetItem>;
+    type IntoIter = Iter<'data_life, CultureSetItem>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.source.iter()

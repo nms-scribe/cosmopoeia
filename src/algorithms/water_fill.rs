@@ -39,7 +39,7 @@ struct Lake {
 
 impl Lake {
 
-    pub(crate) fn dissolve_tiles(&self, layer: &mut TileLayer<'_,'_>) -> Result<VariantArealGeometry,CommandError> {
+    pub(crate) fn dissolve_tiles(&self, layer: &TileLayer<'_,'_>) -> Result<VariantArealGeometry,CommandError> {
 
         let mut tiles = self.contained_tiles.iter();
         let first_tile = layer.try_feature_by_id(tiles.next().expect("Someone called dissolve_tiles on a Lake that didn't have any tiles."))?;
@@ -117,7 +117,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
     let world_shape = target.edit_properties_layer()?.get_world_shape()?;
 
-    let mut tiles_layer = target.edit_tile_layer()?;
+    let tiles_layer = target.edit_tile_layer()?;
 
     // FUTURE: This is actually a kludge to get around a bug in the algorithm that I haven't found yet.
     // Every once in a while, water will fill a lake, the lake's level will rise above the neighbors, causing
@@ -149,7 +149,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
         let tile = tile_map.try_get(&tile_fid)?; 
         // we don't bother with accumulation in ocean.
-        if tile.grouping.is_ocean() {
+        if tile.grouping().is_ocean() {
             continue;
         }
 
@@ -164,10 +164,10 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
             match task {
                 WaterFillTask::AddToFlow(accumulation) => {
                     let edit_tile = tile_map.try_get_mut(&tile_fid)?; 
-                    edit_tile.water_flow += accumulation;
+                    *edit_tile.water_flow_mut() += accumulation;
                     let mut feature = tiles_layer.try_feature_by_id(&tile_fid)?; 
                     
-                    feature.set_water_flow(&edit_tile.water_flow)?;
+                    feature.set_water_flow(edit_tile.water_flow())?;
 
                     tiles_layer.update_feature(feature)?;
     
@@ -184,8 +184,8 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                     // mark the contained tiles...
                     for contained_tile in &new_lake.contained_tiles {
                         let contained_tile = tile_map.try_get_mut(contained_tile)?; 
-                        contained_tile.lake_id = Some(lake_id.clone());
-                        contained_tile.outlet_from = None
+                        contained_tile.set_lake_id(Some(lake_id.clone()));
+                        contained_tile.set_outlet_from(None)
                     }
     
                     // mark the outlet tiles...
@@ -193,11 +193,11 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
                         match outlet_tile {
                             Neighbor::Tile(outlet_tile) => {
                                 let outlet_tile = tile_map.try_get_mut(outlet_tile)?; 
-                                outlet_tile.outlet_from = Some(Neighbor::Tile(sponsor.clone()));
+                                outlet_tile.set_outlet_from(Some(Neighbor::Tile(sponsor.clone())));
                             },
                             Neighbor::CrossMap(outlet_tile, direction) => {
                                 let outlet_tile = tile_map.try_get_mut(outlet_tile)?; 
-                                outlet_tile.outlet_from = Some(Neighbor::CrossMap(sponsor.clone(),direction.opposite()));
+                                outlet_tile.set_outlet_from(Some(Neighbor::CrossMap(sponsor.clone(),direction.opposite())));
                             },
                             Neighbor::OffMap(_) => (),
                         } // else it's an outlet off the map, and there's nothing to mark
@@ -253,7 +253,7 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 
     for (id,lake) in lake_map.into_iter().watch(progress,"Drawing lakes.","Lakes drawn.") {
         if !lake.contained_tiles.is_empty() {
-            let lake_geometry = lake.dissolve_tiles(&mut tiles_layer)?;
+            let lake_geometry = lake.dissolve_tiles(&tiles_layer)?;
             let (lake_temp,lake_evap,lake_type) = lake.get_temp_evap_and_type();
 
             let geometry = make_curvy_lakes(lake_geometry, lake_bezier_scale, buffer_distance, simplify_tolerance)?;
@@ -293,15 +293,15 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
     for (tile_fid,tile) in tile_map.into_iter().watch(progress,"Writing lake elevations.","Lake elevations written.") {
         let mut feature = edit_tiles_layer.try_feature_by_id(&tile_fid)?;
         
-        let lake_id = if let Some(lake_id) = tile.lake_id {
-            written_lake_map.get(&lake_id)
+        let lake_id = if let Some(lake_id) = tile.lake_id() {
+            written_lake_map.get(lake_id)
         } else {
             None
         };
 
         feature.set_lake_id(&lake_id.cloned())?;
 
-        feature.set_outlet_from(&tile.outlet_from)?;
+        feature.set_outlet_from(tile.outlet_from())?;
 
         edit_tiles_layer.update_feature(feature)?;
 
@@ -315,24 +315,24 @@ pub(crate) fn generate_water_fill<Progress: ProgressObserver>(target: &mut World
 }
 
 fn determine_water_fill_task<Progress: ProgressObserver>(tile_fid: &IdRef, tile: &TileForWaterFill, tile_accumulation: f64, tile_map: &EntityIndex<TileSchema, TileForWaterFill>, next_lake_id: &mut RangeFrom<u64>, tile_queue: &mut QueueWatcher<&str, Progress, (IdRef, f64)>, lake_map: &mut HashMap<IdRef, Lake>) -> Result<Option<WaterFillTask>,CommandError> {
-    if let Some(lake_id) = &tile.lake_id {
+    if let Some(lake_id) = &tile.lake_id() {
         // we're already in a lake, so the accumulation is intended to fill it.
         Ok(Some(WaterFillTask::FillLake(lake_id.clone(), tile_accumulation)))
     } else {
         // there is no lake here, so this is a flow task, unless it turns out we need a lake here.
         // we already calculated the lowest neighbors that are actually below the tile in Flow, so let's just check that first.
 
-        let flow_to = &tile.flow_to;
+        let flow_to = tile.flow_to();
         if flow_to.is_empty() {
             // we need to recalculate to find the lowest neighbors for this area:
             let (_,lowest_elevation) = find_lowest_tile(tile,tile_map,|t| {
                 match t {
-                    Some((t,_)) => t.elevation,
+                    Some((t,_)) => *t.elevation(),
                     // for off the map, assume that the tile is the lowest possible elevation. This will force
                     // water to flow off the map rather than accumulate.
                     None => f64::NEG_INFINITY,
                 }
-            }, |t| &t.neighbors)?;
+            }, |t| t.neighbors())?;
 
             // assuming that succeeded, we can create a new lake now.
             if let Some(lowest_elevation) = lowest_elevation {
@@ -340,13 +340,13 @@ fn determine_water_fill_task<Progress: ProgressObserver>(tile_fid: &IdRef, tile:
                 let lake_id = IdRef::new(next_lake_id.next().expect("Why would an unlimited range fail to return a next value?")); // it should be an infinite iterator, so it should always return Some.
 
                 let new_lake = Lake {
-                    elevation: tile.elevation,
-                    bottom_elevation: tile.elevation,
+                    elevation: *tile.elevation(),
+                    bottom_elevation: *tile.elevation(),
                     flow: 0.0, // will be added to in the task.
                     spillover_elevation: lowest_elevation,
                     contained_tiles: vec![tile_fid.clone()],
-                    tile_temperatures: vec![tile.temperature],
-                    shoreline_tiles: tile.neighbors.iter().map(|NeighborAndDirection(a,_)| (tile_fid.clone(),a.clone())).collect(),
+                    tile_temperatures: vec![*tile.temperature()],
+                    shoreline_tiles: tile.neighbors().iter().map(|NeighborAndDirection(a,_)| (tile_fid.clone(),a.clone())).collect(),
                     outlet_tiles: Vec::new()
                 };
 
@@ -448,16 +448,16 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
         
         
                         let check = tile_map.try_get(check_fid)?; 
-                        if check.grouping.is_ocean() {
+                        if check.grouping().is_ocean() {
                             // it's an outlet
                             new_outlets.push((sponsor_fid.clone(),neighbor.clone()));
                             new_shoreline.push((sponsor_fid,neighbor.clone()));
-                        } else if check.elevation > test_elevation {
+                        } else if check.elevation() > &test_elevation {
                             // it's too high to fill. This is now part of the shoreline.
                             new_shoreline.push((sponsor_fid,neighbor.clone()));
                             // And this might change our spillover elevation
-                            new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(check.elevation)).or(Some(check.elevation));
-                        } else if let Some(lake_id) = &check.lake_id {
+                            new_spillover_elevation = new_spillover_elevation.map(|e: f64| e.min(*check.elevation())).or_else(|| Some(*check.elevation()));
+                        } else if let Some(lake_id) = &check.lake_id() {
                             // it's in a lake already...
                             if let Some(other_lake) = lake_map.get(lake_id) {
                                 if (other_lake.elevation <= test_elevation) && (other_lake.elevation >= new_lake_elevation) {
@@ -481,15 +481,15 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
                             } else {
                                 continue;
                             }
-                        } else if check.elevation < new_lake_elevation {
+                        } else if check.elevation() < &new_lake_elevation {
                                 // it's below the original spillover, which means it's an outlet beyond our initial shoreline.
                                 new_outlets.push((sponsor_fid.clone(),neighbor.clone()));
                                 new_shoreline.push((sponsor_fid,neighbor.clone()));
                         } else {
                             // it's floodable.
                             new_contained_tiles.push(check_fid.clone());
-                            new_temperatures.push(check.temperature);
-                            walk_queue.extend(check.neighbors.iter().map(|NeighborAndDirection(id,_)| (check_fid.clone(),id.clone())));
+                            new_temperatures.push(*check.temperature());
+                            walk_queue.extend(check.neighbors().iter().map(|NeighborAndDirection(id,_)| (check_fid.clone(),id.clone())));
                         }                    
                     },
                 }

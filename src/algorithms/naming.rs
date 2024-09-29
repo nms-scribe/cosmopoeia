@@ -203,6 +203,8 @@ mod namer_method_source {
 }
 
 use namer_method_source::NamerMethodSource;
+use std::io::Read;
+use core::mem;
 
 
 #[derive(Serialize,Deserialize,JsonSchema)] 
@@ -224,7 +226,7 @@ struct MarkovGenerator {
 }
 
 struct Chain {
-    chain: HashMap<Option<char>, Vec<String>>,
+    string_map: HashMap<Option<char>, Vec<String>>,
     length_distribution: Normal<f64>,
     minimum_length: usize,
 }
@@ -340,7 +342,7 @@ impl MarkovGenerator {
                 Err(CommandError::EmptyNamerInput(name.to_owned()))
             } else {
                 Ok(Chain {
-                    chain,
+                    string_map: chain,
                     length_distribution,
                     minimum_length
                 })
@@ -352,7 +354,7 @@ impl MarkovGenerator {
 
 
     fn new<Progress: ProgressObserver>(name: &str, base: MarkovSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
-        let Chain{chain,length_distribution,minimum_length} = Self::calculate_chain(name,&base.seed_words,progress)?;
+        let Chain{string_map: chain,length_distribution,minimum_length} = Self::calculate_chain(name,&base.seed_words,progress)?;
         
 
         Ok(Self {
@@ -364,7 +366,7 @@ impl MarkovGenerator {
         })
     }
 
-    pub(crate) fn make_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
+    pub(crate) fn make_word<Random: Rng>(&self, rng: &mut Random) -> String {
 
         let min_len = self.minimum_length;
         let cutoff_len = self.length_distribution.sample(rng).ceil() as usize;
@@ -475,7 +477,7 @@ impl ListPicker {
 
     fn pick_word<Random: Rng>(&mut self, rng: &mut Random) -> String {
         if self.available.is_empty() {
-            self.available = core::mem::replace(&mut self.picked, Vec::new())
+            self.available = mem::replace(&mut self.picked, Vec::new())
         }
 
         let picked = self.available.remove(rng.gen_range(0..self.available.len()));
@@ -678,6 +680,7 @@ impl NamerSet {
 
         let mut map = HashMap::new();
 
+        #[allow(clippy::iter_over_hash_type)]
         for (name,name_base) in source.source {
             let namer = Namer::new(name_base,&mut NamerLoadObserver::new(&name,progress))?;
             _ = map.insert(name, namer);
@@ -745,7 +748,7 @@ impl NamerSetSource {
         _ = self.source.insert(name, data);
     }
     
-    pub(crate) fn extend_from_json<Reader: std::io::Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_json<Reader: Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
         let data = from_json_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?;
         for datum in data {
             self.add_namer(datum)
@@ -756,7 +759,7 @@ impl NamerSetSource {
         
     }
 
-    pub(crate) fn extend_from_text<Reader: std::io::Read>(&mut self, name: String, text_is_markov: bool, source: BufReader<Reader>) -> Result<(),CommandError> {
+    pub(crate) fn extend_from_text<Reader: Read>(&mut self, name: String, text_is_markov: bool, source: BufReader<Reader>) -> Result<(),CommandError> {
         let mut list = Vec::new();
         let mut duplicate_chars = HashSet::new();
         for line in source.lines() {

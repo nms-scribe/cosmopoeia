@@ -75,105 +75,108 @@ impl PolyBezier {
     }
 
     pub(crate) fn from_poly_line(vertices: &[Coordinates]) -> Self {
-        if vertices.len() < 2 {
-            return Self {
+        if vertices.len() >= 2 {
+            assert!(vertices.len() >= 2); // according to clippy::missing_asserts_for_indexing, asserting the length before indexing will elide bounds checks. I'm surprised the conditional above wouldn't be the same as an assert.
+
+            // https://math.stackexchange.com/a/4207568
+            /*
+        STORY: I had a little artifical help from chatgpt to get the initial translation from python code in 
+        the SO answer to rust. As an experience, it was like getting help from an idiot who is good at programming 
+        and thinks he's an expert. The initial result looked like real code, and seemed to be doing what it
+        was supposed to. 
+
+        But, I would report compilation errors to it and it would say "Oh, sorry about that. This will compile." 
+        Except it didn't. Every time it was confidently incorrect.
+
+        It missed out on what was going on. For some reason, the initial translation required the input to be a vector
+        of tuples of points, which didn't make sense. At one point it got into a cycle where it decided to fix things 
+        by turning the points into tuples, then turning those into points, then back into tuples.
+
+        I finally got the best results by starting over with a new conversation. Then I took the original code from
+        stackoverflow, removed all of the plotting stuff to remove confusion, and told it to straight up translate that.
+        I then used the engine linked to in the stackoverflow comment to change the code to print out the results, so 
+        I could compare, and they were way off.
+
+        I discovered two mistakes I never would have known about if I didn't look through the code carefully. It was like 
+        chat decided that one operation was as good as another. The first was how it decided what to add to the start and
+        end when the line wasn't a ring. The second was the call to get the absolute value of the point (`vertex.subtract(vertex0).abs()`).
+
+        Even though it had figured out point subtraction, addition and multiplication, it decided that that the original
+        code (`abs(p - p0)`) meant to take the absolute values of x and y and add them together. I searched for what it meant
+        to get the absolute value of a point, and learned it was the distance from 0. Which meant chat decided that adding
+        the values together was the same as adding their squares and then returning the square root.
+
+        What if the difference between real intelligence and artificial intelligence is understanding the pythagorean theorem? What
+        if Pythagoras was the person who invented human intelligence?
+
+        The final result got me to almost match the values returned from the python code. The only differences were in the last digits
+        and the number of digits returned, so it was just a matter of precision.
+        */
+
+            // Make the normalized tangent vectors
+        
+            // Tangents for interior points are parallel to the lines between the points to either side 
+            // (tangent for point B is parallel to the line between A and B), so we need to pair up
+            // the vertices as p,p+2. This will create n-2 vertices to match up with interior points.
+            let pairs = vertices.iter().zip(vertices.iter().skip(2));
+            // tangents for these pairs are found by subtracting the points
+            let tangents: Vec<Coordinates> = pairs.map(|(u, v)| v.subtract(u)).collect();
+
+            // the start and end tangents are from different pairs.
+
+            let (start,end) = if vertices[0] == vertices[vertices.len() - 1] {
+                // this is a polygonal ring, so the points are the same, and the tangents for
+                // them are the same. This tangent is parallel to a line from the second point to the penultimate point.
+                // ABCDEA => paralell to BE
+                // No panic, because we checked for vertices < 2 above.
+                let end = vec![vertices[1].subtract(&vertices[vertices.len() - 2])];
+                (end.clone(),end)
+            } else {
+                // otherwise, the start tangent is parallel to a line between the first and second point,
+                // and the end tangent the same between the last and penultimate point.
+                // ABCDE => parallel to AB and DE
+                // start is the difference between the second and first
+                let start = vec![vertices[1].subtract(&vertices[0])];
+                // end is the difference between the last and second-to-last
+                // No panic, because we checked for vertices < 2 above.
+                let end = vec![vertices[vertices.len()-1].subtract(&vertices[vertices.len()-2])];
+                (start,end)
+            };
+
+            let tangents = start.iter().chain(tangents.iter()).chain(end.iter());
+            // the tangents are normalized -- we just need the direction, not the distance, so this is a unit vector pointing the same direction.
+            let tangents = tangents.map(Coordinates::normalized);
+            let tangents: Vec<Coordinates> = tangents.collect();
+
+            // Build Bezier curves
+            // zip up the points into pairs with their tangents
+            let mut vertex_tangents = vertices.iter().zip(tangents.iter());
+            // the first one should always be there? 
+            // No panic, because we checked for vertices < 2 above.
+            let (mut vertex0, mut tangent0) = vertex_tangents.next().expect("This shouldn't happeen because we checked if vertices < 2.");
+            let mut controls = Vec::new();
+            for (vertex, tangent) in vertex_tangents {
+                // original code: s = abs(p - p0) / 3 
+                let s = vertex.subtract(vertex0).abs() / 3.0;
+                controls.push((
+                    // control point from previous point, on its tangent, 1/3 along the way between the two points
+                    vertex0.add(&tangent0.multiply(s)),
+                    // control point for the next point, on its tangent, 1/3 along the way
+                    vertex.subtract(&tangent.multiply(s))
+                ));
+
+                vertex0 = vertex;
+                tangent0 = tangent;
+            }
+            Self { 
+                vertices: vertices.to_vec(), 
+                controls 
+            }
+        } else {
+            Self {
                 vertices: vertices.to_vec(),
                 controls: Vec::new()
             }
-        }
-
-        // https://math.stackexchange.com/a/4207568
-        /*
-    STORY: I had a little artifical help from chatgpt to get the initial translation from python code in 
-    the SO answer to rust. As an experience, it was like getting help from an idiot who is good at programming 
-    and thinks he's an expert. The initial result looked like real code, and seemed to be doing what it
-    was supposed to. 
-
-    But, I would report compilation errors to it and it would say "Oh, sorry about that. This will compile." 
-    Except it didn't. Every time it was confidently incorrect.
-
-    It missed out on what was going on. For some reason, the initial translation required the input to be a vector
-    of tuples of points, which didn't make sense. At one point it got into a cycle where it decided to fix things 
-    by turning the points into tuples, then turning those into points, then back into tuples.
-
-    I finally got the best results by starting over with a new conversation. Then I took the original code from
-    stackoverflow, removed all of the plotting stuff to remove confusion, and told it to straight up translate that.
-    I then used the engine linked to in the stackoverflow comment to change the code to print out the results, so 
-    I could compare, and they were way off.
-
-    I discovered two mistakes I never would have known about if I didn't look through the code carefully. It was like 
-    chat decided that one operation was as good as another. The first was how it decided what to add to the start and
-    end when the line wasn't a ring. The second was the call to get the absolute value of the point (`vertex.subtract(vertex0).abs()`).
-
-    Even though it had figured out point subtraction, addition and multiplication, it decided that that the original
-    code (`abs(p - p0)`) meant to take the absolute values of x and y and add them together. I searched for what it meant
-    to get the absolute value of a point, and learned it was the distance from 0. Which meant chat decided that adding
-    the values together was the same as adding their squares and then returning the square root.
-
-    What if the difference between real intelligence and artificial intelligence is understanding the pythagorean theorem? What
-    if Pythagoras was the person who invented human intelligence?
-
-    The final result got me to almost match the values returned from the python code. The only differences were in the last digits
-    and the number of digits returned, so it was just a matter of precision.
-    */
-
-        // Make the normalized tangent vectors
-    
-        // Tangents for interior points are parallel to the lines between the points to either side 
-        // (tangent for point B is parallel to the line between A and B), so we need to pair up
-        // the vertices as p,p+2. This will create n-2 vertices to match up with interior points.
-        let pairs = vertices.iter().zip(vertices.iter().skip(2));
-        // tangents for these pairs are found by subtracting the points
-        let tangents: Vec<Coordinates> = pairs.map(|(u, v)| v.subtract(u)).collect();
-
-        // the start and end tangents are from different pairs.
-        let (start,end) = if vertices[0] == vertices[vertices.len() - 1] {
-            // this is a polygonal ring, so the points are the same, and the tangents for
-            // them are the same. This tangent is parallel to a line from the second point to the penultimate point.
-            // ABCDEA => paralell to BE
-            // No panic, because we checked for vertices < 2 above.
-            let end = vec![vertices[1].subtract(&vertices[vertices.len() - 2])];
-            (end.clone(),end)
-        } else {
-            // otherwise, the start tangent is parallel to a line between the first and second point,
-            // and the end tangent the same between the last and penultimate point.
-            // ABCDE => parallel to AB and DE
-            // start is the difference between the second and first
-            let start = vec![vertices[1].subtract(&vertices[0])];
-            // end is the difference between the last and second-to-last
-            // No panic, because we checked for vertices < 2 above.
-            let end = vec![vertices[vertices.len()-1].subtract(&vertices[vertices.len()-2])];
-            (start,end)
-        };
-
-        let tangents = start.iter().chain(tangents.iter()).chain(end.iter());
-        // the tangents are normalized -- we just need the direction, not the distance, so this is a unit vector pointing the same direction.
-        let tangents = tangents.map(Coordinates::normalized);
-        let tangents: Vec<Coordinates> = tangents.collect();
-
-        // Build Bezier curves
-        // zip up the points into pairs with their tangents
-        let mut vertex_tangents = vertices.iter().zip(tangents.iter());
-        // the first one should always be there? 
-        // No panic, because we checked for vertices < 2 above.
-        let (mut vertex0, mut tangent0) = vertex_tangents.next().expect("This shouldn't happeen because we checked if vertices < 2.");
-        let mut controls = Vec::new();
-        for (vertex, tangent) in vertex_tangents {
-            // original code: s = abs(p - p0) / 3 
-            let s = vertex.subtract(vertex0).abs() / 3.0;
-            controls.push((
-                // control point from previous point, on its tangent, 1/3 along the way between the two points
-                vertex0.add(&tangent0.multiply(s)),
-                // control point for the next point, on its tangent, 1/3 along the way
-                vertex.subtract(&tangent.multiply(s))
-            ));
-
-            vertex0 = vertex;
-            tangent0 = tangent;
-        }
-        Self { 
-            vertices: vertices.to_vec(), 
-            controls 
         }
     }
 

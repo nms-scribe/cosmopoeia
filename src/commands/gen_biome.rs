@@ -25,14 +25,14 @@ subcommand_def!{
     pub struct Data {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub override_criteria_arg: OverrideBiomeCriteriaArg,
+        pub override_criteria: OverrideBiomeCriteriaArg,
 
 
         #[clap(flatten)]
-        pub overwrite_biomes_arg: OverwriteBiomesArg,
+        pub overwrite_biomes: OverwriteBiomesArg,
 
     }
 }
@@ -42,11 +42,11 @@ impl Task for Data {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.override_criteria_arg, &self.overwrite_biomes_arg, transaction, progress)
+            Self::run_with_parameters(&self.override_criteria, &self.overwrite_biomes, transaction, progress)
 
         })?;
 
@@ -190,16 +190,16 @@ subcommand_def!{
     pub struct All {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
     
         #[clap(flatten)]
-        pub bezier_scale_arg: BezierScaleArg,
+        pub bezier_scale: BezierScaleArg,
     
         #[clap(flatten)]
-        pub override_criteria_arg: OverrideBiomeCriteriaArg,
+        pub override_criteria: OverrideBiomeCriteriaArg,
 
         #[clap(flatten)]
-        pub overwrite_biomes_arg: OverwriteBiomesArg,
+        pub overwrite_biomes: OverwriteBiomesArg,
     
     }
 }
@@ -209,9 +209,9 @@ impl Task for All {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
-        Self::run_with_parameters(&self.override_criteria_arg, &self.overwrite_biomes_arg, &self.bezier_scale_arg, &mut target, progress)
+        Self::run_with_parameters(&self.override_criteria, &self.overwrite_biomes, &self.bezier_scale, &mut target, progress)
     
     }
 }

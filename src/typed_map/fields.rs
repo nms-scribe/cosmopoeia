@@ -16,12 +16,45 @@ use crate::utils::simple_serde::Serializer;
 
 #[derive(Clone,PartialEq)]
 pub(crate) struct FieldTypeDocumentation {
-    pub(crate) name: String,
-    pub(crate) description: String, // More detailed description for the format
-    pub(crate) storage_type: String, // the concrete field type in the database
-    pub(crate) syntax: String, // syntax for the format
-    pub(crate) sub_types: Vec<FieldTypeDocumentation>
+    name: String,
+    description: String, // More detailed description for the format
+    storage_type: String, // the concrete field type in the database
+    syntax: String, // syntax for the format
+    sub_types: Vec<FieldTypeDocumentation>
 
+}
+
+impl FieldTypeDocumentation {
+
+    pub(crate) const fn new(name: String, description: String, storage_type: String, syntax: String, sub_types: Vec<Self>) -> Self {
+        Self { 
+            name, 
+            description, 
+            storage_type, 
+            syntax, 
+            sub_types 
+        }
+    }
+    
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+    
+    pub(crate) fn description(&self) -> &str {
+        &self.description
+    }
+    
+    pub(crate) fn storage_type(&self) -> &str {
+        &self.storage_type
+    }
+    
+    pub(crate) fn syntax(&self) -> &str {
+        &self.syntax
+    }
+    
+    pub(crate) fn sub_types(&self) -> &[Self] {
+        &self.sub_types
+    }
 }
 
 pub(crate) trait DocumentedFieldType {
@@ -101,13 +134,13 @@ macro_rules! impl_documentation_for_tagged_enum {
 
                 let (syntax,sub_types) = $crate::typed_map::fields::describe_variant_syntax(&[$((stringify!($variant),&[$(&[$(<$tuple_type>::get_field_type_documentation()),*])?])),*]);
 
-                $crate::typed_map::fields::FieldTypeDocumentation {
-                    name: stringify!($enum).to_owned(),
+                $crate::typed_map::fields::FieldTypeDocumentation::new(
+                    stringify!($enum).to_owned(),
                     description,
-                    storage_type: field_type_to_name(<$enum>::STORAGE_TYPE), // TODO: Should take this from a TypedField trait instead
+                    field_type_to_name(<$enum>::STORAGE_TYPE), // TODO: Should take this from a TypedField trait instead
                     syntax,
                     sub_types
-                }
+                )
             }
     
         }
@@ -449,7 +482,29 @@ impl DocumentedFieldType for i32 {
 
 
 pub(crate) struct FieldDocumentation {
-    pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) field_type: FieldTypeDocumentation
+    name: String,
+    description: String,
+    field_type: FieldTypeDocumentation
+}
+
+impl FieldDocumentation {
+    pub(crate) const fn new(name: String, description: String, field_type: FieldTypeDocumentation) -> Self {
+        Self { 
+            name, 
+            description, 
+            field_type 
+        }
+    }
+    
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+    
+    pub(crate) fn description(&self) -> &str {
+        &self.description
+    }
+    
+    pub(crate) const fn field_type(&self) -> &FieldTypeDocumentation {
+        &self.field_type
+    }
 }

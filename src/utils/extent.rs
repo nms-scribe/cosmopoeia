@@ -13,15 +13,15 @@ use crate::utils::world_shape::WorldShape;
 
 #[derive(Clone,Debug)]
 pub(crate) struct Extent {
-    pub(crate) height: f64,
-    pub(crate) width: f64,
-    pub(crate) south: f64,
-    pub(crate) west: f64,
+    height: f64,
+    width: f64,
+    south: f64,
+    west: f64,
 }
 
 impl Extent {
 
-    pub(crate) fn new(west: f64, south: f64, east: f64, north: f64) -> Self {
+    pub(crate) fn from_bounds(west: f64, south: f64, east: f64, north: f64) -> Self {
         let width = east - west;
         let height = north - south;
         Self { 
@@ -32,6 +32,16 @@ impl Extent {
         }
     }
 
+
+    pub(crate) const fn from_height_width_south_west(height: f64, width: f64, south: f64, west: f64) -> Self {
+        Self { 
+            height, 
+            width, 
+            south, 
+            west 
+        }
+    }
+    
     pub(crate) const fn new_with_dimensions(west: f64, south: f64, width: f64, height: f64) -> Self {
         Self {
             height,
@@ -42,8 +52,8 @@ impl Extent {
     }
 
     pub(crate) fn contains(&self,point: &Coordinates) -> bool {
-        let x = point.x.into_inner();
-        let y = point.y.into_inner();
+        let x = point.x().into_inner();
+        let y = point.y().into_inner();
         (x >= self.west) &&
            (x <= (self.west + self.width)) &&
            (y >= self.south) &&
@@ -185,6 +195,22 @@ impl Extent {
             WorldShape::Sphere => self.spherical_area()
         }
 
+    }
+    
+    pub(crate) const fn height(&self) -> f64 {
+        self.height
+    }
+    
+    pub(crate) const fn width(&self) -> f64 {
+        self.width
+    }
+    
+    pub(crate) const fn south(&self) -> f64 {
+        self.south
+    }
+    
+    pub(crate) const fn west(&self) -> f64 {
+        self.west
     }
 
 }

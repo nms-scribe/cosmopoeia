@@ -33,7 +33,7 @@ impl<'feature> NamedFeature<'feature,NationSchema> for NationFeature<'feature> {
 // needs to be hashable in order to fit into a priority queue
 entity!(#[derive(Hash,Eq,PartialEq)] NationForPlacement: Nation {
     fid: IdRef,
-    name: String,
+    #[get=false] name: String,
     center_tile_id: IdRef,
     type_: CultureType,
     expansionism: OrderedFloat<f64> = |feature: &NationFeature| Ok::<_,CommandError>(OrderedFloat::from(feature.expansionism()?))
@@ -53,7 +53,7 @@ entity!(NationForEmptySubnations: Nation {
 
 entity!(NationForSubnationColors: Nation {
     color: Rgb<u8>,
-    subnation_count: usize = |_| Ok::<_,CommandError>(0) // to be filled in by algorithm
+    #[mut=true] subnation_count: usize = |_| Ok::<_,CommandError>(0) // to be filled in by algorithm
 });
 
 impl NationLayer<'_,'_> {
@@ -87,6 +87,18 @@ entity!(#[derive(Hash,Eq,PartialEq)] SubnationForPlacement: Subnation {
     center_tile_id: IdRef,
     nation_id: IdRef
 });
+
+impl SubnationForPlacement {
+
+    pub(crate) const fn new(fid: IdRef, center_tile_id: IdRef, nation_id: IdRef) -> Self {
+        Self {
+            fid,
+            center_tile_id,
+            nation_id
+        }
+        
+    }
+}
 
 entity!(SubnationForNormalize: Subnation {
     center_tile_id: IdRef,

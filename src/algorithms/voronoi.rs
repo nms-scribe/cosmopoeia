@@ -22,15 +22,15 @@ pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Pol
 }
 
 pub(crate) struct VoronoiGenerator<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {
-    pub(crate) phase: VoronoiGeneratorPhase<GeometryIterator>,
-    pub(crate) world_shape: WorldShape,
-    pub(crate) extent: Extent,
-    pub(crate) extent_geo: Polygon
+    phase: VoronoiGeneratorPhase<GeometryIterator>,
+    world_shape: WorldShape,
+    extent: Extent,
+    extent_geo: Polygon
 
 }
 
 pub(crate) struct VoronoiInfo {
-    pub(crate) vertices: Vec<Coordinates>,
+    vertices: Vec<Coordinates>,
 }
 
 impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGenerator<GeometryIterator> {
@@ -70,7 +70,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
                                 },
                             });
                         },
-                        Some(Err(_)) => {
+                        Some(Err(())) => {
                             edge = Some(Err(()));
                         }
                         _ => edge = Some(Ok(point_edge)),
@@ -125,12 +125,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> VoronoiGener
 
             let area = polygon.shaped_area(world_shape)?;
 
-            Ok(Some(NewTileSite {
-                geometry: polygon,
-                edge,
-                site: site.clone(),
-                area
-            }))
+            Ok(Some(NewTileSite::new(polygon, site.clone(), edge, area)))
         } else {
             // In any case, these would result in either a line or a point, not even a sliver.
             Ok(None)
@@ -203,7 +198,7 @@ impl<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> Iterator for
         match &mut self.phase {
             VoronoiGeneratorPhase::Unstarted(_) => {
                 match self.start(&mut ()) {
-                    Ok(_) => self.next(),
+                    Ok(()) => self.next(),
                     Err(e) => Some(Err(e)),
                 }
             },

@@ -5,6 +5,7 @@ use gdal::vector::FieldValue;
 use gdal::vector::Layer;
 use gdal::vector::LayerAccess;
 use gdal::vector::OGRwkbGeometryType;
+use gdal::vector::Feature as GdalFeature;
 
 use crate::errors::CommandError;
 use crate::geometry::GDALGeometryWrapper;
@@ -12,12 +13,40 @@ use crate::typed_map::fields::IdRef;
 use crate::typed_map::features::TypedFeature;
 use crate::typed_map::fields::FieldDocumentation;
 use crate::typed_map::schema::Schema;
+use core::marker::PhantomData;
 
 pub(crate) struct LayerDocumentation {
-    pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) geometry: String,
-    pub(crate) fields: Vec<FieldDocumentation>
+    name: String,
+    description: String,
+    geometry: String,
+    fields: Vec<FieldDocumentation>
+}
+
+impl LayerDocumentation {
+    pub(crate) const fn new(name: String, description: String, geometry: String, fields: Vec<FieldDocumentation>) -> Self {
+        Self { 
+            name, 
+            description, 
+            geometry, 
+            fields 
+        }
+    }
+    
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+    
+    pub(crate) fn description(&self) -> &str {
+        &self.description
+    }
+    
+    pub(crate) fn geometry(&self) -> &str {
+        &self.geometry
+    }
+    
+    pub(crate) fn fields(&self) -> &[FieldDocumentation] {
+        &self.fields
+    }
 }
 
 #[macro_export]
@@ -164,7 +193,7 @@ macro_rules! layer {
             $crate::hide_item!{$(hide_add $hide_add)?,
                 pub(crate) struct [<New $name>] {
                     $(
-                        pub(crate) $prop: $prop_type
+                        pub $prop: $prop_type
                     ),*
                 }
             }
@@ -198,7 +227,7 @@ macro_rules! layer {
                 $crate::hide_item!{$(hide_read $hide_read)?,
                     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
                     pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<[<$name Schema>],[<$name Feature>]> {
-                        TypedFeatureIterator::from(self.layer.features())
+                        TypedFeatureIterator::from(self.layer_mut().features())
                     }
                 }
 
@@ -210,21 +239,21 @@ macro_rules! layer {
         paste::paste!{
             $crate::hide_item!{$(hide_doc $hide_doc)?,
                 pub(crate) fn [<document_ $name:snake _layer>]() -> Result<$crate::typed_map::layers::LayerDocumentation,CommandError> {
-                    Ok($crate::typed_map::layers::LayerDocumentation {
-                        name: $layer_name.to_owned(),
-                        description: concat!("",$($layer_doc_attr: literal)?).trim_start().to_owned(),
-                        geometry: stringify!($geometry_type).to_owned(),
-                        fields: vec![
+                    Ok($crate::typed_map::layers::LayerDocumentation::new(
+                        $layer_name.to_owned(),
+                        concat!("",$($layer_doc_attr: literal)?).trim_start().to_owned(),
+                        stringify!($geometry_type).to_owned(),
+                        vec![
                             $(
-                                $crate::typed_map::fields::FieldDocumentation {
-                                    name: stringify!($prop).to_owned(),
-                                    description: concat!("",$($field_doc_attr)?).trim_start().to_owned(),
-                                    field_type: <$prop_type as $crate::typed_map::fields::DocumentedFieldType>::get_field_type_documentation()
-                                }
+                                $crate::typed_map::fields::FieldDocumentation::new(
+                                    stringify!($prop).to_owned(),
+                                    concat!("",$($field_doc_attr)?).trim_start().to_owned(),
+                                    <$prop_type as $crate::typed_map::fields::DocumentedFieldType>::get_field_type_documentation()
+                                )
                             ),*
             
                         ],
-                    })            
+                    ))            
 
                 }
             }
@@ -234,9 +263,9 @@ macro_rules! layer {
 }
 
 pub(crate) struct MapLayer<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, SchemaType>> {
-    pub(crate) layer: Layer<'layer>,
-    _phantom_feature: core::marker::PhantomData<&'feature Feature>,
-    _phantom_schema: core::marker::PhantomData<SchemaType>
+    layer: Layer<'layer>,
+    _phantom_feature: PhantomData<&'feature Feature>,
+    _phantom_schema: PhantomData<SchemaType>
 }
 
 impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, SchemaType>> MapLayer<'layer,'feature,SchemaType,Feature> {
@@ -267,8 +296,8 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         
         Ok(Self {
             layer,
-            _phantom_feature: core::marker::PhantomData,
-            _phantom_schema: core::marker::PhantomData
+            _phantom_feature: PhantomData,
+            _phantom_schema: PhantomData
         })
     }
 
@@ -277,8 +306,8 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         let layer = dataset.layer_by_name(SchemaType::LAYER_NAME)?;
         Ok(Self {
             layer,
-            _phantom_feature: core::marker::PhantomData,
-            _phantom_schema: core::marker::PhantomData
+            _phantom_feature: PhantomData,
+            _phantom_schema: PhantomData
         })
 
     }
@@ -296,9 +325,9 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         self.layer.feature_count() as usize
     }
 
-    pub(crate) fn add_feature_with_geometry(&mut self, geometry: SchemaType::Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
+    pub(crate) fn add_feature_with_geometry(&self, geometry: SchemaType::Geometry, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
         // I dug out the source to get this. I wanted to be able to return the feature being created.
-        let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
+        let mut feature = GdalFeature::new(self.layer.defn())?;
         feature.set_geometry(geometry.into())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
@@ -311,11 +340,11 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
     }
 
-    pub(crate) fn add_feature_without_geometry(&mut self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
+    pub(crate) fn add_feature_without_geometry(&self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
         // This function is used for lookup tables, like biomes.
 
         // I had to dig into the source to get this stuff...
-        let mut feature = gdal::vector::Feature::new(self.layer.defn())?;
+        let mut feature = GdalFeature::new(self.layer.defn())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
                 feature.set_field(field, value)?;
@@ -326,6 +355,14 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         feature.create(&self.layer)?;
         Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
 
+    }
+    
+    pub(crate) const fn layer(&self) -> &Layer<'layer> {
+        &self.layer
+    }
+    
+    pub(crate) fn layer_mut(&mut self) -> &mut Layer<'layer> {
+        &mut self.layer
     }
 
 }

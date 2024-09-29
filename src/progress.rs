@@ -6,6 +6,7 @@ use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use console::style;
 use priority_queue::PriorityQueue;
+use core::hash::Hash;
 
 
 pub(crate) trait ProgressObserver {
@@ -79,7 +80,7 @@ impl ConsoleProgressBar {
         }
     }
 
-    fn style_as_spinner(bar: &mut ProgressBar) {
+    fn style_as_spinner(bar: &ProgressBar) {
         bar.enable_steady_tick(Duration::new(0,500));
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) {msg} {spinner}")
             .expect("progress bar template could not be parsed.")
@@ -89,7 +90,7 @@ impl ConsoleProgressBar {
 
     }
 
-    fn style_as_progress(bar: &mut ProgressBar) {
+    fn style_as_progress(bar: &ProgressBar) {
         bar.disable_steady_tick();
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) [{bar:40}] [ETA: {eta_precise}] {msg} {spinner}")
             .expect("progress bar template could not be parsed.")
@@ -100,7 +101,7 @@ impl ConsoleProgressBar {
 
     }
 
-    fn style_as_finished(bar: &mut ProgressBar) {
+    fn style_as_finished(bar: &ProgressBar) {
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) {msg}")
             .expect("progress bar template could not be parsed."));
 
@@ -118,12 +119,12 @@ impl ConsoleProgressBar {
             bar.set_message(message.as_ref().to_owned());
         } else {
             let bar = if let Some(step_count) = step_count {
-                let mut bar = ProgressBar::new(step_count as u64);
-                Self::style_as_progress(&mut bar);
+                let bar = ProgressBar::new(step_count as u64);
+                Self::style_as_progress(&bar);
                 bar
             } else {
-                let mut bar = ProgressBar::new_spinner();
-                Self::style_as_spinner(&mut bar);
+                let bar = ProgressBar::new_spinner();
+                Self::style_as_spinner(&bar);
                 bar
             };
             // FUTURE: I should make this look different when it's a spinner...
@@ -364,7 +365,7 @@ impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
 
 }
 
-pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: core::hash::Hash + Eq, PriorityType: Ord> {
+pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, ItemType: Hash + Eq, PriorityType: Ord> {
     finish: Message,
     progress: &'progress mut Progress,
     inner: PriorityQueue<ItemType,PriorityType>,
@@ -372,7 +373,7 @@ pub(crate) struct PriorityQueueWatcher<'progress,Message: AsRef<str>, Progress: 
     pushed: usize,
 }
 
-impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: core::hash::Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'_,Message,Progress,ItemType,PriorityType> {
+impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: Hash + Eq, PriorityType: Ord> PriorityQueueWatcher<'_,Message,Progress,ItemType,PriorityType> {
 
     pub(crate) fn pop(&mut self) -> Option<(ItemType,PriorityType)> {
         let result = self.inner.pop();
@@ -394,12 +395,12 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: core::hash::Hash
 
 } 
 
-pub(crate) trait WatchablePriorityQueue<ItemType: core::hash::Hash + Eq, PriorityType: Ord> {
+pub(crate) trait WatchablePriorityQueue<ItemType: Hash + Eq, PriorityType: Ord> {
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType>;
 }
 
-impl<ItemType: core::hash::Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
+impl<ItemType: Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,PriorityType> for PriorityQueue<ItemType,PriorityType> {
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));

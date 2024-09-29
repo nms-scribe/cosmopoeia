@@ -32,13 +32,13 @@ subcommand_def!{
     pub struct Coastline {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub bezier_scale_arg: BezierScaleArg,
+        pub bezier_scale: BezierScaleArg,
 
         #[clap(flatten)]
-        pub overwrite_all_ocean_arg: OverwriteAllOceanArg,
+        pub overwrite_all_ocean: OverwriteAllOceanArg,
 
     }
 }
@@ -48,11 +48,11 @@ impl Task for Coastline {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_all_ocean_arg.overwrite_coastline(), &self.overwrite_all_ocean_arg.overwrite_ocean(), transaction, progress)
+            Self::run_with_parameters(&self.bezier_scale, &self.overwrite_all_ocean.overwrite_coastline(), &self.overwrite_all_ocean.overwrite_ocean(), transaction, progress)
         })?;
 
         target.save(progress)
@@ -112,16 +112,17 @@ subcommand_def!{
     pub struct Lakes {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub overwrite_lakes_arg: OverwriteLakesArg,
+        #[allow(clippy::struct_field_names,reason="I don't want to confuse this with other overwrite args.")]
+        pub overwrite_lakes: OverwriteLakesArg,
 
         #[clap(flatten)]
-        pub bezier_scale_arg: BezierScaleArg,
+        pub bezier_scale: BezierScaleArg,
 
         #[clap(flatten)]
-        pub buffer_scale_arg: LakeBufferScaleArg,
+        pub buffer_scale: LakeBufferScaleArg,
 
 
 
@@ -133,12 +134,12 @@ impl Task for Lakes {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         let water_flow_result = target.tiles_layer()?.get_index_and_queue_for_water_fill(progress)?;
 
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(water_flow_result, &self.bezier_scale_arg, &self.buffer_scale_arg, &self.overwrite_lakes_arg, transaction, progress)
+            Self::run_with_parameters(water_flow_result, &self.bezier_scale, &self.buffer_scale, &self.overwrite_lakes, transaction, progress)
 
         })?;
 
@@ -159,13 +160,14 @@ subcommand_def!{
     pub struct Rivers {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub overwrite_rivers_arg: OverwriteRiversArg,
+        #[allow(clippy::struct_field_names,reason="I don't want to confuse this with other overwrite args.")]
+        pub overwrite_rivers: OverwriteRiversArg,
 
         #[clap(flatten)]
-        pub bezier_scale_arg: BezierScaleArg,
+        pub bezier_scale: BezierScaleArg,
 
     }
 }
@@ -175,10 +177,10 @@ impl Task for Rivers {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&self.bezier_scale_arg, &self.overwrite_rivers_arg, progress, transaction)
+            Self::run_with_parameters(&self.bezier_scale, &self.overwrite_rivers, progress, transaction)
         })?;
 
         target.save(progress)
@@ -273,16 +275,16 @@ subcommand_def!{
     pub struct All {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
     
         #[clap(flatten)]
-        pub bezier_scale_arg: BezierScaleArg,
+        pub bezier_scale: BezierScaleArg,
     
         #[clap(flatten)]
-        pub buffer_scale_arg: LakeBufferScaleArg,
+        pub buffer_scale: LakeBufferScaleArg,
     
         #[clap(flatten)]
-        pub overwrite_all_water_arg: OverwriteAllWaterArg,
+        pub overwrite_all_water: OverwriteAllWaterArg,
     
     }
 }
@@ -292,10 +294,10 @@ impl Task for All {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&self.bezier_scale_arg,&self.buffer_scale_arg,&self.overwrite_all_water_arg.overwrite_coastline(),&self.overwrite_all_water_arg.overwrite_ocean(),&self.overwrite_all_water_arg.overwrite_lakes(),&self.overwrite_all_water_arg.overwrite_rivers(),transaction,progress)
+            Self::run_with_parameters(&self.bezier_scale,&self.buffer_scale,&self.overwrite_all_water.overwrite_coastline(),&self.overwrite_all_water.overwrite_ocean(),&self.overwrite_all_water.overwrite_lakes(),&self.overwrite_all_water.overwrite_rivers(),transaction,progress)
         })?;
 
         target.save(progress)

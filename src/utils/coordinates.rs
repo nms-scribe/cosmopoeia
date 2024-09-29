@@ -26,8 +26,8 @@ use crate::utils::world_shape::WorldShape;
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
 pub(crate) struct Coordinates {
-    pub(crate) x: NotNan<f64>,
-    pub(crate) y: NotNan<f64>
+    x: NotNan<f64>,
+    y: NotNan<f64>
 }
 
 impl Coordinates {
@@ -333,11 +333,11 @@ impl Coordinates {
             Edge::North => (self.x,NotNan::try_from(extents.north())?),
             Edge::Northeast => (NotNan::try_from(extents.east())?,NotNan::try_from(extents.north())?),
             Edge::East => (NotNan::try_from(extents.east())?,self.y),
-            Edge::Southeast => (NotNan::try_from(extents.east())?,NotNan::try_from(extents.south)?),
-            Edge::South => (self.x,NotNan::try_from(extents.south)?),
-            Edge::Southwest => (NotNan::try_from(extents.west)?,NotNan::try_from(extents.south)?),
-            Edge::West => (NotNan::try_from(extents.west)?,self.y),
-            Edge::Northwest => (NotNan::try_from(extents.west)?,NotNan::try_from(extents.north())?),
+            Edge::Southeast => (NotNan::try_from(extents.east())?,NotNan::try_from(extents.south())?),
+            Edge::South => (self.x,NotNan::try_from(extents.south())?),
+            Edge::Southwest => (NotNan::try_from(extents.west())?,NotNan::try_from(extents.south())?),
+            Edge::West => (NotNan::try_from(extents.west())?,self.y),
+            Edge::Northwest => (NotNan::try_from(extents.west())?,NotNan::try_from(extents.north())?),
         };
         Ok(Self {
             x,
@@ -372,7 +372,7 @@ impl Coordinates {
             ToEast,
         }
 
-        let west = NotNan::new(extent.west)?;
+        let west = NotNan::new(extent.west())?;
         let east = NotNan::new(extent.east())?;
 
         let fix_point = |point: &Self, location: &Location| {
@@ -414,7 +414,7 @@ impl Coordinates {
                 let next_location = get_location(&next);
                 let mid_point = match (&previous_location,&next_location) {
                     (Location::ToWest, Location::InExtent) |
-                    (Location::InExtent, Location::ToWest) => Some(previous.interpolate_at_longitude(&next, extent.west)?),
+                    (Location::InExtent, Location::ToWest) => Some(previous.interpolate_at_longitude(&next, extent.west())?),
 
                     (Location::InExtent, Location::ToEast) |
                     (Location::ToEast, Location::InExtent) => Some(previous.interpolate_at_longitude(&next, extent.east())?),
@@ -468,6 +468,14 @@ impl Coordinates {
         // And, the Deg structure allows me to normalize it
         clockwise_from_north.normalize()
 
+    }
+    
+    pub(crate) const fn x(&self) -> NotNan<f64> {
+        self.x
+    }
+    
+    pub(crate) const fn y(&self) -> NotNan<f64> {
+        self.y
     }
 
 }
@@ -578,12 +586,12 @@ mod test {
             Coordinates::new(NotNan::try_from(-179.03189170475136).unwrap()+360.0, NotNan::try_from(5.381816241032141).unwrap()),
         ];
 
-        let clipped = Coordinates::clip_point_vec_across_antimeridian(line, &Extent {
-            height: 180.0,
-            width: 360.0,
-            south: -90.0,
-            west: -180.0,
-        }).unwrap();
+        let clipped = Coordinates::clip_point_vec_across_antimeridian(line, &Extent::from_height_width_south_west(
+            180.0,
+            360.0,
+            -90.0,
+            -180.0,
+        )).unwrap();
 
         assert_eq!(clipped,vec![
             vec![Coordinates::new(NotNan::try_from(178.1579399076034).unwrap(), NotNan::try_from(4.993378037130952).unwrap()),

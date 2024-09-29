@@ -144,16 +144,16 @@ subcommand_def!{
     pub struct All {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
     
         #[clap(flatten)]
-        pub temperature_arg: TemperatureRangeArg,
+        pub temperature: TemperatureRangeArg,
     
         #[clap(flatten)]
-        pub winds_arg: WindsArg,
+        pub winds: WindsArg,
     
         #[clap(flatten)]
-        pub precipitation_arg: PrecipitationArg,
+        pub precipitation: PrecipitationArg,
 
     }
 }
@@ -163,11 +163,11 @@ impl Task for All {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&self.temperature_arg, &self.winds_arg, &self.precipitation_arg, transaction, progress)
+            Self::run_with_parameters(&self.temperature, &self.winds, &self.precipitation, transaction, progress)
 
         })?;
 

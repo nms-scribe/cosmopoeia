@@ -22,8 +22,8 @@ impl PropertySchema {
 }
 
 pub(crate) struct ElevationLimits {
-    pub(crate) min_elevation: f64,
-    pub(crate) max_elevation: f64
+    min_elevation: f64,
+    max_elevation: f64
 }
 
 impl ElevationLimits {
@@ -42,6 +42,14 @@ impl ElevationLimits {
                 max_elevation,
             })
         }
+    }
+    
+    pub(crate) const fn min_elevation(&self) -> f64 {
+        self.min_elevation
+    }
+    
+    pub(crate) const fn max_elevation(&self) -> f64 {
+        self.max_elevation
     }
 }
 
@@ -70,7 +78,7 @@ impl PropertyLayer<'_,'_> {
 
     pub(crate) fn get_property(&mut self, name: &str) -> Result<String,CommandError> {
         let mut result = None;
-        for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
+        for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer_mut().features()) {
             if feature.name()? == name {
                 result = Some(feature.value()?);
                 break;
@@ -78,7 +86,7 @@ impl PropertyLayer<'_,'_> {
         }
         // I'm not sure whether this should be done in the gdal layer or not, but it is necessary if the 
         // loop isn't completed.
-        self.layer.reset_feature_reading();
+        self.layer_mut().reset_feature_reading();
         result.ok_or_else(|| CommandError::PropertyNotSet(name.to_owned()))
     }
 
@@ -88,7 +96,7 @@ impl PropertyLayer<'_,'_> {
 
     pub(crate) fn set_property(&mut self, name: &str, value: &str) -> Result<IdRef,CommandError> {
         let mut found = None;
-        for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer.features()) {
+        for feature in TypedFeatureIterator::<PropertySchema,PropertyFeature>::from(self.layer_mut().features()) {
             if feature.name()? == name {
                 found = Some(feature.fid()?);
                 break;

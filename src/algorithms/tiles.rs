@@ -80,7 +80,7 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
 
 pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,CommandError>>, Progress: ProgressObserver>(target: &mut WorldMapTransaction, overwrite_layer: &OverwriteTilesArg, generator: Generator, limits: &ElevationLimits, world_shape: &WorldShape, progress: &mut Progress) -> Result<(),CommandError> {
 
-    let mut tiles = target.create_tile_layer(overwrite_layer)?;
+    let tiles = target.create_tile_layer(overwrite_layer)?;
 
     // NOTE: The delaunay process seems to process the points in a random order. However, I need to always insert the tiles from the same
     // generated points in the same order. If I could somehow "map" the sites with their original points, I could apply an incrementing
@@ -88,7 +88,7 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,Comman
     // bit heavy, so there might be a better way.
     let collected_tiles: Result<Vec<NewTileSite>,CommandError> = generator.watch(progress,"Collecting tiles", "Tiles collected.").collect();
     let mut collected_tiles = collected_tiles?;
-    collected_tiles.sort_by_cached_key(|tile| tile.site.to_ordered_tuple());
+    collected_tiles.sort_by_cached_key(|tile| tile.site().to_ordered_tuple());
 
     for tile in collected_tiles.into_iter().watch(progress,"Writing tiles.","Tiles written.") {
         tiles.add_tile(tile)?;
@@ -139,14 +139,14 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     // Find all tiles which share the same vertex. 
     // And if we're wrapping, keep a list of those that line up along east and west lines
     let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
-        let ring = tile.geometry.get_ring(0)?;
+        let ring = tile.geometry().get_ring(0)?;
         let usable_points_len = ring.len() - 1;
         // rings duplicate points at either end, so I need to skip the last.
         for point in ring.into_iter().take(usable_points_len) { 
             if let Some(list) = east_west_list.as_mut() {
                 if (point.0 - layer_extent.east()).abs() < f64::EPSILON {
                     list.push((fid.clone(),point.1,Side::East))
-                } else if (point.0 - layer_extent.west).abs() < f64::EPSILON {
+                } else if (point.0 - layer_extent.west()).abs() < f64::EPSILON {
                     list.push((fid.clone(),point.1,Side::West))
                 }
             }
@@ -168,12 +168,13 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     // map all of the tiles that share each vertex as their own neighbors.
     for (_,tiles) in point_tile_index.into_iter().watch(progress, "Matching vertices.", "Vertices matched.") {
 
+        #[allow(clippy::iter_over_hash_type)] // TODO: Maybe go through and find where I've allowed this, and change those to Sortable HashSets and HashMaps, just to allow for better reproducibility
         for tile in &tiles {
             
             // I can't calculate the angle yet, because I'm still deduplicating any intersections. I'll do that in the next loop.
             let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).cloned();
 
-            tile_map.try_get_mut(tile)?.neighbor_set.extend(neighbors)
+            tile_map.try_get_mut(tile)?.neighbor_set_mut().extend(neighbors)
 
         }
 
@@ -203,6 +204,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                     // this tile is being turned "on". So add it as a neighbor to any currently active tiles *on the other side*,
                     // plus gather those active tiles as a set to be inserted for this tile.
                     let mut yonder_neighbors = HashSet::new();
+                    #[allow(clippy::iter_over_hash_type)] // TODO: Maybe go through and find where I've allowed this, and change those to Sortable HashSets and HashMaps, just to allow for better reproducibility
                     for (yonder_id,yonder_set) in yonder_tiles {
                         _ = yonder_neighbors.insert(yonder_id.clone());
                         _ = yonder_set.insert(id.clone());
@@ -213,7 +215,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                 Some(neighbors) => {
                     // key existed in the map, so turn it "off", no more neighbors will be assigned to it,
                     // so add those neighbors to the cross_neight_set
-                    tile_map.try_get_mut(&id)?.cross_neighbor_set.extend(neighbors.into_iter());
+                    tile_map.try_get_mut(&id)?.cross_neighbor_set_mut().extend(neighbors.into_iter());
                 },
             }
 
@@ -252,7 +254,8 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     for (fid,tile) in tile_map.iter().watch(progress, "Writing neighbors.", "Neighbors written.") {
 
         let mut neighbors = Vec::new();
-        for neighbor_id in &tile.neighbor_set {
+        #[allow(clippy::iter_over_hash_type)] // TODO: Maybe go through and find where I've allowed this, and change those to Sortable HashSets and HashMaps, just to allow for better reproducibility
+        for neighbor_id in tile.neighbor_set() {
             let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, &world_shape, false)?;
 
             neighbors.push(NeighborAndDirection(Neighbor::Tile(neighbor_id.clone()),neighbor_angle))
@@ -260,8 +263,9 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         }
 
         // handle the cross neighbors, if they were calculated, but this should only happen if they were on the edge
-        if let Some(edge) = &tile.edge {
-            for neighbor_id in &tile.cross_neighbor_set {
+        if let Some(edge) = &tile.edge() {
+            #[allow(clippy::iter_over_hash_type)] // TODO: Maybe go through and find where I've allowed this, and change those to Sortable HashSets and HashMaps, just to allow for better reproducibility
+            for neighbor_id in tile.cross_neighbor_set() {
                 let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, &world_shape, true)?;
     
                 neighbors.push(NeighborAndDirection(Neighbor::CrossMap(neighbor_id.clone(),edge.clone()),neighbor_angle))
@@ -274,7 +278,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         // wrapping edges (east and west) should not have OffMap tiles because they already have CrossMap tiles.
         // polar edges (north and south) should not have OffMap tiles in order to keep features from extending to the poles, which can make things look weird.
         #[allow(clippy::match_same_arms)] // I have them separated for better understanding of what's going on
-        let edge: Option<Edge> = match (wraps_latitudinally,reaches_north_pole,reaches_south_pole,&tile.edge) {
+        let edge: Option<Edge> = match (wraps_latitudinally,reaches_north_pole,reaches_south_pole,&tile.edge()) {
             (_, _, _, None) => None, // there was no edge in the first place
 
             // wraps_latitudinally, reaches_north_pole and reaches_south_pole
@@ -339,12 +343,12 @@ fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, ti
     let neighbor = tile_map.try_get(neighbor_id)?;
     let neighbor_angle = {
 
-        let tile_site = &tile.site;
+        let tile_site = &tile.site();
 
         let neighbor_site = if across_anti_meridian {
-            neighbor.site.across_antimeridian(tile_site)
+            neighbor.site().across_antimeridian(tile_site)
         } else {
-            neighbor.site.clone()
+            neighbor.site().clone()
         };
         
         tile_site.shaped_bearing(&neighbor_site,world_shape)
@@ -493,8 +497,8 @@ impl Theme for CultureTheme {
     }
 
     fn get_theme_id(&self, tile: &TileForCultureDissolve) -> Result<Option<IdRef>, CommandError> {
-        if let Some(culture) = &tile.culture {
-            Ok::<_,CommandError>(Some(self.culture_id_map.try_get(culture)?.fid.clone()))
+        if let Some(culture) = &tile.culture() {
+            Ok::<_,CommandError>(Some(self.culture_id_map.try_get(culture)?.fid().clone()))
         } else {
             Ok(None)
         }
@@ -529,8 +533,8 @@ impl Theme for BiomeTheme {
     }
 
     fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<Option<IdRef>, CommandError> {
-        let biome = &tile.biome; 
-        Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid.clone()))
+        let biome = &tile.biome(); 
+        Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid().clone()))
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, BiomeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -559,7 +563,7 @@ impl Theme for NationTheme {
     }
 
     fn get_theme_id(&self, tile: &TileForNationDissolve) -> Result<Option<IdRef>, CommandError> {
-        Ok(tile.nation_id.clone())
+        Ok(tile.nation_id().clone())
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
@@ -589,7 +593,7 @@ impl Theme for SubnationTheme {
     }
 
     fn get_theme_id(&self, tile: &TileForSubnationDissolve) -> Result<Option<IdRef>, CommandError> {
-        Ok(tile.subnation_id.clone())
+        Ok(tile.subnation_id().clone())
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {

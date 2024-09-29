@@ -44,46 +44,46 @@ use crate::utils::random::random_number_generator;
 pub struct PrimitiveArgs {
 
     #[clap(flatten)]
-    pub tile_count_arg: TileCountArg,
+    pub tile_count: TileCountArg,
 
     #[clap(flatten)]
-    pub world_shape_arg: WorldShapeArg,
+    pub world_shape: WorldShapeArg,
 
     #[clap(flatten)]
-    pub temperature_arg: TemperatureRangeArg,
+    pub temperature: TemperatureRangeArg,
 
     #[clap(flatten)]
-    pub wind_arg: WindsArg,
+    pub wind: WindsArg,
 
     #[clap(flatten)]
-    pub precipitation_arg: PrecipitationArg,
+    pub precipitation: PrecipitationArg,
 
     #[clap(flatten)]
-    pub bezier_scale_arg: BezierScaleArg,
+    pub bezier_scale: BezierScaleArg,
 
     #[clap(flatten)]
-    pub lake_buffer_scale_arg: LakeBufferScaleArg,
+    pub lake_buffer_scale: LakeBufferScaleArg,
 
     #[clap(flatten)]
-    pub river_threshold_arg: RiverThresholdArg,
+    pub river_threshold: RiverThresholdArg,
 
     #[clap(flatten)]
-    pub override_biome_criteria_arg: OverrideBiomeCriteriaArg,
+    pub override_biome_criteria: OverrideBiomeCriteriaArg,
 
     #[clap(flatten)]
-    pub size_variance_arg: SizeVarianceArg,
+    pub size_variance: SizeVarianceArg,
 
     #[clap(flatten)]
-    pub expansion_factor_arg: ExpansionFactorArg,
+    pub expansion_factor: ExpansionFactorArg,
 
     #[clap(flatten)]
-    pub town_counts_arg: TownCountsArg,
+    pub town_counts: TownCountsArg,
 
     #[clap(flatten)]
-    pub subnation_percent_arg: SubnationPercentArg,
+    pub subnation_percent: SubnationPercentArg,
 
     #[clap(flatten)]
-    pub overwrite_all_arg: OverwriteAllArg,
+    pub overwrite_all: OverwriteAllArg,
 
 }
 
@@ -135,25 +135,25 @@ impl BigBang {
 
         let mut target = WorldMap::create_or_edit(&target_arg.target)?;
 
-        Create::run_default(&primitive_args.tile_count_arg, &primitive_args.world_shape_arg, &primitive_args.overwrite_all_arg.overwrite_tiles(), loaded_source, &mut target, random, progress)?;
+        Create::run_default(&primitive_args.tile_count, &primitive_args.world_shape, &primitive_args.overwrite_all.overwrite_tiles(), loaded_source, &mut target, random, progress)?;
 
-        GenClimate::run_default(&primitive_args.temperature_arg, &primitive_args.wind_arg, &primitive_args.precipitation_arg, &mut target, progress)?;
+        GenClimate::run_default(&primitive_args.temperature, &primitive_args.wind, &primitive_args.precipitation, &mut target, progress)?;
 
-        GenWater::run_default(&primitive_args.bezier_scale_arg, &primitive_args.lake_buffer_scale_arg, &primitive_args.overwrite_all_arg.overwrite_coastline(), &primitive_args.overwrite_all_arg.overwrite_ocean(), &primitive_args.overwrite_all_arg.overwrite_lakes(), &primitive_args.overwrite_all_arg.overwrite_rivers(), &mut target, progress)?;
+        GenWater::run_default(&primitive_args.bezier_scale, &primitive_args.lake_buffer_scale, &primitive_args.overwrite_all.overwrite_coastline(), &primitive_args.overwrite_all.overwrite_ocean(), &primitive_args.overwrite_all.overwrite_lakes(), &primitive_args.overwrite_all.overwrite_rivers(), &mut target, progress)?;
 
-        GenBiome::run_default(&primitive_args.override_biome_criteria_arg,&primitive_args.overwrite_all_arg.overwrite_biomes(), &primitive_args.bezier_scale_arg, &mut target, progress)?;
+        GenBiome::run_default(&primitive_args.override_biome_criteria,&primitive_args.overwrite_all.overwrite_biomes(), &primitive_args.bezier_scale, &mut target, progress)?;
 
         // The 'namer_set' here is not loaded, it's only used to verify that a namer exists for a culture while creating. Just to be clear, I'm not loading the namers twice, they are only loaded in `get_lookup_and_namers` below.
-        GenPeople::run_default(&primitive_args.river_threshold_arg, cultures, namers, &primitive_args.size_variance_arg, &primitive_args.overwrite_all_arg.overwrite_cultures(), &primitive_args.expansion_factor_arg, &primitive_args.bezier_scale_arg, &mut target, random, progress)?;
+        GenPeople::run_default(&primitive_args.river_threshold, cultures, namers, &primitive_args.size_variance, &primitive_args.overwrite_all.overwrite_cultures(), &primitive_args.expansion_factor, &primitive_args.bezier_scale, &mut target, random, progress)?;
 
         // CultureForNations implements everything that all the algorithms need.
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
     
-        GenTowns::run_default(random, &culture_lookup, namers, &primitive_args.town_counts_arg, &primitive_args.river_threshold_arg, &primitive_args.overwrite_all_arg.overwrite_towns(), &mut target, progress)?;
+        GenTowns::run_default(random, &culture_lookup, namers, &primitive_args.town_counts, &primitive_args.river_threshold, &primitive_args.overwrite_all.overwrite_towns(), &mut target, progress)?;
 
-        GenNations::run_default(random, &culture_lookup, namers, &primitive_args.size_variance_arg, &primitive_args.river_threshold_arg, &primitive_args.expansion_factor_arg, &primitive_args.bezier_scale_arg, &primitive_args.overwrite_all_arg.overwrite_nations(), &mut target, progress)?;
+        GenNations::run_default(random, &culture_lookup, namers, &primitive_args.size_variance, &primitive_args.river_threshold, &primitive_args.expansion_factor, &primitive_args.bezier_scale, &primitive_args.overwrite_all.overwrite_nations(), &mut target, progress)?;
 
-        GenSubnations::run_default(random, &culture_lookup, namers, &primitive_args.subnation_percent_arg, &primitive_args.overwrite_all_arg.overwrite_subnations(), &primitive_args.bezier_scale_arg, &mut target, progress)
+        GenSubnations::run_default(random, &culture_lookup, namers, &primitive_args.subnation_percent, &primitive_args.overwrite_all.overwrite_subnations(), &primitive_args.bezier_scale, &mut target, progress)
 
     }
 }

@@ -24,10 +24,10 @@ use crate::typed_map::fields::IdRef;
 
 #[derive(Debug)]
 pub(crate) struct RiverSegment {
-    pub(crate) from: IdRef,
-    pub(crate) to: Neighbor,
-    pub(crate) to_flow: f64,
-    pub(crate) from_lake: bool,
+    from: IdRef,
+    to: Neighbor,
+    to_flow: f64,
+    from_lake: bool,
 }
 
 fn find_flowingest_tile(list: &Vec<Rc<RiverSegment>>) -> (Rc<RiverSegment>,f64) {
@@ -371,16 +371,16 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
 
     for entity in tiles.read_features().into_entities::<TileForRiverConnect>().watch(progress,"Finding segments.","Segments found.") {
         let (fid,tile) = entity?;
-        for flow_to in &tile.flow_to {
-            let flow_to_len = tile.flow_to.len() as f64;
+        for flow_to in tile.flow_to() {
+            let flow_to_len = tile.flow_to().len() as f64;
             result.push(Rc::from(RiverSegment {
                 from: fid.clone(),
                 to: flow_to.clone(),
-                to_flow: tile.water_flow/flow_to_len,
+                to_flow: tile.water_flow()/flow_to_len,
                 from_lake: false,
             }))
         }
-        if let Some(outlet_from) = &tile.outlet_from {
+        if let Some(outlet_from) = &tile.outlet_from() {
             let (from,to) = match outlet_from.clone() {
                 Neighbor::Tile(from) => (from,Neighbor::Tile(fid.clone())),
                 Neighbor::CrossMap(from, edge) => (from,Neighbor::CrossMap(fid.clone(), edge.opposite())),
@@ -392,7 +392,7 @@ pub(crate) fn gen_water_rivers_find_segments<Progress: ProgressObserver>(tiles: 
             result.push(Rc::from(RiverSegment {
                 from,
                 to,
-                to_flow: tile.water_flow,
+                to_flow: *tile.water_flow(),
                 from_lake: true,
             }));
         }

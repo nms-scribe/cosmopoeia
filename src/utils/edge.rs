@@ -75,11 +75,11 @@ impl Edge {
             Self::North => (p.1 - extent.north()).abs() < f64::EPSILON,
             Self::Northeast => (p.1 - extent.north()).abs() < f64::EPSILON || (p.0 - extent.east()).abs() < f64::EPSILON,
             Self::East => (p.0 - extent.east()).abs() < f64::EPSILON,
-            Self::Southeast => (p.1 - extent.south).abs() < f64::EPSILON || (p.0 - extent.east()).abs() < f64::EPSILON,
-            Self::South => (p.1 - extent.south).abs() < f64::EPSILON,
-            Self::Southwest => (p.1 - extent.south).abs() < f64::EPSILON || (p.0 - extent.west).abs() < f64::EPSILON,
-            Self::West => (p.0 - extent.west).abs() < f64::EPSILON,
-            Self::Northwest => (p.1 - extent.north()).abs() < f64::EPSILON || (p.0 - extent.west).abs() < f64::EPSILON,
+            Self::Southeast => (p.1 - extent.south()).abs() < f64::EPSILON || (p.0 - extent.east()).abs() < f64::EPSILON,
+            Self::South => (p.1 - extent.south()).abs() < f64::EPSILON,
+            Self::Southwest => (p.1 - extent.south()).abs() < f64::EPSILON || (p.0 - extent.west()).abs() < f64::EPSILON,
+            Self::West => (p.0 - extent.west()).abs() < f64::EPSILON,
+            Self::Northwest => (p.1 - extent.north()).abs() < f64::EPSILON || (p.0 - extent.west()).abs() < f64::EPSILON,
         }
     }
 

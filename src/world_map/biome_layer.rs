@@ -18,20 +18,38 @@ use crate::typed_map::features::TypedFeatureIterator;
 use crate::commands::OverrideBiomeCriteriaArg;
 
 pub(crate) struct BiomeDefault {
-    pub(crate) name: &'static str,
-    pub(crate) habitability: i32,
-    pub(crate) criteria: BiomeCriteria,
-    pub(crate) movement_cost: i32,
-    pub(crate) supports_nomadic: bool,
-    pub(crate) supports_hunting: bool,
-    pub(crate) color: (u8,u8,u8),
+    name: &'static str,
+    habitability: i32,
+    criteria: BiomeCriteria,
+    movement_cost: i32,
+    supports_nomadic: bool,
+    supports_hunting: bool,
+    color: (u8,u8,u8),
 }
 
 pub(crate) struct BiomeMatrix {
-    pub(crate) matrix: [[String; 26]; 5],
-    pub(crate) ocean: String,
-    pub(crate) glacier: (String,f64),
-    pub(crate) wetland: (String,f64)
+    matrix: [[String; 26]; 5],
+    ocean: String,
+    glacier: (String,f64),
+    wetland: (String,f64)
+}
+
+impl BiomeMatrix {
+    pub(crate) const fn ocean(&self) -> &String {
+        &self.ocean
+    }
+    
+    pub(crate) const fn glacier(&self) -> &(String,f64) {
+        &self.glacier
+    }
+    
+    pub(crate) const fn wetland(&self) -> &(String,f64) {
+        &self.wetland
+    }
+    
+    pub(crate) const fn matrix(&self) -> &[[String; 26]; 5] {
+        &self.matrix
+    }
 }
 
 layer!(Biome["biomes"]: MultiPolygon {
@@ -237,57 +255,57 @@ impl BiomeSchema {
 }
 
 entity!(BiomeForPopulation: Biome {
-    name: String,
+    #[get=false] name: String,
     habitability: i32
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForPopulation {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }
 
 entity!(BiomeForCultureGen: Biome {
-    name: String,
+    #[get=false] name: String,
     supports_nomadic: bool,
     supports_hunting: bool
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForCultureGen {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }
 
 entity!(BiomeForCultureExpand: Biome {
-    name: String,
+    #[get=false] name: String,
     movement_cost: i32
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForCultureExpand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }
 
 entity!(BiomeForNationExpand: Biome {
-    name: String,
+    #[get=false] name: String,
     movement_cost: i32
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForNationExpand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }
 
 entity!(BiomeForDissolve: Biome {
     fid: IdRef,
-    name: String
+    #[get=false] name: String
 });
 
 impl NamedEntity<BiomeSchema> for BiomeForDissolve {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }

@@ -85,7 +85,7 @@ impl WorldMap {
 
     const GDAL_DRIVER: &'static str = "GPKG";
 
-    fn new(dataset: Dataset/* , path: PathBuf*/) -> Self {
+    const fn new(dataset: Dataset/* , path: PathBuf*/) -> Self {
         Self { 
             //path, 
             dataset 
@@ -172,7 +172,7 @@ pub(crate) struct WorldMapTransaction<'data_life> {
 
 impl<'impl_life> WorldMapTransaction<'impl_life> {
 
-    fn new(dataset: Transaction<'impl_life>) -> Self {
+    const fn new(dataset: Transaction<'impl_life>) -> Self {
         Self {
             dataset
         }
@@ -206,11 +206,11 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_lakes)
     }
 
-    pub (crate) fn edit_lakes_layer(&mut self) -> Result<LakeLayer,CommandError> {
+    pub (crate) fn edit_lakes_layer(&self) -> Result<LakeLayer,CommandError> {
         LakeLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn edit_tile_layer(&mut self) -> Result<TileLayer,CommandError> {
+    pub(crate) fn edit_tile_layer(&self) -> Result<TileLayer,CommandError> {
         TileLayer::open_from_dataset(&self.dataset)
 
     }
@@ -219,7 +219,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         BiomeLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_biomes)
     }
 
-    pub(crate) fn edit_biomes_layer(&mut self) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn edit_biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
         BiomeLayer::open_from_dataset(&self.dataset)
 
     }
@@ -228,7 +228,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         CultureLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_cultures)
     }
 
-    pub(crate) fn edit_cultures_layer(&mut self) -> Result<CultureLayer,CommandError> {
+    pub(crate) fn edit_cultures_layer(&self) -> Result<CultureLayer,CommandError> {
         CultureLayer::open_from_dataset(&self.dataset)
 
     }
@@ -237,7 +237,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_towns)
     }
 
-    pub(crate) fn edit_towns_layer(&mut self) -> Result<TownLayer,CommandError> {
+    pub(crate) fn edit_towns_layer(&self) -> Result<TownLayer,CommandError> {
         TownLayer::open_from_dataset(&self.dataset)
 
     }
@@ -246,7 +246,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_nations)
     }
 
-    pub(crate) fn edit_nations_layer(&mut self) -> Result<NationLayer,CommandError> {
+    pub(crate) fn edit_nations_layer(&self) -> Result<NationLayer,CommandError> {
         NationLayer::open_from_dataset(&self.dataset)
     }
 
@@ -254,7 +254,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_subnations)
     }
 
-    pub(crate) fn edit_subnations_layer(&mut self) -> Result<SubnationLayer,CommandError> {
+    pub(crate) fn edit_subnations_layer(&self) -> Result<SubnationLayer,CommandError> {
         SubnationLayer::open_from_dataset(&self.dataset)
     }
 
@@ -276,7 +276,7 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         PropertyLayer::create_from_dataset(&mut self.dataset,true)
     }
 
-    pub(crate) fn edit_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
+    pub(crate) fn edit_properties_layer(&self) -> Result<PropertyLayer,CommandError> {
         PropertyLayer::open_from_dataset(&self.dataset)
     }
 

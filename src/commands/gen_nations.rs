@@ -38,19 +38,19 @@ subcommand_def!{
     pub struct Create {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub namers_arg: NamerArg,
+        pub namers: NamerArg,
 
         #[clap(flatten)]
-        pub size_variance_arg: SizeVarianceArg,
+        pub size_variance: SizeVarianceArg,
 
         #[clap(flatten)]
-        pub random_seed_arg: RandomSeedArg,
+        pub random_seed: RandomSeedArg,
 
         #[clap(flatten)]
-        pub overwrite_nations_arg: OverwriteNationsArg,
+        pub overwrite_nations: OverwriteNationsArg,
         
     }
 }
@@ -60,17 +60,17 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(&self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed);
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
-        let mut loaded_namers = NamerSet::load_from(self.namers_arg, &mut random, progress)?;
+        let mut loaded_namers = NamerSet::load_from(self.namers, &mut random, progress)?;
 
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.size_variance_arg, &self.overwrite_nations_arg, transaction, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.size_variance, &self.overwrite_nations, transaction, progress)
         })?;
 
         target.save(progress)
@@ -93,13 +93,13 @@ subcommand_def!{
     pub struct Expand {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub river_threshold_arg: RiverThresholdArg,
+        pub river_threshold: RiverThresholdArg,
 
         #[clap(flatten)]
-        pub expansion_factor_arg: ExpansionFactorArg,
+        pub expansion_factor: ExpansionFactorArg,
 
     }
 }
@@ -109,9 +109,9 @@ impl Task for Expand {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, transaction, progress)
+            Self::run_with_parameters(&self.river_threshold, &self.expansion_factor, transaction, progress)
         })?;
 
         target.save(progress)
@@ -261,28 +261,28 @@ command_def!{
 pub struct DefaultArgs {
 
     #[clap(flatten)]
-    pub target_arg: TargetArg,
+    pub target: TargetArg,
 
     #[clap(flatten)]
-    pub namer_arg: NamerArg,
+    pub namer: NamerArg,
 
     #[clap(flatten)]
-    pub size_variance_arg: SizeVarianceArg,
+    pub size_variance: SizeVarianceArg,
 
     #[clap(flatten)]
-    pub random_seed_arg: RandomSeedArg,
+    pub random_seed: RandomSeedArg,
 
     #[clap(flatten)]
-    pub river_threshold_arg: RiverThresholdArg,
+    pub river_threshold: RiverThresholdArg,
 
     #[clap(flatten)]
-    pub expansion_factor_arg: ExpansionFactorArg,
+    pub expansion_factor: ExpansionFactorArg,
 
     #[clap(flatten)]
-    pub bezier_scale_arg: BezierScaleArg,
+    pub bezier_scale: BezierScaleArg,
 
     #[clap(flatten)]
-    pub overwrite_nations_arg: OverwriteNationsArg,
+    pub overwrite_nations: OverwriteNationsArg,
 
 
 }
@@ -307,15 +307,15 @@ impl Task for GenNations {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         if let Some(default_args) = self.default_args {
-            let mut random = random_number_generator(&default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed);
 
-            let mut target = WorldMap::edit(&default_args.target_arg.target)?;
+            let mut target = WorldMap::edit(&default_args.target.target)?;
     
-            let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
+            let mut loaded_namers = NamerSet::load_from(default_args.namer, &mut random, progress)?;
 
             let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
     
-            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.size_variance_arg, &default_args.river_threshold_arg, &default_args.expansion_factor_arg, &default_args.bezier_scale_arg, &default_args.overwrite_nations_arg, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.size_variance, &default_args.river_threshold, &default_args.expansion_factor, &default_args.bezier_scale, &default_args.overwrite_nations, &mut target, progress)
 
         } else if let Some(command) = self.command {
 

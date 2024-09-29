@@ -129,15 +129,15 @@ pub(crate) fn generate_temperatures<Progress: ProgressObserver>(target: &mut Wor
 
     for feature in features.iter().watch(progress,"Generating temperatures.","Temperatures calculated.") {
 
-        let base_temp = ((polar_temp - equator_temp)/8100.0).mul_add(feature.site_y.powi(2),equator_temp);
-        let adabiatic_temp = base_temp - if feature.grouping.is_ocean() {
+        let base_temp = ((polar_temp - equator_temp)/8100.0).mul_add(feature.site_y().powi(2),equator_temp);
+        let adabiatic_temp = base_temp - if feature.grouping().is_ocean() {
             0.0
         } else {
-            (feature.elevation/1000.0)*6.5
+            (feature.elevation()/1000.0)*6.5
         };
         let temp = (adabiatic_temp*100.0).round()/100.0;
 
-        let mut working_feature = layer.try_feature_by_id(&feature.fid)?; 
+        let mut working_feature = layer.try_feature_by_id(feature.fid())?; 
         
         working_feature.set_temperature(&temp)?;
 
@@ -163,9 +163,9 @@ pub(crate) fn generate_winds<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for feature in features.iter().watch(progress,"Generating winds.","Winds generated.") {
 
-        let wind_dir = Deg(winds.get(&ordered_float::OrderedFloat(feature.site_y)).copied().unwrap_or(90) as f64);
+        let wind_dir = Deg(winds.get(&ordered_float::OrderedFloat(*feature.site_y())).copied().unwrap_or(90) as f64);
  
-        let mut working_feature = layer.try_feature_by_id(&feature.fid)?;
+        let mut working_feature = layer.try_feature_by_id(feature.fid())?;
         
         working_feature.set_wind(&wind_dir)?;
 
@@ -204,15 +204,15 @@ impl PrecipitationFactors {
 }
 
 entity!(TileDataForPrecipitation: Tile {
-    elevation: f64,
-    wind: Deg<f64>, 
-    grouping: Grouping, 
-    neighbors: Vec<NeighborAndDirection>,
-    temperature: f64,
-    precipitation: f64 = |_| {
+    #[get=false] elevation: f64,
+    #[get=false] wind: Deg<f64>, 
+    #[get=false] grouping: Grouping, 
+    #[get=false] neighbors: Vec<NeighborAndDirection>,
+    #[get=false] temperature: f64,
+    #[get=false] precipitation: f64 = |_| {
         Ok::<_,CommandError>(0.0)
     },
-    factors: PrecipitationFactors = PrecipitationFactors::from_tile_feature
+    #[get=false] factors: PrecipitationFactors = PrecipitationFactors::from_tile_feature
 });
 
 

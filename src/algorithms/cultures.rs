@@ -40,6 +40,7 @@ use crate::commands::RiverThresholdArg;
 use crate::commands::ExpansionFactorArg;
 use crate::world_map::fields::NeighborAndDirection;
 use crate::world_map::fields::Neighbor;
+use crate::typed_map::entities::NamedEntity;
 
 impl CultureType {
 
@@ -148,7 +149,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             //     tile during the process and choose that at the end
             let index = populated.choose_biased_index(rng,0,max_tile_choice,5);
             let center = &populated[index];
-            if (i > MAX_ATTEMPTS) || !too_close(&placed_centers,&center.site,spacing,&world_shape) { 
+            if (i > MAX_ATTEMPTS) || !too_close(&placed_centers,center.site(),spacing,&world_shape) { 
                 // return the removed tile, to prevent any other culture from matching it.
                 break populated.remove(index);
             }
@@ -156,7 +157,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             spacing *= 0.9;
             i += 1;
         };
-        placed_centers.push(center.site.clone());
+        placed_centers.push(center.site().clone());
 
         let name = culture_source.name().to_owned();
 
@@ -182,7 +183,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             namer: namer.to_owned(),
             type_: culture_type,
             expansionism,
-            center_tile_id: center.fid,
+            center_tile_id: center.fid().clone(),
             color: colors.next().expect("There should have been just as many colors generated as cultures.")
         });
         
@@ -235,8 +236,8 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
     
     for tile in tile_layer.read_features().into_entities::<TileForCultureGen>().watch(progress,"Reading tiles.","Tiles read.") {
         let (_,tile) = tile?;
-        if tile.population > 0 {
-            max_habitability = max_habitability.max(tile.habitability);
+        if tile.population() > &0 {
+            max_habitability = max_habitability.max(*tile.habitability());
             populated.push(tile);
         }
     }
@@ -253,29 +254,29 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
 
 
 fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_threshold: f64, rng: &mut Random) -> CultureType {
-    if center.elevation_scaled < 70 && center.biome.supports_nomadic {
+    if center.elevation_scaled() < 70 && *center.biome().supports_nomadic() {
         return CultureType::Nomadic 
-    } else if center.elevation_scaled > 50 {
+    } else if center.elevation_scaled() > 50 {
         return CultureType::Highland
     }
     
-    if let Some(water_count) = center.water_count {
-        if let Some(neighboring_lake_size) = center.neighboring_lake_size {
+    if let Some(water_count) = center.water_count() {
+        if let Some(neighboring_lake_size) = center.neighboring_lake_size() {
             if neighboring_lake_size > 5 {
                 return CultureType::Lake
             }
         }
 
-        if (center.neighboring_lake_size.is_none() && rng.gen_bool(0.1)) || // on the ocean cost (on water cost and not on a lake)
+        if (center.neighboring_lake_size().is_none() && rng.gen_bool(0.1)) || // on the ocean cost (on water cost and not on a lake)
            ((water_count == 1) && rng.gen_bool(0.6)) || // on exactly one water (makes a good harbor)
-           (matches!(center.grouping,Grouping::Islet) && rng.gen_bool(0.4)) { // on a small island
+           (matches!(center.grouping(),Grouping::Islet) && rng.gen_bool(0.4)) { // on a small island
             return CultureType::Naval
         }
     }
     
-    if center.water_flow > river_threshold { 
+    if center.water_flow() > river_threshold { 
         CultureType::River
-    } else if center.shore_distance > 2 && center.biome.supports_hunting {
+    } else if center.shore_distance() > 2 && *center.biome().supports_hunting() {
         CultureType::Hunting
     } else {
         CultureType::Generic
@@ -327,14 +328,14 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     
     for culture in cultures {
 
-        _ = culture_centers.insert(culture.center_tile_id.clone());
+        _ = culture_centers.insert(culture.center_tile_id().clone());
 
         // place the culture center
-        let tile = tile_map.try_get_mut(&culture.center_tile_id)?;
-        tile.culture = Some(culture.name.clone());
+        let tile = tile_map.try_get_mut(culture.center_tile_id())?;
+        tile.set_culture(Some(culture.name().clone()));
 
         // add the tile to the queue for work.
-        _ = queue.push((culture.center_tile_id.clone(),culture,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        _ = queue.push((culture.center_tile_id().clone(),culture,tile.biome().clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -347,7 +348,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         
         let tile = tile_map.try_get(&tile_id)?;
 
-        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
             
             match neighbor_id {
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
@@ -359,21 +360,21 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
                     let neighbor = tile_map.try_get(neighbor_id)?;
 
-                    let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
+                    let neighbor_biome = biome_map.try_get(neighbor.biome())?;
 
-                    let biome_cost = get_biome_cost(&culture_biome,neighbor_biome,&culture.type_);
+                    let biome_cost = get_biome_cost(&culture_biome,neighbor_biome,culture.type_());
 
                     // NOTE: AFMG Had a line that looked very much like this one. I don't know if that was what was intended or not, but
                     // from my view, this will always return 0.
                     // let biome_change_cost = if neighbor_biome == biome_map.get(&neighbor.biome) { 0 } else { 20 };
 
-                    let height_cost = get_height_cost(neighbor, &culture.type_);
+                    let height_cost = get_height_cost(neighbor, culture.type_());
 
-                    let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &culture.type_);
+                    let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, culture.type_());
 
-                    let type_cost = get_shore_cost(neighbor, &culture.type_);
+                    let type_cost = get_shore_cost(neighbor, culture.type_());
 
-                    let cell_cost = OrderedFloat::from(biome_cost /* + biome_change_cost */ + height_cost + river_cost + type_cost) / culture.expansionism;
+                    let cell_cost = OrderedFloat::from(biome_cost /* + biome_change_cost */ + height_cost + river_cost + type_cost) / culture.expansionism();
 
                     let total_cost = priority.0 + cell_cost;
 
@@ -392,7 +393,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                         if replace_culture {
                             // even if there's no population in the tile, if we can spread to it, mark it as the cultures.
                             // Otherwise, we get some "empty" areas around lakes.
-                            place_cultures.push((neighbor_id.clone(),culture.name.clone()));
+                            place_cultures.push((neighbor_id.clone(),culture.name().clone()));
                             _ = costs.insert(neighbor_id.clone(), total_cost);
 
                             queue.push((neighbor_id.clone(), culture.clone(), culture_biome.clone()), Reverse(total_cost));
@@ -428,7 +429,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
         }
 
         for (place_tile_id,place_culture) in place_cultures {
-            tile_map.try_get_mut(&place_tile_id)?.culture = Some(place_culture);
+            tile_map.try_get_mut(&place_tile_id)?.set_culture(Some(place_culture));
         }
 
 
@@ -438,7 +439,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
         let mut feature = tiles.try_feature_by_id(fid)?;
 
-        feature.set_culture(&tile.culture)?;
+        feature.set_culture(tile.culture())?;
 
         tiles.update_feature(feature)?;
 
@@ -450,35 +451,35 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
 const fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -> f64 {
     match culture_type {
-        CultureType::Lake => match neighbor.shore_distance {
+        CultureType::Lake => match neighbor.shore_distance() {
             2 | 1 => 0.0, 
             ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
             -1 => 0.0,
         },
-        CultureType::Naval => match neighbor.shore_distance {
+        CultureType::Naval => match neighbor.shore_distance() {
             1 => 0.0,
             2 => 30.0, // penalty for mainland 
             ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland 
             -1 => 0.0,
         },
-        CultureType::Nomadic => match neighbor.shore_distance {
+        CultureType::Nomadic => match neighbor.shore_distance() {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
-        CultureType::Generic  => match neighbor.shore_distance {
+        CultureType::Generic  => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
-        CultureType::River => match neighbor.shore_distance {
+        CultureType::River => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
-        CultureType::Hunting => match neighbor.shore_distance {
+        CultureType::Hunting => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0,
         },
-        CultureType::Highland => match neighbor.shore_distance {
+        CultureType::Highland => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0,
         },
@@ -488,7 +489,7 @@ const fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureT
 
 fn get_river_cost(neighbor: &TileForCultureExpand, river_threshold: f64, culture_type: &CultureType) -> f64 {
     match culture_type {
-        CultureType::River => if neighbor.water_flow > river_threshold {
+        CultureType::River => if neighbor.water_flow() > &river_threshold {
             0.0
         } else {
             // they want to stay near rivers
@@ -499,62 +500,62 @@ fn get_river_cost(neighbor: &TileForCultureExpand, river_threshold: f64, culture
         CultureType::Naval |
         CultureType::Nomadic |
         CultureType::Hunting |
-        CultureType::Highland => if neighbor.water_flow <= river_threshold {
+        CultureType::Highland => if neighbor.water_flow() <= &river_threshold {
             0.0 // no penalty for non-rivers
         } else {
             // penalty based on flowage
-            (neighbor.water_flow / 10.0).clamp(20.0, 100.0)
+            (neighbor.water_flow() / 10.0).clamp(20.0, 100.0)
         },
     }
 }
 
 fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -> f64 {
     match culture_type {
-        CultureType::Lake => if neighbor.lake_id.is_some() {
+        CultureType::Lake => if neighbor.lake_id().is_some() {
             // low lake crossing penalty for lake cultures
             10.0
-        } else if neighbor.grouping.is_water() {
+        } else if neighbor.grouping().is_water() {
             // general sea/lake crossing penalty
-            neighbor.area * 6.0
-        } else if neighbor.elevation_scaled >= 67 {
+            neighbor.area() * 6.0
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
         } else {
             0.0
         },
-        CultureType::Naval => if neighbor.grouping.is_water() {
+        CultureType::Naval => if neighbor.grouping().is_water() {
             // low water crossing penalty
-            neighbor.area * 2.0
-        } else if neighbor.elevation_scaled >= 67 {
+            neighbor.area() * 2.0
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
         } else {
             0.0
         },
-        CultureType::Nomadic => if neighbor.grouping.is_water() {
-            neighbor.area * 50.0
-        } else if neighbor.elevation_scaled >= 67 {
+        CultureType::Nomadic => if neighbor.grouping().is_water() {
+            neighbor.area() * 50.0
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
         } else {
             0.0
         },
-        CultureType::Highland => if neighbor.grouping.is_water() {
+        CultureType::Highland => if neighbor.grouping().is_water() {
             // general sea/lake corssing penalty
-            neighbor.area * 6.0
-        } else if neighbor.elevation_scaled < 44 {
+            neighbor.area() * 6.0
+        } else if neighbor.elevation_scaled() < &44 {
             // big penalty for highlanders in lowlands
             3000.0
-        } else if neighbor.elevation_scaled < 62 {
+        } else if neighbor.elevation_scaled() < &62 {
             // smaller but still big penalty for hills
             200.0
         } else {
@@ -563,13 +564,13 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
         },
         CultureType::Generic |
         CultureType::River |
-        CultureType::Hunting => if neighbor.grouping.is_water() {
+        CultureType::Hunting => if neighbor.grouping().is_water() {
             // general sea/lake corssing penalty
-            neighbor.area * 6.0
-        } else if neighbor.elevation_scaled >= 67 {
+            neighbor.area() * 6.0
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
         } else {
@@ -583,23 +584,23 @@ fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForCultureExpand
     const FOREST_BIOMES: [&str; 5] = [BiomeSchema::TROPICAL_SEASONAL_FOREST, BiomeSchema::TEMPERATE_DECIDUOUS_FOREST, BiomeSchema::TROPICAL_RAINFOREST, BiomeSchema::TEMPERATE_RAINFOREST, BiomeSchema::TAIGA];
 
     
-    if culture_biome == &neighbor_biome.name {
+    if culture_biome == neighbor_biome.name() {
         // tiny penalty for native biome
         10.0
     } else {
         (match culture_type {
-            CultureType::Hunting => neighbor_biome.movement_cost * 5, // non-native biome penalty for hunters
-            CultureType::Nomadic => if FOREST_BIOMES.contains(&neighbor_biome.name.as_str()) {
+            CultureType::Hunting => neighbor_biome.movement_cost() * 5, // non-native biome penalty for hunters
+            CultureType::Nomadic => if FOREST_BIOMES.contains(&neighbor_biome.name().as_str()) {
                 // penalty for forests
-                neighbor_biome.movement_cost * 10
+                neighbor_biome.movement_cost() * 10
             } else {
-                neighbor_biome.movement_cost * 2
+                neighbor_biome.movement_cost() * 2
             },
             CultureType::Generic |
             CultureType::Lake |
             CultureType::Naval |
             CultureType::River |
-            CultureType::Highland => neighbor_biome.movement_cost * 2,
+            CultureType::Highland => neighbor_biome.movement_cost() * 2,
         }) as f64
     
     }

@@ -57,7 +57,7 @@ impl<Random: Rng> PointGenerator<Random> {
     }
 
     pub(crate) fn make_point(&self, x: f64, y: f64) -> Result<Point,CommandError> {
-        let result = Point::new(self.extent.west + x,self.extent.south + y)?;
+        let result = Point::new(self.extent.west() + x,self.extent.south() + y)?;
         Ok(result)
     }
 
@@ -114,7 +114,7 @@ impl<Random: Rng> PointGenerator<Random> {
             R = 1/cos(phi)
 
         */
-        let lat = self.extent.south + y; // remember, 'y' is not the actual latitude.
+        let lat = self.extent.south() + y; // remember, 'y' is not the actual latitude.
         let length_of_lat_degree = lat.to_radians().cos().max(f64::EPSILON);
         let ratio = length_of_lat_degree.recip();
         ratio * self.spacing
@@ -144,15 +144,15 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
         match &self.phase { 
             PointGeneratorPhase::NortheastInfinity => {
                 self.phase = PointGeneratorPhase::SoutheastInfinity;
-                Some(self.make_point(self.extent.width*2.0, self.extent.height*2.0))
+                Some(self.make_point(self.extent.width()*2.0, self.extent.height()*2.0))
             },
             PointGeneratorPhase::SoutheastInfinity => {
                 self.phase = PointGeneratorPhase::SouthwestInfinity;
-                Some(self.make_point(self.extent.width*2.0, -self.extent.height))
+                Some(self.make_point(self.extent.width()*2.0, -self.extent.height()))
             },
             PointGeneratorPhase::SouthwestInfinity => {
                 self.phase = PointGeneratorPhase::NorthwestInfinity;
-                Some(self.make_point(-self.extent.width, -self.extent.height))
+                Some(self.make_point(-self.extent.width(), -self.extent.height()))
             },
             PointGeneratorPhase::NorthwestInfinity => {
                 let y = Self::START_Y;
@@ -162,18 +162,18 @@ impl<Random: Rng> Iterator for PointGenerator<Random> {
                     y,
                     x_spacing
                 };
-                Some(self.make_point(-self.extent.width, self.extent.height*2.0))
+                Some(self.make_point(-self.extent.width(), self.extent.height()*2.0))
             },
-            PointGeneratorPhase::Random{x, y, x_spacing} => if y < &self.extent.height {
+            PointGeneratorPhase::Random{x, y, x_spacing} => if y < &self.extent.height() {
                 let y_spacing = self.spacing;
-                if x < &self.extent.width {
+                if x < &self.extent.width() {
                     // if x_spacing is None, then we are at the poles. I want to skip that.
                     
                     let x_jitter = Self::jitter(&mut self.random,*x_spacing);
-                    let jittered_x = (x + x_jitter).clamp(Self::START_X,self.extent.width);
+                    let jittered_x = (x + x_jitter).clamp(Self::START_X,self.extent.width());
 
                     let y_jitter = Self::jitter(&mut self.random,y_spacing);
-                    let jittered_y = (y + y_jitter).clamp(Self::START_Y,self.extent.height);
+                    let jittered_y = (y + y_jitter).clamp(Self::START_Y,self.extent.height());
 
                     self.phase = PointGeneratorPhase::Random{
                         x: x + x_spacing, 

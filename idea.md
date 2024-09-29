@@ -195,3 +195,155 @@ The following was used to generate shared World.gpkg:
 ```sh
 /usr/bin/time -f 'Time:\t\t%E\nMax Mem:\t%M\nCPU:\t\t%P\nFile Out:\t%O' cargo run big-bang share/qgis/World.gpkg --overwrite-all --cultures share/culture_sets/afmg_culture_antique.json --namers share/namers/afmg_namers.json --default-namer English --seed 9543572450198918714 blank 180 360 -90 -180 recipe-set --source share/terrain_recipes/afmg_recipes.json --recipe continents
 ```
+
+# Improvement Thoughts 2024-09-19
+
+These thoughts are on a major overhaul that would support raster worldbuilding for the physical elements. Some of the things I want to address:
+
+* Parts of the physical process, especially precipitation, rivers and lakes are broken in their algorithms.
+* It would be nice to be able to use the physical algorithms, once refined, on raster maps without having to pull into tiles, for other kinds of world-building.
+* It would also be nice to turn Cosmopoeia into a general-purpose world-building tool. This is what I originally envisioned.
+* The political processes suffer from a major issue in that borders do not form at rivers.
+
+**NOTE: These might go into geo-tools instead.**
+
+I'm proposing switching the physical processes over to raster-based operations, and changing the way tiles are generated from this in the political process.
+
+This is what the plan is:
+
+* Random Terrain Generation can stay the same. The tile mechanism for building terrains is fine, even if the various recipe tasks could be improved. Below are listed some new commands.
+* `export-heightmap`: Will let you extract an interpolated heightmap from the terrain generation. 
+  * Parameters
+    * World Geopackage file
+    * Output heightmap
+    * Raster resolution
+    * Maybe, interpolation parameters
+    * Maybe, interpolation method
+  * Create a new raster, with the extents matching the world.
+  * Create an interpolator
+     * Natural Neighbor Interpolation seems like the best, and it's already got rust implementations: 
+        * https://blog.mikebourgeous.com/2021/06/09/voronoi-diagrams-and-natural-neighbor-interpolation-explained-in-video/
+        * https://gwlucastrig.github.io/TinfourDocs/NaturalNeighborTinfourAlgorithm/index.html
+        * https://crates.io/crates/naturalneighbor
+        * https://crates.io/crates/spade
+        * If there are too many pixels and the process is slow, one option for this is if it there are too many pixels, you can just interpolate to a lower resolution, then use some other interpolation method for the rest.
+     * Other options might include 'Bicubic Interpolation', 'TIN Interpolation' and maybe 'Cubic Spline' interpolation. I'd rather just pick one, but provide data that others could use to run their own algorithms on.
+     * Either way, the goal is an interpolator that reads in a bunch of points, then lets you query a point to calculate its interpolation, one at a time.
+  * Read the heights of the tiles, and load the interpolator with those heights and the coordinates of the tile site.
+  * For each pixel in the height-map raster, query the interpolator to get its interpolated height for that pixel, and write it to the heightmap.
+* `export-ocean-mask`: Extracts the ocean seeds from terrain generation and flood fills based on a given heightmap
+  * Parameters:
+    * World Geopackage
+    * Reference heightmap
+    * Output ocean mask
+    * Maybe, flood parameters
+  * Create a flood-filler
+    * The goal is an object that takes a bunch of seed points, and migrates around an existing raster to flood-fill based on given criteria.
+  * Read the tiles and find the sites of all ocean tiles, and feed the flood-filler. Set the condition to be any pixel <= 0.
+  * Iterate through the flood-filler, or however it's done, and mark ocean pixels in the mask based on the results.
+* `export-rasters`: Runs `export-heightmap` and `export-ocean-mask` all at once.
+
+* **Spatial Equity**. For all of the raster processes, where possible, I will incorporate the area of the pixel given the latitude into the process. This means that, for example, a pixel at the same elevation and temperature could have less water stored in it if it's further away from the equator. I contemplated some sort of fancy pixel format which has less pixels in the line, but I think assuming pixel area is probably the best solution to maintain spherical activity.
+* **Angular Equity**. Another thing I might want to consider is, whenever I'm looking for slopes, use some sort of bilinear interpolation to figure out the direction, rather then just NSEW. 
+* `raster-erosion`: This command would take a heightmap and ocean mask, and run erosion algorithms on it. 
+  * Although there would be built-in repetition factors, it should be possible to re-run the algorithm.
+  * After each repetition of the erosion process, the ocean mask is recalculated by:
+    * Masking out those pixels from the old ocean raster that are now above sea level.
+    * Flood filling to sea level using the remaining pixels as a seed.
+    * This process might have the habit of creating little oceans in basins that are filling in, the user can always edit the raster later, though.
+  * Alternatively, it might be possible to run this in cycles by just using the `export-ocean-mask` after each erosion.
+* `raster-temperature`: This command takes a heightmap and ocean mask, and using the parabolic method I use currently, assigns temperatures based on elevation and ocean. This version can include tilt in the process. The result is actually a 12-band raster, with average temperatures for each month of the year.
+  * I can't remember if the current algorithm takes distance from ocean into consideration. I might do that. 
+  * To allow for climate cycles, I might allow passing in a shade mask, which could be calculated based on precipitation and winds from later parts of the process. This might be a future thing, though.
+* `raster-pressure`: This one may or may not be done, or it might just be a simple function of temperature. Currently, in cosmopoeia, I have winds moving based on temperature. But there's a possibility that I can actually calculate pressure areas for each month of the year, making winds easier to calculate. It's also possible that I might take existing winds and precipitation as an input, allowing for cycles.
+* `raster-winds`: Using similar algorithm as I'm currently using, this one would calculate wind directions for each month of the year.
+* `raster-currents`: This is a process to be determined, to find the ocean currents. It would be based on prevailing winds, but also coriolis effect.
+* `raster-precipitation`: This algorithm gets an overhaul. With pixels I think I can do this more easily. The following is done for each month. 
+  * Requires winds and temperature.
+  * Every cell is assigned a starting humidity level. This is calculated thusly:
+    * Over land cells, it's zero.
+    * Over ocean cells, it's calculated based on the amount of water in the ocean, based on the pixels area, that can evaporate on a given day (this is probably an f64 number). 
+      * This is then compared to the amount of water the air can actually hold. Any excess water is converted into precipitation, which is marked on the output raster, probably after being converted into millimeters over the entire area of the pixel.
+    * If I can pull in a pre-existing lakes layer, I can add that humidity as well. This again allows for cycles to make more realistic worlds.
+  * Humidity is moved onto a new raster. Each cell is visited:
+    * Using wind direction, the neighbor to which the humidity will be moved is discovered.
+    * The humidity is moved onto the next cell, adding on to any humidity already moved there. If the humidity would be higher than what the air in that pixel can hold, it is converted into precipitation as above. Higher elevations and colder temperatures hold less humidity, which means this technique should form mountain deserts as easily as it forms deserts from distance to ocean.
+    * There is likely to be evaporation from the precipitation from the previous iteration to be added to the humidity as well.
+  * This is repeated a certain number of times. There are several possibilities:
+    * I could just repeat it based on the number of pixels on the heightmap in the longest direction, this would allow making sure the humidity covers as much as possible. However, the precipitation in mm would not be accurate for this as it would likely be rain over a thousand years or something. But then I could divide the precipitation up into single days and use that to calculate an average for the month.
+    * I could just repeat it 30 times, assuming the calculations I'm doing are based on daily evaporation rates. But this may not spread the humidity far enough.
+    * A hybrid option would be to do the 1000 day loop or whatever as above, but ignore all precipitation gained from that. Then just take the precipitation from the last loop.
+  * This is not accurate to real precipitation processes, but it should be adequate for our purposes.
+* `raster-water`: This algorithm also gets an overhaul, but it might actually be similar.
+  * **Alternatively**: See the next option
+  * Requires precipitation.
+  * First, slopes and slope angles are calculated for all land. Pixels with no lower neighbors have a null slope. Equal elevations are not lower.
+  * Second, precipitation across a whole year is calculated and laid down on each pixel as "water".
+  * Mark the flow flag as on.
+  * Loop while flag is on.
+    * Flow step:
+      * Flow flag is turned off.
+      * Water in every pixel is moved down the slope to the next pixel. It is added to any that has already been added from another pixel (but not to the precipitation flow)
+      * Yes, there can be branches, but they're more unlikely in this algorithm, I think.
+      * If the water ends in an ocean, it is done.
+      * If the water ends in a lake, the fill flag is marked, and the amount of water is recorded.
+      * If the water ends in a pixel with a non-null slope, a flag is marked that the flowage is not complete and the water is put into a flowing value.
+      * If the water can not flow, because all pixels are higher than it (slope is null), then a flag is marked that filling is necessary, and the amount of water is recorded.
+    * Fill step: only if the 'fill' flag is marked.
+      * Fill flag is turned off.
+      * scan through the pixels for pixels with 'filling' values.
+      * First, perform a small flood-fill to find all of the neighboring pixels that are the same elevation, or who are a lake with the same elevation.
+      * If, during the process of this flood-fill, an outlet is found (a pixel with a lower elevation), then:
+        * modify the slope direction for all pixels so that they point towards this outlet, so future iterations no longer fill this lake, but flow through.
+        * If multiple outlets are found, the slope for the pixels should point to the closest one.
+      * Distribute the amount of water included throughout these pixels evenly and mark this as a lake (if it isn't already), providing it's lake elevation. Even if an outlet was found, a lake is still forming here, any more water added will simply go out the outlet.
+    * Next: if the flow flag is on, repeat the loop. In theory, the fill step should never leave any water that hasn't filled.
+  * Go through the flowage, and everything over a certain threshold should be marked as a river. I'm not sure how to calculate this threshold.
+  * Then, turn the raster rivers into vector flow lines, creating our first vector layer from this process. This involves connecting pixels that are marked as rivers, based on slope. It could get complext. *Maybe this is a separate command, or part of import-environment*
+  * Again, this should take input lake and river files, as well as existing slope files, to allow this to be repeated several times.
+* `raster-water-alt`: This algorithm simplifies this even more. It might be broken up into separate steps, allowing you to repeat the lake filling if you want to.
+  * This version breaks it down into three steps: flow, fill and flow. Instead of making a cycle of that. 
+    * It's very difficult to calculate lakes correctly, since they fill and dry over time, and may be based on weather in the past, not the amount of precipiation it's getting *now*. For example, would the Aral Sea even exist if it hadn't been wetter in the past? How much actual less rain did it take to turn Lake Bonneville into Great Salt Lake? It might be easier to come up with a system of setting lake levels based on precipitation and temperature, and a little randomness. 
+    * In addition, once lakes form, they are unlikely to create more lakes, because the amount flowing out (if any) is just going to equal the amount flowing in, not that much more. At most it increases the flow of a river.
+    * This would reduce the complexity of the system and get rid of potential infinite loops.
+  * Requires precipitation.
+  * First, slopes and slope angles are calculated for all land. Pixels with no lower neighbors have a null slope. Equal elevations are not lower.
+  * Second, precipitation across a whole year is calculated and laid down on each pixel as "water".
+  * Mark the flow flag as on.
+  * Loop while flag is on.
+    * Flow step:
+      * Flow flag is turned off.
+      * Water in every pixel is moved down the slope to the next pixel. It is added to any that has already been added from another pixel (but not to the precipitation flow)
+      * Yes, there can be branches, but they're more unlikely in this algorithm, I think.
+      * If the water ends in an ocean, it is done.
+      * If the water ends in a lake, the fill flag is marked, and the amount of water is recorded.
+      * If the water ends in a pixel with a non-null slope, a flag is marked that the flowage is not complete and the water is put into a flowing value.
+      * If the water can not flow, because all pixels are higher than it (slope is null), then a flag is marked that filling is necessary, and the amount of water is recorded.
+  * Fill step: only if the 'fill' flag is marked. -- **This is not a loop, it's only done once**
+      * scan through the pixels for pixels with 'filling' values.
+      * Once found, look around at the size of the basin... how far out do you have to go to find a pixel that starts going down. Remember that level, then follow it down and then up again. If you run into an ocean while flowing down, then the basin is the previous level remembered. If you don't, remember the next outlet.
+      * *Another possibility is that I actually have a separate step called **find-basins*** that finds the basins around these fill marks. 
+      * Based on this value, precipitation, temperature, guesstimate a lake level. Basically, if the precipitation is high enough and the temperature low enough, then the basin gets filled, otherwise it becomes endorheic. 
+      * **An option might be to let the user decide these elevations and put it in a different step**.
+      * Do a flood-fill to generate the lake. Look for outlets: areas which are at the elevation of the lake (which might already be determined).
+      * Add up all the filling values that are now covered by the lake. Divide them up for each outlet and mark as 'flowing', and turn on the flow flag.
+      * If there are no flows, mark the lake as endorheic.
+  * Second flowage: re-run the flow loop from before, but ignore any filling flags, and pass flowage into lakes on to their outlets.
+  * Go through the flowage, and everything over a certain threshold should be marked as a river. I'm not sure how to calculate this threshold.
+  * Then, turn the raster rivers into vector flow lines, creating our first vector layer from this process. This involves connecting pixels that are marked as rivers, based on slope. It could get complex. *Maybe this is a separate command, or part of import-environment*
+  * Again, this should take input lake and river files, as well as existing slope files, to allow this to be repeated several times.
+* `raster-glaciers`: I'm not sure if this is something I want to do, but basically, it's similar to the water thing, but takes precipitation that falls in temperatures below 0 and converts it into snow, then figures out how much melts during the rest of the year. If some lasts throughout the year, then it accumulates into a glacier. Then the cycle is repeated, with pixels along the edge of the glacier automatically being included in that below 0 even if it's not their natural temperature. The glacier also shifts down one slope each cycle.
+* `raster-climate`: If I've done everything right, I should have real-world style measurements, which I can use to classify as Koppler zones.
+* `raster-biome`: I'm not sure if there are any classification systems for these, or if I should just based them off of Koppler zones.
+* `import-environment`: This is finally where we pull the raster data back into the vector data. This might be a set of commands. It gets the climate, biome, waterflow, rivers, lakes and oceans and pulls that into the tiles. The climates and biomes are spread out through the tile according to the predominant intersection. The rivers and lakes, however, are simply traced into vector lines. This allows lakes to exist smaller than tiles.
+  * There will still be some smoothing of rivers and lakes and biome/climate zone boundaries. They were pixelated before, so not only do they need to be curved, but vertices need to be removed to bring them closer to the fantasy scale. However, it might also be nice to keep them as they were, in case you did your own smoothing, so that the world looks a little more natural later.
+  * Part of this process, or another command, is going to re-tile everything, and I'm not sure exactly how to do that. But the goal is to split tiles that rivers go through, and cut lakes and oceans out of the land tiles. Tiles that are cut this way that become significantly below average may get merged into neighboring tiles that aren't across the water. 
+    * One issue with this is when a river starts in the middle of a tile. If I digitize the rivers correctly, however, this might not be a huge problem, because I can find their source and end points (have to be careful that the source isn't a branch, though). If I discover that the start point is inside a tile, then I can follow that to where it intersects with the border of a tile before splitting the tiles.
+    * Another issue are small lakes entirely inside tiles. These should be easy to find as well with a 'contains' operation, so they can stay and not split tiles also. These sorts of lakes would be too small to make ports, though.
+    * This system may change the political processes slightly, as there now can be no land tiles that are also lake tiles. And, to figure out if there is a river, I can't just go with waterflow. In fact, I might need a "River-Neighbor" field, or maybe more data in the neighbors field that specifies whether the neighbor is accross a river. (I can look at the data itself to see if it's land, lake or water)
+    * *One option*: there is no reason the tiles for the political processes need to be voronoi, except that there might be some assumptions I need to work with. I could take the vertices of the rivers, lakes and oceans, plus some random scattered points (trying not to set points too near those water features, maybe a buffer), and simply create Delaunay Triangles, and use triangle tiles. I really think this might make worlds that look nicer anyway, since the voronoi leads to almost a hex look and feel.
+
+
+
+
+

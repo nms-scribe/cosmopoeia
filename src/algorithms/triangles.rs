@@ -16,7 +16,7 @@ pub(crate) enum DelaunayGeneratorPhase {
 }
 
 pub(crate) struct DelaunayGenerator {
-    pub(crate) phase: DelaunayGeneratorPhase,
+    phase: DelaunayGeneratorPhase,
     world_shape: WorldShape
 
 }
@@ -62,7 +62,7 @@ impl Iterator for DelaunayGenerator {
         match &mut self.phase {
             DelaunayGeneratorPhase::Unstarted(_) => {
                 match self.start(&mut ()) { 
-                    Ok(_) => self.next(),
+                    Ok(()) => self.next(),
                     Err(e) => Some(Err(e)),
                 }
             },

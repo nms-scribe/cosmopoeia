@@ -33,10 +33,11 @@ use crate::world_map::fields::Neighbor;
 use crate::typed_map::fields::IdRef;
 
 pub(crate) struct ScoredTileForTowns {
-    pub(crate) tile: TileForTowns,
-    pub(crate) capital_score: OrderedFloat<f64>,
-    pub(crate) town_score: OrderedFloat<f64>
+    tile: TileForTowns,
+    capital_score: OrderedFloat<f64>,
+    town_score: OrderedFloat<f64>
 }
+
 
 pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, town_counts: &TownCountsArg, overwrite_layer: &OverwriteTownsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
@@ -61,19 +62,19 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
     let mut placed_towns = HashMap::new(); 
     for town in capitals.into_iter().chain(towns.into_iter()).watch(progress,"Writing towns.","Towns written.") {
         let (ScoredTileForTowns{tile,..},is_capital) = town;
-        let culture = tile.culture;
+        let culture = tile.culture();
         let namer = Culture::get_namer(culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?, namers)?;
         let name = namer.make_name(rng);
         let fid = towns_layer.add_town(&NewTown {
             name,
-            culture,
+            culture: culture.clone(),
             is_capital,
-            tile_id: tile.fid.clone(),
-            grouping_id: tile.grouping_id,
+            tile_id: tile.fid().clone(),
+            grouping_id: tile.grouping_id().clone(),
             population: 0,
             is_port: false
-        },tile.site.create_geometry()?)?;
-        _ = placed_towns.insert(tile.fid,fid); 
+        },tile.site().create_geometry()?)?;
+        _ = placed_towns.insert(tile.fid().clone(),fid); 
     }
 
     // even though we have the town locations indicated in the towns layer, there are going to be occasions
@@ -111,7 +112,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
             *town_count
         }
     } else {
-        let map_size = extent.width * extent.height;
+        let map_size = extent.width() * extent.height();
         let generated_town_count = (map_size/100.0).floor() as usize;
         let generated_town_count = generated_town_count.min(tiles.len() - placed_capital_count);
         if generated_town_count == 0 {
@@ -120,7 +121,7 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
         generated_town_count
     };
 
-    let mut spacing = (extent.width + extent.height) / 150.0 / ((town_count as f64).powf(0.7)/66.0);
+    let mut spacing = (extent.width() + extent.height()) / 150.0 / ((town_count as f64).powf(0.7)/66.0);
     let town_spacing_normal = Normal::new(1.0f64,0.3f64).expect("Why would these constants fail if they never did before?");
     // if this fails then it's a programming error, I'm pretty certain.
 
@@ -144,9 +145,9 @@ pub(crate) fn place_towns<Random: Rng, Progress: ProgressObserver>(rng: &mut Ran
         while (i < tiles.len()) && (towns.len() < town_count) {
             let candidate = &tiles[i];
             let s = spacing * town_spacing_normal.sample(rng).clamp(0.2,2.0);
-            if !towns_finder.points_in_target(&candidate.tile.site, s) {
+            if !towns_finder.points_in_target(candidate.tile.site(), s) {
                 let entry = tiles.remove(i);
-                _ = town_cultures.insert(entry.tile.culture.clone());
+                _ = town_cultures.insert(entry.tile.culture().clone());
                 towns.push((entry,false)); // true means it's a capital
                 progress.update(|| towns.len());
             }
@@ -191,7 +192,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
             capital_count
         }
     } else {
-        let map_size = extent.width * extent.height;
+        let map_size = extent.width() * extent.height();
         let generated_capital_count = (map_size/1000.0).floor() as usize;
         let generated_capital_count = generated_capital_count.min(tiles.len());
         if generated_capital_count == 0 {
@@ -200,7 +201,7 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
         generated_capital_count
     };
 
-    let mut spacing = (extent.width + extent.height) / 2.0 / capital_count as f64;
+    let mut spacing = (extent.width() + extent.height()) / 2.0 / capital_count as f64;
 
     macro_rules! reset_capital_search {
         () => {
@@ -222,9 +223,9 @@ pub(crate) fn generate_capitals<Progress: ProgressObserver>(tiles: &mut Vec<Scor
         progress.start_known_endpoint(|| (format!("Placing capitals at spacing {spacing}"),capital_count));
         while (i < tiles.len()) && (capitals.len() < capital_count) {
             let candidate = &tiles[i];
-            if !capitals_finder.points_in_target(&candidate.tile.site, spacing) {
+            if !capitals_finder.points_in_target(candidate.tile.site(), spacing) {
                 let entry = tiles.remove(i);
-                _ = capital_cultures.insert(entry.tile.culture.clone());
+                _ = capital_cultures.insert(entry.tile.culture().clone());
                 capitals.push((entry,true)); // true means it's a capital
                 progress.update(|| capitals.len());
             }
@@ -253,9 +254,9 @@ pub(crate) fn gather_tiles_for_towns<Random: Rng, Progress: ProgressObserver>(rn
 
     for tile in tiles_layer.read_features().into_entities::<TileForTowns>().watch(progress, "Reading tiles.", "Tiles read.") {
         let (_,tile) = tile?;
-        if tile.habitability > 0.0 {
-            let capital_score = tile.habitability * rng.gen_range(0.0f64..1.0f64).mul_add(0.5, 0.5);
-            let town_score = tile.habitability * town_score_normal.sample(rng).clamp(0.0,20.0);
+        if tile.habitability() > &0.0 {
+            let capital_score = tile.habitability() * rng.gen_range(0.0f64..1.0f64).mul_add(0.5, 0.5);
+            let town_score = tile.habitability() * town_score_normal.sample(rng).clamp(0.0,20.0);
             if (capital_score > 0.0) || (town_score > 0.0) {
                 let capital_score = OrderedFloat::from(capital_score);
                 let town_score = OrderedFloat::from(town_score);
@@ -299,32 +300,32 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
     for town in towns_layer.read_features().into_entities::<TownForPopulation>().watch(progress,"Populating towns.","Towns populated.") {
         let (_,town) = town?;
-        let tile = tile_map.try_get(&town.tile_id)?;
+        let tile = tile_map.try_get(town.tile_id())?;
 
         // figure out if it's a port
-        let port_location = if let Some(closest_water) = &tile.harbor_tile_id {
+        let port_location = if let Some(closest_water) = &tile.harbor_tile_id() {
             match closest_water {
                 neighbor @ (Neighbor::Tile(closest_water) | Neighbor::CrossMap(closest_water, _)) => {
                     let harbor = tile_map.try_get(closest_water)?;
 
                     // add it to the map of towns by feature for removing port status later.
-                    match coastal_towns.get_mut(&harbor.grouping_id) {
-                        None => _ = coastal_towns.insert(harbor.grouping_id.clone(), vec![town.fid.clone()]),
-                        Some(entry) => entry.push(town.fid.clone()),
+                    match coastal_towns.get_mut(harbor.grouping_id()) {
+                        None => _ = coastal_towns.insert(harbor.grouping_id().clone(), vec![town.fid().clone()]),
+                        Some(entry) => entry.push(town.fid().clone()),
                     }
         
                     // no ports if the water is frozen
-                    if harbor.temperature > 0.0 {
-                        let on_large_water = if let Some(lake_id) = &harbor.lake_id {
+                    if harbor.temperature() > &0.0 {
+                        let on_large_water = if let Some(lake_id) = &harbor.lake_id() {
                             // don't make it a port if the lake is only 1 tile big
                             let lake = lake_map.try_get(lake_id)?;
-                            lake.size > 1
+                            lake.size() > &1
                         } else {
-                            harbor.grouping.is_ocean()
+                            harbor.grouping().is_ocean()
                         };
         
                         // it's a port if it's on the large water and either it's a capital or has a good harbor (only one water tile next to it)
-                        if on_large_water && (town.is_capital || matches!(tile.water_count,Some(1))) {
+                        if on_large_water && (*town.is_capital() || matches!(tile.water_count(),Some(1))) {
                             match neighbor {
                                 Neighbor::Tile(_) => Some(tile.find_middle_point_between(harbor,&world_shape)?),
                                 Neighbor::CrossMap(_, edge) => Some(tile.find_middle_point_on_edge(edge,&extent,&world_shape)?),
@@ -348,9 +349,9 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         // figure out it's population -- habitability is already divided by 5, so this makes it 10% of true suitability for people.
         // FUTURE: The population should be increased by the road traffic, but that could be done in the road generating stuff
-        let population = ((tile.habitability / 2.0) * 1000.0).max(100.0); 
+        let population = ((tile.habitability() / 2.0) * 1000.0).max(100.0); 
 
-        let population = if town.is_capital {
+        let population = if *town.is_capital() {
             population * 1.3
         } else {
             population
@@ -364,9 +365,9 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         let population = population.floor() as i32;
 
-        let (is_port,new_location) = if port_location.is_none() && tile.water_flow > river_threshold.river_threshold {
-            let shift = (tile.water_flow / 150.0).min(1.0);
-            let (tile_x,tile_y) = tile.site.to_tuple();
+        let (is_port,new_location) = if port_location.is_none() && tile.water_flow() > &river_threshold.river_threshold {
+            let shift = (tile.water_flow() / 150.0).min(1.0);
+            let (tile_x,tile_y) = tile.site().to_tuple();
             let x = if (tile_x % 2.0) < 1.0 { tile_x + shift } else { tile_x - shift };
             let y = if (tile_y % 2.0) < 1.0 { tile_y + shift } else { tile_y - shift };
             (false,Some(Coordinates::try_from((x,y))?))
@@ -375,7 +376,7 @@ pub(crate) fn populate_towns<Progress: ProgressObserver>(target: &mut WorldMapTr
         };
 
 
-        _ = town_details.insert(town.fid,TownDetails { 
+        _ = town_details.insert(town.fid().clone(),TownDetails { 
             population, 
             is_port, 
             new_location 

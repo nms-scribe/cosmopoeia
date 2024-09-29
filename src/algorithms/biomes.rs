@@ -43,12 +43,12 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
     let mut tiles_layer = target.edit_tile_layer()?; 
 
     entity!(BiomeSource: Tile {
-        fid: IdRef,
-        temperature: f64,
-        water_flow: f64,
-        precipitation: f64,
-        lake_id: Option<IdRef>,
-        grouping: Grouping
+        #[get=false] fid: IdRef,
+        #[get=false] temperature: f64,
+        #[get=false] water_flow: f64,
+        #[get=false] precipitation: f64,
+        #[get=false] lake_id: Option<IdRef>,
+        #[get=false] grouping: Grouping
     });
 
     let tiles = tiles_layer.read_features().into_entities_vec::<_,BiomeSource>(progress)?;
@@ -56,14 +56,14 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
     for tile in tiles.iter().watch(progress,"Applying biomes.","Biomes applied.") {
 
         let biome = if tile.grouping.is_ocean() {
-            biomes.ocean.clone()
-        } else if tile.temperature < biomes.glacier.1 {
-            biomes.glacier.0.clone()
+            biomes.ocean()
+        } else if tile.temperature < biomes.glacier().1 {
+            &biomes.glacier().0
         } else {
             // is it a wetland?
-            if (tile.water_flow > biomes.wetland.1) || 
-               matches!(tile.lake_id.as_ref().map(|id| lake_map.try_get(id).map(|l| &l.type_)).transpose()?, Some(LakeType::Marsh)) {
-                biomes.wetland.0.clone()
+            if (tile.water_flow > biomes.wetland().1) || 
+               matches!(tile.lake_id.as_ref().map(|id| lake_map.try_get(id).map(LakeForBiomes::type_)).transpose()?, Some(LakeType::Marsh)) {
+                &biomes.wetland().0
             } else {
                 // The original calculation favored deserts too much
                 //let moisture_band = ((tile.precipitation/5.0).floor() as usize).min(4); // 0-4
@@ -85,7 +85,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
                 };
 
                 let temperature_band = ((20.0 - tile.temperature).max(0.0).floor() as usize).min(25);
-                biomes.matrix[moisture_band][temperature_band].clone()
+                &biomes.matrix()[moisture_band][temperature_band]
             }
 
     
@@ -93,7 +93,7 @@ pub(crate) fn apply_biomes<Progress: ProgressObserver>(target: &mut WorldMapTran
 
         let mut tile = tiles_layer.try_feature_by_id(&tile.fid)?;
         
-        tile.set_biome(&biome)?;
+        tile.set_biome(biome)?;
 
         tiles_layer.update_feature(tile)?;
 

@@ -160,13 +160,13 @@ impl TypedField for Vec<Neighbor> {
 impl DocumentedFieldType for Neighbor {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation {
-            name: "Neighbor".to_owned(),
-            description: "Specifies a type of neighbor for a tile. There are three possibilities. They are described by their contents, not their name, in order to simplify the NeighborDirection fields.\n* Tile: a regular contiguous tile, which is specified by it's id.\n* CrossMap: a tile that sits on the opposite side of the map, specified by it's id and direction as an 'Edge'.\n* OffMap: unknown content that is off the edges of the map, specified merely by a direction as an 'Edge'".to_owned(),
-            storage_type: field_type_to_name(Self::STORAGE_TYPE),
-            syntax: "<integer> | (<integer>,<Edge>) | <Edge>".to_owned(),
-            sub_types: vec![Edge::get_field_type_documentation()]
-        }
+        FieldTypeDocumentation::new(
+            "Neighbor".to_owned(),
+            "Specifies a type of neighbor for a tile. There are three possibilities. They are described by their contents, not their name, in order to simplify the NeighborDirection fields.\n* Tile: a regular contiguous tile, which is specified by it's id.\n* CrossMap: a tile that sits on the opposite side of the map, specified by it's id and direction as an 'Edge'.\n* OffMap: unknown content that is off the edges of the map, specified merely by a direction as an 'Edge'".to_owned(),
+            field_type_to_name(Self::STORAGE_TYPE),
+            "<integer> | (<integer>,<Edge>) | <Edge>".to_owned(),
+            vec![Edge::get_field_type_documentation()]
+        )
     }
 }
 
@@ -184,24 +184,24 @@ impl Serialize for Neighbor {
 
 impl Deserialize for Neighbor {
     // implemented so there are no tags
-    fn read_value<Source: Deserializer>(source: &mut Source) -> Result<Self,CommandError> {
-        if source.matches(&Token::OpenParenthesis)? {
-            let id = Deserialize::read_value(source)?;
-            source.expect(&Token::Comma)?;
-            let edge = Deserialize::read_value(source)?;
-            source.expect(&Token::CloseParenthesis)?;
+    fn read_value<Source: Deserializer>(deserializer: &mut Source) -> Result<Self,CommandError> {
+        if deserializer.matches(&Token::OpenParenthesis)? {
+            let id = Deserialize::read_value(deserializer)?;
+            deserializer.expect(&Token::Comma)?;
+            let edge = Deserialize::read_value(deserializer)?;
+            deserializer.expect(&Token::CloseParenthesis)?;
             Ok(Self::CrossMap(id, edge))
-        } else if let Some(id) = source.matches_integer()? {
+        } else if let Some(id) = deserializer.matches_integer()? {
             Ok(Self::Tile(IdRef::new(id)))
         } else {
-            let edge = Deserialize::read_value(source)?;
+            let edge = Deserialize::read_value(deserializer)?;
             Ok(Self::OffMap(edge))
         }
     }
 }
 
 #[derive(Clone,PartialEq,Debug)]
-pub(crate) struct NeighborAndDirection(pub(crate) Neighbor,pub(crate) Deg<f64>);
+pub(crate) struct NeighborAndDirection(pub Neighbor,pub Deg<f64>);
 
 impl TypedField for Vec<NeighborAndDirection> {
 
@@ -224,13 +224,13 @@ impl TypedField for Vec<NeighborAndDirection> {
 impl DocumentedFieldType for Vec<NeighborAndDirection> {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation {
-            name: "NeighborAndDirection".to_owned(),
-            description: "A pair of Neighbor and angular direction (in degrees, clockwise from north) surrounded by parentheses.".to_owned(),
-            storage_type: field_type_to_name(Self::STORAGE_TYPE),
-            syntax: "(<Neighbor>,<real>)".to_owned(),
-            sub_types: vec![Neighbor::get_field_type_documentation()]
-        }
+        FieldTypeDocumentation::new(
+            "NeighborAndDirection".to_owned(),
+            "A pair of Neighbor and angular direction (in degrees, clockwise from north) surrounded by parentheses.".to_owned(),
+            field_type_to_name(Self::STORAGE_TYPE),
+            "(<Neighbor>,<real>)".to_owned(),
+            vec![Neighbor::get_field_type_documentation()]
+        )
     }
 }
 
@@ -244,8 +244,8 @@ impl Serialize for NeighborAndDirection {
 
 impl Deserialize for NeighborAndDirection {
 
-    fn read_value<Source: Deserializer>(source: &mut Source) -> Result<Self,CommandError> {
-        let (neighbor,float) = Deserialize::read_value(source)?;
+    fn read_value<Source: Deserializer>(deserializer: &mut Source) -> Result<Self,CommandError> {
+        let (neighbor,float) = Deserialize::read_value(deserializer)?;
         Ok(Self(neighbor,Deg(float)))
 
     }
@@ -303,13 +303,13 @@ impl TypedField for Deg<f64> {
 impl DocumentedFieldType for Deg<f64> {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation {
-            name: "Angle".to_owned(),
-            description: "A real number from 0 to 360.".to_owned(),
-            storage_type: field_type_to_name(Self::STORAGE_TYPE),
-            syntax: "<real>".to_owned(),
-            sub_types: Vec::new()
-        }
+        FieldTypeDocumentation::new(
+            "Angle".to_owned(),
+            "A real number from 0 to 360.".to_owned(),
+            field_type_to_name(Self::STORAGE_TYPE),
+            "<real>".to_owned(),
+            Vec::new()
+        )
     }
 }
 
@@ -339,13 +339,13 @@ impl TypedField for Rgb<u8> {
 impl DocumentedFieldType for Rgb<u8> {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation {
-            name: "Color".to_owned(),
-            description: "A color in #RRGGBB syntax.".to_owned(),
-            storage_type: field_type_to_name(Self::STORAGE_TYPE),
-            syntax: "<color>".to_owned(),
-            sub_types: Vec::new(),
-        }
+        FieldTypeDocumentation::new(
+            "Color".to_owned(),
+            "A color in #RRGGBB syntax.".to_owned(),
+            field_type_to_name(Self::STORAGE_TYPE),
+            "<color>".to_owned(),
+            Vec::new(),
+        )
     }
 }
 
@@ -674,13 +674,13 @@ pub(crate) enum BiomeCriteria {
 impl DocumentedFieldType for (usize,usize) {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation { 
-            name: "Unsigned Integer Pair".to_owned(), 
-            description: "A pair of unsigned integers in parentheses.".to_owned(), 
-            storage_type: field_type_to_name(OGRFieldType::OFTString), 
-            syntax: "(<integer>,<integer>)".to_owned(),
-            sub_types: Vec::new()
-        }
+        FieldTypeDocumentation::new(
+            "Unsigned Integer Pair".to_owned(), 
+            "A pair of unsigned integers in parentheses.".to_owned(), 
+            field_type_to_name(OGRFieldType::OFTString), 
+            "(<integer>,<integer>)".to_owned(),
+            Vec::new()
+        )
     }
 }
 

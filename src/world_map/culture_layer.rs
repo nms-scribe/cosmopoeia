@@ -61,12 +61,12 @@ entity!(#[derive(Hash,Eq,PartialEq)] CultureForPlacement: Culture {
 });
 
 entity!(CultureForTowns: Culture {
-    name: String,
-    namer: String
+    #[get=false] name: String,
+    #[get=false] namer: String
 });
 
 impl NamedEntity<CultureSchema> for CultureForTowns {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }
@@ -78,13 +78,13 @@ impl CultureWithNamer for CultureForTowns {
 }
 
 entity!(CultureForNations: Culture {
-    name: String,
-    namer: String,
-    type_: CultureType
+    #[get=false] name: String,
+    #[get=false] namer: String,
+    #[get=false] type_: CultureType
 });
 
 impl NamedEntity<CultureSchema> for CultureForNations {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }
@@ -103,11 +103,11 @@ impl CultureWithType for CultureForNations {
 
 entity!(CultureForDissolve: Culture {
     fid: IdRef,
-    name: String
+    #[get=false] name: String
 });
 
 impl NamedEntity<CultureSchema> for CultureForDissolve {
-    fn name(&self) -> &str {
+    fn name(&self) -> &String {
         &self.name
     }
 }

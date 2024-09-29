@@ -160,13 +160,13 @@ subcommand_def!{
     pub struct Blank {
 
         #[clap(flatten)]
-        pub extent_arg: ExtentsArg,
+        pub extent: ExtentsArg,
 
         #[clap(flatten)]
-        pub elevation_limits_arg: ElevationLimitsArg,
+        pub elevation_limits: ElevationLimitsArg,
 
         #[clap(flatten)]
-        pub post_process_arg: PostProcessArg
+        pub post_process: PostProcessArg
 
 
     }
@@ -176,11 +176,11 @@ impl LoadSource for Blank {
 
     fn load<Random: Rng, Progress: ProgressObserver>(self, random: &mut Random, progress: &mut Progress) -> Result<LoadedSource,CommandError> {
 
-        let extent = Extent::new_with_dimensions(self.extent_arg.west, self.extent_arg.south, self.extent_arg.width, self.extent_arg.height);
+        let extent = Extent::new_with_dimensions(self.extent.west, self.extent.south, self.extent.width, self.extent.height);
 
-        let limits = ElevationLimits::new(self.elevation_limits_arg.min_elevation,self.elevation_limits_arg.max_elevation)?;
+        let limits = ElevationLimits::new(self.elevation_limits.min_elevation,self.elevation_limits.max_elevation)?;
         // load these earlier so we can fail quickly on loading error.
-        let post_processes = if let Some(process) = self.post_process_arg.post_process {
+        let post_processes = if let Some(process) = self.post_process.post_process {
             progress.announce("Loading terrain processes.");
 
             process.load_terrain_task(random, progress)?

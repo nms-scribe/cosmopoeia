@@ -73,3 +73,156 @@ lto = true #  instructs the linker to optimize at the link stage. This can, for 
 codegen-units = 1 #By default, Cargo specifies 16 parallel codegen units for release builds. This improves compile times, but prevents some optimizations.
 panic = "abort" # By default, when Rust code encounters a situation when it must call panic!(), it unwinds the stack and produces a helpful backtrace. The unwinding code, however, does require extra binary size. rustc can be instructed to abort immediately rather than unwind, which removes the need for this extra unwinding code.
 overflow-checks = true # NMS: As this program depends on a lot of math and numeric input, I think it's important to check for overflows to avoid invalid data. This does not appear to effect the improved speed of the binary release.
+
+# TODO: Any way to move these lints into a global file that I can share? Even if it's just a symlink to some location?
+[lints.rust]
+
+# non_exhaustive_omitted_patterns = "warn" #  FUTURE: unstable, but it looks useful
+# private_bounds = "warn" #  FUTURE: unstable, but it looks useful
+# private_interfaces = "warn" #  FUTURE: unstable, but it looks useful
+# unnameable_types = "warn" #  FUTURE: unstable, but it looks useful
+noop_method_call = "warn" #  This hasn't caught anything yet, but it is something I've worried about.
+single_use_lifetimes = "warn" #  This caught a few places where I didn't need to specify lifetimes but did.
+unused_lifetimes = "warn" #  As did this
+trivial_numeric_casts = "warn" #  This caught some 'as' statements which were leftover from a previous refactor
+unreachable_pub = "warn" #  This caught some 'pub' declarations that weren't necessary
+unused_crate_dependencies = "warn" #  This is useful for those times when you bring in a crate, then get rid of it when you realize it's the wrong solution.
+meta_variable_misuse = "warn" #  This caught a macro kleene-operator difference between definition and implementation, it might catch some other things
+unused_macro_rules = "warn" #  This caught some macro branches that weren't followed after a refactor
+unused_qualifications = "warn" #  This caught a few bits of code that looked bad
+unused_results = "warn" #  This one will be controversial, but I think it's useful. Most of the warnings should occur with map inserts, and a few of the removes. If it's something else, then I should think about it. It's easy to get around by adding a `_ = ` before the code (not a variable assignment, but a pattern assignment)
+variant_size_differences = "warn"
+
+[lints.clippy]
+# allows
+upper_case_acronyms = "allow" #  I disagree
+too_many_arguments = "allow" #  I'm fully aware that functions should be shorter, and can check this myself. But sometimes many parameters is just the simpler choice.
+mem_replace_with_default = "allow" #  I feel that std::mem::replace is more explicit in its meaning than std::mem::take. It would be different if the function was called std::mem::replace_default
+
+
+
+# # clippy lints as of clippy 1.83
+# non_zero_suggestions = "warn"
+# unused_trait_names = "warn"
+# pathbuf_init_then_push = "warn"
+
+#  clippy lints as of clippy 1.81
+absolute_paths = "warn"
+assigning_clones = "warn"
+cfg_not_test = "warn"
+empty_enum_variants_with_brackets = "warn"
+error_impl_error = "warn"
+field_scoped_visibility_modifiers = "warn"
+ignored_unit_patterns = "warn"
+infinite_loop = "warn"
+into_iter_without_iter = "warn"
+iter_filter_is_ok = "warn"
+iter_filter_is_some = "warn"
+iter_over_hash_type = "warn"
+iter_without_into_iter = "warn"
+manual_is_variant_and = "warn"
+missing_asserts_for_indexing = "warn"
+needless_pass_by_ref_mut = "warn"
+option_as_ref_cloned = "warn"
+pub_underscore_fields = "warn"
+renamed_function_params = "warn"
+set_contains_or_insert = "warn"
+should_panic_without_expect = "warn"
+str_split_at_newline = "warn"
+string_lit_chars_any = "warn"
+struct_field_names = "warn"
+uninhabited_references = "warn"
+while_float = "warn"
+
+#  clippy lints as of clippy 1.72
+cargo_common_metadata = "warn"
+assertions_on_result_states = "warn"
+bool_to_int_with_if = "warn"
+branches_sharing_code = "warn"
+checked_conversions = "warn"
+cloned_instead_of_copied = "warn"
+cognitive_complexity = "warn"
+collection_is_never_read = "warn"
+default_trait_access = "warn"
+derive_partial_eq_without_eq = "warn"
+empty_structs_with_brackets = "warn"
+equatable_if_let = "warn"
+explicit_deref_methods = "warn"
+explicit_into_iter_loop = "warn"
+explicit_iter_loop = "warn"
+float_cmp = "warn"
+float_cmp_const = "warn"
+format_push_string = "warn"
+if_not_else = "warn"
+implicit_clone = "warn"
+imprecise_flops = "warn"
+inconsistent_struct_constructor = "warn"
+index_refutable_slice = "warn"
+inefficient_to_string = "warn"
+integer_division = "warn"
+invalid_upcast_comparisons = "warn"
+items_after_statements = "warn"
+iter_on_empty_collections = "warn"
+iter_on_single_items = "warn"
+large_stack_arrays = "warn"
+large_stack_frames = "warn"
+large_types_passed_by_value = "warn"
+manual_clamp = "warn"
+manual_let_else = "warn"
+manual_ok_or = "warn"
+manual_string_new = "warn"
+map_unwrap_or = "warn"
+match_bool = "warn"
+match_on_vec_items = "warn"
+match_same_arms = "warn"
+maybe_infinite_iter = "warn"
+mismatching_type_param_order = "warn"
+missing_const_for_fn = "warn"
+missing_panics_doc = "warn"
+mixed_read_write_in_expression = "warn"
+module_name_repetitions = "warn"
+multiple_inherent_impl = "warn"
+must_use_candidate = "warn"
+mut_mut = "warn"
+naive_bytecount = "warn"
+needless_collect = "warn"
+needless_continue = "warn"
+needless_pass_by_value = "warn"
+option_option = "warn"
+or_fun_call = "warn"
+redundant_clone = "warn"
+redundant_closure_for_method_calls = "warn"
+redundant_else = "warn"
+redundant_type_annotations = "warn"
+ref_binding_to_reference = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+return_self_not_must_use = "warn"
+same_functions_in_if_condition = "warn"
+same_name_method = "warn"
+shadow_unrelated = "warn"
+#  TODO: single_call_fn = "warn"
+single_char_lifetime_names = "warn"
+single_match_else = "warn"
+std_instead_of_core = "warn"
+str_to_string = "warn"
+string_slice = "warn"
+string_to_string = "warn"
+suboptimal_flops = "warn"
+suspicious_operation_groupings = "warn"
+suspicious_xor_used_as_pow = "warn"
+todo = "warn"
+trait_duplication_in_bounds = "warn"
+trivially_copy_pass_by_ref = "warn"
+try_err = "warn"
+tuple_array_conversions = "warn"
+type_repetition_in_bounds = "warn"
+unicode_not_nfc = "warn"
+uninlined_format_args = "warn"
+unnecessary_struct_initialization = "warn"
+unnecessary_wraps = "warn"
+unnested_or_patterns = "warn"
+unused_peekable = "warn"
+unused_self = "warn"
+use_self = "warn"
+useless_let_if_seq = "warn"
+zero_sized_map_values = "warn"

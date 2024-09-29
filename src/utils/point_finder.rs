@@ -7,6 +7,7 @@ use super::coordinates::Coordinates;
 use crate::errors::CommandError;
 use crate::typed_map::fields::IdRef;
 use crate::utils::world_shape::WorldShape;
+use qutee::QuadTreeError;
 
 pub(crate) struct PointFinder {
   // It's kind of annoying, but the query method doesn't return the original point, so I have to store the point.
@@ -19,7 +20,7 @@ pub(crate) struct PointFinder {
 impl PointFinder {
 
     pub(crate) fn new(extent: &Extent, world_shape: WorldShape, capacity: usize) -> Self {
-        let bounds = Boundary::between_points((extent.west,extent.south),(extent.east(),extent.north()));
+        let bounds = Boundary::between_points((extent.west(),extent.south()),(extent.east(),extent.north()));
         Self {
             inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
             bounds,
@@ -31,18 +32,18 @@ impl PointFinder {
     pub(crate) fn add_point(&mut self, point: Coordinates) -> Result<(),CommandError> {
         self.inner.insert_at(point.to_tuple(),point).map_err(|e|  {
             match e {
-                qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
+                QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
             }
             
         })
 
     }
 
-    pub(crate) fn points_in_target(&mut self, point: &Coordinates, spacing: f64) -> bool {
-        let west = point.x - spacing;
-        let south = point.y - spacing;
-        let north = point.x + spacing;
-        let east = point.y + spacing;
+    pub(crate) fn points_in_target(&self, point: &Coordinates, spacing: f64) -> bool {
+        let west = point.x() - spacing;
+        let south = point.y() - spacing;
+        let north = point.x() + spacing;
+        let east = point.y() + spacing;
         let boundary = Boundary::between_points((west.into(),south.into()),(east.into(),north.into()));
         for item in self.inner.query(boundary) {
             if item.shaped_distance(point,&self.world_shape) <= spacing {
@@ -80,7 +81,7 @@ pub(crate) struct TileFinder {
 impl TileFinder {
 
     pub(crate) fn new(extent: &Extent, world_shape: WorldShape, capacity: usize, tile_spacing: f64) -> Self {
-        let bounds = Boundary::between_points((extent.west,extent.south),(extent.east(),extent.north()));
+        let bounds = Boundary::between_points((extent.west(),extent.south()),(extent.east(),extent.north()));
         Self {
             inner: QuadTree::new_with_dyn_cap(bounds.clone(),capacity),
             bounds,
@@ -93,7 +94,7 @@ impl TileFinder {
     pub(crate) fn add_tile(&mut self, point: Coordinates, tile: IdRef) -> Result<(),CommandError> {
         self.inner.insert_at(point.to_tuple(),(point,tile)).map_err(|e|  {
             match e {
-                qutee::QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
+                QuadTreeError::OutOfBounds(_, qutee::Point { x, y }) => CommandError::PointFinderOutOfBounds(x,y),
             }
             
         })
@@ -106,10 +107,10 @@ impl TileFinder {
         macro_rules! calc_search_boundary {
             () => {
                 {
-                    let west = point.x - spacing;
-                    let south = point.y - spacing;
-                    let north = point.x + spacing;
-                    let east = point.y + spacing;
+                    let west = point.x() - spacing;
+                    let south = point.y() - spacing;
+                    let north = point.x() + spacing;
+                    let east = point.y() + spacing;
                     Boundary::between_points((west.into(),south.into()),(east.into(),north.into()))
                 }
             };

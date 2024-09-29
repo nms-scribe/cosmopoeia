@@ -14,6 +14,7 @@ use crate::typed_map::fields::IdRef;
 use crate::typed_map::features::TypedFeature;
 use crate::typed_map::features::TypedFeatureIterator;
 use crate::typed_map::schema::Schema;
+use core::marker::PhantomData;
 
 
 pub(crate) trait Entity<SchemaType: Schema> {
@@ -21,12 +22,12 @@ pub(crate) trait Entity<SchemaType: Schema> {
 }
 
 pub(crate) trait NamedEntity<SchemaType: Schema>: Entity<SchemaType> {
-    fn name(&self) -> &str;
+    fn name(&self) -> &String;
 }
 
 pub(crate) struct EntityIterator<'data_life, SchemaType: Schema, Feature: TypedFeature<'data_life,SchemaType>, Data: Entity<SchemaType>> {
-    pub(crate) features: TypedFeatureIterator<'data_life,SchemaType,Feature>,
-    pub(crate) data: core::marker::PhantomData<Data>
+    features: TypedFeatureIterator<'data_life,SchemaType,Feature>,
+    data: PhantomData<Data>
 }
 
 // This actually returns a pair with the id and the data, in case the entity doesn't store the data itself.
@@ -53,7 +54,7 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life, SchemaTyp
     fn from(features: TypedFeatureIterator<'impl_life,SchemaType,Feature>) -> Self {
         Self {
             features,
-            data: core::marker::PhantomData
+            data: PhantomData
         }
     }
 }
@@ -61,8 +62,8 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life, SchemaTyp
 pub(crate) struct EntityIndex<SchemaType: Schema, EntityType: Entity<SchemaType>> {
     // I use an IndexMap instead of HashMap as it ensures that the map maintains an order when iterating.
     // This helps me get reproducible results with the same random seed.
-    pub(crate) inner: IndexMap<IdRef,EntityType>,
-    pub(crate) _phantom: core::marker::PhantomData<SchemaType>
+    inner: IndexMap<IdRef,EntityType>,
+    _phantom: PhantomData<SchemaType>
 }
 
 impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,EntityType> {
@@ -75,7 +76,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         inner.sort_keys();
         Self {
             inner,
-            _phantom: core::marker::PhantomData
+            _phantom: PhantomData
         }
     }
 
@@ -150,10 +151,10 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> FromIterator<(IdRef,Ent
 }
 
 pub(crate) struct EntityIndexQueueWatcher<'progress,Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> {
-    pub(crate) finish: Message,
-    pub(crate) progress: &'progress mut Progress,
-    pub(crate) inner: EntityIndex<SchemaType,EntityType>,
-    pub(crate) popped: usize,
+    finish: Message,
+    progress: &'progress mut Progress,
+    inner: EntityIndex<SchemaType,EntityType>,
+    popped: usize,
 }
 
 impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndexQueueWatcher<'_,Message,Progress,SchemaType,EntityType> {
@@ -191,8 +192,8 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, SchemaType: Schema, Entity
 }
 
 pub(crate) struct EntityLookup<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> {
-    pub(crate) inner: HashMap<String,EntityType>,
-    pub(crate) _phantom: core::marker::PhantomData<SchemaType>
+    inner: HashMap<String,EntityType>,
+    _phantom: PhantomData<SchemaType>
 }
 
 impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> EntityLookup<SchemaType,EntityType> {
@@ -200,7 +201,7 @@ impl<SchemaType: Schema, EntityType: NamedEntity<SchemaType>> EntityLookup<Schem
     pub(crate) const fn from(inner: HashMap<String,EntityType>) -> Self {
         Self {
             inner,
-            _phantom: core::marker::PhantomData
+            _phantom: PhantomData
         }
     }
 
@@ -262,6 +263,48 @@ macro_rules! entity_field_def {
 }
 
 #[macro_export]
+/// Used by `entity!` to generate the type for an entity field
+macro_rules! entity_get_field_fn {
+    (false $field: ident -> $type: ty  $([$function: expr])?) => {
+    };
+    ($field: ident -> $type: ty  $([$function: expr])?) => {
+        pub(crate) const fn $field(&self) -> &$crate::entity_field_def!($type $([$function])?) { 
+            &self.$field
+        }
+    };
+}
+
+
+#[macro_export]
+/// Used by `entity!` to generate the type for an entity field
+macro_rules! entity_get_mut_field_fn {
+    ($field: ident -> $type: ty  $([$function: expr])?) => {
+    };
+    (true $field: ident -> $type: ty  $([$function: expr])?) => {
+        paste::paste!{
+            pub(crate) fn [<$field _mut>](&mut self) -> &mut $crate::entity_field_def!($type $([$function])?) { 
+                &mut self.$field
+            }
+        }
+    };
+}
+
+
+#[macro_export]
+/// Used by `entity!` to generate the type for an entity field
+macro_rules! entity_set_field_fn {
+    ($field: ident -> $type: ty  $([$function: expr])?) => {
+    };
+    (true $field: ident -> $type: ty  $([$function: expr])?) => {
+        paste::paste!{
+            pub(crate) fn [<set_ $field>](&mut self, value: $crate::entity_field_def!($type $([$function])?)) { 
+                self.$field = value
+            }
+        }
+    };
+}
+
+#[macro_export]
 /** 
 Creates an entity struct that contains the specified fields. (See Entity trait)
 
@@ -280,13 +323,22 @@ The assignment function closure takes an TypedFeature value and returns a result
 
 */ 
 macro_rules! entity {
-    ($(#[$struct_attr: meta])* $name: ident: $layer: ident {$($field: ident: $type: ty $(= $function: expr)?),*$(,)?}) => {
+    ($(#[$struct_attr: meta])* $name: ident: $layer: ident {$( $(#[get = $get: ident])? $(#[set = $set: ident])? $(#[mut = $mut: ident])? $field: ident: $type: ty $(= $function: expr)?),*$(,)?}) => {
         #[derive(Clone)]
         $(#[$struct_attr])* 
         pub(crate) struct $name {
             $(
-                pub(crate) $field: $crate::entity_field_def!($type $([$function])?)
+                $field: $crate::entity_field_def!($type $([$function])?)
             ),*
+        }
+
+        impl $name {
+            $(
+                $crate::entity_get_field_fn!($($get)? $field -> $type $([$function])?);
+                $crate::entity_get_mut_field_fn!($($mut)? $field -> $type $([$function])?);
+                $crate::entity_set_field_fn!($($set)? $field -> $type $([$function])?);
+            )*
+
         }
 
         paste::paste!{

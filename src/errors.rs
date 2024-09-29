@@ -1,5 +1,8 @@
-use std::error::Error;
+use core::error::Error;
 use core::fmt::Display;
+use core::fmt::Formatter;
+use core::fmt::Result as FmtResult;
+use std::io::Error as IOError;
 
 pub(crate) use gdal::errors::GdalError;
 use gdal::raster::GdalDataType;
@@ -94,7 +97,7 @@ impl Error for CommandError {
 }
 
 impl Display for CommandError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::GdalError(a) => write!(f,"gdal: {a}"),
             Self::VoronoiExpectsPolygons => write!(f,"Voronoi input data should be polygons."),
@@ -217,8 +220,8 @@ impl From<FloatIsNan> for CommandError {
 
 }
 
-impl From<std::io::Error> for CommandError {
-    fn from(value: std::io::Error) -> Self {
+impl From<IOError> for CommandError {
+    fn from(value: IOError) -> Self {
         Self::IOError(format!("{value}"))
     }
 }
@@ -243,7 +246,7 @@ impl Error for ProgramError {
 
 impl Display for ProgramError {
 
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::ArgumentError(a) => write!(f,"{a}"),
             Self::CommandError(a) => write!(f,"{a}"),

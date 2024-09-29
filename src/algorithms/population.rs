@@ -51,25 +51,25 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
     while let Some(fid) = work_queue.pop() {
         let (habitability,population) = {
             let tile = tiles.try_entity_by_id::<TileForPopulation>(&fid)?; 
-            let mut suitability = if tile.lake_id.is_some() {
+            let mut suitability = if tile.lake_id().is_some() {
                 0.0
             } else {
-                biome_map.try_get(&tile.biome)?.habitability as f64
+                *biome_map.try_get(tile.biome())?.habitability() as f64
             };
             if suitability > 0.0 {
                 if flow_mean > 0.0 {
-                    suitability += ((tile.water_flow - flow_mean)/flow_divisor).clamp(0.0,1.0) * 250.0; // big rivers are nice.
+                    suitability += ((tile.water_flow() - flow_mean)/flow_divisor).clamp(0.0,1.0) * 250.0; // big rivers are nice.
                 }
-                suitability -= (tile.elevation_scaled - 50) as f64/5.0; // low elevation is preferred
-                if tile.shore_distance == 1 {
-                    if tile.water_flow > estuary_threshold.river_threshold {
+                suitability -= (tile.elevation_scaled() - 50) as f64/5.0; // low elevation is preferred
+                if tile.shore_distance() == &1 {
+                    if tile.water_flow() > &estuary_threshold.river_threshold {
                         suitability += 15.0 // estuaries are liked
                     }
-                    if let Some(water_cell) = tile.harbor_tile_id {
+                    if let Some(water_cell) = tile.harbor_tile_id() {
                         match water_cell {
                             Neighbor::Tile(water_cell) | Neighbor::CrossMap(water_cell, _) => {
-                                let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(&water_cell)?;
-                                if let Some(lake_type) = &water_cell.lake_id.map(|id| lake_map.try_get(&id)).transpose()?.map(|l| &l.type_) {
+                                let water_cell = tiles.try_entity_by_id::<TileForPopulationNeighbor>(water_cell)?;
+                                if let Some(lake_type) = water_cell.lake_id().as_ref().map(|id| lake_map.try_get(id)).transpose()?.map(LakeForPopulation::type_) {
                                     match lake_type {
                                         LakeType::Fresh => suitability += 30.0,
                                         LakeType::Salt => suitability += 10.0,
@@ -78,9 +78,9 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                                         LakeType::Dry => suitability -= 5.0,
                                         LakeType::Marsh => suitability += 5.0,
                                     }
-                                } else if water_cell.grouping.is_ocean() {
+                                } else if water_cell.grouping().is_ocean() {
                                     suitability += 5.0;
-                                    if tile.water_count == Some(1) { // let pattern unecessary
+                                    if tile.water_count() == &Some(1) { // let pattern unecessary
                                         // since it's a land cell bordering a single cell on the ocean, that single cell is a small bay, which
                                         // probably makes a good harbor.
                                         suitability += 20.0
@@ -96,7 +96,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
                 }
                 let habitability = suitability / 5.0; // I don't know why 5, but that's what AFMG did.
                 // AFMG Just shows population in thousands, I'm actually going to have more precision, just for looks.
-                let population = (((habitability * tile.area)/area_mean) * 1000.0).floor() as i32;
+                let population = (((habitability * tile.area())/area_mean) * 1000.0).floor() as i32;
                 (habitability,population)
             } else {
                 (0.0,0)

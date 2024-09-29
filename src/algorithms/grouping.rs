@@ -34,9 +34,9 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
         // grouping and grouping_id to make sure I'm looking in the right place.
         let grouping_id = IdRef::new(next_grouping_id.next().expect("Why would an unlimited range fail?"));
         let mut group = vec![fid.clone()];
-        let mut neighbors = tile.neighbors.clone();
+        let mut neighbors = tile.neighbors().clone();
 
-        let grouping_type = if tile.grouping.is_ocean() {
+        let grouping_type = if tile.grouping().is_ocean() {
             // track this as an ocean, so we can tell if land borders an ocean later.
             _ = ocean.insert(fid);
 
@@ -45,10 +45,10 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
                 match neighbor_fid {
                     Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_) => {
                         if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
-                            if neighbor.grouping.is_ocean() {
+                            if neighbor.grouping().is_ocean() {
                                 // it's part of the same group
                                 _ = ocean.insert(neighbor_fid.clone()); // insert it into oceans so we can check whether an island is a lake island or not.
-                                neighbors.extend(neighbor.neighbors.iter().cloned());
+                                neighbors.extend(neighbor.neighbors().iter().cloned());
                                 _ = table.try_remove(&neighbor_fid)?;
                                 group.push(neighbor_fid);
                             }
@@ -65,22 +65,22 @@ pub(crate) fn calculate_grouping<Progress: ProgressObserver>(target: &mut WorldM
             Grouping::Ocean
         } else {
             let mut found_ocean_neighbor_or_edge = false;
-            let is_lake = tile.lake_id;
+            let is_lake = tile.lake_id();
     
             // trace all of it's neighbors until we hit something that isn't part of the same thing.
             while let Some(NeighborAndDirection(neighbor_fid,_)) = neighbors.pop() {
                 match neighbor_fid {
                     Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid,_)=> {
                         if let Some(neighbor) = table.maybe_get(&neighbor_fid) {
-                            if neighbor.edge.is_some() {
+                            if neighbor.edge().is_some() {
                                 found_ocean_neighbor_or_edge = true;
                             }
-                            if neighbor.grouping.is_ocean() {
+                            if neighbor.grouping().is_ocean() {
                                 // it's not part of the group, but we now know this body is next to the ocean
                                 found_ocean_neighbor_or_edge = true
-                            } else if is_lake == neighbor.lake_id {
+                            } else if is_lake == neighbor.lake_id() {
                                 // it's the same kind of non-ocean grouping, so add it to the current group and keep looking at it's neighbors
-                                neighbors.extend(neighbor.neighbors.iter().cloned());
+                                neighbors.extend(neighbor.neighbors().iter().cloned());
                                 _ = table.try_remove(&neighbor_fid)?;
                                 group.push(neighbor_fid);
                             }

@@ -40,19 +40,19 @@ subcommand_def!{
     pub struct Create {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub namer_arg: NamerArg,
+        pub namer: NamerArg,
 
         #[clap(flatten)]
-        pub subnation_percent_arg: SubnationPercentArg,
+        pub subnation_percent: SubnationPercentArg,
 
         #[clap(flatten)]
-        pub random_seed_arg: RandomSeedArg,
+        pub random_seed: RandomSeedArg,
 
         #[clap(flatten)]
-        pub overwrite_subnations_arg: OverwriteSubnationsArg,
+        pub overwrite_subnations: OverwriteSubnationsArg,
     
     
     }
@@ -63,18 +63,18 @@ impl Task for Create {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(&self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed);
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
-        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer, &mut random, progress)?;
 
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
 
         target.with_transaction(|transaction| {
 
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, &self.overwrite_subnations_arg, transaction, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent, &self.overwrite_subnations, transaction, progress)
         })?;
 
         target.save(progress)
@@ -99,13 +99,13 @@ subcommand_def!{
     pub struct Expand {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub subnation_percent_arg: SubnationPercentArg,
+        pub subnation_percent: SubnationPercentArg,
 
         #[clap(flatten)]
-        pub random_seed_arg: RandomSeedArg,
+        pub random_seed: RandomSeedArg,
 
 
     }
@@ -116,13 +116,13 @@ impl Task for Expand {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(&self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed);
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
         
 
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&mut random, &self.subnation_percent_arg, transaction, progress)
+            Self::run_with_parameters(&mut random, &self.subnation_percent, transaction, progress)
         })?;
 
         target.save(progress)
@@ -148,16 +148,16 @@ subcommand_def!{
     pub struct FillEmpty {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub namer_arg: NamerArg,
+        pub namer: NamerArg,
 
         #[clap(flatten)]
-        pub subnation_percent_arg: SubnationPercentArg,
+        pub subnation_percent: SubnationPercentArg,
 
         #[clap(flatten)]
-        pub random_seed_arg: RandomSeedArg,
+        pub random_seed: RandomSeedArg,
 
     }
 }
@@ -167,16 +167,16 @@ impl Task for FillEmpty {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut random = random_number_generator(&self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed);
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
         
-        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer, &mut random, progress)?;
 
         let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
 
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent_arg, transaction, progress)
+            Self::run_with_parameters(&mut random, &culture_lookup, &mut loaded_namers, &self.subnation_percent, transaction, progress)
         })?;
 
         target.save(progress)
@@ -373,22 +373,22 @@ command_def!{
 pub struct DefaultArgs {
 
     #[clap(flatten)]
-    pub target_arg: TargetArg,
+    pub target: TargetArg,
 
     #[clap(flatten)]
-    pub namer_arg: NamerArg,
+    pub namer: NamerArg,
 
     #[clap(flatten)]
-    pub subnation_percent_arg: SubnationPercentArg,
+    pub subnation_percent: SubnationPercentArg,
 
     #[clap(flatten)]
-    pub bezier_scale_arg: BezierScaleArg,
+    pub bezier_scale: BezierScaleArg,
 
     #[clap(flatten)]
-    pub random_seed_arg: RandomSeedArg,
+    pub random_seed: RandomSeedArg,
 
     #[clap(flatten)]
-    pub overwrite_subnations_arg: OverwriteSubnationsArg,
+    pub overwrite_subnations: OverwriteSubnationsArg,
 
 }
 
@@ -414,15 +414,15 @@ impl Task for GenSubnations {
 
         if let Some(default_args) = self.default_args {
 
-            let mut random = random_number_generator(&default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed);
 
-            let mut target = WorldMap::edit(&default_args.target_arg.target)?;
+            let mut target = WorldMap::edit(&default_args.target.target)?;
 
-            let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
+            let mut loaded_namers = NamerSet::load_from(default_args.namer, &mut random, progress)?;
 
             let culture_lookup = target.cultures_layer()?.read_features().into_named_entities_index::<_,CultureForNations>(progress)?;
     
-            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.subnation_percent_arg, &default_args.overwrite_subnations_arg, &default_args.bezier_scale_arg, &mut target, progress)
+            Self::run_default(&mut random, &culture_lookup, &mut loaded_namers, &default_args.subnation_percent, &default_args.overwrite_subnations, &default_args.bezier_scale, &mut target, progress)
 
         } else if let Some(command) = self.command {
 

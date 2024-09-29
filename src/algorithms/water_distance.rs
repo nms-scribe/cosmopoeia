@@ -39,18 +39,18 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut water_count = None;
 
         let tile = tile_map.try_get(&fid)?;
-        let is_land = !tile.grouping.is_water();
+        let is_land = !tile.grouping().is_water();
 
-        for NeighborAndDirection(neighbor_fid,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_fid,_) in tile.neighbors() {
             match neighbor_fid {
                 neighbor_tile @ (Neighbor::Tile(neighbor_fid) | Neighbor::CrossMap(neighbor_fid, _)) => {
                     let neighbor = tile_map.try_get(neighbor_fid)?;
-                    if is_land && (neighbor.grouping.is_water()) {
+                    if is_land && (neighbor.grouping().is_water()) {
     
                         on_shore = true;
                         let neighbor_water_distance = match neighbor_tile {
-                            Neighbor::Tile(_) => tile.site.shaped_distance(&neighbor.site,&world_shape),
-                            Neighbor::CrossMap(_, _) => tile.site.shaped_distance(&neighbor.site.across_antimeridian(&tile.site),&world_shape),
+                            Neighbor::Tile(_) => tile.site().shaped_distance(neighbor.site(),&world_shape),
+                            Neighbor::CrossMap(_, _) => tile.site().shaped_distance(&neighbor.site().across_antimeridian(tile.site()),&world_shape),
                             Neighbor::OffMap(_) => unreachable!("neighbor_tile should only be set if Tile or CrossMap"),
                         };
 
@@ -64,7 +64,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
                             closest_water = Some(neighbor_tile.clone());
                         }
                         *water_count.get_or_insert(0) += 1;
-                    } else if !is_land && !neighbor.grouping.is_water() {
+                    } else if !is_land && !neighbor.grouping().is_water() {
     
                         on_shore = true;
                     }
@@ -75,8 +75,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         }
 
         let edit_tile = tile_map.try_get_mut(&fid)?;
-        edit_tile.water_count = water_count;
-        edit_tile.closest_water_tile_id = closest_water;
+        edit_tile.set_water_count(water_count);
+        edit_tile.set_closest_water_tile_id(closest_water);
         if on_shore {
             if is_land {
                 _ = shore_distances.insert(fid.clone(),1);
@@ -97,7 +97,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     while let Some((fid,priority)) = land_queue.pop() {
 
         let tile = tile_map.try_get(&fid)?;
-        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
             match neighbor_id {
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
 
@@ -126,7 +126,7 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
     while let Some((fid,priority)) = water_queue.pop() {
 
         let tile = tile_map.try_get(&fid)?;
-        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
 
             match neighbor_id {
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
@@ -155,8 +155,8 @@ pub(crate) fn generate_water_distance<Progress: ProgressObserver>(target: &mut W
         let mut feature = tiles.try_feature_by_id(&fid)?;
         let shore_distance = shore_distances.remove(&fid).expect("Why wouldn't this value have been generated for the tile?");
         feature.set_shore_distance(&shore_distance)?;
-        feature.set_harbor_tile_id(&tile.closest_water_tile_id)?;
-        feature.set_water_count(&tile.water_count)?;
+        feature.set_harbor_tile_id(tile.closest_water_tile_id())?;
+        feature.set_water_count(tile.water_count())?;
         tiles.update_feature(feature)?;
 
 

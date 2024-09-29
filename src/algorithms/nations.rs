@@ -44,14 +44,14 @@ pub(crate) fn generate_nations<Random: Rng, Progress: ProgressObserver, Culture:
 
     for town in towns.read_features().into_entities::<TownForNations>().watch(progress,"Reading towns.","Towns read.") {
         let (_,town) = town?;
-        if town.is_capital {
-            let culture = town.culture;
+        if *town.is_capital() {
+            let culture = town.culture().clone();
             let culture_data = culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?;
             let namer = Culture::get_namer(culture_data, namers)?;
             let name = namer.make_state_name(rng);
             let type_ = culture_data.map(CultureWithType::type_).cloned().unwrap_or(CultureType::Generic);
-            let center_tile_id = town.tile_id;
-            let capital_town_id = town.fid;
+            let center_tile_id = town.tile_id().clone();
+            let capital_town_id = town.fid().clone();
             let expansionism = rng.gen_range(0.1f64..1.0f64).mul_add(size_variance.size_variance, 1.0);
             nations.push(NewNation {
                 name,
@@ -113,15 +113,15 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     for nation in nations {
 
         // place the nation center
-        let tile = tile_map.try_get_mut(&nation.center_tile_id)?;
-        tile.nation_id = Some(nation.fid.clone());
+        let tile = tile_map.try_get_mut(nation.center_tile_id())?;
+        tile.set_nation_id(Some(nation.fid().clone()));
 
-        _ = costs.insert(nation.center_tile_id.clone(), OrderedFloat::from(1.0));
+        _ = costs.insert(nation.center_tile_id().clone(), OrderedFloat::from(1.0));
 
-        _ = capitals.insert(nation.center_tile_id.clone());
+        _ = capitals.insert(nation.center_tile_id().clone());
 
         // add the tile to the queue for work.
-        _ = queue.push((nation.center_tile_id.clone(),nation,tile.biome.clone()), Reverse(OrderedFloat::from(0.0)));
+        _ = queue.push((nation.center_tile_id().clone(),nation,tile.biome().clone()), Reverse(OrderedFloat::from(0.0)));
 
     }
 
@@ -134,7 +134,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     
         let tile = tile_map.try_get(&tile_id)?;
 
-        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
 
             match neighbor_id {
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
@@ -145,27 +145,27 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     
                     let neighbor = tile_map.try_get(neighbor_id)?;
     
-                    let culture_cost = if tile.culture == neighbor.culture {-9.0} else { 100.0 };
+                    let culture_cost = if tile.culture() == neighbor.culture() {-9.0} else { 100.0 };
     
-                    let population_cost = if neighbor.grouping.is_water() { 
+                    let population_cost = if neighbor.grouping().is_water() { 
                         0.0
-                    } else if neighbor.habitability > 0.0 {
-                        (20.0 - neighbor.habitability).max(0.0)
+                    } else if neighbor.habitability() > &0.0 {
+                        (20.0 - neighbor.habitability()).max(0.0)
                     } else {
                         5000.0
                     };
     
-                    let neighbor_biome = biome_map.try_get(&neighbor.biome)?;
+                    let neighbor_biome = biome_map.try_get(neighbor.biome())?;
     
-                    let biome_cost = get_biome_cost(&nation_biome,neighbor_biome,&nation.type_);
+                    let biome_cost = get_biome_cost(&nation_biome,neighbor_biome,nation.type_());
     
-                    let height_cost = get_height_cost(neighbor, &nation.type_);
+                    let height_cost = get_height_cost(neighbor, nation.type_());
     
-                    let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, &nation.type_);
+                    let river_cost = get_river_cost(neighbor, river_threshold.river_threshold, nation.type_());
     
-                    let shore_cost = get_shore_cost(neighbor, &nation.type_);
+                    let shore_cost = get_shore_cost(neighbor, nation.type_());
     
-                    let cell_cost = OrderedFloat::from((culture_cost + population_cost + biome_cost + height_cost + river_cost + shore_cost).max(0.0) * neighbor.area) / nation.expansionism;
+                    let cell_cost = OrderedFloat::from((culture_cost + population_cost + biome_cost + height_cost + river_cost + shore_cost).max(0.0) * neighbor.area()) / nation.expansionism();
     
                     let total_cost = priority.0 + OrderedFloat::from(10.0) + cell_cost;
     
@@ -184,7 +184,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
     
                         if replace_nation {
                             // place the nation even if there is no population or something.
-                            place_nations.push((neighbor_id.clone(),nation.fid.clone()));
+                            place_nations.push((neighbor_id.clone(),nation.fid().clone()));
                             _ = costs.insert(neighbor_id.clone(), total_cost);
     
                             queue.push((neighbor_id.clone(), nation.clone(), nation_biome.clone()), Reverse(total_cost));
@@ -203,7 +203,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         for (place_tile_id,nation_id) in place_nations {
             let place_tile = tile_map.try_get_mut(&place_tile_id)?;
-            place_tile.nation_id = Some(nation_id);
+            place_tile.set_nation_id(Some(nation_id));
         }
 
 
@@ -214,7 +214,7 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
         let mut feature = tiles.try_feature_by_id(fid)?;
 
-        feature.set_nation_id(&tile.nation_id.clone())?;
+        feature.set_nation_id(&tile.nation_id().clone())?;
 
         tiles.update_feature(feature)?;
 
@@ -226,35 +226,35 @@ pub(crate) fn expand_nations<Progress: ProgressObserver>(target: &mut WorldMapTr
 
 pub(crate) const fn get_shore_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
     match culture_type {
-        CultureType::Lake => match neighbor.shore_distance {
+        CultureType::Lake => match neighbor.shore_distance() {
             2 | 1 => 0.0, 
             ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
             -1 => 0.0,
         },
-        CultureType::Naval => match neighbor.shore_distance {
+        CultureType::Naval => match neighbor.shore_distance() {
             1 => 0.0,
             2 => 30.0, // penalty for mainland 
             ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland 
             -1 => 0.0,
         },
-        CultureType::Nomadic => match neighbor.shore_distance {
+        CultureType::Nomadic => match neighbor.shore_distance() {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
-        CultureType::Generic  => match neighbor.shore_distance {
+        CultureType::Generic  => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
-        CultureType::River => match neighbor.shore_distance {
+        CultureType::River => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
-        CultureType::Hunting => match neighbor.shore_distance {
+        CultureType::Hunting => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0,
         },
-        CultureType::Highland => match neighbor.shore_distance {
+        CultureType::Highland => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
             -1 | ..=-2 | 0 | 2.. => 0.0, 
         },
@@ -264,7 +264,7 @@ pub(crate) const fn get_shore_cost(neighbor: &TileForNationExpand, culture_type:
 
 pub(crate) fn get_river_cost(neighbor: &TileForNationExpand, river_threshold: f64, culture_type: &CultureType) -> f64 {
     match culture_type {
-        CultureType::River => if neighbor.water_flow > river_threshold {
+        CultureType::River => if neighbor.water_flow() > &river_threshold {
             0.0
         } else {
             // they want to stay near rivers
@@ -275,49 +275,49 @@ pub(crate) fn get_river_cost(neighbor: &TileForNationExpand, river_threshold: f6
         CultureType::Naval |
         CultureType::Nomadic |
         CultureType::Hunting |
-        CultureType::Highland => if neighbor.water_flow <= river_threshold {
+        CultureType::Highland => if neighbor.water_flow() <= &river_threshold {
             0.0 // no penalty for non-rivers
         } else {
             // penalty based on flowage
-            (neighbor.water_flow / 10.0).clamp(20.0, 100.0)
+            (neighbor.water_flow() / 10.0).clamp(20.0, 100.0)
         },
     }
 }
 
-pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
+pub(crate) fn get_height_cost(neighbor: &TileForNationExpand, culture_type: &CultureType) -> f64 {
     // This is similar to the way cultures work, but not exactly.
     match culture_type {
-        CultureType::Lake => if neighbor.lake_id.is_some() {
+        CultureType::Lake => if neighbor.lake_id().is_some() {
             // low lake crossing penalty for lake cultures
             10.0
-        } else if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
+        } else if (neighbor.shore_distance() < &-1) || neighbor.grouping().is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // general sea/lake crossing penalty
             1000.0
-        } else if neighbor.elevation_scaled >= 67 {
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             2200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             300.0
         } else {
             0.0
         },
-        CultureType::Naval => if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
+        CultureType::Naval => if (neighbor.shore_distance() < &-1) || neighbor.grouping().is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // low water crossing penalty
             300.0
-        } else if neighbor.elevation_scaled >= 67 {
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             2200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             300.0
         } else {
             0.0
         },
-        CultureType::Highland => if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
+        CultureType::Highland => if (neighbor.shore_distance() < &-1) || neighbor.grouping().is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // general sea/lake corssing penalty
             1000.0
-        } else if neighbor.elevation_scaled < 62 {
+        } else if neighbor.elevation_scaled() < &62 {
             // smaller but still big penalty for hills
             1100.0
         } else {
@@ -327,13 +327,13 @@ pub(crate) const fn get_height_cost(neighbor: &TileForNationExpand, culture_type
         CultureType::Nomadic |
         CultureType::Generic |
         CultureType::River |
-        CultureType::Hunting => if (neighbor.shore_distance < -1) || neighbor.grouping.is_ocean() { // allow them to enter lakes up to -1 for better appearance
+        CultureType::Hunting => if (neighbor.shore_distance() < &-1) || neighbor.grouping().is_ocean() { // allow them to enter lakes up to -1 for better appearance
             // general sea/lake corssing penalty
             1000.0
-        } else if neighbor.elevation_scaled >= 67 {
+        } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
             2200.0 
-        } else if neighbor.elevation_scaled > 44 {
+        } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             300.0
         } else {
@@ -349,23 +349,23 @@ pub(crate) fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForNa
     const FOREST_BIOMES: [&str; 5] = [BiomeSchema::TROPICAL_SEASONAL_FOREST, BiomeSchema::TEMPERATE_DECIDUOUS_FOREST, BiomeSchema::TROPICAL_RAINFOREST, BiomeSchema::TEMPERATE_RAINFOREST, BiomeSchema::TAIGA];
 
 
-    if culture_biome == &neighbor_biome.name {
+    if culture_biome == neighbor_biome.name() {
         // tiny penalty for native biome
         10.0
     } else {
         (match culture_type {
-            CultureType::Hunting => neighbor_biome.movement_cost * 2, // non-native biome penalty for hunters
-            CultureType::Nomadic => if FOREST_BIOMES.contains(&neighbor_biome.name.as_str()) {
+            CultureType::Hunting => neighbor_biome.movement_cost() * 2, // non-native biome penalty for hunters
+            CultureType::Nomadic => if FOREST_BIOMES.contains(&neighbor_biome.name().as_str()) {
                 // penalty for forests
-                neighbor_biome.movement_cost * 3
+                neighbor_biome.movement_cost() * 3
             } else {
-                neighbor_biome.movement_cost
+                *neighbor_biome.movement_cost()
             },
             CultureType::Generic |
             CultureType::Lake |
             CultureType::Naval |
             CultureType::River |
-            CultureType::Highland => neighbor_biome.movement_cost,
+            CultureType::Highland => *neighbor_biome.movement_cost(),
         }) as f64
 
     }
@@ -387,7 +387,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
     for tile_id in tile_list.into_iter().watch(progress,"Normalizing nations.","Nations normalized.") {
         let tile = tile_map.try_get(&tile_id)?;
 
-        if tile.grouping.is_water() || tile.town_id.is_some() {
+        if tile.grouping().is_water() || tile.town_id().is_some() {
             continue; // don't overwrite
         }
 
@@ -395,28 +395,28 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
         let mut adversaries = HashMap::new();
         let mut adversary_count = 0;
         let mut buddy_count = 0;
-        for NeighborAndDirection(neighbor_id,_) in &tile.neighbors {
+        for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
 
             match neighbor_id {
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
                     let neighbor = tile_map.try_get(neighbor_id)?;
 
-                    if let Some(town_id) = &neighbor.town_id {
+                    if let Some(town_id) = &neighbor.town_id() {
                         let town = town_index.try_get(town_id)?;
-                        if town.is_capital {
+                        if *town.is_capital() {
                             dont_overwrite = true; // don't overwrite near capital
                             break;
                         }
                     }
     
-                    if !neighbor.grouping.is_water() {
-                        if neighbor.nation_id == tile.nation_id {
+                    if !neighbor.grouping().is_water() {
+                        if neighbor.nation_id() == tile.nation_id() {
                             buddy_count += 1;
                         } else {
-                            if let Some(count) = adversaries.get(&neighbor.nation_id) {
-                                _ = adversaries.insert(neighbor.nation_id.clone(), count + 1);
+                            if let Some(count) = adversaries.get(neighbor.nation_id()) {
+                                _ = adversaries.insert(neighbor.nation_id().clone(), count + 1);
                             } else {
-                                _ = adversaries.insert(neighbor.nation_id.clone(), 1);
+                                _ = adversaries.insert(neighbor.nation_id().clone(), 1);
                             };
                             adversary_count += 1;
                         }

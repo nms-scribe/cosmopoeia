@@ -7,6 +7,16 @@ use crate::algorithms::beziers::bezierify_points;
 use crate::utils::coordinates::Coordinates;
 use crate::utils::extent::Extent;
 use crate::utils::world_shape::WorldShape;
+use gdal::cpl::CslStringList;
+use geo_types::Error as GeoTypesError;
+use core::marker::PhantomData;
+use gdal::vector::Envelope;
+
+impl From<Envelope> for Extent {
+    fn from(value: Envelope) -> Self {
+        Self::from_bounds(value.MinX, value.MinY, value.MaxX, value.MaxY)
+    }
+}
 
 // special wrapper for the geo type.
 pub(crate) trait ChamberlainDuquetteAreaInDegrees {
@@ -84,12 +94,7 @@ macro_rules! non_collection_geometry {
 
             fn get_envelope(&self) -> Extent {
                 let envelope = self.inner.envelope();
-                Extent {
-                    south: envelope.MinY,
-                    west: envelope.MinX,
-                    width: envelope.MaxX - envelope.MinX,
-                    height: envelope.MaxY - envelope.MinY
-                }
+                envelope.into()
             }
 
             fn is_valid(&self) -> bool {
@@ -323,8 +328,8 @@ impl IntoIterator for LinearRing {
 
 non_collection_geometry!(Polygon,wkbPolygon);
 
-fn validate_options_structure() -> Result<gdal::cpl::CslStringList, CommandError> {
-    let mut validate_options = gdal::cpl::CslStringList::new();
+fn validate_options_structure() -> Result<CslStringList, CommandError> {
+    let mut validate_options = CslStringList::new();
     validate_options.add_string("METHOD=STRUCTURE")?;
     Ok(validate_options)
 }
@@ -432,7 +437,7 @@ impl Polygon {
         match result {
             Ok(polygon) => Ok(polygon),
             Err(err) => match err {
-                geo_types::Error::MismatchedGeometry { expected, found } => Err(CommandError::CantConvert{expected,found}),
+                GeoTypesError::MismatchedGeometry { expected, found } => Err(CommandError::CantConvert{expected,found}),
             },
         }
     }
@@ -457,7 +462,7 @@ impl Polygon {
     pub(crate) fn make_valid_default(&self) -> Result<VariantArealGeometry,CommandError> {
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
         // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-        self.inner.make_valid(&gdal::cpl::CslStringList::new())?.try_into()
+        self.inner.make_valid(&CslStringList::new())?.try_into()
     }
 
     pub(crate) fn make_valid_structure(&self) -> Result<VariantArealGeometry,CommandError> {
@@ -607,7 +612,7 @@ impl MultiPolygon {
         match result {
             Ok(shape) => Ok(shape),
             Err(err) => match err {
-                geo_types::Error::MismatchedGeometry { expected, found } => Err(CommandError::CantConvert{expected,found}),
+                GeoTypesError::MismatchedGeometry { expected, found } => Err(CommandError::CantConvert{expected,found}),
             },
         }
     }
@@ -618,7 +623,7 @@ impl MultiPolygon {
     pub(crate) fn make_valid_default(&self) -> Result<Self,CommandError> {
         // Primary cause of invalid geometry that I've noticed: the original dissolved tiles meet at the same point, or a point that is very close.
         // Much preferred would be to snip away the polygon created by the intersection if it's small. FUTURE: Maybe revisit that theory.
-        self.inner.make_valid(&gdal::cpl::CslStringList::new())?.try_into()
+        self.inner.make_valid(&CslStringList::new())?.try_into()
     }
 
 
@@ -702,7 +707,7 @@ impl TryFrom<Polygon> for MultiPolygon {
 // in TryFrom.
 pub(crate) struct Collection<ItemType: GDALGeometryWrapper> {
     inner: GDALGeometry,
-    _marker: core::marker::PhantomData<ItemType>
+    _marker: PhantomData<ItemType>
 }
 
 impl<ItemType: GDALGeometryWrapper> From<Collection<ItemType>> for GDALGeometry {
@@ -718,12 +723,7 @@ impl GDALGeometryWrapper for Collection<VariantGeometry> {
 
     fn get_envelope(&self) -> Extent {
         let envelope = self.inner.envelope();
-        Extent {
-            south: envelope.MinY,
-            west: envelope.MinX,
-            width: envelope.MaxX - envelope.MinX,
-            height: envelope.MaxY - envelope.MinY
-        }
+        envelope.into()
     }
 
     fn is_valid(&self) -> bool {
@@ -752,7 +752,7 @@ impl Collection<VariantGeometry> {
         if found == OGRwkbGeometryType::wkbGeometryCollection {
             Ok(Self {
                 inner: value,
-                _marker: core::marker::PhantomData
+                _marker: PhantomData
             })
         } else {
             Err(CommandError::IncorrectGdalGeometryType{ 
@@ -785,7 +785,7 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         if found == OGRwkbGeometryType::wkbGeometryCollection {
             Ok(Self {
                 inner: value,
-                _marker: core::marker::PhantomData
+                _marker: PhantomData
             })
         } else {
             Err(CommandError::IncorrectGdalGeometryType{ 
@@ -800,7 +800,7 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         let inner = GDALGeometry::empty(OGRwkbGeometryType::wkbGeometryCollection)?;
         Ok(Self {
             inner,
-            _marker: core::marker::PhantomData
+            _marker: PhantomData
         })
 
     }
@@ -813,7 +813,7 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
         }
         Ok(Self {
             inner,
-            _marker: core::marker::PhantomData
+            _marker: PhantomData
         })
     }
 
@@ -839,12 +839,7 @@ impl<ItemType: GDALGeometryWrapper> Collection<ItemType> {
     #[allow(clippy::same_name_method)]
     fn get_envelope(&self) -> Extent {
         let envelope = self.inner.envelope();
-        Extent {
-            south: envelope.MinY,
-            west: envelope.MinX,
-            width: envelope.MaxX - envelope.MinX,
-            height: envelope.MaxY - envelope.MinY
-        }
+        envelope.into()
     }
 
     #[allow(clippy::same_name_method)]

@@ -3,6 +3,7 @@ use core::str::FromStr;
 
 use serde::Serialize;
 use serde::Deserialize;
+use serde::de::Error as SerdeDeError;
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
 use schemars::JsonSchema;
@@ -14,6 +15,7 @@ use schemars::schema::StringValidation;
 use schemars::schema::InstanceType;
 
 use crate::errors::CommandError;
+use core::fmt;
 
 
 #[derive(Clone)]
@@ -113,7 +115,7 @@ where <NumberType as FromStr>::Err: Display {
 
         let value = StrOrNum::deserialize(deserializer)?;
         match value {
-            StrOrNum::Str(deserialized) => deserialized.parse().map_err(|e: CommandError| serde::de::Error::custom(e.to_string())),
+            StrOrNum::Str(deserialized) => deserialized.parse().map_err(|e: CommandError| SerdeDeError::custom(e.to_string())),
             StrOrNum::Num(deserialized) => Ok(Self::Single(deserialized)),
         }
     
@@ -162,7 +164,7 @@ where <NumberType as FromStr>::Err: Display {
 
 impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
 
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Inclusive(min,max) => write!(f,"{min}..={max}"),
             Self::Exclusive(min,max) => write!(f,"{min}..{max}"),

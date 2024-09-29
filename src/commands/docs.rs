@@ -63,10 +63,10 @@ fn list_schemas() -> Result<Vec<LayerDocumentation>,CommandError> {
 }
 
 fn map_field_types(field_type: &FieldTypeDocumentation, map: &mut IndexMap<String,FieldTypeDocumentation>) -> String {
-    for sub_type in &field_type.sub_types {
+    for sub_type in field_type.sub_types() {
         _ = map_field_types(sub_type, map)
     }
-    let name = field_type.name.clone();
+    let name = field_type.name().to_owned();
     match map.get(&name) {
         Some(existing) => if field_type != existing {
             // This is a programming logic error. FUTURE: I should find some type safe way to do this.
@@ -100,16 +100,16 @@ The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This i
     let mut formats = IndexMap::new();
 
     for schema in list_schemas()? {
-        writeln!(&mut target,"## Layer `{}`",schema.name)?;
-        writeln!(&mut target,"**geometry**: {}",schema.geometry)?;
+        writeln!(&mut target,"## Layer `{}`",schema.name())?;
+        writeln!(&mut target,"**geometry**: {}",schema.geometry())?;
         writeln!(&mut target)?;
-        writeln!(&mut target,"{}",schema.description)?;
+        writeln!(&mut target,"{}",schema.description())?;
         writeln!(&mut target)?;
-        for field in schema.fields {
-            writeln!(&mut target,"### `{}`",field.name)?;
-            writeln!(&mut target,"**database field type**: {}",map_field_types(&field.field_type,&mut formats))?;
+        for field in schema.fields() {
+            writeln!(&mut target,"### `{}`",field.name())?;
+            writeln!(&mut target,"**database field type**: {}",map_field_types(field.field_type(),&mut formats))?;
             writeln!(&mut target)?;
-            writeln!(&mut target,"{}",field.description)?;
+            writeln!(&mut target,"{}",field.description())?;
             writeln!(&mut target)?;
         }
         writeln!(&mut target)?;
@@ -121,10 +121,10 @@ The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This i
 
     for (name,field_type) in formats {
         writeln!(&mut target,"### {name}")?;
-        writeln!(&mut target,"**storage type**: {}",field_type.storage_type)?;
-        writeln!(&mut target,"**syntax**: `{}`",field_type.syntax)?;
+        writeln!(&mut target,"**storage type**: {}",field_type.storage_type())?;
+        writeln!(&mut target,"**syntax**: `{}`",field_type.syntax())?;
         writeln!(&mut target)?;
-        writeln!(&mut target,"{}",field_type.description)?;
+        writeln!(&mut target,"{}",field_type.description())?;
         writeln!(&mut target)?;
     }
 

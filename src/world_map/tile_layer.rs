@@ -112,28 +112,44 @@ pub(crate) trait TileWithShoreDistance: Entity<TileSchema> {
 }
 
 entity!(NewTileSite: Tile {
-    geometry: Polygon,
+    #[get=false] geometry: Polygon,
     site: Coordinates,
-    edge: Option<Edge>,
-    area: f64
+    #[get=false] edge: Option<Edge>,
+    #[get=false] area: f64
 });
+
+impl NewTileSite {
+
+    pub(crate) const fn new(geometry: Polygon,
+        site: Coordinates,
+        edge: Option<Edge>,
+        area: f64) -> Self {
+        Self { 
+            geometry, 
+            site, 
+            edge, 
+            area 
+        }
+
+    }
+}
 
 entity!(TileForCalcNeighbors: Tile {
     geometry: Polygon,
     edge: Option<Edge>,
     site: Coordinates,
-    neighbor_set: HashSet<IdRef> = |_| Ok::<_,CommandError>(HashSet::new()),
-    cross_neighbor_set: HashSet<IdRef> = |_| Ok::<_,CommandError>(HashSet::new())
+    #[mut=true] neighbor_set: HashSet<IdRef> = |_| Ok::<_,CommandError>(HashSet::new()),
+    #[mut=true] cross_neighbor_set: HashSet<IdRef> = |_| Ok::<_,CommandError>(HashSet::new())
 });
 
 entity!(TileForTerrain: Tile {
     site: Coordinates, 
-    elevation: f64,
-    grouping: Grouping, 
+    #[set=true] #[mut=true] elevation: f64,
+    #[set=true] grouping: Grouping, 
     neighbors: Vec<NeighborAndDirection>,
     // 'old' values so the algorithm can check if it's changed.
-    old_elevation: f64 = TileFeature::elevation,
-    old_grouping: Grouping = TileFeature::grouping
+    #[get=false] old_elevation: f64 = TileFeature::elevation,
+    #[get=false] old_grouping: Grouping = TileFeature::grouping
 });
 
 impl TileForTerrain {
@@ -161,13 +177,13 @@ entity!(TileForWinds: Tile {
 
 entity!(TileForWaterflow: Tile {
     elevation: f64, 
-    flow_to: Vec<Neighbor> = |_| Ok::<_,CommandError>(Vec::new()),
+    #[set=true] flow_to: Vec<Neighbor> = |_| Ok::<_,CommandError>(Vec::new()),
     grouping: Grouping, 
     neighbors: Vec<NeighborAndDirection>,
     precipitation: f64, // not in TileForWaterFill
-    temperature: f64,
-    water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
-    water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
+    #[get=false] temperature: f64,
+    #[mut=true] water_accumulation: f64 = |_| Ok::<_,CommandError>(0.0),
+    #[set=true] #[mut=true] water_flow: f64 = |_| Ok::<_,CommandError>(0.0),
 });
 
 // Basically the same struct as WaterFlow, except that the fields are initialized differently. I can't
@@ -177,12 +193,12 @@ entity!(TileForWaterFill: Tile {
     elevation: f64, 
     flow_to: Vec<Neighbor>, // Initialized to blank in TileForWaterFlow
     grouping: Grouping, 
-    lake_id: Option<IdRef> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
+    #[set=true] lake_id: Option<IdRef> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     neighbors: Vec<NeighborAndDirection>,
-    outlet_from: Option<Neighbor> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
+    #[set=true] outlet_from: Option<Neighbor> = |_| Ok::<_,CommandError>(None), // Not in TileForWaterFlow
     temperature: f64,
-    water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
-    water_flow: f64,  // Initialized to blank in TileForWaterFlow
+    #[get=false] water_accumulation: f64,  // Initialized to blank in TileForWaterFlow
+    #[mut=true] water_flow: f64,  // Initialized to blank in TileForWaterFlow
 });
 
 impl From<TileForWaterflow> for TileForWaterFill {
@@ -212,8 +228,8 @@ entity!(TileForWaterDistance: Tile {
     site: Coordinates,
     grouping: Grouping, 
     neighbors: Vec<NeighborAndDirection>,
-    water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
-    closest_water_tile_id: Option<Neighbor> = |_| Ok::<_,CommandError>(None)
+    #[set=true] water_count: Option<i32> = |_| Ok::<_,CommandError>(None),
+    #[set=true] closest_water_tile_id: Option<Neighbor> = |_| Ok::<_,CommandError>(None)
 });
 
 entity!(TileForGroupingCalc: Tile {
@@ -240,33 +256,33 @@ entity!(TileForPopulationNeighbor: Tile {
 });
 
 entity!(TileForCultureGen: Tile {
-    fid: IdRef,
-    site: Coordinates,
+    #[get=false] fid: IdRef,
+    #[get=false] site: Coordinates,
     population: i32,
     habitability: f64,
-    shore_distance: i32,
-    elevation_scaled: i32,
-    biome: String,
-    water_count: Option<i32>,
-    harbor_tile_id: Option<Neighbor>,
-    grouping: Grouping,
-    water_flow: f64,
-    temperature: f64
+    #[get=false] shore_distance: i32,
+    #[get=false] elevation_scaled: i32,
+    #[get=false] biome: String,
+    #[get=false] water_count: Option<i32>,
+    #[get=false] harbor_tile_id: Option<Neighbor>,
+    #[get=false] grouping: Grouping,
+    #[get=false] water_flow: f64,
+    #[get=false] temperature: f64
 
 });
 
 pub(crate) struct TileForCulturePrefSorting<'struct_life> { // NOT an entity because we add in data from other layers.
-    pub(crate) fid: IdRef,
-    pub(crate) site: Coordinates,
-    pub(crate) habitability: f64,
-    pub(crate) shore_distance: i32,
-    pub(crate) elevation_scaled: i32,
-    pub(crate) biome: &'struct_life BiomeForCultureGen,
-    pub(crate) water_count: Option<i32>,
-    pub(crate) neighboring_lake_size: Option<i32>,
-    pub(crate) grouping: Grouping,
-    pub(crate) water_flow: f64,
-    pub(crate) temperature: f64
+    fid: IdRef,
+    site: Coordinates,
+    habitability: f64,
+    shore_distance: i32,
+    elevation_scaled: i32,
+    biome: &'struct_life BiomeForCultureGen,
+    water_count: Option<i32>,
+    neighboring_lake_size: Option<i32>,
+    grouping: Grouping,
+    water_flow: f64,
+    temperature: f64
 }
 
 impl TileForCulturePrefSorting<'_> {
@@ -279,7 +295,7 @@ impl TileForCulturePrefSorting<'_> {
                     let closest_water = tiles.try_feature_by_id(&closest_water)?;
                     if let Some(lake_id) = closest_water.lake_id()? {
                         let lake = lakes.try_get(&lake_id)?;
-                        Some(lake.size)
+                        Some(*lake.size())
                     } else {
                         None
                     }
@@ -305,6 +321,50 @@ impl TileForCulturePrefSorting<'_> {
         })
 
     }
+    
+    pub(crate) const fn habitability(&self) -> f64 {
+        self.habitability
+    }
+    
+    pub(crate) const fn shore_distance(&self) -> i32 {
+        self.shore_distance
+    }
+    
+    pub(crate) const fn elevation_scaled(&self) -> i32 {
+        self.elevation_scaled
+    }
+    
+    pub(crate) const fn temperature(&self) -> f64 {
+        self.temperature
+    }
+    
+    pub(crate) const fn biome(&self) -> &BiomeForCultureGen {
+        self.biome
+    }
+    
+    pub(crate) const fn water_count(&self) -> Option<i32> {
+        self.water_count
+    }
+    
+    pub(crate) const fn neighboring_lake_size(&self) -> Option<i32> {
+        self.neighboring_lake_size
+    }
+    
+    pub(crate) const fn site(&self) -> &Coordinates {
+        &self.site
+    }
+    
+    pub(crate) const fn fid(&self) -> &IdRef {
+        &self.fid
+    }
+    
+    pub(crate) const fn grouping(&self) -> &Grouping {
+        &self.grouping
+    }
+    
+    pub(crate) const fn water_flow(&self) -> f64 {
+        self.water_flow
+    }
 }
 
 entity!(TileForCultureExpand: Tile {
@@ -316,7 +376,7 @@ entity!(TileForCultureExpand: Tile {
     neighbors: Vec<NeighborAndDirection>,
     lake_id: Option<IdRef>,
     area: f64,
-    culture: Option<String> = |_| Ok::<_,CommandError>(None)
+    #[set=true] culture: Option<String> = |_| Ok::<_,CommandError>(None)
 
 });
 
@@ -329,8 +389,8 @@ entity!(TileForTowns: Tile {
 });
 
 entity!(TileForTownPopulation: Tile {
-    fid: IdRef,
-    geometry: Polygon,
+    #[get=false] fid: IdRef,
+    #[get=false] geometry: Polygon,
     habitability: f64,
     site: Coordinates,
     grouping_id: IdRef,
@@ -391,7 +451,7 @@ entity!(TileForNationExpand: Tile {
     neighbors: Vec<NeighborAndDirection>,
     lake_id: Option<IdRef>,
     culture: Option<String>,
-    nation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
+    #[set=true] nation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
     area: f64,
 });
 
@@ -415,7 +475,7 @@ entity!(TileForSubnationExpand: Tile {
     shore_distance: i32,
     elevation_scaled: i32,
     nation_id: Option<IdRef>,
-    subnation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
+    #[set=true] subnation_id: Option<IdRef> = |_| Ok::<_,CommandError>(None),
     area: f64,
 });
 
@@ -439,9 +499,9 @@ entity!(TileForSubnationNormalize: Tile {
 
 entity!(TileForCultureDissolve: Tile {
     culture: Option<String>,
-    geometry: Polygon,
-    neighbors: Vec<NeighborAndDirection>,
-    shore_distance: i32
+    #[get=false] geometry: Polygon,
+    #[get=false] neighbors: Vec<NeighborAndDirection>,
+    #[get=false] shore_distance: i32
 });
 
 impl TileWithGeometry for TileForCultureDissolve {
@@ -464,9 +524,9 @@ impl TileWithNeighbors for TileForCultureDissolve {
 
 entity!(TileForBiomeDissolve: Tile {
     biome: String,
-    geometry: Polygon,
-    neighbors: Vec<NeighborAndDirection>,
-    shore_distance: i32
+    #[get=false] geometry: Polygon,
+    #[get=false] neighbors: Vec<NeighborAndDirection>,
+    #[get=false] shore_distance: i32
 });
 
 impl TileWithGeometry for TileForBiomeDissolve {
@@ -490,9 +550,9 @@ impl TileWithNeighbors for TileForBiomeDissolve {
 
 entity!(TileForNationDissolve: Tile {
     nation_id: Option<IdRef>,
-    geometry: Polygon,
-    neighbors: Vec<NeighborAndDirection>,
-    shore_distance: i32
+    #[get=false] geometry: Polygon,
+    #[get=false] neighbors: Vec<NeighborAndDirection>,
+    #[get=false] shore_distance: i32
 });
 
 impl TileWithGeometry for TileForNationDissolve {
@@ -515,9 +575,9 @@ impl TileWithNeighbors for TileForNationDissolve {
 
 entity!(TileForSubnationDissolve: Tile {
     subnation_id: Option<IdRef>,
-    geometry: Polygon,
-    neighbors: Vec<NeighborAndDirection>,
-    shore_distance: i32
+    #[get=false] geometry: Polygon,
+    #[get=false] neighbors: Vec<NeighborAndDirection>,
+    #[get=false] shore_distance: i32
 });
 
 impl TileWithGeometry for TileForSubnationDissolve {
@@ -543,11 +603,11 @@ impl TileLayer<'_,'_> {
 
     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
     // FUTURE: It would also be nice to get rid of the lifetimes
-    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this mut self, fid: &IdRef) -> Result<Data,CommandError> {
+    pub(crate) fn try_entity_by_id<'this, Data: Entity<TileSchema> + TryFrom<TileFeature<'this>,Error=CommandError>>(&'this self, fid: &IdRef) -> Result<Data,CommandError> {
         self.try_feature_by_id(fid)?.try_into()
     }
 
-    pub(crate) fn add_tile(&mut self, tile: NewTileSite) -> Result<(),CommandError> {
+    pub(crate) fn add_tile(&self, tile: NewTileSite) -> Result<(),CommandError> {
         // tiles are initialized with incomplete definitions in the table. It is a user error to access fields which haven't been assigned yet by running an algorithm before required algorithms are completed.
 
         let (x,y) = tile.site.to_tuple();
@@ -577,7 +637,7 @@ impl TileLayer<'_,'_> {
     }
 
     pub(crate) fn get_layer_size(&self) -> Result<(f64,f64),CommandError> {
-        let extent = self.layer.get_extent()?;
+        let extent = self.layer().get_extent()?;
         let width = extent.MaxX - extent.MinX;
         let height = extent.MaxY - extent.MinY;
         Ok((width,height))
@@ -592,8 +652,8 @@ impl TileLayer<'_,'_> {
     }
 
     pub(crate) fn get_extent(&self) -> Result<Extent,CommandError> {
-        let result = self.layer.get_extent()?;
-        Ok(Extent::new(result.MinX, result.MinY, result.MaxX, result.MaxY))
+        let result = self.layer().get_extent()?;
+        Ok(result.into())
 
     }
 

@@ -15,6 +15,7 @@ use crate::typed_map::entities::EntityIterator;
 use crate::typed_map::entities::EntityLookup;
 use crate::typed_map::entities::NamedEntity;
 use crate::typed_map::schema::Schema;
+use core::marker::PhantomData;
 
 
 pub(crate) trait TypedFeature<'data_life,SchemaType: Schema>: From<Feature<'data_life>>  {
@@ -40,8 +41,8 @@ pub(crate) trait NamedFeature<'data_life,SchemaType: Schema>: TypedFeature<'data
 
 pub(crate) struct TypedFeatureIterator<'data_life, SchemaType: Schema, Feature: TypedFeature<'data_life,SchemaType>> {
     features: FeatureIterator<'data_life>,
-    _phantom_feature: core::marker::PhantomData<Feature>,
-    _phantom_schema: core::marker::PhantomData<SchemaType>
+    _phantom_feature: PhantomData<Feature>,
+    _phantom_schema: PhantomData<SchemaType>
 }
 
 impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType>> Iterator for TypedFeatureIterator<'impl_life, SchemaType, Feature> {
@@ -60,8 +61,8 @@ impl<'impl_life, SchemaType: Schema, Feature: TypedFeature<'impl_life,SchemaType
     fn from(features: FeatureIterator<'impl_life>) -> Self {
         Self {
             features,
-            _phantom_feature: core::marker::PhantomData,
-            _phantom_schema: core::marker::PhantomData
+            _phantom_feature: PhantomData,
+            _phantom_schema: PhantomData
         }
     }
 }

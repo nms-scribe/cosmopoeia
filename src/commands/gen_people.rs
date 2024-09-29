@@ -74,25 +74,25 @@ subcommand_def!{
     pub struct CreateCultures {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub cultures_arg: CulturesGenArg,
+        pub cultures: CulturesGenArg,
 
         #[clap(flatten)]
-        pub namer_arg: NamerArg,
+        pub namer: NamerArg,
         
         #[clap(flatten)]
-        pub size_variance_arg: SizeVarianceArg,
+        pub size_variance: SizeVarianceArg,
 
         #[clap(flatten)]
-        pub river_threshold_arg: RiverThresholdArg,
+        pub river_threshold: RiverThresholdArg,
     
         #[clap(flatten)]
-        pub random_seed_arg: RandomSeedArg,
+        pub random_seed: RandomSeedArg,
 
         #[clap(flatten)]
-        pub overwrite_cultures_arg: OverwriteCulturesArg,
+        pub overwrite_cultures: OverwriteCulturesArg,
     
     
     }
@@ -102,14 +102,14 @@ impl Task for CreateCultures {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let mut random = random_number_generator(&self.random_seed_arg);
+        let mut random = random_number_generator(&self.random_seed);
 
-        let mut loaded_namers = NamerSet::load_from(self.namer_arg, &mut random, progress)?;
+        let mut loaded_namers = NamerSet::load_from(self.namer, &mut random, progress)?;
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
 
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&mut random, &self.cultures_arg, &mut loaded_namers, &self.size_variance_arg, &self.river_threshold_arg, &self.overwrite_cultures_arg, transaction, progress)
+            Self::run_with_parameters(&mut random, &self.cultures, &mut loaded_namers, &self.size_variance, &self.river_threshold, &self.overwrite_cultures, transaction, progress)
         })?;
 
         target.save(progress)
@@ -134,13 +134,13 @@ subcommand_def!{
     pub struct ExpandCultures {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub river_threshold_arg: RiverThresholdArg,
+        pub river_threshold: RiverThresholdArg,
     
         #[clap(flatten)]
-        pub expansion_factor_arg: ExpansionFactorArg,
+        pub expansion_factor: ExpansionFactorArg,
 
     }
 }
@@ -150,9 +150,9 @@ impl Task for ExpandCultures {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
 
-        let mut target = WorldMap::edit(&self.target_arg.target)?;
+        let mut target = WorldMap::edit(&self.target.target)?;
         target.with_transaction(|transaction| {
-            Self::run_with_parameters(&self.river_threshold_arg, &self.expansion_factor_arg, transaction, progress)
+            Self::run_with_parameters(&self.river_threshold, &self.expansion_factor, transaction, progress)
         })?;
 
         target.save(progress)
@@ -266,31 +266,31 @@ command_def!{
 pub struct DefaultArgs {
 
     #[clap(flatten)]
-    pub target_arg: TargetArg,
+    pub target: TargetArg,
 
     #[clap(flatten)]
-    pub cultures_arg: CulturesGenArg,
+    pub cultures: CulturesGenArg,
 
     #[clap(flatten)]
-    pub river_threshold_arg: RiverThresholdArg,
+    pub river_threshold: RiverThresholdArg,
 
     #[clap(flatten)]
-    pub expansion_factor_arg: ExpansionFactorArg,
+    pub expansion_factor: ExpansionFactorArg,
 
     #[clap(flatten)]
-    pub namer_arg: NamerArg,
+    pub namer: NamerArg,
 
     #[clap(flatten)]
-    pub size_variance_arg: SizeVarianceArg,
+    pub size_variance: SizeVarianceArg,
 
     #[clap(flatten)]
-    pub bezier_scale_arg: BezierScaleArg,
+    pub bezier_scale: BezierScaleArg,
 
     #[clap(flatten)]
-    pub random_seed_arg: RandomSeedArg,
+    pub random_seed: RandomSeedArg,
 
     #[clap(flatten)]
-    pub overwrite_cultures_arg: OverwriteCulturesArg,
+    pub overwrite_cultures: OverwriteCulturesArg,
 
 
 }
@@ -315,20 +315,20 @@ impl Task for GenPeople {
 
         if let Some(default_args) = self.default_args {
 
-            let mut random = random_number_generator(&default_args.random_seed_arg);
+            let mut random = random_number_generator(&default_args.random_seed);
 
-            let mut loaded_namers = NamerSet::load_from(default_args.namer_arg, &mut random, progress)?;
+            let mut loaded_namers = NamerSet::load_from(default_args.namer, &mut random, progress)?;
     
-            let mut target = WorldMap::edit(&default_args.target_arg.target)?;
+            let mut target = WorldMap::edit(&default_args.target.target)?;
     
             Self::run_default(
-                &default_args.river_threshold_arg, 
-                &default_args.cultures_arg, 
+                &default_args.river_threshold, 
+                &default_args.cultures, 
                 &mut loaded_namers, 
-                &default_args.size_variance_arg, 
-                &default_args.overwrite_cultures_arg, 
-                &default_args.expansion_factor_arg, 
-                &default_args.bezier_scale_arg, 
+                &default_args.size_variance, 
+                &default_args.overwrite_cultures, 
+                &default_args.expansion_factor, 
+                &default_args.bezier_scale, 
                 &mut target, 
                 &mut random, 
                 progress

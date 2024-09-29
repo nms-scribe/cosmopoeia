@@ -124,7 +124,7 @@ subcommand_def!{
 impl Task for PointsFromExtent {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
-        let extent = Extent::new(self.west,self.south,self.east,self.north);
+        let extent = Extent::from_bounds(self.west,self.south,self.east,self.north);
         let mut target = WorldMap::create_or_edit(&self.target_arg.target)?;
         let random = random_number_generator(&self.random_seed_arg);
         let generator = PointGenerator::new(random, extent, self.world_shape_arg.world_shape, self.points);
@@ -183,14 +183,14 @@ impl Task for TrianglesFromPoints {
 
 macro_rules! voronoi_from_triangle {
     ($self: ident, $extent: ident, $progress: ident) => {{
-        let limits = ElevationLimits::new($self.elevation_limits_arg.min_elevation,$self.elevation_limits_arg.max_elevation)?;
+        let limits = ElevationLimits::new($self.elevation_limits.min_elevation,$self.elevation_limits.max_elevation)?;
 
-        let mut target = WorldMap::edit(&$self.target_arg.target)?;
+        let mut target = WorldMap::edit(&$self.target.target)?;
 
         target.with_transaction(|transaction| {
             let mut triangles = transaction.edit_triangles_layer()?;
     
-            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),$extent,$self.world_shape_arg.world_shape.clone())?;
+            let mut generator = VoronoiGenerator::new(triangles.read_features().map(|f| f.geometry()),$extent,$self.world_shape.world_shape.clone())?;
     
             $progress.announce("Create tiles from voronoi polygons");
         
@@ -200,7 +200,7 @@ macro_rules! voronoi_from_triangle {
             #[allow(clippy::needless_collect)]
             let voronoi: Vec<_> = generator.watch($progress,"Copying voronoi.","Voronoi copied.").collect();
     
-            load_tile_layer(transaction,&$self.overwrite_tiles_arg,voronoi.into_iter(),&limits,&$self.world_shape_arg.world_shape,$progress)
+            load_tile_layer(transaction,&$self.overwrite_tiles,voronoi.into_iter(),&limits,&$self.world_shape.world_shape,$progress)
         })?;
 
         target.save($progress)
@@ -213,19 +213,19 @@ subcommand_def!{
     pub struct VoronoiFromTrianglesHeightmap {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[clap(flatten)]
-        pub heightmap_arg: ElevationSourceArg,
+        pub heightmap: ElevationSourceArg,
 
         #[clap(flatten)]
-        pub elevation_limits_arg: ElevationLimitsArg,
+        pub elevation_limits: ElevationLimitsArg,
 
         #[clap(flatten)]
-        pub world_shape_arg: WorldShapeArg,
+        pub world_shape: WorldShapeArg,
 
         #[clap(flatten)]
-        pub overwrite_tiles_arg: OverwriteTilesArg,
+        pub overwrite_tiles: OverwriteTilesArg,
 
     }
 }
@@ -235,7 +235,7 @@ impl Task for VoronoiFromTrianglesHeightmap {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
         let extent = {
-            let source = RasterMap::open(self.heightmap_arg.source)?;
+            let source = RasterMap::open(self.heightmap.source)?;
             source.bounds()?.extent()
         };
 
@@ -251,7 +251,7 @@ subcommand_def!{
     pub struct VoronoiFromTrianglesExtent {
 
         #[clap(flatten)]
-        pub target_arg: TargetArg,
+        pub target: TargetArg,
 
         #[arg(allow_hyphen_values=true)]
         pub west: f64,
@@ -267,13 +267,13 @@ subcommand_def!{
 
 
         #[clap(flatten)]
-        pub elevation_limits_arg: ElevationLimitsArg,
+        pub elevation_limits: ElevationLimitsArg,
 
         #[clap(flatten)]
-        pub world_shape_arg: WorldShapeArg,
+        pub world_shape: WorldShapeArg,
 
         #[clap(flatten)]
-        pub overwrite_tiles_arg: OverwriteTilesArg,
+        pub overwrite_tiles: OverwriteTilesArg,
 
     }
 }
@@ -282,7 +282,7 @@ impl Task for VoronoiFromTrianglesExtent {
 
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
 
-        let extent = Extent::new(self.west,self.south,self.east,self.north);
+        let extent = Extent::from_bounds(self.west,self.south,self.east,self.north);
         
         voronoi_from_triangle!(self,extent,progress)
    

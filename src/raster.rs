@@ -40,20 +40,20 @@ impl RasterBounds {
     }
 
     pub(crate) fn extent(&self) -> Extent {
-        Extent {
-            height: self.coord_height(),
-            width: self.coord_width(),
-            south: if self.transform_y_factor >= 0.0 {
+        Extent::from_height_width_south_west(
+            self.coord_height(),
+            self.coord_width(),
+            if self.transform_y_factor >= 0.0 {
                 self.coord_min_y
             } else {
                 -self.coord_min_y
             },
-            west: if self.transform_x_factor >= 0.0 {
+            if self.transform_x_factor >= 0.0 {
                 self.coord_min_x
             } else {
                 -self.coord_min_x
             },
-        }
+        )
 
     }
 
@@ -100,7 +100,7 @@ pub(crate) struct RasterMap {
 
 impl RasterMap {
 
-    fn new(dataset: Dataset) -> Self {
+    const fn new(dataset: Dataset) -> Self {
         Self {
             dataset
         }
