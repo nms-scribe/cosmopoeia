@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+* Upgraded to gdal crate 0.18.0
+
 ## [0.2.4] - (2024-09-01)
 
 * Lowered the water fill cycle limit
