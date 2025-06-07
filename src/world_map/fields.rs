@@ -25,11 +25,11 @@ impl TypedField for Edge {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -43,14 +43,14 @@ impl TypedField for Option<Edge> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
-        feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
+        feature.field_as_string(feature.field_index(field_name)?)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
-            Ok(feature.set_field_string(field_name, &value.write_to_string())?)
+            Ok(feature.set_field_string(feature.field_index(field_name)?, &value.write_to_string())?)
         } else {
-            Ok(feature.set_field_null(field_name)?)
+            Ok(feature.set_field_null(feature.field_index(field_name)?)?)
         }
     }
 
@@ -98,11 +98,11 @@ impl TypedField for Neighbor {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -117,14 +117,14 @@ impl TypedField for Option<Neighbor> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
-        feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
+        feature.field_as_string(feature.field_index(field_name)?)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(value.set_field(feature,field_name)?)
         } else {
-            Ok(feature.set_field_null(field_name)?)
+            Ok(feature.set_field_null(feature.field_index(field_name)?)?)
         }
     }
 
@@ -144,11 +144,11 @@ impl TypedField for Vec<Neighbor> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -208,11 +208,11 @@ impl TypedField for Vec<NeighborAndDirection> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -321,12 +321,12 @@ impl TypedField for Rgb<u8> {
 
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Self::try_from_hex_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Self::try_from_hex_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.into_hex_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.into_hex_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -378,12 +378,12 @@ impl TypedField for Grouping {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -456,11 +456,11 @@ impl TypedField for RiverSegmentFrom {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -531,11 +531,11 @@ impl TypedField for RiverSegmentTo {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -621,11 +621,11 @@ impl TypedField for LakeType {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -703,11 +703,11 @@ impl TypedField for BiomeCriteria {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -759,11 +759,11 @@ impl TypedField for CultureType {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {

@@ -1,4 +1,5 @@
 use rand::Rng;
+use rand::seq::SliceRandom;
 use prisma::Rgb;
 use prisma::Hsv;
 use prisma::FromColor;
@@ -386,10 +387,7 @@ impl RandomColorGenerator {
         }
 
         // sort randomly so they aren't output in rainbow order
-        // TODO: Rust (as of 1.8.1) is now throwing errors if it catches a bad sort function:
-        // "user-provided comparison function does not correctly implement a total order"
-        // TODO: Replace with -- rand::seq::SliceRandom::shuffle(&mut self, rng);
-        colors.sort_by_key(|_| rng.gen::<usize>());
+        colors.shuffle(rng);
 
         colors
                 

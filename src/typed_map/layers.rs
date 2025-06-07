@@ -331,9 +331,9 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         feature.set_geometry(geometry.into())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
-                feature.set_field(field, value)?;
+                feature.set_field(feature.field_index(field)?, value)?;
             } else {
-                feature.set_field_null(field)?;
+                feature.set_field_null(feature.field_index(field)?)?;
             }
         }
         feature.create(&self.layer)?;
@@ -347,9 +347,9 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         let mut feature = GdalFeature::new(self.layer.defn())?;
         for (field, value) in field_names.iter().zip(field_values.iter()) {
             if let Some(value) = value {
-                feature.set_field(field, value)?;
+                feature.set_field(feature.field_index(field)?, value)?;
             } else {
-                feature.set_field_null(field)?;
+                feature.set_field_null(feature.field_index(field)?)?;
             }
         }
         feature.create(&self.layer)?;
