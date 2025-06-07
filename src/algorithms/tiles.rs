@@ -396,8 +396,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     let mut tile_layer = target.edit_tile_layer()?;
     let extent_polygon = tile_layer.get_extent()?.create_polygon()?;
 
-    let tile_union;
-    {
+    let tile_union = {
         let mut iterator = tile_layer.read_features().filter_map(|f| {
             match f.grouping() {
                 Ok(g) if !g.is_ocean() => Some(Ok(f)),
@@ -406,7 +405,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
             }
         } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
 
-        tile_union = if let Some(tile) = iterator.next() {
+        if let Some(tile) = iterator.next() {
             let first_tile: MultiPolygon = tile?.geometry()?.try_into()?; 
 
             // it's much faster to union two geometries rather than union them one at a time.
@@ -419,8 +418,8 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
             Some(tile_union)
         } else {
             None
-        };
-    }
+        }
+    };
 
     progress.start_unknown_endpoint(|| "Creating ocean polygon.");
     // Create base ocean tile before differences.
