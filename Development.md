@@ -1,8 +1,10 @@
 # Rules For Developers
 
-* Try to follow formatting standards already in use. 
-* If you see something that doesn't match those standards, go ahead and fix that.
+* Try to follow formatting standards already in use
 * If you see inconsistencies in style, you're welcome to bring them up and fix them if asked to do so.
+* For pull requests:
+  * Turn off auto-formatting and "remove spaces after lines" for now, at least until issue #55 is figured out.
+  * Do not change formatting in lines you aren't actually changing the code in (Does not apply to repository owner)
 * Comment well (not just doc comments) and use code practices (full-word identifiers, etc.) that turn the code into the comment.
 * Run clippy as often as you want, but especially before pushing changes
 * The additional clippy warnings are in main.rs, don't remove any of them.
