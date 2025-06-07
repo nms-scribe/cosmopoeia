@@ -66,7 +66,8 @@ fn test_run_command() {
 
 
 #[test]
-#[should_panic(expected="create should not return an an error here, but it does for now: OgrError { err: 6, method_name: \"OGR_L_CreateFeature\" }")]
+// This appears to be fixed.
+//#[should_panic(expected="create should not return an an error here, but it does for now: OgrError { err: 6, method_name: \"OGR_L_CreateFeature\" }")]
 fn test_database_lock_issue() {
     use std::path::PathBuf;
     use gdal::Dataset;
