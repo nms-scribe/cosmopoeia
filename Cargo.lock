@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "cosmopoeia"
-version = "0.2.5"
+version = "0.2.6-rc.1"
 dependencies = [
  "adaptive-bezier",
  "angular-units",
