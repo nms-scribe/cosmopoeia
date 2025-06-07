@@ -396,28 +396,31 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
     let mut tile_layer = target.edit_tile_layer()?;
     let extent_polygon = tile_layer.get_extent()?.create_polygon()?;
 
-    let mut iterator = tile_layer.read_features().filter_map(|f| {
-        match f.grouping() {
-            Ok(g) if !g.is_ocean() => Some(Ok(f)),
-            Ok(_) => None,
-            Err(err) => Some(Err(err)),
-        }
-    } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
+    let tile_union;
+    {
+        let mut iterator = tile_layer.read_features().filter_map(|f| {
+            match f.grouping() {
+                Ok(g) if !g.is_ocean() => Some(Ok(f)),
+                Ok(_) => None,
+                Err(err) => Some(Err(err)),
+            }
+        } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
 
-    let tile_union = if let Some(tile) = iterator.next() {
-        let first_tile: MultiPolygon = tile?.geometry()?.try_into()?; 
+        tile_union = if let Some(tile) = iterator.next() {
+            let first_tile: MultiPolygon = tile?.geometry()?.try_into()?; 
 
-        // it's much faster to union two geometries rather than union them one at a time.
-        let next_tiles = MultiPolygon::from_polygon_results(iterator.map(|f| f?.geometry()))?;
+            // it's much faster to union two geometries rather than union them one at a time.
+            let next_tiles = MultiPolygon::from_polygon_results(iterator.map(|f| f?.geometry()))?;
 
-        progress.start_unknown_endpoint(|| "Uniting tiles.");
+            progress.start_unknown_endpoint(|| "Uniting tiles.");
 
-        let tile_union = first_tile.union(&next_tiles)?;
-        progress.finish(|| "Tiles united.");
-        Some(tile_union)
-    } else {
-        None
-    };
+            let tile_union = first_tile.union(&next_tiles)?;
+            progress.finish(|| "Tiles united.");
+            Some(tile_union)
+        } else {
+            None
+        };
+    }
 
     progress.start_unknown_endpoint(|| "Creating ocean polygon.");
     // Create base ocean tile before differences.

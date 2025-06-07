@@ -202,12 +202,12 @@ impl TypedField for IdRef {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Deserialize::read_from_str(&Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)?)
+        Deserialize::read_from_str(&Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)?)
     }
 
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, &self.write_to_string())?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, &self.write_to_string())?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -221,14 +221,14 @@ impl TypedField for Option<IdRef> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
-        feature.field_as_string_by_name(field_name)?.map(|a| Deserialize::read_from_str(&a)).transpose()
+        feature.field_as_string(feature.field_index(field_name)?)?.map(|a| Deserialize::read_from_str(&a)).transpose()
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
             Ok(value.set_field(feature,field_name)?)
         } else {
-            Ok(feature.set_field_null(field_name)?)
+            Ok(feature.set_field_null(feature.field_index(field_name)?)?)
         }
     }
 
@@ -259,12 +259,12 @@ impl TypedField for String {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTString;
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Self::get_required(feature.field_as_string_by_name(field_name)?, field_id)
+        Self::get_required(feature.field_as_string(feature.field_index(field_name)?)?, field_id)
     }
 
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_string(field_name, self)?)
+        Ok(feature.set_field_string(feature.field_index(field_name)?, self)?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -281,7 +281,7 @@ impl TypedField for Option<String> {
 
 
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
-        if let Some(value) = feature.field_as_string_by_name(field_name)? {
+        if let Some(value) = feature.field_as_string(feature.field_index(field_name)?)? {
             Ok(Some(value))
         } else {
             Ok(None)
@@ -293,7 +293,7 @@ impl TypedField for Option<String> {
         if let Some(value) = self {
             Ok(value.set_field(feature,field_name)?)
         } else {
-            Ok(feature.set_field_null(field_name)?)
+            Ok(feature.set_field_null(feature.field_index(field_name)?)?)
         }
     }
 
@@ -357,11 +357,11 @@ impl TypedField for bool {
 
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Ok(Self::get_required(feature.field_as_integer_by_name(field_name)?, field_id)? != 0)
+        Ok(Self::get_required(feature.field_as_integer(feature.field_index(field_name)?)?, field_id)? != 0)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_integer(field_name, (*self).into())?)
+        Ok(feature.set_field_integer(feature.field_index(field_name)?, (*self).into())?)
 
     }
 
@@ -392,13 +392,13 @@ impl TypedField for f64 {
 
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Self::get_required(feature.field_as_double_by_name(field_name)?, field_id)
+        Self::get_required(feature.field_as_double(feature.field_index(field_name)?)?, field_id)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         // The NotNan thing verifies that the value is not NaN, which would be treated as null.
         // This can help me catch math problems early...
-        Ok(feature.set_field_double(field_name, NotNan::try_from(*self)?.into_inner())?)
+        Ok(feature.set_field_double(feature.field_index(field_name)?, NotNan::try_from(*self)?.into_inner())?)
 
     }
 
@@ -426,11 +426,11 @@ impl TypedField for i32 {
 
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError> {
-        Self::get_required(feature.field_as_integer_by_name(field_name)?, field_id)
+        Self::get_required(feature.field_as_integer(feature.field_index(field_name)?)?, field_id)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
-        Ok(feature.set_field_integer(field_name,*self)?)
+        Ok(feature.set_field_integer(feature.field_index(field_name)?,*self)?)
     }
 
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
@@ -447,14 +447,14 @@ impl TypedField for Option<i32> {
 
     
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
-        Ok(feature.field_as_integer_by_name(field_name)?)
+        Ok(feature.field_as_integer(feature.field_index(field_name)?)?)
     }
 
     fn set_field(&self, feature: &mut Feature, field_name: &str) -> Result<(),CommandError> {
         if let Some(value) = self {
-            Ok(feature.set_field_integer(field_name, *value)?)
+            Ok(feature.set_field_integer(feature.field_index(field_name)?, *value)?)
         } else {
-            Ok(feature.set_field_null(field_name)?)
+            Ok(feature.set_field_null(feature.field_index(field_name)?)?)
         }
     }
 
