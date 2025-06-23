@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+## [0.2.6] - (2025-06-23)
+
 * Restore usage of bindgen feature for gdal, allowing compilation for newer versions of gdal. 
 
 ## [0.2.5] - (2025-06-07)
@@ -44,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial public release.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/nms-scribe/cosmopoeia/v0.2.5...HEAD
+[Unreleased]: https://github.com/nms-scribe/cosmopoeia/v0.2.6...HEAD
+[0.2.6]: https://github.com/nms-scribe/cosmopoeia/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/nms-scribe/cosmopoeia/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/nms-scribe/cosmopoeia/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/nms-scribe/cosmopoeia/v0.2.2...v0.2.3
