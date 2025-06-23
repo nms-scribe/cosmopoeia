@@ -478,8 +478,6 @@ fn grow_or_flow_lake<Progress: ProgressObserver>(lake: &Lake, accumulation: f64,
                                     new_shoreline.push((sponsor_fid,neighbor.clone()));
                                 }
         
-                            } else {
-                                continue;
                             }
                         } else if check.elevation() < &new_lake_elevation {
                                 // it's below the original spillover, which means it's an outlet beyond our initial shoreline.

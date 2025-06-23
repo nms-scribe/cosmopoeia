@@ -140,14 +140,13 @@ impl CultureSetItem {
                 },
             };
     
-            let name = match &value.name {
-                Some(name) => name.clone(),
-                None => {
-                    let namer = namers.get_mut(Some(&namer)).expect("Why would the key not be here if we just chose this value from amidst its keys?");
-                    namer.make_name(rng)
-                }
+            let name = if let Some(name) = &value.name {
+                name.clone()
+            } else {
+                let namer = namers.get_mut(Some(&namer)).expect("Why would the key not be here if we just chose this value from amidst its keys?");
+                namer.make_name(rng)
             };
-    
+
             let probability = value.probability.unwrap_or(1.0);
     
             let preferences = match &value.preferences {
@@ -256,7 +255,7 @@ impl CultureSet {
 
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.source.len()
     }
 

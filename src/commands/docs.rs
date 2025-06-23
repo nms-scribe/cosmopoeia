@@ -180,6 +180,7 @@ struct UsableSchema {
     additional_properties: Option<Box<UsableSchemaOrBoolean>>
 }
 
+#[allow(clippy::large_enum_variant,reason="Not sure how else to do this. I supposed I could use a box...")]
 enum UsableSchemaOrBoolean {
     Boolean(bool),
     Schema(UsableSchema)

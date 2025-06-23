@@ -232,7 +232,7 @@ impl TerrainParameters {
 
     }
 
-    fn clamp_elevation(&self, elevation: f64) -> f64 {
+    const fn clamp_elevation(&self, elevation: f64) -> f64 {
         elevation.clamp(self.elevations.min_elevation(), self.elevations.max_elevation())
     }
 

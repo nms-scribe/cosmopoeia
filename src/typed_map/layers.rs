@@ -361,7 +361,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         &self.layer
     }
     
-    pub(crate) fn layer_mut(&mut self) -> &mut Layer<'layer> {
+    pub(crate) const fn layer_mut(&mut self) -> &mut Layer<'layer> {
         &mut self.layer
     }
 

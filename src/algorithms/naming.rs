@@ -37,7 +37,7 @@ struct NamerLoadObserver<'data,Progress: ProgressObserver> {
 
 impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
 
-    fn new(name: &'data str, progress: &'data mut Progress) -> Self {
+    const fn new(name: &'data str, progress: &'data mut Progress) -> Self {
         Self {
             name,
             progress,

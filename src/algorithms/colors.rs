@@ -292,7 +292,7 @@ impl RandomColorGenerator {
         
     }
 
-    pub(crate) fn set_spread_axis(&mut self, axis: ColorSpreadAxis) {
+    pub(crate) const fn set_spread_axis(&mut self, axis: ColorSpreadAxis) {
         self.color_spread_axis = axis
     }
 

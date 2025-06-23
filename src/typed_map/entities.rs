@@ -282,7 +282,7 @@ macro_rules! entity_get_mut_field_fn {
     };
     (true $field: ident -> $type: ty  $([$function: expr])?) => {
         paste::paste!{
-            pub(crate) fn [<$field _mut>](&mut self) -> &mut $crate::entity_field_def!($type $([$function])?) { 
+            pub(crate) const fn [<$field _mut>](&mut self) -> &mut $crate::entity_field_def!($type $([$function])?) { 
                 &mut self.$field
             }
         }
@@ -297,6 +297,7 @@ macro_rules! entity_set_field_fn {
     };
     (true $field: ident -> $type: ty  $([$function: expr])?) => {
         paste::paste!{
+            #[allow(clippy::missing_const_for_fn,reason="Apparently it can't be const for certain field types do to destructors.")]
             pub(crate) fn [<set_ $field>](&mut self, value: $crate::entity_field_def!($type $([$function])?)) { 
                 self.$field = value
             }
