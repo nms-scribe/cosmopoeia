@@ -4,7 +4,10 @@ Unfortunately, I did not need to install everything from scratch for this as I h
 
 1) Install [`rustup`](https://www.rust-lang.org/tools/install) and run the script. This takes some time but is fairly easy.
 2) Make sure you have gdal library installed on your machine, it should be available in your package manager.
+3) Make sure you have [libclang installed](https://rust-lang.github.io/rust-bindgen/requirements.html), to use the bindgen feature in gdal. This feature is necessary in case your current gdal version is higher than that supported by the gdal crate. For arch linux, this is done with the command `yay -S clang`.
 3) Run `cargo build` from this directory.
+
+
 
 # Windows
 

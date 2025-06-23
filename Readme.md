@@ -126,5 +126,7 @@ Cosmopoeia is developed in Rust. The strict typing of the language, and it's var
 
 **Testing**. I have not been good about creating unit tests for this code, despite that being a standard of most rust programs. My testing has been done by simply running commands and looking at the results. Although some of this can be attributed to laziness, the nature of the program makes testing difficult. First, the "correctness" of results is subjective, the versimilitude of a map can only be gauged by aesthetic appeal. Second, the results are nondeterministic: a slight change in any algorithm -- even switching the order of two lines of code -- can lead to drastic differences in results.
 
+If you are interested in doing work on this, you can find some notes in [Development](Development.md) and [Compiling](Compiling.md).
+
 I do hope that more testing can be added in the future.
 

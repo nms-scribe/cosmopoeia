@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+* Restore usage of bindgen feature for gdal, allowing compilation for newer versions of gdal. 
+
 ## [0.2.5] - (2025-06-07)
 
 * Upgraded to gdal crate 0.18.0

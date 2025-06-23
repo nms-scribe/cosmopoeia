@@ -18,7 +18,11 @@ angular-units = { version = "0.2.4", features = ["serde"] }
 clap = { version = "4.3.11", features = ["derive"] }
 clap-markdown = "0.1.3"
 console = "0.15.7"
-gdal = { version = "0.18.0", features = ["array"] } # , features = ["bindgen"] -- Got rid of this because I couldn't compile.
+# bindgen feature is necessary if the currently installed version of gdal is not yet supported by the gdal crate
+# using the feature requires you to install libclang: 
+# https://rust-lang.github.io/rust-bindgen/requirements.html
+# for arch linux: `yay -S clang`
+gdal = { version = "0.18.0", features = ["array", "bindgen"] }
 #gdal-sys = "0.10.0" -- don't need this since we don't need to fix it anymore.
 geo = { version = "0.27.0", default-features = false, features = ["spade"] }
 geo-types = { version = "0.7.12", default-features = false }
