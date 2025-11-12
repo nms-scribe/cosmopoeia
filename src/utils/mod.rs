@@ -1,13 +1,13 @@
 pub(crate) mod random;
 pub(crate) mod extent;
-pub(crate) mod edge;
+pub mod edge;
 pub(crate) mod coordinates;
 pub(crate) mod title_case;
 pub(crate) mod namers_pretty_print;
 pub(crate) mod point_finder;
-pub(crate) mod arg_range;
-pub(crate) mod simple_serde;
-pub(crate) mod world_shape;
+pub mod arg_range;
+pub mod simple_serde;
+pub mod world_shape;
 
 /// Splits a string given an index from the end of the string.
 pub(crate) fn split_string_from_end(string: &str, char_index_from_end: usize) -> (&str, &str) {
@@ -121,12 +121,10 @@ macro_rules! impl_to_roman {
                 }
                 Some(result)
             }
-        
-        
+
+
         }
     };
 }
 
 impl_to_roman!(usize);
-
-

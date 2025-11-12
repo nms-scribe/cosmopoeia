@@ -71,7 +71,7 @@ impl Edge {
 
     pub(crate) fn contains(&self, p: &(f64, f64), extent: &Extent) -> bool {
         match self {
-            // (p.1 - extent.north()).abs() < 
+            // (p.1 - extent.north()).abs() <
             Self::North => (p.1 - extent.north()).abs() < f64::EPSILON,
             Self::Northeast => (p.1 - extent.north()).abs() < f64::EPSILON || (p.0 - extent.east()).abs() < f64::EPSILON,
             Self::East => (p.0 - extent.east()).abs() < f64::EPSILON,

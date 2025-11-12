@@ -27,31 +27,31 @@ pub(crate) struct FieldTypeDocumentation {
 impl FieldTypeDocumentation {
 
     pub(crate) const fn new(name: String, description: String, storage_type: String, syntax: String, sub_types: Vec<Self>) -> Self {
-        Self { 
-            name, 
-            description, 
-            storage_type, 
-            syntax, 
-            sub_types 
+        Self {
+            name,
+            description,
+            storage_type,
+            syntax,
+            sub_types
         }
     }
-    
+
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
-    
+
     pub(crate) fn description(&self) -> &str {
         &self.description
     }
-    
+
     pub(crate) fn storage_type(&self) -> &str {
         &self.storage_type
     }
-    
+
     pub(crate) fn syntax(&self) -> &str {
         &self.syntax
     }
-    
+
     pub(crate) fn sub_types(&self) -> &[Self] {
         &self.sub_types
     }
@@ -142,7 +142,7 @@ macro_rules! impl_documentation_for_tagged_enum {
                     sub_types
                 )
             }
-    
+
         }
 
         // This enforce that we have all of the same enum values
@@ -247,7 +247,7 @@ impl DocumentedFieldType for IdRef {
         FieldTypeDocumentation {
             name: "ID Reference".to_owned(),
             description: "A reference to the 'fid' field in another table. This is stored as a String field because an unsigned integer field is not available.".to_owned(),
-            storage_type: field_type_to_name(Self::STORAGE_TYPE), 
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
             syntax: "<integer>".to_owned(),
             sub_types: Vec::new()
         }
@@ -325,10 +325,10 @@ impl<Inner: DocumentedFieldType> DocumentedFieldType for Option<Inner> {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
         let inner = Inner::get_field_type_documentation();
-        FieldTypeDocumentation { 
+        FieldTypeDocumentation {
             name: format!("Optional {}",inner.name),
-            description: inner.description.clone(), 
-            storage_type: inner.storage_type.clone(), 
+            description: inner.description.clone(),
+            storage_type: inner.storage_type.clone(),
             syntax: format!("{}?",inner.syntax),
             sub_types: vec![inner]
         }
@@ -340,10 +340,10 @@ impl<Inner: DocumentedFieldType> DocumentedFieldType for Vec<Inner> {
 
     fn get_field_type_documentation() -> FieldTypeDocumentation {
         let inner = Inner::get_field_type_documentation();
-        FieldTypeDocumentation { 
+        FieldTypeDocumentation {
             name: format!("List of {}",inner.name),
-            description: format!("A list of comma-separated {} values in brackets.",inner.name), 
-            storage_type: field_type_to_name(OGRFieldType::OFTString), 
+            description: format!("A list of comma-separated {} values in brackets.",inner.name),
+            storage_type: field_type_to_name(OGRFieldType::OFTString),
             syntax: format!("[<{}>, ..]",inner.name),
             sub_types: vec![inner]
         }
@@ -410,12 +410,12 @@ impl TypedField for f64 {
 
 impl DocumentedFieldType for f64 {
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation { 
-            name: "Real".to_owned(), 
-            description: "A real number.".to_owned(), 
-            storage_type: field_type_to_name(Self::STORAGE_TYPE), 
+        FieldTypeDocumentation {
+            name: "Real".to_owned(),
+            description: "A real number.".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
             syntax: "<real>".to_owned(),
-            sub_types: Vec::new() 
+            sub_types: Vec::new()
         }
     }
 }
@@ -436,7 +436,7 @@ impl TypedField for i32 {
     fn to_field_value(&self) -> Result<Option<FieldValue>,CommandError> {
         Ok(Some(FieldValue::IntegerValue(*self)))
     }
-    
+
 
 }
 
@@ -445,7 +445,7 @@ impl TypedField for Option<i32> {
     const STORAGE_TYPE: OGRFieldType::Type = OGRFieldType::OFTInteger;
 
 
-    
+
     fn get_field(feature: &Feature, field_name: &str, _: &'static str) -> Result<Self,CommandError> {
         Ok(feature.field_as_integer(feature.field_index(field_name)?)?)
     }
@@ -470,10 +470,10 @@ impl TypedField for Option<i32> {
 
 impl DocumentedFieldType for i32 {
     fn get_field_type_documentation() -> FieldTypeDocumentation {
-        FieldTypeDocumentation { 
-            name: "Signed Integer".to_owned(), 
-            description: "A signed integer.".to_owned(), 
-            storage_type: field_type_to_name(Self::STORAGE_TYPE), 
+        FieldTypeDocumentation {
+            name: "Signed Integer".to_owned(),
+            description: "A signed integer.".to_owned(),
+            storage_type: field_type_to_name(Self::STORAGE_TYPE),
             syntax: "<integer>".to_owned(),
             sub_types: Vec::new()
         }
@@ -489,21 +489,21 @@ pub(crate) struct FieldDocumentation {
 
 impl FieldDocumentation {
     pub(crate) const fn new(name: String, description: String, field_type: FieldTypeDocumentation) -> Self {
-        Self { 
-            name, 
-            description, 
-            field_type 
+        Self {
+            name,
+            description,
+            field_type
         }
     }
-    
+
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
-    
+
     pub(crate) fn description(&self) -> &str {
         &self.description
     }
-    
+
     pub(crate) const fn field_type(&self) -> &FieldTypeDocumentation {
         &self.field_type
     }

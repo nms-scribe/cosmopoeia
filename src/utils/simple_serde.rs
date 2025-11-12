@@ -22,7 +22,7 @@
     Note that in all of the macro cases above, you almost have to repeat the entire structure of the type, because I'm too lazy to create a proc macro. Only tuple structs and tuple enum variants can get by with bare identifiers, but they still must match the count. However, you don't have to worry about whether you have them correct, because the compiler will warn you if you've got names or counts wrong.
 
     If you want to use a different format, such as json, you might be able to implement Serializer and Deserializer, and pass that to `read_from` and `write_to` methods on the objects. But more than likely you'll find yourself struggling, and decide that it's just better to use another library. That's why I don't use this for more file-based input data in this crate.
-     
+
     */
 
 use core::str::Chars;
@@ -121,18 +121,18 @@ impl Iterator for Tokenizer<'_> {
                         match number.parse() {
                             Ok(value) => Some(Ok(Token::Float(value))),
                             Err(e) => Some(Err(CommandError::InvalidNumberInSerializedValue(number,format!("{e}")))),
-                        }                    
+                        }
 
                     } else if signed {
                         match number.parse() {
                             Ok(value) => Some(Ok(Token::SignedInteger(value))),
                             Err(e) => Some(Err(CommandError::InvalidNumberInSerializedValue(number,format!("{e}")))),
-                        }                    
+                        }
                     } else {
                         match number.parse() {
                             Ok(value) => Some(Ok(Token::Integer(value))),
                             Err(e) => Some(Err(CommandError::InvalidNumberInSerializedValue(number,format!("{e}")))),
-                        }                    
+                        }
 
                     }
 
@@ -181,7 +181,7 @@ impl Iterator for Tokenizer<'_> {
         } else {
             None
         }
-        
+
     }
 
 }
@@ -406,12 +406,12 @@ pub(crate) trait Deserialize: Sized {
             text: string.chars().peekable()
         };
 
-        Deserialize::read_value(&mut tokenizer.peekable())        
+        Deserialize::read_value(&mut tokenizer.peekable())
     }
 }
 
 impl<ItemType: Serialize> Serialize for Vec<ItemType> {
-    
+
     fn write_value<Target: Serializer>(&self, serializer: &mut Target) {
         serializer.write_token(Token::OpenBracket);
         let mut first = true;
@@ -435,7 +435,7 @@ impl<ItemType: Deserialize> Deserialize for Vec<ItemType> {
         if !deserializer.matches(&Token::CloseBracket)? {
             result.push(Deserialize::read_value(deserializer)?);
             while deserializer.matches(&Token::Comma)? {
-                result.push(Deserialize::read_value(deserializer)?);    
+                result.push(Deserialize::read_value(deserializer)?);
             }
             deserializer.expect(&Token::CloseBracket)?;
         }
@@ -461,9 +461,9 @@ macro_rules! impl_simple_serde_tuple {
                 )?
                 serializer.write_token(Token::CloseParenthesis)
             }
-                    
+
         }
-        
+
         impl$(<$first_gen_param: Deserialize $(,$gen_param: Deserialize)*>)? Deserialize for ($($first_gen_param, $($gen_param),*)?) {
 
             fn read_value<Source: Deserializer>(source: &mut Source) -> Result<Self,CommandError> {
@@ -478,8 +478,8 @@ macro_rules! impl_simple_serde_tuple {
                 source.expect(&Token::CloseParenthesis)?;
                 Ok(($($first_name,$($name,)*)?))
             }
-    
-        }            
+
+        }
     };
     ($($first_gen_param: ident $(, $gen_param: ident)* $(,)?)?) => {
         paste!{
@@ -553,7 +553,7 @@ macro_rules! impl_simple_serde_tagged_enum {
     ($enum: ty {$($variant: ident $(($($tuple_name: ident: $tuple_type: ty),*$(,)?))?),*$(,)?}) => {
 
         impl $crate::utils::simple_serde::Serialize for $enum {
-    
+
             fn write_value<Target: $crate::utils::simple_serde::Serializer>(&self, serializer: &mut Target) {
                 match self {
                     $(
@@ -570,7 +570,7 @@ macro_rules! impl_simple_serde_tagged_enum {
         }
 
         impl $crate::utils::simple_serde::Deserialize for $enum {
-        
+
             fn read_value<Source: $crate::utils::simple_serde::Deserializer>(deserializer: &mut Source) -> Result<Self,$crate::errors::CommandError> {
                 let identifier = deserializer.expect_identifier()?;
                 match identifier.as_str() {
@@ -584,10 +584,10 @@ macro_rules! impl_simple_serde_tagged_enum {
                     invalid => Err($crate::errors::CommandError::InvalidEnumValueInInSerializedValue(invalid.to_owned())),
                 }
             }
-        
+
         }
-        
-        
+
+
     };
 }
 
@@ -596,7 +596,7 @@ macro_rules! impl_simple_serde_tuple_struct {
 
     ($struct: ty {$($name: ident),*$(,)?}) => {
         impl $crate::utils::simple_serde::Serialize for $struct {
-    
+
             fn write_value<Target: $crate::utils::simple_serde::Serializer>(&self, serializer: &mut Target) {
                 let Self($($name,)*) = self;
                 // use tuple serialization to handle it. Note that I need the comma even on the one-element to convert it into a tuple
@@ -605,16 +605,16 @@ macro_rules! impl_simple_serde_tuple_struct {
         }
 
         impl $crate::utils::simple_serde::Deserialize for $struct {
-        
+
             fn read_value<Source: $crate::utils::simple_serde::Deserializer>(deserializer: &mut Source) -> Result<Self,$crate::errors::CommandError> {
                 // use tuple deserialization. Note that I need the comma even on the one-element to convert it into a tuple
                 let ($($name,)*) = $crate::utils::simple_serde::Deserialize::read_value(deserializer)?;
                 Ok(Self($($name,)*))
             }
-        
+
         }
-        
-        
+
+
     };
 }
 
@@ -623,7 +623,7 @@ macro_rules! impl_simple_serde_keyed_struct {
 
     ($struct: ty {$first_name: ident $(,$name: ident)*$(,)?}) => {
         impl $crate::utils::simple_serde::Serialize for $struct {
-    
+
             fn write_value<Target: $crate::utils::simple_serde::Serializer>(&self, serializer: &mut Target) {
                 let Self{$first_name $(,$name)*} = self;
                 serializer.write_token(Token::OpenBrace);
@@ -637,7 +637,7 @@ macro_rules! impl_simple_serde_keyed_struct {
         }
 
         impl $crate::utils::simple_serde::Deserialize for $struct {
-        
+
             fn read_value<Source: $crate::utils::simple_serde::Deserializer>(deserializer: &mut Source) -> Result<Self,$crate::errors::CommandError> {
                 source.expect(Token::OpenBrace)?;
                 let $first_name = $crate::utils::simple_serde::Deserialize::read_value(deserializer)?;
@@ -650,10 +650,10 @@ macro_rules! impl_simple_serde_keyed_struct {
                     $(,$name)*
                 })
             }
-        
+
         }
-        
-        
+
+
     };
 }
 
@@ -664,7 +664,7 @@ mod test {
     use angular_units::Deg;
 
     use crate::utils::simple_serde::Serialize as SimpleSerialize;
-    use crate::utils::simple_serde::Deserialize as SimpleDeserialize;    
+    use crate::utils::simple_serde::Deserialize as SimpleDeserialize;
 
     use crate::utils::edge::Edge;
     use crate::world_map::fields::Neighbor; // and vec

@@ -7,14 +7,14 @@ Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage f
 
 use clap::Parser;
 
-pub(crate) mod errors;
+pub mod errors;
 pub mod commands;
 pub(crate) mod raster;
 pub(crate) mod gdal_fixes;
 pub(crate) mod geometry;
-pub(crate) mod typed_map;
+pub mod typed_map;
 pub(crate) mod world_map;
-pub(crate) mod utils;
+pub mod utils;
 pub(crate) mod progress;
 pub(crate) mod algorithms;
 #[cfg(test)] mod test;
@@ -30,10 +30,10 @@ use std::ffi::OsString;
 /**
 Runs Cosmopoeia with arbitrary arguments. The first item in the arguments will be ignored. All output will be printed to Stdout or Stderr.
 */
-pub fn run<Arg, Args>(args: Args) -> Result<(),ProgramError> 
-where 
-    Arg: Clone + Into<OsString>, 
-    Args: IntoIterator<Item = Arg> 
+pub fn run<Arg, Args>(args: Args) -> Result<(),ProgramError>
+where
+    Arg: Clone + Into<OsString>,
+    Args: IntoIterator<Item = Arg>
 {
     let mut progress = ConsoleProgressBar::new();
     let command = Cosmopoeia::try_parse_from(args)?;

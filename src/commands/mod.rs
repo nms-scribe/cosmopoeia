@@ -17,19 +17,19 @@ use crate::progress::ProgressObserver;
 use crate::utils::world_shape::WorldShape;
 
 
-mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
-mod dev;
-mod docs;
-mod create;
-pub(crate) mod terrain;
-mod gen_climate;
-mod gen_water;
-mod gen_biome;
-mod gen_people;
-mod gen_towns;
-mod gen_nations;
-mod gen_subnations;
-mod big_bang;
+pub mod gdal_dev; // called gdal_dev to avoid ambiguity with external crate
+pub mod dev;
+pub mod docs;
+pub mod create;
+pub mod terrain;
+pub mod gen_climate;
+pub mod gen_water;
+pub mod gen_biome;
+pub mod gen_people;
+pub mod gen_towns;
+pub mod gen_nations;
+pub mod gen_subnations;
+pub mod big_bang;
 
 use gdal_dev::Gdal;
 use dev::Dev;
@@ -135,11 +135,11 @@ macro_rules! command_help_template {
 macro_rules! subcommand_def {
     (#[doc = $about: literal] $(#[$attr:meta])* $visibility: vis struct $name: ident $body: tt) => {
         #[derive(Args)]
-        #[command(author,help_template = $crate::command_help_template!())] 
+        #[command(author,help_template = $crate::command_help_template!())]
         #[doc = $about]
         $(#[$attr])*
         $visibility struct $name $body
-                
+
     };
 }
 
@@ -233,7 +233,7 @@ fn parse_wind_range(value: &str) -> Result<(Range<OrderedFloat<f64>>, u16), &'st
             ArgRange::Inclusive(_,_) | ArgRange::Single(_) => return Err(HELP_MESSAGE)
         };
         Ok((range,direction))
-    
+
     } else {
         Err(HELP_MESSAGE)
     }
@@ -241,7 +241,7 @@ fn parse_wind_range(value: &str) -> Result<(Range<OrderedFloat<f64>>, u16), &'st
 
 #[derive(Args)]
 pub struct WindsArg {
-    
+
     #[arg(long,default_value="225")]
     /// Wind direction above latitude 60 N
     pub north_polar_wind: u16,
@@ -376,7 +376,7 @@ pub struct ExpansionFactorArg {
 #[derive(Args)]
 pub struct CulturesGenArg {
 
-    #[arg(long,required(true))] 
+    #[arg(long,required(true))]
     /// Files to load culture sets from, more than one may be specified to load multiple culture sets.
     pub cultures: Vec<PathBuf>,
 
@@ -429,9 +429,9 @@ macro_rules! overwrite_arg {
                 /// If true and the [<$layer>] layer already exists in the file, it will be overwritten. Otherwise, an error will occur if the layer exists.
                 pub [<overwrite_ $layer:lower>]: bool,
             }
-    
+
         }
-                
+
     };
 }
 
@@ -484,7 +484,7 @@ pub struct OverwriteAllArg {
     #[arg(long)]
     /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
     pub overwrite_all: bool,
-    
+
 }
 
 impl OverwriteAllArg {
@@ -570,7 +570,7 @@ pub struct OverwriteAllWaterArg {
     #[arg(long)]
     /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
     pub overwrite_all: bool,
-    
+
 }
 
 impl OverwriteAllWaterArg {
@@ -615,7 +615,7 @@ pub struct OverwriteAllOceanArg {
     #[arg(long)]
     /// If true and any layer already exists in the file, it will be overwritten. This overrides all of the other 'overwrite_' switches to true.
     pub overwrite_all: bool,
-    
+
 }
 
 impl OverwriteAllOceanArg {

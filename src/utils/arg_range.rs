@@ -38,7 +38,7 @@ macro_rules! impl_trunc_or_self_float {
                 self.trunc()
             }
         }
-            
+
     };
 }
 
@@ -49,7 +49,7 @@ macro_rules! impl_trunc_or_self_int {
                 self
             }
         }
-            
+
     };
 }
 
@@ -118,7 +118,7 @@ where <NumberType as FromStr>::Err: Display {
             StrOrNum::Str(deserialized) => deserialized.parse().map_err(|e: CommandError| SerdeDeError::custom(e.to_string())),
             StrOrNum::Num(deserialized) => Ok(Self::Single(deserialized)),
         }
-    
+
     }
 }
 
@@ -131,7 +131,7 @@ impl<NumberType: FromStr + Display> Serialize for ArgRange<NumberType> {
     }
 }
 
-impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType> 
+impl<NumberType: FromStr + PartialOrd> FromStr for ArgRange<NumberType>
 where <NumberType as FromStr>::Err: Display {
     type Err = CommandError;
 
@@ -173,7 +173,7 @@ impl<NumberType: FromStr + Display> Display for ArgRange<NumberType> {
     }
 }
 
-pub trait NumberPattern {
+pub(crate) trait NumberPattern {
 
     fn pattern() -> &'static str;
 }
@@ -185,7 +185,7 @@ macro_rules! impl_number_pattern_float {
                 "-?\\d+(\\.\\d+)?"
             }
         }
-            
+
     };
 }
 
@@ -196,7 +196,7 @@ macro_rules! impl_number_pattern_signed_int {
                 "-?\\d+"
             }
         }
-            
+
     };
 }
 
@@ -207,7 +207,7 @@ macro_rules! impl_number_pattern_unsigned_int {
                 "\\d+"
             }
         }
-            
+
     };
 }
 
@@ -245,7 +245,7 @@ impl<NumberType: JsonSchema + NumberPattern> JsonSchema for ArgRange<NumberType>
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
         let number_pattern = NumberType::pattern();
         let pattern = Some(format!("{number_pattern}(\\.\\.=?{number_pattern})?"));
-    
+
         Schema::Object(SchemaObject {
             instance_type: Some(InstanceType::String.into()),
             format: None,

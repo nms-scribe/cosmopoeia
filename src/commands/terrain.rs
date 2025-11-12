@@ -98,7 +98,7 @@ impl LoadTerrainTask for RecipeSet {
             let chosen_key = if let Some(recipe) = self.recipe {
                 recipe
             } else {
-                tasks.keys().choose(random).expect("Why would this fail if the len > 0?").clone() 
+                tasks.keys().choose(random).expect("Why would this fail if the len > 0?").clone()
             };
             if let Some(tasks) = tasks.remove(&chosen_key) {
                 let mut result = Vec::new();
@@ -109,7 +109,7 @@ impl LoadTerrainTask for RecipeSet {
             } else {
                 Err(CommandError::RecipeFileRead(format!("Can't find recipe '{chosen_key}' in set.")))
             }
-    
+
         }
     }
 
@@ -121,14 +121,14 @@ subcommand_def!{
     /// Clears all elevations to 0 and all groupings to "Continent". This is an alias for Multiplying all height by 0.0.
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Clear{}
-    
+
 }
 
 impl LoadTerrainTask for Clear {
 
     fn load_terrain_task<Random: Rng, Progress: ProgressObserver>(self, _: &mut Random, _: &mut Progress) -> Result<Vec<TerrainTask>,CommandError> {
-        Ok(vec![TerrainTask::Multiply(Multiply { 
-            height_filter: None, 
+        Ok(vec![TerrainTask::Multiply(Multiply {
+            height_filter: None,
             height_factor: 0.0
         })])
     }
@@ -144,11 +144,11 @@ subcommand_def!{
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Multiply {
         #[arg(long)]
-        pub height_filter: Option<ArgRange<i8>>, 
+        pub height_filter: Option<ArgRange<i8>>,
         #[arg(long)]
         pub height_factor: f64 // this doesn't have to be i8 because it's a multiplication, will still work no matter what the scale.
     }
-    
+
 }
 
 
@@ -167,7 +167,7 @@ subcommand_def!{
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct ClearOcean{}
-    
+
 }
 
 
@@ -188,11 +188,11 @@ subcommand_def!{
     pub struct RandomUniform{
 
         #[arg(long)]
-        pub height_filter: Option<ArgRange<i8>>, 
+        pub height_filter: Option<ArgRange<i8>>,
         #[arg(long)]
         pub height_delta: ArgRange<i8>
     }
-    
+
 }
 
 
@@ -270,7 +270,7 @@ subcommand_def!{
     /// Adds a long cut somewhere on the map
 
     #[derive(Deserialize,Serialize,JsonSchema)]
-    pub struct AddStrait { 
+    pub struct AddStrait {
         #[arg(long)]
         pub width: ArgRange<f64>,
         #[arg(long)]
@@ -320,11 +320,11 @@ subcommand_def!{
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Invert {
         #[arg(long)]
-        pub probability: f64, 
+        pub probability: f64,
         #[arg(long)]
         pub axes: InvertAxes
     }
-    
+
 }
 
 
@@ -344,11 +344,11 @@ subcommand_def!{
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct Add {
         #[arg(long)]
-        pub height_filter: Option<ArgRange<i8>>, 
+        pub height_filter: Option<ArgRange<i8>>,
         #[arg(long)]
         pub height_delta: i8
     }
-    
+
 }
 
 
@@ -370,7 +370,7 @@ subcommand_def!{
         #[arg(long,default_value="2")]
         pub fr: f64
     }
-    
+
 }
 
 
@@ -417,7 +417,7 @@ subcommand_def!{
         #[arg(long)]
         pub y_filter: ArgRange<f64>
     }
-    
+
 }
 
 
@@ -436,7 +436,7 @@ subcommand_def!{
     /// Finds tiles that are marked as ocean and marks all neighbors that are below sea level as ocean, until no neighbors below sea level can be found.
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct FloodOcean{}
-    
+
 }
 
 
@@ -455,7 +455,7 @@ subcommand_def!{
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
     #[derive(Deserialize,Serialize,JsonSchema)]
     pub struct FillOcean{}
-    
+
 }
 
 
@@ -546,7 +546,7 @@ impl LoadTerrainTask for SampleElevation {
 
 // FUTURE: all this to get rid of a few warnings that I can't get rid of in the derive macro output
 #[allow(unused_qualifications)]
-mod command {
+pub mod command {
     use super::*;
 
     #[derive(Deserialize,Serialize,Subcommand,JsonSchema)]
