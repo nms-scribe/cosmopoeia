@@ -138,6 +138,7 @@ macro_rules! subcommand_def {
         #[command(author,help_template = $crate::command_help_template!())]
         #[doc = $about]
         $(#[$attr])*
+        #[allow(clippy::empty_structs_with_brackets,reason="Although the macro is perfectly happy replacing '{}' with semi-colon, the documentation is then not generated.")]
         $visibility struct $name $body
 
     };
