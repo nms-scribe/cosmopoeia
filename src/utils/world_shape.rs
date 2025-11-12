@@ -3,7 +3,7 @@ use clap::ValueEnum;
 // This is used for shape calculations.
 use crate::errors::CommandError;
 use crate::utils::simple_serde::Deserialize;
-use crate::utils::simple_serde::Serialize;
+use crate::utils::simple_serde::Serialize as _;
 use crate::impl_simple_serde_tagged_enum;
 
 

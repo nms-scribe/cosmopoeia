@@ -1,12 +1,12 @@
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 
 use crate::errors::CommandError;
 use crate::geometry::NoGeometry;
 use crate::layer;
 use crate::utils::simple_serde::Deserialize;
-use crate::utils::simple_serde::Serialize;
+use crate::utils::simple_serde::Serialize as _;
 use crate::typed_map::fields::IdRef;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::typed_map::features::TypedFeatureIterator;
 use crate::utils::world_shape::WorldShape;
 

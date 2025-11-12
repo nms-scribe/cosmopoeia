@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::tile_layer::TileForGroupingCalc;
 use crate::world_map::fields::Grouping;

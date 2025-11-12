@@ -1,5 +1,5 @@
 use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::SeedableRng as _;
 use rand::Rng;
 
 use crate::commands::RandomSeedArg;

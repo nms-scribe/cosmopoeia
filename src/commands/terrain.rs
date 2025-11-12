@@ -21,7 +21,7 @@ use crate::algorithms::terrain::TerrainTask;
 use crate::utils::random::random_number_generator;
 use crate::progress::ProgressObserver;
 use crate::algorithms::terrain::LoadTerrainTask;
-use crate::utils::random::RandomNth;
+use crate::utils::random::RandomNth as _;
 use crate::utils::arg_range::ArgRange;
 use crate::raster::RasterMap;
 use crate::algorithms::terrain::SampleOceanBelowLoaded;

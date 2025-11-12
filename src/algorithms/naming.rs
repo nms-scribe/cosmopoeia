@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::BufReader;
-use std::io::BufRead;
+use std::io::BufRead as _;
 use std::path::Path;
 use std::path::PathBuf;
 use std::ffi::OsStr;
@@ -9,7 +9,7 @@ use std::fs::File;
 
 use rand::Rng;
 use rand_distr::Normal;
-use rand_distr::Distribution;
+use rand_distr::Distribution as _;
 use serde::Serialize;
 use serde::Deserialize;
 use serde_json::Serializer as JSONSerializer;
@@ -24,7 +24,7 @@ use schemars::JsonSchema;
 use crate::utils::namers_pretty_print::PrettyFormatter;
 use crate::utils::split_string_from_end;
 use crate::utils::remove_n_chars_from_end;
-use crate::utils::random::RandomIndex;
+use crate::utils::random::RandomIndex as _;
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
 use crate::commands::NamerArg;

@@ -5,7 +5,7 @@ Cosmopoeia is a tool for generating fantasy worlds in the form of a geopackage f
 
 
 
-use clap::Parser;
+use clap::Parser as _;
 
 pub mod errors;
 pub mod commands;

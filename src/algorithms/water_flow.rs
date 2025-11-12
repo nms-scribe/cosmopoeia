@@ -5,7 +5,7 @@ use crate::errors::CommandError;
 use crate::world_map::tile_layer::TileForWaterFill;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::typed_map::entities::EntityIndex;
 use crate::world_map::tile_layer::TileSchema;
 use super::tiles::find_lowest_tile;

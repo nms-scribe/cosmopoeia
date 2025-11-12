@@ -7,8 +7,8 @@ use priority_queue::PriorityQueue;
 use ordered_float::OrderedFloat;
 
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
-use crate::progress::WatchablePriorityQueue;
+use crate::progress::WatchableIterator as _;
+use crate::progress::WatchablePriorityQueue as _;
 use crate::world_map::WorldMapTransaction;
 use crate::errors::CommandError;
 use crate::algorithms::culture_sets::CultureSet;
@@ -19,9 +19,9 @@ use crate::world_map::biome_layer::BiomeForCultureExpand;
 use crate::world_map::tile_layer::TileForCultureGen;
 use crate::world_map::tile_layer::TileForCulturePrefSorting;
 use crate::world_map::tile_layer::TileForCultureExpand;
-use crate::utils::random::RandomIndex;
+use crate::utils::random::RandomIndex as _;
 use crate::utils::coordinates::Coordinates;
-use crate::utils::ToRoman;
+use crate::utils::ToRoman as _;
 use crate::utils::world_shape::WorldShape;
 use crate::world_map::fields::Grouping;
 use crate::world_map::tile_layer::TileLayer;
@@ -40,7 +40,7 @@ use crate::commands::RiverThresholdArg;
 use crate::commands::ExpansionFactorArg;
 use crate::world_map::fields::NeighborAndDirection;
 use crate::world_map::fields::Neighbor;
-use crate::typed_map::entities::NamedEntity;
+use crate::typed_map::entities::NamedEntity as _;
 
 impl CultureType {
 

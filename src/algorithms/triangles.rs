@@ -1,7 +1,7 @@
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::world_map::WorldMapTransaction;
 use crate::geometry::Collection;
 use crate::geometry::Point;

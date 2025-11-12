@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 use prisma::Rgb;
 
 use crate::entity;
@@ -13,7 +13,7 @@ use crate::typed_map::fields::IdRef;
 use crate::typed_map::entities::Entity;
 use crate::typed_map::entities::NamedEntity;
 use crate::typed_map::features::NamedFeature;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::typed_map::features::TypedFeatureIterator;
 use crate::commands::OverrideBiomeCriteriaArg;
 

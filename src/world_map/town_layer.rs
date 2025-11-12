@@ -1,4 +1,4 @@
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 
 use crate::entity;
 use crate::errors::CommandError;
@@ -6,7 +6,7 @@ use crate::geometry::Point;
 use crate::layer;
 use crate::utils::coordinates::Coordinates; // renamed so it doesn't conflict with geometry::Point, which is more important that it keep this name.
 use crate::typed_map::fields::IdRef;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::typed_map::features::TypedFeatureIterator;
 
 layer!(Town["towns"]: Point {

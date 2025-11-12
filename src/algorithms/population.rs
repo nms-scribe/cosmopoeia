@@ -1,10 +1,10 @@
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
-use crate::progress::WatchableQueue;
+use crate::progress::WatchableIterator as _;
+use crate::progress::WatchableQueue as _;
 use crate::errors::CommandError;
 use crate::world_map::biome_layer::BiomeForPopulation;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::world_map::tile_layer::TileForPopulation;
 use crate::world_map::tile_layer::TileForPopulationNeighbor;
 use crate::world_map::fields::LakeType;

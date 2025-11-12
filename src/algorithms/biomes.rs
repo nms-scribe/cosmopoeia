@@ -1,8 +1,8 @@
 use crate::entity;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::world_map::biome_layer::BiomeMatrix;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::world_map::biome_layer::BiomeSchema;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;

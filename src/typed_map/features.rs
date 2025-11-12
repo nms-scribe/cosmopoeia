@@ -6,8 +6,8 @@ use indexmap::IndexMap;
 
 use crate::errors::CommandError;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
-use crate::utils::title_case::ToTitleCase;
+use crate::progress::WatchableIterator as _;
+use crate::utils::title_case::ToTitleCase as _;
 use crate::typed_map::fields::IdRef;
 use crate::typed_map::entities::Entity;
 use crate::typed_map::entities::EntityIndex;

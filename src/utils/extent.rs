@@ -5,7 +5,7 @@ use geo::polygon;
 use crate::geometry::VariantArealGeometry;
 use crate::geometry::LinearRing;
 use crate::geometry::Polygon;
-use crate::geometry::ChamberlainDuquetteAreaInDegrees;
+use crate::geometry::ChamberlainDuquetteAreaInDegrees as _;
 use crate::errors::CommandError;
 use crate::utils::edge::Edge;
 use crate::utils::coordinates::Coordinates;

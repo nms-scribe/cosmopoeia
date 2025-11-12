@@ -1,10 +1,10 @@
 use rand::Rng;
-use rand::seq::SliceRandom;
+use rand::seq::SliceRandom as _;
 use prisma::Rgb;
 use prisma::Hsv;
-use prisma::FromColor;
+use prisma::FromColor as _;
 use angular_units::Deg;
-use angular_units::Angle;
+use angular_units::Angle as _;
 
 
 

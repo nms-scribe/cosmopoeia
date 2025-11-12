@@ -15,13 +15,13 @@ use schemars::JsonSchema;
 
 use crate::errors::CommandError;
 use crate::utils::namers_pretty_print::PrettyFormatter;
-use crate::utils::random::RandomIndex;
+use crate::utils::random::RandomIndex as _;
 use crate::algorithms::naming::NamerSet;
 use crate::world_map::tile_layer::TileForCulturePrefSorting;
 use core::slice::Iter;
 use core::ops::Index;
 use std::io::Read;
-use crate::typed_map::entities::NamedEntity;
+use crate::typed_map::entities::NamedEntity as _;
 
 #[derive(Clone,Serialize,Deserialize,JsonSchema)]
 pub(crate) enum TilePreference {

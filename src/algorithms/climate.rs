@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use angular_units::Deg;
-use angular_units::Angle;
+use angular_units::Angle as _;
 
 use crate::entity;
 use crate::world_map::tile_layer::TileFeature;
@@ -10,13 +10,13 @@ use crate::world_map::tile_layer::TileForTemperatures;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::world_map::fields::Grouping;
 use crate::world_map::tile_layer::TileSchema;
 use crate::commands::TemperatureRangeArg;
 use crate::commands::WindsArg;
 use crate::commands::PrecipitationArg;
-use crate::progress::WatchableQueue;
+use crate::progress::WatchableQueue as _;
 use crate::world_map::fields::NeighborAndDirection;
 use crate::world_map::fields::Neighbor;
 use crate::typed_map::fields::IdRef;

@@ -9,7 +9,7 @@ use crate::progress::ProgressObserver;
 use crate::errors::CommandError;
 use crate::world_map::WorldMap;
 use crate::algorithms::naming::NamerSet;
-use crate::commands::create::LoadSource;
+use crate::commands::create::LoadSource as _;
 use crate::commands::create::LoadedSource;
 use crate::commands::create::Create;
 use crate::commands::gen_climate::GenClimate;

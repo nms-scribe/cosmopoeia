@@ -5,7 +5,7 @@ use crate::utils::world_shape::WorldShape;
 use crate::errors::CommandError;
 use crate::world_map::WorldMapTransaction;
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::geometry::Point;
 
 pub(crate) enum PointGeneratorPhase {

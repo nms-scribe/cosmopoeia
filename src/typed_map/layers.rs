@@ -3,12 +3,12 @@ use gdal::vector::LayerOptions;
 use gdal::spatial_ref::SpatialRef;
 use gdal::vector::FieldValue;
 use gdal::vector::Layer;
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 use gdal::vector::OGRwkbGeometryType;
 use gdal::vector::Feature as GdalFeature;
 
 use crate::errors::CommandError;
-use crate::geometry::GDALGeometryWrapper;
+use crate::geometry::GDALGeometryWrapper as _;
 use crate::typed_map::fields::IdRef;
 use crate::typed_map::features::TypedFeature;
 use crate::typed_map::fields::FieldDocumentation;

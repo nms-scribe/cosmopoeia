@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use priority_queue::PriorityQueue;
 
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
-use crate::progress::WatchableQueue;
-use crate::progress::WatchablePriorityQueue;
+use crate::progress::WatchableIterator as _;
+use crate::progress::WatchableQueue as _;
+use crate::progress::WatchablePriorityQueue as _;
 use crate::world_map::WorldMapTransaction;
 use crate::world_map::tile_layer::TileForWaterDistance;
 use crate::errors::CommandError;

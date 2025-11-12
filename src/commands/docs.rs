@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::fs::File;
-use std::io::Write;
+use std::io::Write as _;
 use std::collections::HashMap;
 use std::collections::BTreeSet;
 use std::collections::BTreeMap;

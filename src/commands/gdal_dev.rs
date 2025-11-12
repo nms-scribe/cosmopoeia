@@ -6,7 +6,7 @@ use clap::Subcommand;
 use gdal::Dataset;
 use gdal::DriverManager;
 use gdal::version::VersionInfo;
-use gdal::Metadata;
+use gdal::Metadata as _;
 use gdal::MetadataEntry;
 
 use crate::commands::Task;

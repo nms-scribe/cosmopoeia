@@ -13,9 +13,9 @@ use crate::utils::extent::Extent;
 use crate::raster::RasterMap;
 use crate::world_map::WorldMap;
 use crate::algorithms::random_points::PointGenerator;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::algorithms::triangles::DelaunayGenerator;
-use crate::utils::coordinates::ToGeometryCollection;
+use crate::utils::coordinates::ToGeometryCollection as _;
 use crate::algorithms::voronoi::VoronoiGenerator;
 use crate::algorithms::random_points::load_points_layer;
 use crate::algorithms::triangles::load_triangles_layer;
@@ -33,7 +33,7 @@ use crate::commands::WorldShapeArg;
 use crate::commands::RandomSeedArg;
 use crate::commands::OverwriteTilesArg;
 use crate::commands::NamerArg;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 
 
 subcommand_def!{

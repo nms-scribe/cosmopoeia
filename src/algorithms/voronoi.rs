@@ -4,7 +4,7 @@ use core::cmp::Ordering;
 use std::collections::hash_map::IntoIter;
 
 use crate::progress::ProgressObserver;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::world_map::tile_layer::NewTileSite;
 use crate::utils::extent::Extent;
 use crate::utils::coordinates::Coordinates;
@@ -13,7 +13,7 @@ use crate::errors::CommandError;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
 use crate::utils::edge::Edge;
-use crate::geometry::GDALGeometryWrapper;
+use crate::geometry::GDALGeometryWrapper as _;
 
 
 pub(crate) enum VoronoiGeneratorPhase<GeometryIterator: Iterator<Item=Result<Polygon,CommandError>>> {

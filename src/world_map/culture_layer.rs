@@ -1,6 +1,6 @@
 use core::hash::Hash;
 
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 use ordered_float::OrderedFloat;
 use prisma::Rgb;
 
@@ -14,7 +14,7 @@ use crate::world_map::fields::CultureType;
 use crate::typed_map::fields::IdRef;
 use crate::typed_map::entities::NamedEntity;
 use crate::typed_map::features::NamedFeature;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::typed_map::features::TypedFeatureIterator;
 
 layer!(Culture["cultures"]: MultiPolygon {

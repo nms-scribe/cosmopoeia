@@ -1,4 +1,4 @@
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 
 use crate::entity;
 use crate::errors::CommandError;

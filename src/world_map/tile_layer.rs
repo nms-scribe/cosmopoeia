@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use angular_units::Deg;
-use gdal::vector::LayerAccess;
+use gdal::vector::LayerAccess as _;
 
 use crate::algorithms::water_flow::WaterFlowResult;
 use crate::entity;
@@ -22,9 +22,9 @@ use crate::world_map::fields::NeighborAndDirection;
 use crate::typed_map::entities::Entity;
 use crate::typed_map::entities::EntityIndex;
 use crate::typed_map::entities::EntityLookup;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::typed_map::features::TypedFeatureIterator;
-use crate::typed_map::fields::TypedField;
+use crate::typed_map::fields::TypedField as _;
 use crate::world_map::water_layers::LakeForCultureGen;
 use crate::world_map::water_layers::LakeSchema;
 

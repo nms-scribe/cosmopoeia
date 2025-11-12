@@ -5,12 +5,12 @@ use core::cmp::Ordering;
 use adaptive_bezier::Vector2;
 use ordered_float::NotNan;
 use ordered_float::FloatIsNan;
-use geo::algorithm::HaversineDistance;
-use geo::algorithm::HaversineIntermediate;
-use geo::algorithm::HaversineBearing;
-use geo::algorithm::Centroid;
+use geo::algorithm::HaversineDistance as _;
+use geo::algorithm::HaversineIntermediate as _;
+use geo::algorithm::HaversineBearing as _;
+use geo::algorithm::Centroid as _;
 use angular_units::Deg;
-use angular_units::Angle;
+use angular_units::Angle as _;
 use geo::polygon;
 
 
@@ -21,7 +21,7 @@ use crate::geometry::Point;
 use crate::utils::edge::Edge;
 use crate::errors::CommandError;
 use super::extent::Extent;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::utils::world_shape::WorldShape;
 
 #[derive(Hash,Eq,PartialEq,Clone,Debug)]
