@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Update clippy lints and fix
 * Fixed github security warning by upgrading dependency of clap
+* Fixed issue with git repository
 
 ## [0.2.6] - (2025-06-23)
 
