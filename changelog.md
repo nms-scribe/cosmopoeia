@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+## [0.2.7] - (2025-11-12)
+
 * Update clippy lints and fix
 * Fixed github security warning by upgrading dependency of clap
 * Fixed issue with git repository
@@ -50,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial public release.
 
 <!-- next-url -->
-[Unreleased]: https://github.com/nms-scribe/cosmopoeia/v0.2.6...HEAD
+[Unreleased]: https://github.com/nms-scribe/cosmopoeia/v0.2.7...HEAD
+[0.2.7]: https://github.com/nms-scribe/cosmopoeia/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/nms-scribe/cosmopoeia/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/nms-scribe/cosmopoeia/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/nms-scribe/cosmopoeia/v0.2.3...v0.2.4
