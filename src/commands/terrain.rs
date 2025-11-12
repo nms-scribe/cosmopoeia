@@ -120,7 +120,7 @@ subcommand_def!{
 
     /// Clears all elevations to 0 and all groupings to "Continent". This is an alias for Multiplying all height by 0.0.
     #[derive(Deserialize,Serialize,JsonSchema)]
-    pub struct Clear{}
+    pub struct Clear;
 
 }
 
@@ -166,7 +166,7 @@ subcommand_def!{
 
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
     #[derive(Deserialize,Serialize,JsonSchema)]
-    pub struct ClearOcean{}
+    pub struct ClearOcean;
 
 }
 
@@ -435,7 +435,7 @@ subcommand_def!{
 
     /// Finds tiles that are marked as ocean and marks all neighbors that are below sea level as ocean, until no neighbors below sea level can be found.
     #[derive(Deserialize,Serialize,JsonSchema)]
-    pub struct FloodOcean{}
+    pub struct FloodOcean;
 
 }
 
@@ -454,7 +454,7 @@ subcommand_def!{
 
     /// Marks all tiles below sea level as ocean (SeedOcean and FloodOcean might be better)
     #[derive(Deserialize,Serialize,JsonSchema)]
-    pub struct FillOcean{}
+    pub struct FillOcean;
 
 }
 

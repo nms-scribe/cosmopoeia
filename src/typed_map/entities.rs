@@ -122,9 +122,9 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
 
     pub(crate) fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<FinishMessage, Progress, SchemaType, EntityType> {
         progress.start(|| (start,Some(self.len())));
-        EntityIndexQueueWatcher { 
-            finish, 
-            progress, 
+        EntityIndexQueueWatcher {
+            finish,
+            progress,
             inner: self,
             popped: 0
         }
@@ -268,7 +268,8 @@ macro_rules! entity_get_field_fn {
     (false $field: ident -> $type: ty  $([$function: expr])?) => {
     };
     ($field: ident -> $type: ty  $([$function: expr])?) => {
-        pub(crate) const fn $field(&self) -> &$crate::entity_field_def!($type $([$function])?) { 
+        #[allow(clippy::ref_option,reason="I don't want to try to fix the macro to allow this at this time.")] // FUTURE: Fix this
+        pub(crate) const fn $field(&self) -> &$crate::entity_field_def!($type $([$function])?) {
             &self.$field
         }
     };
@@ -282,7 +283,7 @@ macro_rules! entity_get_mut_field_fn {
     };
     (true $field: ident -> $type: ty  $([$function: expr])?) => {
         paste::paste!{
-            pub(crate) const fn [<$field _mut>](&mut self) -> &mut $crate::entity_field_def!($type $([$function])?) { 
+            pub(crate) const fn [<$field _mut>](&mut self) -> &mut $crate::entity_field_def!($type $([$function])?) {
                 &mut self.$field
             }
         }
@@ -298,7 +299,7 @@ macro_rules! entity_set_field_fn {
     (true $field: ident -> $type: ty  $([$function: expr])?) => {
         paste::paste!{
             #[allow(clippy::missing_const_for_fn,reason="Apparently it can't be const for certain field types do to destructors.")]
-            pub(crate) fn [<set_ $field>](&mut self, value: $crate::entity_field_def!($type $([$function])?)) { 
+            pub(crate) fn [<set_ $field>](&mut self, value: $crate::entity_field_def!($type $([$function])?)) {
                 self.$field = value
             }
         }
@@ -306,7 +307,7 @@ macro_rules! entity_set_field_fn {
 }
 
 #[macro_export]
-/** 
+/**
 Creates an entity struct that contains the specified fields. (See Entity trait)
 
 * `$struct_attr` is an attribute that will be placed on the entity struct.
@@ -318,15 +319,15 @@ The body of the entity is a set of braces with a comma-separated list items desc
 
 * `$field` is the identifier of the struct field
 * `$type` is the type of the field generated
-* `$function` is the assignment function, an optional closure used to initialize the value of the field. 
+* `$function` is the assignment function, an optional closure used to initialize the value of the field.
 
 The assignment function closure takes an TypedFeature value and returns a result. The Ok result must be the type of the field being assigned to. The Err result must be a CommandError. If no assignment functions is specified, the macro will attempt to assign the ok result of a function on the feature with the same name as the field.
 
-*/ 
+*/
 macro_rules! entity {
     ($(#[$struct_attr: meta])* $name: ident: $layer: ident {$( $(#[get = $get: ident])? $(#[set = $set: ident])? $(#[mut = $mut: ident])? $field: ident: $type: ty $(= $function: expr)?),*$(,)?}) => {
         #[derive(Clone)]
-        $(#[$struct_attr])* 
+        $(#[$struct_attr])*
         pub(crate) struct $name {
             $(
                 $field: $crate::entity_field_def!($type $([$function])?)

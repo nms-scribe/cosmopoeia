@@ -44,7 +44,7 @@ use crate::typed_map::fields::IdRef;
 pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Culture: NamedEntity<CultureSchema> + CultureWithNamer + CultureWithType>(target: &mut WorldMapTransaction, rng: &mut Random, culture_lookup: &EntityLookup<CultureSchema,Culture>, namers: &mut NamerSet, subnation_percentage: &SubnationPercentArg, overwrite_layer: &OverwriteSubnationsArg, progress: &mut Progress) -> Result<(),CommandError> {
 
     let town_map = target.edit_towns_layer()?.read_features().into_entities_index::<_,TownForSubnations>(progress)?;
-    let nations = target.edit_nations_layer()?.read_features().into_entities_vec::<_,NationForSubnations>(progress)?; 
+    let nations = target.edit_nations_layer()?.read_features().into_entities_vec::<_,NationForSubnations>(progress)?;
     let mut towns_by_nation = HashMap::new();
 
     for tile in target.edit_tile_layer()?.read_features().into_entities::<TileForSubnations>().watch(progress, "Reading tiles.", "Tiles read.") {
@@ -55,7 +55,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
                 Some(list) => list.push((tile,town_id.clone()))
             }
         }
-    
+
     }
 
     let town_sort_normal = Normal::new(1.0f64,0.2f64).expect("Why would these constants fail when they never have before?");
@@ -82,7 +82,7 @@ pub(crate) fn generate_subnations<Random: Rng, Progress: ProgressObserver, Cultu
             } else {
                 // new name by culture
                 let namer = Culture::get_namer(culture_data, namers)?;
-                namer.make_state_name(rng)                  
+                namer.make_state_name(rng)
             };
             let color = *nation.color();
 
@@ -143,9 +143,9 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                     let neighbor = tile_map.try_get(neighbor_id)?;
 
                     let Some(total_cost) = subnation_expansion_cost(neighbor, &subnation, priority) else { continue };
-    
+
                     if total_cost.0 <= max {
-    
+
                         // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
                         // then I can place or replace the culture with this one. This will remove cultures that were previously
                         // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
@@ -155,14 +155,14 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
                         } else {
                             true
                         };
-    
+
                         if replace_subnation {
                             place_subnations.push((neighbor_id.clone(),subnation.fid().clone()));
                             _ = costs.insert(neighbor_id.clone(), total_cost);
                             queue.push((neighbor_id.clone(),subnation.clone()), Reverse(total_cost));
                         } // else we can't expand into this tile, and this line of spreading ends here.
                     }
-    
+
 
                 }
                 Neighbor::OffMap(_) => (),
@@ -171,7 +171,7 @@ pub(crate) fn expand_subnations<Random: Rng, Progress: ProgressObserver>(target:
 
 
         }
-    
+
         for (place_tile_id,subnation_id) in place_subnations {
             let place_tile = tile_map.try_get_mut(&place_tile_id)?;
             place_tile.set_subnation_id(Some(subnation_id));
@@ -240,10 +240,10 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
         if let (Some(nation_id),None) = (&tile.nation_id(),&tile.subnation_id()) {
             // use a priority queue to make it easier to remove by value as well.
             match tiles_by_nation.get_mut(nation_id) {
-                None => { 
+                None => {
                     let mut queue: PriorityQueue<IdRef, i32> = PriorityQueue::new();
                     _ = queue.push(fid.clone(), *tile.population());
-                    _ = tiles_by_nation.insert(nation_id.clone(), queue); 
+                    _ = tiles_by_nation.insert(nation_id.clone(), queue);
                 },
                 Some(queue) => {
                     _ = queue.push(fid.clone(), *tile.population());
@@ -287,10 +287,10 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                 );
 
                 _ = tile_subnation_changes.insert(tile_id.clone(), subnation.fid().clone());
-                
+
                 let mut costs = HashMap::new();
                 _ = costs.insert(tile_id.clone(), OrderedFloat::from(1.0));
-                
+
                 let mut queue = PriorityQueue::new();
                 _ = queue.push(tile_id.clone(),Reverse(OrderedFloat::from(0.0)));
 
@@ -314,13 +314,13 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                                     // we've already placed this in another subnation, or it wasn't available.
                                     continue;
                                 }
-    
-    
+
+
                                 let neighbor = tile_map.try_get(neighbor_id)?;
                                 if neighbor.subnation_id().is_some() {
                                     continue;
                                 }
-    
+
                                 // the cost is different than regular subnation expansion. Basically, there is no cost to finish filling
                                 // up everything, except a small cost to keep things small.
                                 if neighbor.shore_distance() < &-3 {
@@ -329,11 +329,11 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                                 if neighbor.nation_id().as_ref() != Some(subnation.nation_id()) {
                                     continue; // don't leave nation
                                 }
-    
+
                                 let total_cost = OrderedFloat(10.0f64.mul_add(*neighbor.area(), *priority.0));
-        
+
                                 if total_cost.0 <= max {
-            
+
                                     // if no previous cost has been assigned for this tile, or if the total_cost is less than the previously assigned cost,
                                     // then I can place or replace the culture with this one. This will remove cultures that were previously
                                     // placed, and in theory could even wipe a culture off the map. (Although the previous culture placement
@@ -343,7 +343,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                                     } else {
                                         true
                                     };
-            
+
                                     if replace_subnation {
                                         _ = tile_subnation_changes.insert(neighbor_id.clone(), subnation.fid().clone());
                                         _ = nation_tiles.remove(neighbor_id);
@@ -355,7 +355,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                             Neighbor::OffMap(_) => (),
                         } // else it's off the map and unknowable
 
-        
+
                     }
 
 
@@ -370,7 +370,7 @@ pub(crate) fn fill_empty_subnations<Random: Rng, Progress: ProgressObserver, Cul
                 } else {
                     // new name by culture
                     let namer = Culture::get_namer(culture_data, namers)?;
-                    namer.make_state_name(rng)                  
+                    namer.make_state_name(rng)
                 };
 
                 new_subnations.push((subnation.fid().clone(),NewSubnation {
@@ -470,7 +470,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
                             adversary_count += 1;
                         }
                     }
-    
+
                 }
                 Neighbor::OffMap(_) => (),
             } // else it's off the map and unknowable
@@ -494,7 +494,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
             if count > buddy_count {
                 let mut change_tile = tiles_layer.try_feature_by_id(&tile_id)?;
                 change_tile.set_subnation_id(&worst_adversary)?;
-                tiles_layer.update_feature(change_tile)?    
+                tiles_layer.update_feature(change_tile)?
             }
 
         }
@@ -502,7 +502,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
     }
 
 
-    Ok(()) 
+    Ok(())
 }
 
 pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(target: &mut WorldMapTransaction, rng: &mut Random, progress: &mut Progress) -> Result<(),CommandError> {
@@ -510,7 +510,7 @@ pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(t
     let mut nation_color_index = target.edit_nations_layer()?.read_features().into_entities_index::<_,NationForSubnationColors>(progress)?;
 
     let mut subnations_layer = target.edit_subnations_layer()?;
-    
+
     let subnations = subnations_layer.read_features().into_entities_vec::<_,SubnationForColors>(progress)?;
 
     for subnation in subnations.iter().watch(progress, "Counting subnations.", "Subnations counted.") {
@@ -519,7 +519,7 @@ pub(crate) fn assign_subnation_colors<Random: Rng, Progress: ProgressObserver>(t
     }
 
     // This will become an input to the generator so we can generate colors within the same ranges as the nations.
-    let hue_range_split = RandomColorGenerator::split_hue_range_for_color_set(&None, nation_color_index.len());
+    let hue_range_split = RandomColorGenerator::split_hue_range_for_color_set(None, nation_color_index.len());
 
     let mut nation_color_generator_index = HashMap::new();
 

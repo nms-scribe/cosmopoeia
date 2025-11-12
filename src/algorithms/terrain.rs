@@ -61,7 +61,7 @@ struct TerrainParameters {
     negative_elevation_scale: f64,
     expanse_above_sea_level: f64,
     blob_power: f64,
-    line_power: f64, 
+    line_power: f64,
     extents: Extent
 }
 
@@ -84,7 +84,7 @@ impl TerrainParameters {
             80002..=90001 => 0.9964,
             90002..=100001 => 0.9973,
             _ => 0.998
-        }        
+        }
     }
 
     const fn get_line_power(tile_count: usize) -> f64 {
@@ -105,7 +105,7 @@ impl TerrainParameters {
             _ => 0.94
         }
     }
-        
+
 
     fn new(world_shape: WorldShape, elevations: ElevationLimits, extents: Extent, tile_count: usize) -> Self {
         let expanse_above_sea_level = elevations.max_elevation() - (elevations.min_elevation().max(0.0));
@@ -113,21 +113,21 @@ impl TerrainParameters {
         let line_power = Self::get_line_power(tile_count);
 
         let positive_elevation_scale = 80.0/elevations.max_elevation();
-        let negative_elevation_scale = if elevations.min_elevation() < 0.0 { 
+        let negative_elevation_scale = if elevations.min_elevation() < 0.0 {
             20.0/elevations.min_elevation().abs()
         } else {
             0.0
         };
 
-        Self { 
-            elevations, 
+        Self {
+            elevations,
             world_shape,
-            positive_elevation_scale, 
-            negative_elevation_scale, 
-            expanse_above_sea_level, 
-            blob_power, 
-            line_power, 
-            extents 
+            positive_elevation_scale,
+            negative_elevation_scale,
+            expanse_above_sea_level,
+            blob_power,
+            line_power,
+            extents
         }
 
     }
@@ -201,20 +201,20 @@ impl TerrainParameters {
         }
     }
 
-    fn convert_height_filter(&self, height_filter: &Option<ArgRange<i8>>) -> ArgRange<f64> {
+    fn convert_height_filter(&self, height_filter: Option<&ArgRange<i8>>) -> ArgRange<f64> {
         match height_filter {
             Some(ArgRange::Inclusive(min, max)) => ArgRange::Inclusive(
-                self.convert_relative_height(*min, &RelativeHeightTruncation::Floor,true), 
+                self.convert_relative_height(*min, &RelativeHeightTruncation::Floor,true),
                 self.convert_relative_height(*max, &RelativeHeightTruncation::Ceil,true)
             ),
             Some(ArgRange::Exclusive(min, max)) => ArgRange::Exclusive(
-                self.convert_relative_height(*min, &RelativeHeightTruncation::Floor,true), 
+                self.convert_relative_height(*min, &RelativeHeightTruncation::Floor,true),
                 self.convert_relative_height(*max, &RelativeHeightTruncation::Ceil,true)
             ),
             Some(ArgRange::Single(single)) => {
                 let single = *single;
                 ArgRange::Inclusive(
-                    self.convert_relative_height(single, &RelativeHeightTruncation::Floor,true), 
+                    self.convert_relative_height(single, &RelativeHeightTruncation::Floor,true),
                     self.convert_relative_height(single, &RelativeHeightTruncation::Ceil,true)
                 )
             },
@@ -247,12 +247,12 @@ impl TerrainParameters {
     fn gen_end_y<Random: Rng>(&self, rng: &mut Random) -> f64 {
         self.extents.height().mul_add(0.15, rng.gen_range(0.0..(self.extents.height() * 0.7)) + self.extents.south())
     }
-    
+
     fn gen_end_x<Random: Rng>(&self, rng: &mut Random) -> f64 {
         self.extents.width().mul_add(0.1, rng.gen_range(0.0..(self.extents.width() * 0.8)) + self.extents.west())
     }
 
-    
+
 }
 
 trait ProcessTerrainTiles {
@@ -322,11 +322,11 @@ impl ProcessTerrainTiles for SampleOceanBelowLoaded {
         let band = self.raster.read_band::<f64>(1)?;
         let bounds = self.raster.bounds()?;
         let no_data_value = band.no_data_value();
-    
+
         progress.finish(|| "Raster read.");
-    
+
         for (_,tile) in tile_map.iter_mut().watch(progress,"Sampling oceans.","Oceans sampled.") {
-    
+
             let (tile_x,tile_y) = tile.site().to_tuple();
             let (x,y) = bounds.coords_to_pixels(tile_x, tile_y);
 
@@ -356,8 +356,8 @@ impl ProcessTerrainTiles for SampleOceanBelowLoaded {
             }
 
         }
-    
-        Ok(())        
+
+        Ok(())
     }
 }
 
@@ -387,11 +387,11 @@ impl ProcessTerrainTiles for SampleOceanMaskedLoaded {
         let band = self.raster.read_band::<f64>(1)?;
         let bounds = self.raster.bounds()?;
         let no_data_value = band.no_data_value();
-    
+
         progress.finish(|| "Raster read.");
-    
+
         for (_,tile) in tile_map.iter_mut().watch(progress,"Sampling oceans.","Oceans sampled.") {
-    
+
             let (tile_x,tile_y) = tile.site().to_tuple();
             let (x,y) = bounds.coords_to_pixels(tile_x, tile_y);
 
@@ -414,7 +414,7 @@ impl ProcessTerrainTiles for SampleOceanMaskedLoaded {
             }
 
         }
-    
+
         Ok(())
     }
 }
@@ -443,21 +443,21 @@ impl ProcessTerrainTiles for SampleElevationLoaded {
 
         let band = raster.read_band::<f64>(1)?;
         let bounds = raster.bounds()?;
-    
+
         progress.finish(|| "Raster read.");
-    
+
         for (_,tile) in tile_map.iter_mut().watch(progress,"Sampling elevations.","Elevations sampled.") {
-    
+
             let (tile_x,tile_y) = tile.site().to_tuple();
             let (x,y) = bounds.coords_to_pixels(tile_x, tile_y);
 
             if let Some(elevation) = band.get_value(x, y) {
 
                 tile.set_elevation(*elevation);
-    
+
             }
-    
-    
+
+
         }
 
         Ok(())
@@ -468,7 +468,7 @@ impl ProcessTerrainTiles for SampleElevationLoaded {
 impl ProcessTerrainTilesWithPointIndex for AddHill {
 
     fn process_terrain_tiles_with_point_index<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, point_index: &TileFinder, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
-        
+
         let count = self.count.choose(rng);
 
         progress.announce(&format!("Generating {count} hills."));
@@ -497,7 +497,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
 
             while let Some(tile_id) = queue.pop_front() {
                 let tile = tile_map.try_get(&tile_id)?;
-                let last_change = *change_map.get(&tile_id).expect("How could there be something in the queue if it wasn't added to this map?"); 
+                let last_change = *change_map.get(&tile_id).expect("How could there be something in the queue if it wasn't added to this map?");
                 for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
 
                     match neighbor_id {
@@ -508,7 +508,7 @@ impl ProcessTerrainTilesWithPointIndex for AddHill {
 
                             let neighbor_height_delta = last_change.powf(parameters.blob_power) * (rng.gen_range(0.0..0.2) + 0.9);
                             _ = change_map.insert(neighbor_id.clone(), neighbor_height_delta);
-                            if neighbor_height_delta > 1.0 { 
+                            if neighbor_height_delta > 1.0 {
                                 queue.push_back(neighbor_id.clone())
                             }
                         }
@@ -633,7 +633,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
                     } else {
                         break;
                     }
-                    
+
                 }
 
             }
@@ -643,7 +643,7 @@ impl ProcessTerrainTilesWithPointIndex for AddRange {
 
         }
 
-      
+
         Ok(())
     }
 }
@@ -896,11 +896,11 @@ impl ProcessTerrainTilesWithPointIndex for Invert {
             // cache the calculation
             let switch_tile_id = match switches.get(fid) {
                 None => {
-                    // NOTE: This is where the most time is spent. Removing this and setting switch_tile_id to a constant value 
+                    // NOTE: This is where the most time is spent. Removing this and setting switch_tile_id to a constant value
                     // sped up things about 90%. Of course, it also broke the algorithm.
                     let switch_tile_id = point_index.find_nearest_tile(&switch_point)?;
-                    _ = switches.insert(switch_tile_id.clone(), fid.clone());     
-                    switch_tile_id               
+                    _ = switches.insert(switch_tile_id.clone(), fid.clone());
+                    switch_tile_id
                 },
                 Some(id) => id.clone(),
             };
@@ -931,7 +931,7 @@ impl ProcessTerrainTiles for Add {
 
         progress.announce(&format!("Adding {} to some elevations.",self.height_delta));
 
-        let filter = parameters.convert_height_filter(&self.height_filter);
+        let filter = parameters.convert_height_filter(self.height_filter.as_ref());
         let height_delta = parameters.get_signed_height_delta(self.height_delta);
 
         for (_,tile) in tile_map.iter_mut().watch(progress, "Adding heights.", "Heights added.") {
@@ -951,7 +951,7 @@ impl ProcessTerrainTiles for Multiply {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
         progress.announce(&format!("Multiplying some elevations by {}.",self.height_factor));
 
-        let filter = parameters.convert_height_filter(&self.height_filter);
+        let filter = parameters.convert_height_filter(self.height_filter.as_ref());
 
         for (_,tile) in tile_map.iter_mut().watch(progress, "Multiplying heights.", "Heights multiplied.") {
 
@@ -1006,10 +1006,10 @@ impl ProcessTerrainTiles for Smooth {
 impl ProcessTerrainTiles for Erode {
 
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
-        
+
         entity!(TileForSoil: Tile {
             #[get=false] site: Coordinates,
-            #[get=false] elevation: f64, 
+            #[get=false] elevation: f64,
             #[get=false] neighbors: Vec<NeighborAndDirection>,
             #[get=false] soil: f64 = |_| Ok::<_,CommandError>(0.0)
         });
@@ -1037,7 +1037,7 @@ impl ProcessTerrainTiles for Erode {
                 soil: weathering_amount
             })
         }));
-        
+
 
         for iteration in 0..self.iterations {
 
@@ -1051,7 +1051,7 @@ impl ProcessTerrainTiles for Erode {
             for fid in &tile_list {
                 update_count += 1;
                 progress.update(|| update_count);
-    
+
                 let entity = soil_map.try_get(fid)?;
 
                 // this is very similar to algorithms::tiles::find_flowingest_tile, but 1) I need to include soil in the result and 2) I'm more interested in steepness than depth and 3) Even if I even used the closures to replace the elevation with steepness somehow, I'm looking at the highest levels instead.
@@ -1083,7 +1083,7 @@ impl ProcessTerrainTiles for Erode {
 
                         // Grade is a percent. The following shifts all the soil if it's only 45 degrees, but this is much less likely than you'd think.
                         let shift_soil = (steepest_grade.abs() * entity.soil).min(entity.soil);
-                        
+
                         soil_map.try_get_mut(fid)?.soil -= shift_soil;
 
                         let shift_soil = shift_soil / steepest_neighbors.len() as f64;
@@ -1118,7 +1118,7 @@ impl ProcessTerrainTiles for Erode {
                     // now subtract the weathering amount
                     entity.soil = weathering_amount;
                 }
-    
+
             }
 
 
@@ -1133,7 +1133,7 @@ impl ProcessTerrainTiles for Erode {
 
         Ok(())
 
-        
+
 
 
     }
@@ -1188,7 +1188,7 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
                 if found {
                     // found one that was below sea level
                     break;
-                }    
+                }
                 if !found_downslope {
                     // no neighbors were found that were than the last, so we have to give up without having found one.
                     break;
@@ -1199,11 +1199,11 @@ impl ProcessTerrainTilesWithPointIndex for SeedOcean {
                 progress.finish(|| "Could not trace to below sea level.");
                 // continue to attempt to place further seeds
                 continue;
-            } 
-            
+            }
+
             progress.finish(|| "Seed traced.");
-            
-        
+
+
 
             tile_map.try_get_mut(&seed_id)?.set_grouping(Grouping::Ocean);
 
@@ -1220,7 +1220,7 @@ impl ProcessTerrainTiles for FloodOcean {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, _: &mut Random, _: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
 
         progress.announce("Flooding ocean.");
-        
+
         let mut queue = Vec::new();
 
         macro_rules! queue_neighbors {
@@ -1232,12 +1232,12 @@ impl ProcessTerrainTiles for FloodOcean {
                             if (neighbor.elevation() < &0.0) && !matches!(neighbor.grouping(),Grouping::Ocean) {
                                 $queue.push(neighbor_id.clone())
                             }
-        
+
                         } // else it's off the map and unknowable
                         Neighbor::OffMap(_) => ()
                     }
                 }
-                
+
             };
         }
 
@@ -1255,7 +1255,7 @@ impl ProcessTerrainTiles for FloodOcean {
                 queue_neighbors!(tile,queue);
                 tile_map.try_get_mut(&tile_id)?.set_grouping(Grouping::Ocean);
             } // else someone else got to this one already, so don't change it.
-            
+
         }
 
         Ok(())
@@ -1300,10 +1300,10 @@ impl ProcessTerrainTiles for ClearOcean {
 
 impl ProcessTerrainTiles for RandomUniform {
     fn process_terrain_tiles<Random: Rng, Progress: ProgressObserver>(&self, rng: &mut Random, parameters: &TerrainParameters, tile_map: &mut EntityIndex<TileSchema,TileForTerrain>, progress: &mut Progress) -> Result<(),CommandError> {
-        
+
         progress.announce("Generating random noise.");
 
-        let filter = parameters.convert_height_filter(&self.height_filter);
+        let filter = parameters.convert_height_filter(self.height_filter.as_ref());
 
         for (_,tile) in tile_map.iter_mut().watch(progress, "Making some noise.", "Noise made.") {
 
@@ -1351,14 +1351,14 @@ impl TerrainTask {
             let mut properties = target.edit_properties_layer()?;
             let limits = properties.get_elevation_limits()?;
             let world_shape = properties.get_world_shape()?;
-    
+
             let mut layer = target.edit_tile_layer()?;
             let tile_extents = layer.get_extent()?;
             let tile_count = layer.feature_count();
             let parameters = TerrainParameters::new(world_shape, limits, tile_extents.clone(), tile_count);
-    
-    
-    
+
+
+
             // I only want to create the point index if any of the tasks require it. If none of them
             // require it, it's a waste of time to create it.
             let tile_map = if selves.iter().any(Self::requires_point_index) {
@@ -1367,71 +1367,71 @@ impl TerrainTask {
                 // * the distance across, if the tiles were square, is the square root of this area.
                 let tile_spacing = ((tile_extents.height() * tile_extents.width())/tile_count as f64).sqrt();
                 let tile_search_radius = tile_spacing * 2.0; // multiply by two to make darn sure we cover something.
-    
-    
+
+
                 let mut point_index = TileFinder::new(&tile_extents, parameters.world_shape.clone(), tile_count, tile_search_radius);
                 let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForTerrain,_>(|fid,tile| {
                     point_index.add_tile(tile.site().clone(), fid.clone())
                 }, progress)?;
-    
+
                 for me in selves {
                     me.process_terrain_tiles_with_point_index(rng, &parameters, &point_index, &mut tile_map, progress)?;
                 }
-    
-                tile_map    
-    
+
+                tile_map
+
             } else {
                 let mut tile_map = layer.read_features().into_entities_index::<_,TileForTerrain>(progress)?;
                 for me in selves {
                     me.process_terrain_tiles(rng, &parameters, &mut tile_map, progress)?;
                 }
-    
+
                 tile_map
-        
+
             };
-    
-        
+
+
             let mut bad_ocean_tiles_found = Vec::new();
-        
+
             for (fid,tile) in tile_map.into_iter().watch(progress,"Writing data.","Data written.") {
-    
-                
+
+
                 let elevation_changed = tile.elevation_changed();
                 let grouping_changed = tile.grouping_changed();
                 if elevation_changed || grouping_changed {
-    
+
                     // warn user if a tile was set to ocean that's above 0.
                     if matches!(tile.grouping(),Grouping::Ocean) && (tile.elevation() > &0.0) {
                         bad_ocean_tiles_found.push(fid.clone());
-                    }        
-    
-    
+                    }
+
+
                     let mut feature = layer.try_feature_by_id(&fid)?;
                     if elevation_changed {
-    
+
                         let elevation = parameters.clamp_elevation(*tile.elevation());
                         let elevation_scaled = parameters.scale_elevation(elevation);
-        
-       
+
+
                         feature.set_elevation(&elevation)?;
                         feature.set_elevation_scaled(&elevation_scaled)?;
                     }
                     if grouping_changed {
-    
-            
+
+
                         // Should I check to make sure?
                         feature.set_grouping(tile.grouping())?;
                     }
                     layer.update_feature(feature)?;
-    
+
                 }
-    
+
             }
-    
+
             if !bad_ocean_tiles_found.is_empty() {
                 progress.warning(|| format!("At least one ocean tile was found with an elevation above 0 (id: {}).",bad_ocean_tiles_found[0]))
             }
-                
+
 
         } // else there are no processes, so don't bother doing anything.
 
@@ -1507,4 +1507,3 @@ impl TerrainTask {
 
 
 }
-

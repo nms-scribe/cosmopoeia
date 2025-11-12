@@ -17,7 +17,7 @@ use angular_units::Angle;
 pub(crate) enum NamedColor {
     Red,
     Orange,
-    Yellow, 
+    Yellow,
     Green,
     Blue,
     Purple,
@@ -62,7 +62,7 @@ impl ColorInformation {
         };
 
         for entry in NAMED_COLOR_DICTIONARY {
-            if hue >= entry.1.hue_range.0 && 
+            if hue >= entry.1.hue_range.0 &&
                 hue <= entry.1.hue_range.1 {
                 return entry.1
             }
@@ -92,7 +92,7 @@ impl NamedColor {
                     (0.90, 0.55),
                     (1.00, 0.50),
                 ]
-            ),            
+            ),
             Self::Orange => ColorInformation::new(
                 (Deg(18.0), Deg(46.0)),
                 &[
@@ -177,8 +177,8 @@ impl NamedColor {
 
 
 pub(crate) const NAMED_COLOR_DICTIONARY: [(NamedColor,ColorInformation); 7] = [
-    (NamedColor::Red,NamedColor::Red.get_color_information()), 
-    (NamedColor::Orange,NamedColor::Orange.get_color_information()), 
+    (NamedColor::Red,NamedColor::Red.get_color_information()),
+    (NamedColor::Orange,NamedColor::Orange.get_color_information()),
     (NamedColor::Yellow,NamedColor::Yellow.get_color_information()),
     (NamedColor::Green,NamedColor::Green.get_color_information()),
     (NamedColor::Blue,NamedColor::Blue.get_color_information()),
@@ -197,7 +197,7 @@ pub(crate) enum ColorSet {
 
 impl ColorSet {
 
-    const fn get_hue_range(color_input: &Option<Self>) -> (Deg<f32>,Deg<f32>) {
+    const fn get_hue_range(color_input: Option<&Self>) -> (Deg<f32>,Deg<f32>) {
         match color_input {
             Some(Self::Hue(hue)) => {
                 (*hue,*hue)
@@ -211,7 +211,7 @@ impl ColorSet {
         }
     }
 
-    fn get_color_info_for_hue(color_set: &Option<Self>, hue: Deg<f32>) -> ColorInformation {
+    fn get_color_info_for_hue(color_set: Option<&Self>, hue: Deg<f32>) -> ColorInformation {
         match color_set {
             Some(Self::Hue(chosen_hue)) => {
                 ColorInformation::find_color_info_for_hue(*chosen_hue)
@@ -289,7 +289,7 @@ impl RandomColorGenerator {
         } else {
             Self::new(Some(ColorSet::Hue(hue)),luminosity)
         }
-        
+
     }
 
     pub(crate) const fn set_spread_axis(&mut self, axis: ColorSpreadAxis) {
@@ -297,7 +297,7 @@ impl RandomColorGenerator {
     }
 
     // See `from_rgb_in_split_hue_range`
-    pub(crate) fn split_hue_range_for_color_set(color_set: &Option<ColorSet>, count: usize) -> Vec<(Deg<f32>,Deg<f32>)> {
+    pub(crate) fn split_hue_range_for_color_set(color_set: Option<&ColorSet>, count: usize) -> Vec<(Deg<f32>,Deg<f32>)> {
         let hue_range = ColorSet::get_hue_range(color_set);
         Self::split_hue_range(hue_range, count)
     }
@@ -328,7 +328,7 @@ impl RandomColorGenerator {
 
         // The original code used a different function that turned a specific hue into a range of 0..360,
         // but I don't want that to happen.
-        let full_hue_range = ColorSet::get_hue_range(&self.color_set);
+        let full_hue_range = ColorSet::get_hue_range(self.color_set.as_ref());
 
         let split_hue_range = if matches!(self.color_spread_axis,ColorSpreadAxis::Hue) {
             Self::split_hue_range(full_hue_range, count)
@@ -337,7 +337,7 @@ impl RandomColorGenerator {
         };
 
         for hue_range in split_hue_range {
-            
+
             let hue = {
 
                 let hue = Deg(rng.gen_range(hue_range.0.0..=hue_range.1.0));
@@ -347,7 +347,7 @@ impl RandomColorGenerator {
                 hue.normalize()
             };
 
-            let color_info = ColorSet::get_color_info_for_hue(&self.color_set,hue);
+            let color_info = ColorSet::get_color_info_for_hue(self.color_set.as_ref(),hue);
 
             let full_saturation_range = self.get_saturation_range(&color_info);
 
@@ -372,16 +372,16 @@ impl RandomColorGenerator {
                 for value_range in split_value_range {
 
                     let value = rng.gen_range(value_range.0..=value_range.1);
-    
+
                     let hsv = Hsv::new(hue,saturation,value);
-        
+
                     let color = Rgb::from_color(&hsv).color_cast();
-        
-        
+
+
                     colors.push(color)
-    
+
                 }
-    
+
             }
 
         }
@@ -390,20 +390,20 @@ impl RandomColorGenerator {
         colors.shuffle(rng);
 
         colors
-                
+
     }
 
     fn get_saturation_range(&self, color_info: &ColorInformation) -> (f32, f32) {
         let (s_min,s_max) = if let Some(luminosity) = &self.luminosity {
             let saturation_range = color_info.saturation_range;
-    
+
             let (s_min,s_max) = match luminosity {
                 Luminosity::Bright => (0.55,saturation_range.1),
                 Luminosity::Dark => (saturation_range.0 - 0.10, saturation_range.1),
                 Luminosity::Light => (saturation_range.0, 0.55),
                 Luminosity::Value(_) => saturation_range,
                 Luminosity::Saturation(saturation) | Luminosity::SaturationValue(saturation,_) => (*saturation,*saturation),
-        
+
             };
 
             (s_min,s_max)
@@ -423,7 +423,7 @@ impl RandomColorGenerator {
             },
             Some(Luminosity::Light) => {
                 let min = Self::get_minimum_value(saturation,color_info);
-                ((1.00 + min) / 2.0,1.00)
+                (f32::midpoint(1.00,min),1.00)
             },
             Some(Luminosity::Bright) => {
                 (Self::get_minimum_value(saturation,color_info),1.00)
@@ -441,22 +441,22 @@ impl RandomColorGenerator {
 
     fn get_minimum_value(saturation: f32, color_info: &ColorInformation) -> f32 /* 0..=1 */ {
         let lower_bounds = color_info.lower_bounds;
-    
+
         for i in 0..lower_bounds.len() - 1 {
             let s1 = lower_bounds[i].0;
             let v1 = lower_bounds[i].1;
-    
+
             let s2 = lower_bounds[i + 1].0;
             let v2 = lower_bounds[i + 1].1;
-    
+
             if saturation >= s1 && saturation <= s2 {
                 let m = (v2 - v1) / (s2 - s1);
                 let b = (-m).mul_add(s1, v1); //v1 - m * s1;
-        
+
                 return m.mul_add(saturation, b);
             }
         }
-    
+
         0.0
     }
 
@@ -472,12 +472,12 @@ impl RandomColorGenerator {
         } else {
             hsv.0
         };
-    
+
         // Rebase the h,s,v values
         let hue = hue as f64 / 360.0; // 0.6194
         let saturation = hsv.1 as f64 / 100.0; // 0.43
         let value = hsv.2 as f64 / 100.0; // 0.91
-    
+
         let h_i = (hue * 6.0).floor(); // 3
         let f = hue * 6.0 - h_i; // 0.7167
         let p = value * (1.0 - saturation); // 0.5187
@@ -486,7 +486,7 @@ impl RandomColorGenerator {
         let r;
         let g;
         let b;
-    
+
         match h_i as u8 {
             0 => {
                 r = value;
@@ -520,7 +520,7 @@ impl RandomColorGenerator {
             },
             _ => unreachable!("{{0..360}}/360 * 6 shouldn't be anything but an integer from 0..=6")
         }
-    
+
         let result = (
             (r * 255.0).floor() as u8,
             (g * 255.0).floor() as u8,
@@ -555,7 +555,7 @@ impl RandomColorGenerator {
                 hue = 360 + hue
             }
             hue as u16
-    
+
         };
 
         let saturation = if c_max == 0 {
@@ -573,5 +573,3 @@ impl RandomColorGenerator {
 
 
 }
-
-

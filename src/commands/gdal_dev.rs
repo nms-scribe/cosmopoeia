@@ -27,7 +27,7 @@ impl Task for DatasetInfo {
 
     fn run<Progress: ProgressObserver>(self, _: &mut Progress) -> Result<(),CommandError> {
         let ds = Dataset::open(self.source)?;
-        println!("projection: {}",ds.projection()); 
+        println!("projection: {}",ds.projection());
         //println!("spatial reference: {:?}",ds.spatial_ref()?); // NOTE: This causes an error in gpkg
         //println!("geotransform: {:?}",ds.geo_transform()?); // NOTE: This causes an error in gpkg
         println!("layer count: {}",ds.layer_count()); // If the file is a vector, this will be > 0
@@ -50,8 +50,7 @@ impl Task for DatasetInfo {
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    pub struct Version {
-    }
+    pub struct Version;
 }
 
 impl Task for Version {
@@ -64,8 +63,7 @@ impl Task for Version {
 
 subcommand_def!{
     /// Opens a GDAL file and gets some information.
-    pub struct Drivers {
-    }
+    pub struct Drivers;
 }
 
 impl Task for Drivers {
@@ -89,7 +87,7 @@ command_def!(
     pub GdalCommand {
         DatasetInfo,
         Version,
-        Drivers 
+        Drivers
     }
 );
 
@@ -106,6 +104,6 @@ subcommand_def!{
 
 impl Task for Gdal {
     fn run<Progress: ProgressObserver>(self, progress: &mut Progress) -> Result<(),CommandError> {
-        self.command.run(progress)        
+        self.command.run(progress)
     }
 }

@@ -24,26 +24,26 @@ pub(crate) struct LayerDocumentation {
 
 impl LayerDocumentation {
     pub(crate) const fn new(name: String, description: String, geometry: String, fields: Vec<FieldDocumentation>) -> Self {
-        Self { 
-            name, 
-            description, 
-            geometry, 
-            fields 
+        Self {
+            name,
+            description,
+            geometry,
+            fields
         }
     }
-    
+
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
-    
+
     pub(crate) fn description(&self) -> &str {
         &self.description
     }
-    
+
     pub(crate) fn geometry(&self) -> &str {
         &self.geometry
     }
-    
+
     pub(crate) fn fields(&self) -> &[FieldDocumentation] {
         &self.fields
     }
@@ -87,10 +87,10 @@ macro_rules! layer {
             }
 
         }
-    
+
         paste::paste!{
             impl<'impl_life> From<gdal::vector::Feature<'impl_life>> for [<$name Feature>]<'impl_life> {
-    
+
                 fn from(feature: gdal::vector::Feature<'impl_life>) -> Self {
                     Self {
                         feature
@@ -160,9 +160,9 @@ macro_rules! layer {
 
             }
         }
-        
+
         paste::paste!{
-        
+
             impl [<$name Feature>]<'_> {
 
                 // property functions
@@ -173,15 +173,17 @@ macro_rules! layer {
                             <$prop_type as $crate::typed_map::fields::TypedField>::get_field(&self.feature,[<$name Schema>]::[<FIELD_ $prop:snake:upper>],concat!($layer_name,".",stringify!($prop)))
                         }
                     }
-        
+
                     paste::paste!{
                         $(#[doc = $field_doc_attr])?
-                        $(#[$set_attr])* pub(crate) fn [<set_ $prop>](&mut self, value: &$prop_type) -> Result<(),CommandError> {
+                        $(#[$set_attr])*
+                        #[allow(clippy::ref_option,reason="I don't want to try to fix the macro to allow this at this time.")] // FUTURE: Fix this...
+                        pub(crate) fn [<set_ $prop>](&mut self, value: &$prop_type) -> Result<(),CommandError> {
                             $crate::typed_map::fields::TypedField::set_field(value,&mut self.feature,[<$name Schema>]::[<FIELD_ $prop:snake:upper>])
-                        }            
-    
+                        }
+
                     }
-        
+
                 )*
 
             }
@@ -191,6 +193,7 @@ macro_rules! layer {
         paste::paste!{
 
             $crate::hide_item!{$(hide_add $hide_add)?,
+                #[allow(clippy::empty_structs_with_brackets)]
                 pub(crate) struct [<New $name>] {
                     $(
                         pub $prop: $prop_type
@@ -205,7 +208,7 @@ macro_rules! layer {
             impl [<$name Layer>]<'_,'_> {
 
                 $crate::hide_item!{$(hide_add $hide_add)?,
-                    // I've marked entity as possibly not used because some calls have no fields and it won't be assigned.          
+                    // I've marked entity as possibly not used because some calls have no fields and it won't be assigned.
                     fn add_struct(&mut self, _entity: &[<New $name>], geometry: Option<<[<$name Schema>] as $crate::typed_map::schema::Schema>::Geometry>) -> Result<IdRef,CommandError> {
                         let field_names = [
                             $(paste::paste!{
@@ -251,9 +254,9 @@ macro_rules! layer {
                                     <$prop_type as $crate::typed_map::fields::DocumentedFieldType>::get_field_type_documentation()
                                 )
                             ),*
-            
+
                         ],
-                    ))            
+                    ))
 
                 }
             }
@@ -286,14 +289,14 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             } else {
                 Some(&srs)
             },
-            options: if overwrite { 
+            options: if overwrite {
                 Some(&["OVERWRITE=YES"])
             } else {
                 None
             }
         })?;
         layer.create_defn_fields(SchemaType::get_field_defs())?;
-        
+
         Ok(Self {
             layer,
             _phantom_feature: PhantomData,
@@ -302,7 +305,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
     }
 
     pub(crate) fn open_from_dataset(dataset: &'layer Dataset) -> Result<Self,CommandError> {
-        
+
         let layer = dataset.layer_by_name(SchemaType::LAYER_NAME)?;
         Ok(Self {
             layer,
@@ -356,11 +359,11 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
         Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
 
     }
-    
+
     pub(crate) const fn layer(&self) -> &Layer<'layer> {
         &self.layer
     }
-    
+
     pub(crate) const fn layer_mut(&mut self) -> &mut Layer<'layer> {
         &mut self.layer
     }

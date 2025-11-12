@@ -55,7 +55,7 @@ impl CultureType {
         };
         ((rng.gen_range(0.0..1.0) * size_variance / 2.0) + 1.0) * base
     }
-    
+
 }
 
 
@@ -102,7 +102,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
     let mut cultures = Vec::new();
 
     let (width,height) = tile_layer.get_layer_size()?;
-    let spacing = (width + height) / 2.0 / culture_count as f64;
+    let spacing = f64::midpoint(width,height) / culture_count as f64;
     let max_tile_choice = populated.len().div_euclid(2);
 
     // I need to avoid duplicate names
@@ -115,14 +115,14 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         // find the cultural center
 
         let preferences = culture_source.preferences();
-        
+
         // sort so the most preferred tiles go to the top.
         // FUTURE: It would be nice if there were a try_sort_by_cached_key, but I don't expect
         // them to implement. Some sort of alternative standard solution for this sort of pattern
         // would be nice, though. A panic and catch_unwind would allow me to short-circuit the sort
         // algorithm, at least.
         let mut error = None;
-        populated.sort_by_cached_key(|a| 
+        populated.sort_by_cached_key(|a|
             match preferences.get_value(a,max_habitability) {
                 Ok(value) => value,
                 Err(err) => {
@@ -138,7 +138,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         let mut i = 0;
         let center = loop {
             // FUTURE: Right now, this chooses randomly and increases the spacing until we've randomly hit upon a good spot,
-            // the spacing has decreased until the too_close is always going to fail, or we just give up and take one. 
+            // the spacing has decreased until the too_close is always going to fail, or we just give up and take one.
             // There might be a better way:
             // - start with a biased index, as with current
             // - if that doesn't work, choose another biased index, but set the min of the parameter to the previous index
@@ -149,7 +149,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
             //     tile during the process and choose that at the end
             let index = populated.choose_biased_index(rng,0,max_tile_choice,5);
             let center = &populated[index];
-            if (i > MAX_ATTEMPTS) || !too_close(&placed_centers,center.site(),spacing,&world_shape) { 
+            if (i > MAX_ATTEMPTS) || !too_close(&placed_centers,center.site(),spacing,&world_shape) {
                 // return the removed tile, to prevent any other culture from matching it.
                 break populated.remove(index);
             }
@@ -163,7 +163,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
         // define the culture type
         let culture_type = get_culture_type(&center, river_threshold.river_threshold, rng);
-        
+
         let expansionism = culture_type.generate_expansionism(rng,size_variance.size_variance);
 
         let namer = culture_source.namer_name();
@@ -179,14 +179,14 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
         }
 
         cultures.push(NewCulture {
-            name, 
+            name,
             namer: namer.to_owned(),
             type_: culture_type,
             expansionism,
             center_tile_id: center.fid().clone(),
             color: colors.next().expect("There should have been just as many colors generated as cultures.")
         });
-        
+
     }
 
     // now check the culture_names for duplicates and rename.
@@ -206,7 +206,7 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 
     // NOTE: AFMG Had a Wildlands culture that was automatically placed wherever there were no cultures.
     // However, that culture did not behave like other cultures. The option is to do this, have a
-    // special culture that doesn't have a culture center, and doesn't behave like a culture, or to 
+    // special culture that doesn't have a culture center, and doesn't behave like a culture, or to
     // just allow tiles to not have a culture. I prefer the latter.
     // FUTURE: Actually, what I really prefer is to not have any populated place that doesn't have a culture.
     // It's pretty arrogant to say that a "wildlands" culture is special. However, to do that I'll have to
@@ -231,9 +231,9 @@ pub(crate) fn generate_cultures<Random: Rng, Progress: ProgressObserver>(target:
 fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mut TileLayer, biomes: &'biome_life EntityLookup<BiomeSchema, BiomeForCultureGen>, lake_map: &EntityIndex<LakeSchema, LakeForCultureGen>, progress: &mut Progress) -> Result<(f64, Vec<TileForCulturePrefSorting<'biome_life>>), CommandError> {
 
     let mut max_habitability: f64 = 0.0;
-    
+
     let mut populated = Vec::new();
-    
+
     for tile in tile_layer.read_features().into_entities::<TileForCultureGen>().watch(progress,"Reading tiles.","Tiles read.") {
         let (_,tile) = tile?;
         if tile.population() > &0 {
@@ -241,8 +241,8 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
             populated.push(tile);
         }
     }
-    
-    
+
+
     let mut sortable_populated = Vec::new();
 
     for tile in populated.into_iter().watch(progress,"Processing tiles for preference sorting.","Tiles processed.") {
@@ -255,11 +255,11 @@ fn get_culturable_tiles<'biome_life, Progress: ProgressObserver>(tile_layer: &mu
 
 fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_threshold: f64, rng: &mut Random) -> CultureType {
     if center.elevation_scaled() < 70 && *center.biome().supports_nomadic() {
-        return CultureType::Nomadic 
+        return CultureType::Nomadic
     } else if center.elevation_scaled() > 50 {
         return CultureType::Highland
     }
-    
+
     if let Some(water_count) = center.water_count() {
         if let Some(neighboring_lake_size) = center.neighboring_lake_size() {
             if neighboring_lake_size > 5 {
@@ -273,8 +273,8 @@ fn get_culture_type<Random: Rng>(center: &TileForCulturePrefSorting, river_thres
             return CultureType::Naval
         }
     }
-    
-    if center.water_flow() > river_threshold { 
+
+    if center.water_flow() > river_threshold {
         CultureType::River
     } else if center.shore_distance() > 2 && *center.biome().supports_hunting() {
         CultureType::Hunting
@@ -325,7 +325,7 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
     let max_expansion_cost = OrderedFloat::from(10000.0/tile_size * limit_factor.expansion_factor);
 
     let mut culture_centers = HashSet::new();
-    
+
     for culture in cultures {
 
         _ = culture_centers.insert(culture.center_tile_id().clone());
@@ -345,11 +345,11 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 
         let mut place_cultures = Vec::new();
 
-        
+
         let tile = tile_map.try_get(&tile_id)?;
 
         for NeighborAndDirection(neighbor_id,_) in tile.neighbors() {
-            
+
             match neighbor_id {
                 Neighbor::Tile(neighbor_id) | Neighbor::CrossMap(neighbor_id,_) => {
 
@@ -414,8 +414,8 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
                         //    println!("   type_cost {}",type_cost);
                         //    println!("   total_cost {}",total_cost);
                         //}
-        
-        
+
+
                     }
 
                 }
@@ -452,28 +452,28 @@ pub(crate) fn expand_cultures<Progress: ProgressObserver>(target: &mut WorldMapT
 const fn get_shore_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) -> f64 {
     match culture_type {
         CultureType::Lake => match neighbor.shore_distance() {
-            2 | 1 => 0.0, 
-            ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland 
+            2 | 1 => 0.0,
+            ..=-2 | 0 | 2.. => 100.0, // penalty for the mainland
             -1 => 0.0,
         },
         CultureType::Naval => match neighbor.shore_distance() {
             1 => 0.0,
-            2 => 30.0, // penalty for mainland 
-            ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland 
+            2 => 30.0, // penalty for mainland
+            ..=-2 | 0 | 2.. => 100.0,  // penalty for mainland
             -1 => 0.0,
         },
         CultureType::Nomadic => match neighbor.shore_distance() {
             1 => 60.0, // larger penalty for reaching the coast
             2 => 30.0, // penalty for approaching the coast
-            -1 | ..=-2 | 0 | 2.. => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0,
         },
         CultureType::Generic  => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
-            -1 | ..=-2 | 0 | 2.. => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0,
         },
         CultureType::River => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
-            -1 | ..=-2 | 0 | 2.. => 0.0, 
+            -1 | ..=-2 | 0 | 2.. => 0.0,
         },
         CultureType::Hunting => match neighbor.shore_distance() {
             1 => 20.0, // penalty for reaching the coast
@@ -519,7 +519,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
             neighbor.area() * 6.0
         } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
-            200.0 
+            200.0
         } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
@@ -531,7 +531,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
             neighbor.area() * 2.0
         } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
-            200.0 
+            200.0
         } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
@@ -542,7 +542,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
             neighbor.area() * 50.0
         } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
-            200.0 
+            200.0
         } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
@@ -569,7 +569,7 @@ fn get_height_cost(neighbor: &TileForCultureExpand, culture_type: &CultureType) 
             neighbor.area() * 6.0
         } else if neighbor.elevation_scaled() >= &67 {
             // mountain crossing penalty
-            200.0 
+            200.0
         } else if neighbor.elevation_scaled() > &44 {
             // hill crossing penalt
             30.0
@@ -583,7 +583,7 @@ fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForCultureExpand
     // FUTURE: I need a way to make this more configurable...
     const FOREST_BIOMES: [&str; 5] = [BiomeSchema::TROPICAL_SEASONAL_FOREST, BiomeSchema::TEMPERATE_DECIDUOUS_FOREST, BiomeSchema::TROPICAL_RAINFOREST, BiomeSchema::TEMPERATE_RAINFOREST, BiomeSchema::TAIGA];
 
-    
+
     if culture_biome == neighbor_biome.name() {
         // tiny penalty for native biome
         10.0
@@ -602,7 +602,7 @@ fn get_biome_cost(culture_biome: &String, neighbor_biome: &BiomeForCultureExpand
             CultureType::River |
             CultureType::Highland => neighbor_biome.movement_cost() * 2,
         }) as f64
-    
+
     }
 
 }

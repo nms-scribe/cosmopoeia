@@ -86,11 +86,11 @@ impl<DataType: GdalType> RasterBandBuffer<DataType> {
 
     }
 
-    pub(crate) const fn no_data_value(&self) -> &Option<f64> {
-        &self.no_data
+    pub(crate) const fn no_data_value(&self) -> Option<&f64> {
+        self.no_data.as_ref()
     }
-    
-} 
+
+}
 
 
 
@@ -120,10 +120,10 @@ impl RasterMap {
         let buffer = band.read_band_as::<DataType>()?;
         let width = self.dataset.raster_size().0;
         let no_data = band.no_data_value();
-        Ok(RasterBandBuffer { 
-            width, 
-            buffer, 
-            no_data 
+        Ok(RasterBandBuffer {
+            width,
+            buffer,
+            no_data
         })
     }
 
@@ -134,14 +134,14 @@ impl RasterMap {
         let transform_y_factor = -transform_y_factor;
         let coord_height = pixel_height as f64 * transform_y_factor;
         let coord_bottom = coord_top - coord_height;
-    
-        Ok(RasterBounds { 
-            coord_min_x: coord_left, 
-            transform_x_factor, 
-            coord_min_y: coord_bottom, 
-            transform_y_factor, 
-            pixel_width, 
-            pixel_height 
+
+        Ok(RasterBounds {
+            coord_min_x: coord_left,
+            transform_x_factor,
+            coord_min_y: coord_bottom,
+            transform_y_factor,
+            pixel_width,
+            pixel_height
         })
 
     }
@@ -159,4 +159,3 @@ impl RasterMap {
 
 
 }
-

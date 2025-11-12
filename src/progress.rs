@@ -28,7 +28,7 @@ pub(crate) trait ProgressObserver {
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback);
 
-    fn announce(&self, message: &str);    
+    fn announce(&self, message: &str);
 
 }
 
@@ -92,6 +92,7 @@ impl ConsoleProgressBar {
 
     fn style_as_progress(bar: &ProgressBar) {
         bar.disable_steady_tick();
+        #[expect(clippy::literal_string_with_formatting_args,reason="This is not a formatting string")]
         bar.set_style(ProgressStyle::with_template("({elapsed_precise}) [{bar:40}] [ETA: {eta_precise}] {msg} {spinner}")
             .expect("progress bar template could not be parsed.")
             //.tick_strings(SPINNER_STRINGS)
@@ -223,13 +224,13 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType, IteratorType: It
             self.progress.finish(|| &self.finish);
             None
         }
-        
+
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()        
+        self.inner.size_hint()
     }
-    
+
 
 }
 
@@ -246,9 +247,9 @@ impl<IteratorType: Iterator> WatchableIterator for IteratorType {
 
     fn watch<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> IteratorWatcher<FinishMessage, Progress, Self> {
         progress.start(|| (start,self.size_hint().1));
-        IteratorWatcher { 
-            finish, 
-            progress, 
+        IteratorWatcher {
+            finish,
+            progress,
             inner: self.enumerate()
         }
 
@@ -288,7 +289,7 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType> QueueWatcher<'_,
     pub(crate) fn last(&self) -> Option<&ItemType> {
         self.inner.last()
     }
-} 
+}
 
 pub(crate) trait WatchableQueue<ItemType: Sized> {
 
@@ -299,9 +300,9 @@ impl<ItemType> WatchableQueue<ItemType> for Vec<ItemType> {
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> QueueWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
-        QueueWatcher { 
-            finish, 
-            progress, 
+        QueueWatcher {
+            finish,
+            progress,
             inner: self,
             pushed: 0,
             popped: 0
@@ -341,7 +342,7 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType> DequeWatcher<'_,
         self.progress.update_step_length(|| self.pushed);
     }
 
-} 
+}
 
 pub(crate) trait WatchableDeque<ItemType: Sized> {
 
@@ -352,9 +353,9 @@ impl<ItemType> WatchableDeque<ItemType> for VecDeque<ItemType> {
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> DequeWatcher<FinishMessage, Progress, ItemType> {
         progress.start(|| (start,Some(self.len())));
-        DequeWatcher { 
-            finish, 
-            progress, 
+        DequeWatcher {
+            finish,
+            progress,
             inner: self,
             pushed: 0,
             popped: 0
@@ -393,7 +394,7 @@ impl<Message: AsRef<str>, Progress: ProgressObserver, ItemType: Hash + Eq, Prior
         self.progress.update_step_length(|| self.pushed);
     }
 
-} 
+}
 
 pub(crate) trait WatchablePriorityQueue<ItemType: Hash + Eq, PriorityType: Ord> {
 
@@ -404,9 +405,9 @@ impl<ItemType: Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,Pri
 
     fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> PriorityQueueWatcher<FinishMessage, Progress, ItemType,PriorityType> {
         progress.start(|| (start,Some(self.len())));
-        PriorityQueueWatcher { 
-            finish, 
-            progress, 
+        PriorityQueueWatcher {
+            finish,
+            progress,
             inner: self,
             pushed: 0,
             popped: 0
@@ -416,5 +417,3 @@ impl<ItemType: Hash + Eq, PriorityType: Ord> WatchablePriorityQueue<ItemType,Pri
 
 
 }
-
-

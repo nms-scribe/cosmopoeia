@@ -4,16 +4,16 @@ use crate::progress::ProgressObserver;
 use crate::world_map::WorldMapTransaction;
 use crate::algorithms::tiles::Theme;
 use crate::errors::CommandError;
-use crate::progress::WatchableIterator;
+use crate::progress::WatchableIterator as _;
 use crate::utils::coordinates::Coordinates;
-use crate::typed_map::features::TypedFeature;
+use crate::typed_map::features::TypedFeature as _;
 use crate::algorithms::beziers::bezierify_points;
 use crate::commands::BezierScaleArg;
 use crate::typed_map::features::TypedFeatureIterator;
 use crate::geometry::MultiPolygon;
 use crate::geometry::Polygon;
 use crate::geometry::LinearRing;
-use crate::geometry::GDALGeometryWrapper;
+use crate::geometry::GDALGeometryWrapper as _;
 use crate::geometry::VariantArealGeometry;
 use crate::typed_map::fields::IdRef;
 
@@ -58,7 +58,7 @@ pub(crate) fn curvify_layer_by_theme<Progress: ProgressObserver, ThemeType: Them
                     for new_point in line {
                         points.push(new_point.to_tuple());
                     }
-                        
+
                 }
                 let ring_geometry = LinearRing::from_vertices(points)?;
                 rings.push(ring_geometry);
@@ -152,8 +152,8 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                             // if it had been three or more, then it was already broken.
                             segments.push(current_segment);
                             current_segment = vec![prev_vertex,next_vertex.clone()];
-                        } else if (next_share_count == &2) && (prev_share_count == &1) || 
-                                  (next_share_count > &2) { 
+                        } else if (next_share_count == &2) && (prev_share_count == &1) ||
+                                  (next_share_count > &2) {
                             // the previous was not shared, the next one is shared by 2 OR this one was shared by 3 or more no matter what the previous was.
                             // A three-way intersection always causes a break because there should be no way for more than two polygons to share a single line segment.
                             current_segment.push(next_vertex.clone());
@@ -161,7 +161,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                             current_segment = vec![next_vertex.clone()];
                         } else { // no intersection, segment continues as normal.
                             current_segment.push(next_vertex.clone())
-                        };
+                        }
                         prev_vertex = next_vertex;
                         prev_share_count = next_share_count;
                     }
@@ -186,8 +186,8 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                     let mut matched_id = None;
                     if let Some(match_segments) = segment_cache.get(segment.last().expect("Why wouldn't this key be here if we just inserted it?")) { // look from last first, because it's the more likely we're matching the reversed order.
                         matched_id = find_segment_match(match_segments, &segment,true);
-                    } 
-                
+                    }
+
                     if matched_id.is_none() {
                         // nothing was found, so look through in the ordinary order, there's a small chance it might match.
                         if let Some(match_segments) = segment_cache.get(&segment[0]) {
@@ -231,7 +231,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
 
         _ = polygon_segments.insert(fid, polygons);
     }
-    Ok(BrokenSegments { 
+    Ok(BrokenSegments {
         map: polygon_segments
     })
 }
@@ -241,7 +241,7 @@ fn find_segment_match(match_segments: &[Vec<Coordinates>], segment: &[Coordinate
         if (!match_segment.is_empty()) && match_segment.len() == segment.len() {
             // search by reversed
             let matched = if reverse {
-                match_segment.iter().eq(segment.iter().rev()) 
+                match_segment.iter().eq(segment.iter().rev())
             } else {
                 match_segment.iter().eq(segment.iter())
             };

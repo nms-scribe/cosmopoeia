@@ -28,6 +28,7 @@ pub enum ArgRange<NumberType> {
 
 pub trait TruncOrSelf {
 
+    #[must_use]
     fn trunc_or_self(self) -> Self;
 }
 
