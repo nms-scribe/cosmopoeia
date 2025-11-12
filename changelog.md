@@ -9,9 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (Someday)
 
+* Update clippy lints and fix
+* Fixed github security warning by upgrading dependency of clap
+
 ## [0.2.6] - (2025-06-23)
 
-* Restore usage of bindgen feature for gdal, allowing compilation for newer versions of gdal. 
+* Restore usage of bindgen feature for gdal, allowing compilation for newer versions of gdal.
 
 ## [0.2.5] - (2025-06-07)
 
