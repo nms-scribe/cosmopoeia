@@ -184,7 +184,7 @@ impl ProgressObserver for ConsoleProgressBar {
             bar.println(message)
         } else {
             eprintln!("{message}")
-        };
+        }
     }
 
     fn finish<Message: AsRef<str>, Callback: FnOnce() -> Message>(&mut self, callback: Callback) {

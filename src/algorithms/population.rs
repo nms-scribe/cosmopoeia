@@ -89,7 +89,7 @@ pub(crate) fn generate_populations<Progress: ProgressObserver>(target: &mut Worl
         
                             },
                             Neighbor::OffMap(_) => unreachable!("Why would there be a harbor_tile_id with an OffMap neighbor?"), // FUTURE: I'm not sure if this should ever happen
-                        };
+                        }
                             
 
                     }

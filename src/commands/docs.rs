@@ -531,7 +531,7 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
     if let Some(anchor) = anchor {
         has_term = true;
         write!(target,"<a id=\"{anchor}\"></a>")?
-    };
+    }
 
     if let Some((name,code_span)) = name {
         has_term = true;
@@ -540,7 +540,7 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
         } else {
             write!(target,"**{name}**")?;
         }
-    };
+    }
 
 
     if schema.instance_types.is_some() || schema.reference.is_some() || schema.format.is_some() || required {
@@ -562,12 +562,12 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
             let instance_types = join_iter(instance_types.iter().map(|i| instance_type_name(*i))," | ");
             write!(target,"{instance_types}")?;
             spacing = ", ";
-        };
+        }
 
         if let Some(reference) = &schema.reference {
             if has_type {
                 spacing = " | "
-            };
+            }
             write!(target,"{spacing}[{reference}](#definitions/{reference})")?;
             spacing = ", ";
         }

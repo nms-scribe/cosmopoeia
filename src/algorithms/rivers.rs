@@ -341,7 +341,7 @@ fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_cle
                 _ = tile_from_index.insert(segment.from.clone(),vec![segment.clone()]);
             },
             Some(entry) => entry.push(segment.clone()),
-        };
+        }
         match &segment.to {
             Neighbor::Tile(segment_to) | Neighbor::CrossMap(segment_to,_)=> {
                 match tile_to_index.get_mut(segment_to) {
@@ -349,7 +349,7 @@ fn generate_water_rivers_clean_and_index<Progress: ProgressObserver>(segment_cle
                         _ = tile_to_index.insert(segment_to.clone(),vec![segment.clone()]);
                     },
                     Some(entry) => entry.push(segment.clone()),
-                };
+                }
             }
             // don't add to 'to' index if it leads off the map. Those don't necessarily go to the same point.
             Neighbor::OffMap(_) => (),

@@ -125,7 +125,7 @@ impl LoadSource for FromHeightmap {
 
             post_processes.extend(process.load_terrain_task(random, progress)?);
 
-        };
+        }
 
         Ok(LoadedSource {
             extent,

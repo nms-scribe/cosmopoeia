@@ -466,7 +466,7 @@ pub(crate) fn normalize_subnations<Progress: ProgressObserver>(target: &mut Worl
                                 _ = adversaries.insert(neighbor.subnation_id().clone(), count + 1)
                             } else {
                                 _ = adversaries.insert(neighbor.subnation_id().clone(), 1)
-                            };
+                            }
                             adversary_count += 1;
                         }
                     }

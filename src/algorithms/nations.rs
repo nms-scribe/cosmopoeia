@@ -417,7 +417,7 @@ pub(crate) fn normalize_nations<Progress: ProgressObserver>(target: &mut WorldMa
                                 _ = adversaries.insert(neighbor.nation_id().clone(), count + 1);
                             } else {
                                 _ = adversaries.insert(neighbor.nation_id().clone(), 1);
-                            };
+                            }
                             adversary_count += 1;
                         }
                     }

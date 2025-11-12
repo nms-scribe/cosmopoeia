@@ -274,7 +274,7 @@ impl MarkovGenerator {
                         if (syllable == " ") || (syllable == "-") { 
                             // syllable starts with space or hyphen
                             break 
-                        }; 
+                        } 
                         let next_char = match next_char {
                             Some(' ' | '-') | None => break, // definitely the end of a syllable, no need to check.
                             Some(next_char) => *next_char
@@ -282,7 +282,7 @@ impl MarkovGenerator {
     
                         if is_vowel(current_char) {
                             vowel_found = true
-                        }; // check if letter is vowel
+                        } // check if letter is vowel
     
                         // do not split some digraphs // FUTURE: NMS: These rules should depend on the language, which should provide a list of diphthongs
                         let is_digraph = if current_char == 'y' && next_char == 'e' {
@@ -306,11 +306,11 @@ impl MarkovGenerator {
                             if is_vowel(current_char) && next_char == current_char {
                                 // two same vowels in a row
                                 break
-                            }; 
+                            } 
                             if vowel_found && word.get(c + 2).map_or_else(|| false, is_ref_vowel) {
                                 // syllable has vowel and additional vowel is expected soon
                                 break
-                            }; 
+                            } 
                         }
     
                         if syllable.len() >= 5 {
@@ -414,13 +414,13 @@ impl MarkovGenerator {
             if Some(current_char) == word.get(current_index + 1) && !self.duplicatable_letters.contains(current_char) {
                 // duplication is not allowed except in language-based circumstances
                 continue;
-            }; 
+            } 
 
             let last = name.chars().last();
             if (matches!(last,Some('-')) && current_char == &' ') {
                 // remove space after hyphen
                 continue;
-            }; 
+            } 
             // NOTE: AFMG was capitalizing letters after space and hyphen, however if the seed words are curated correctly,
             // it should be following the capitalization rules already, right? If we're going to do something like this, though,
             // it would have to be customizable by language, and we'd have to be able to specify "short words" not capitalizable.
@@ -430,13 +430,13 @@ impl MarkovGenerator {
             if current_char == &'a' && matches!(word.get(current_index + 1),Some('e')) {
                 // "ae" => "e"
                 continue;
-            }; 
+            } 
 
             if Some(current_char) == word.get(current_index + 1) && 
                  Some(current_char) == word.get(current_index + 2) {
                 // remove three same letters in a row
                 continue;
-            }; 
+            } 
             name.push(*current_char)
         }
         
@@ -617,7 +617,7 @@ impl Namer {
         if name.ends_with(&suffix) {
             // no suffix if name already ends with it
             return name
-        }; 
+        } 
         let s1 = suffix.chars().nth(0).expect("Whoever called this function shouldn't have passed a blank suffix."); // first letter of suffix
 
         if name.ends_with(s1) {
@@ -642,7 +642,7 @@ impl Namer {
         if name.ends_with(s1) {
             // remove name last letter if it's a suffix first letter (Again)
             remove_n_chars_from_end(&mut name,1); // name = split_string_from_end(&name, 1).0.to_owned();
-        }; 
+        } 
         name + suffix
     }
 

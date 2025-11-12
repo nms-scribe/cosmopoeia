@@ -211,7 +211,7 @@ impl PolyBezier {
                 vertex1 = vertex2;
             }
 
-        };
+        }
 
         Ok(result)
 
