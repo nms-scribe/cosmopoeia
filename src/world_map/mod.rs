@@ -35,14 +35,14 @@ use crate::world_map::water_layers::RiverLayer;
 
 
 
-// FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time. 
-// The solution to this would probably require rewriting the gdal crate, so I'm not going to bother with this at this time, I'll just have to be more careful. 
+// FUTURE: It would be really nice if the Gdal stuff were more type-safe. Right now, I could try to add a Point to a Polygon layer, or a Line to a Multipoint geometry, or a LineString instead of a LinearRing to a polygon, and I wouldn't know what the problem is until run-time.
+// The solution to this would probably require rewriting the gdal crate, so I'm not going to bother with this at this time, I'll just have to be more careful.
 // A fairly easy solution is to present a struct Geometry<Type>, where Type is an empty struct or a const numeric type parameter. Then, impl Geometry<Polygon> or Geometry<Point>, etc. This is actually an improvement over the geo_types crate as well. When creating new values of the type, the geometry_type of the inner pointer would have to be validated, possibly causing an error. But it would happen early in the program, and wouldn't have to be checked again.
 
-// FUTURE: Another problem with the gdal crate is the lifetimes. Feature, for example, only requires the lifetimes because it holds a reference to 
+// FUTURE: Another problem with the gdal crate is the lifetimes. Feature, for example, only requires the lifetimes because it holds a reference to
 // a field definition pointer, which is never used except in the constructor. Once the feature is created, this reference could easily be forgotten. Layer is
 // a little more complex, it holds a phantom value of the type of a reference to its dataset. On the one hand, it also doesn't do anything with it at all,
-// on the other this reference might keep it from outliving it's dataset reference. Which, I guess, is the same with Feature, so maybe that's what they're 
+// on the other this reference might keep it from outliving it's dataset reference. Which, I guess, is the same with Feature, so maybe that's what they're
 // doing. I just wish there was another way, as it would make the TypedFeature stuff I'm trying to do below work better. However, if that were built into
 // the gdal crate, maybe it would be better.
 
@@ -86,15 +86,15 @@ impl WorldMap {
     const GDAL_DRIVER: &'static str = "GPKG";
 
     const fn new(dataset: Dataset/* , path: PathBuf*/) -> Self {
-        Self { 
-            //path, 
-            dataset 
+        Self {
+            //path,
+            dataset
         }
     }
 
     fn open_dataset<FilePath: AsRef<Path>>(path: &FilePath) -> Result<Dataset, CommandError> {
-        Ok(Dataset::open_ex(path, DatasetOptions { 
-            open_flags: GdalOpenFlags::GDAL_OF_UPDATE, 
+        Ok(Dataset::open_ex(path, DatasetOptions {
+            open_flags: GdalOpenFlags::GDAL_OF_UPDATE,
             ..Default::default()
         })?)
     }
@@ -138,31 +138,31 @@ impl WorldMap {
     }
 
     pub(crate) fn save<Progress: ProgressObserver>(&mut self, progress: &mut Progress) -> Result<(),CommandError> {
-        progress.start_unknown_endpoint(|| "Saving map."); 
+        progress.start_unknown_endpoint(|| "Saving map.");
         self.dataset.flush_cache()?;
-        progress.finish(|| "Map saved."); 
+        progress.finish(|| "Map saved.");
         Ok(())
     }
 
-    pub(crate) fn points_layer(&self) -> Result<PointLayer,CommandError> {
+    pub(crate) fn points_layer(&'_ self) -> Result<PointLayer<'_,'_>,CommandError> {
         PointLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn tiles_layer(&self) -> Result<TileLayer,CommandError> {
+    pub(crate) fn tiles_layer(&'_ self) -> Result<TileLayer<'_,'_>,CommandError> {
         TileLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn biomes_layer(&'_ self) -> Result<BiomeLayer<'_,'_>,CommandError> {
         BiomeLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn cultures_layer(&self) -> Result<CultureLayer, CommandError> {
+    pub(crate) fn cultures_layer(&'_ self) -> Result<CultureLayer<'_,'_>, CommandError> {
         CultureLayer::open_from_dataset(&self.dataset)
     }
 
 
 
- 
+
 
 }
 
@@ -178,105 +178,105 @@ impl<'impl_life> WorldMapTransaction<'impl_life> {
         }
     }
 
-    pub(crate) fn create_points_layer(&mut self, overwrite: bool) -> Result<PointLayer,CommandError> {
-        PointLayer::create_from_dataset(&mut self.dataset, overwrite)       
+    pub(crate) fn create_points_layer(&'_ mut self, overwrite: bool) -> Result<PointLayer<'_,'_>,CommandError> {
+        PointLayer::create_from_dataset(&mut self.dataset, overwrite)
 
     }
 
-    pub(crate) fn create_triangles_layer(&mut self, overwrite: bool) -> Result<TriangleLayer,CommandError> {
+    pub(crate) fn create_triangles_layer(&'_ mut self, overwrite: bool) -> Result<TriangleLayer<'_,'_>,CommandError> {
         TriangleLayer::create_from_dataset(&mut self.dataset, overwrite)
 
     }
 
-    pub(crate) fn edit_triangles_layer(&self) -> Result<TriangleLayer, CommandError> {
+    pub(crate) fn edit_triangles_layer(&'_ self) -> Result<TriangleLayer<'_,'_>, CommandError> {
         TriangleLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn create_tile_layer(&mut self, overwrite: &OverwriteTilesArg) -> Result<TileLayer,CommandError> {
+    pub(crate) fn create_tile_layer(&mut self, overwrite: &OverwriteTilesArg) -> Result<TileLayer<'_,'_>,CommandError> {
         TileLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_tiles)
 
     }
 
-    pub(crate) fn create_rivers_layer(&mut self, overwrite: &OverwriteRiversArg) -> Result<RiverLayer,CommandError> {
+    pub(crate) fn create_rivers_layer(&mut self, overwrite: &OverwriteRiversArg) -> Result<RiverLayer<'_,'_>,CommandError> {
         RiverLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_rivers)
 
     }
 
-    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: &OverwriteLakesArg) -> Result<LakeLayer,CommandError> {
+    pub (crate) fn create_lakes_layer(&mut self, overwrite_layer: &OverwriteLakesArg) -> Result<LakeLayer<'_,'_>,CommandError> {
         LakeLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_lakes)
     }
 
-    pub (crate) fn edit_lakes_layer(&self) -> Result<LakeLayer,CommandError> {
+    pub (crate) fn edit_lakes_layer(&self) -> Result<LakeLayer<'_,'_>,CommandError> {
         LakeLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn edit_tile_layer(&self) -> Result<TileLayer,CommandError> {
+    pub(crate) fn edit_tile_layer(&self) -> Result<TileLayer<'_,'_>,CommandError> {
         TileLayer::open_from_dataset(&self.dataset)
 
     }
 
-    pub(crate) fn create_biomes_layer(&mut self, overwrite: &OverwriteBiomesArg) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn create_biomes_layer(&mut self, overwrite: &OverwriteBiomesArg) -> Result<BiomeLayer<'_,'_>,CommandError> {
         BiomeLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_biomes)
     }
 
-    pub(crate) fn edit_biomes_layer(&self) -> Result<BiomeLayer,CommandError> {
+    pub(crate) fn edit_biomes_layer(&self) -> Result<BiomeLayer<'_,'_>,CommandError> {
         BiomeLayer::open_from_dataset(&self.dataset)
 
     }
 
-    pub(crate) fn create_cultures_layer(&mut self, overwrite: &OverwriteCulturesArg) -> Result<CultureLayer,CommandError> {
+    pub(crate) fn create_cultures_layer(&mut self, overwrite: &OverwriteCulturesArg) -> Result<CultureLayer<'_,'_>,CommandError> {
         CultureLayer::create_from_dataset(&mut self.dataset, overwrite.overwrite_cultures)
     }
 
-    pub(crate) fn edit_cultures_layer(&self) -> Result<CultureLayer,CommandError> {
+    pub(crate) fn edit_cultures_layer(&self) -> Result<CultureLayer<'_,'_>,CommandError> {
         CultureLayer::open_from_dataset(&self.dataset)
 
     }
 
-    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: &OverwriteTownsArg) -> Result<TownLayer,CommandError> {
+    pub(crate) fn create_towns_layer(&mut self, overwrite_layer: &OverwriteTownsArg) -> Result<TownLayer<'_,'_>,CommandError> {
         TownLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_towns)
     }
 
-    pub(crate) fn edit_towns_layer(&self) -> Result<TownLayer,CommandError> {
+    pub(crate) fn edit_towns_layer(&self) -> Result<TownLayer<'_,'_>,CommandError> {
         TownLayer::open_from_dataset(&self.dataset)
 
     }
 
-    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: &OverwriteNationsArg) -> Result<NationLayer,CommandError> {
+    pub(crate) fn create_nations_layer(&mut self, overwrite_layer: &OverwriteNationsArg) -> Result<NationLayer<'_,'_>,CommandError> {
         NationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_nations)
     }
 
-    pub(crate) fn edit_nations_layer(&self) -> Result<NationLayer,CommandError> {
+    pub(crate) fn edit_nations_layer(&self) -> Result<NationLayer<'_,'_>,CommandError> {
         NationLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: &OverwriteSubnationsArg) -> Result<SubnationLayer,CommandError> {
+    pub(crate) fn create_subnations_layer(&mut self, overwrite_layer: &OverwriteSubnationsArg) -> Result<SubnationLayer<'_,'_>,CommandError> {
         SubnationLayer::create_from_dataset(&mut self.dataset, overwrite_layer.overwrite_subnations)
     }
 
-    pub(crate) fn edit_subnations_layer(&self) -> Result<SubnationLayer,CommandError> {
+    pub(crate) fn edit_subnations_layer(&self) -> Result<SubnationLayer<'_,'_>,CommandError> {
         SubnationLayer::open_from_dataset(&self.dataset)
     }
 
-    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: &OverwriteCoastlineArg) -> Result<CoastlineLayer,CommandError> {
+    pub(crate) fn create_coastline_layer(&mut self, overwrite_coastline: &OverwriteCoastlineArg) -> Result<CoastlineLayer<'_,'_>,CommandError> {
         CoastlineLayer::create_from_dataset(&mut self.dataset, overwrite_coastline.overwrite_coastline)
     }
 
-    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: &OverwriteOceanArg) -> Result<OceanLayer,CommandError> {
+    pub(crate) fn create_ocean_layer(&mut self, overwrite_ocean: &OverwriteOceanArg) -> Result<OceanLayer<'_,'_>,CommandError> {
         OceanLayer::create_from_dataset(&mut self.dataset, overwrite_ocean.overwrite_ocean)
     }
 
     /* Uncomment this to add a line layer for playing around with ideas.
-     pub(crate) fn create_lines_layer(&mut self, overwrite: bool) -> Result<LineLayer,CommandError> {
+     pub(crate) fn create_lines_layer(&mut self, overwrite: bool) -> Result<LineLayer<'_,'_>,CommandError> {
         Ok(LineLayer::create_from_dataset(&mut self.dataset, overwrite)?)
     }
     */
 
-    pub(crate) fn create_properties_layer(&mut self) -> Result<PropertyLayer,CommandError> {
+    pub(crate) fn create_properties_layer(&mut self) -> Result<PropertyLayer<'_,'_>,CommandError> {
         PropertyLayer::create_from_dataset(&mut self.dataset,true)
     }
 
-    pub(crate) fn edit_properties_layer(&self) -> Result<PropertyLayer,CommandError> {
+    pub(crate) fn edit_properties_layer(&self) -> Result<PropertyLayer<'_,'_>,CommandError> {
         PropertyLayer::open_from_dataset(&self.dataset)
     }
 

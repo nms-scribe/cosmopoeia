@@ -22,7 +22,7 @@ console = "0.15.7"
 # using the feature requires you to install libclang:
 # https://rust-lang.github.io/rust-bindgen/requirements.html
 # for arch linux: `yay -S clang`
-gdal = { version = "0.18.0", features = ["array", "bindgen"] }
+gdal = { version = "0.19.0", features = ["array", "bindgen"] }
 #gdal-sys = "0.10.0" -- don't need this since we don't need to fix it anymore.
 geo = { version = "0.27.0", default-features = false, features = ["spade"] }
 geo-types = { version = "0.7.12", default-features = false }
@@ -210,7 +210,7 @@ str_split_at_newline = "warn"
 str_to_string = "warn"
 string_lit_chars_any = "warn"
 string_slice = "warn"
-string_to_string = "warn"
+#string_to_string = "warn"
 struct_field_names = "warn"
 suboptimal_flops = "warn"
 suspicious_operation_groupings = "warn"

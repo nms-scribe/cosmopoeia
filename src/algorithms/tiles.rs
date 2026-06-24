@@ -62,17 +62,17 @@ pub(crate) fn generate_random_tiles<Random: Rng, Progress: ProgressObserver>(ran
 
     progress.announce("Generate random tiles");
 
-    // yes, the random variable is a mutable reference, and PointGenerator doesn't take a reference as it's generic, 
+    // yes, the random variable is a mutable reference, and PointGenerator doesn't take a reference as it's generic,
     // but the reference implements the random number generator stuff so it works.
     // I assume if I was leaking the PointGenerator out of the function that I would get an error.
     let mut points = PointGenerator::new(random, extent.clone(), shape.clone(), tile_count);
     let mut triangles = DelaunayGenerator::new(points.to_geometry_collection(progress)?, shape.clone());
-    
+
     triangles.start(progress)?;
     let mut voronois = VoronoiGenerator::new(triangles,extent,shape)?;
-    
+
     voronois.start(progress)?;
-    
+
     Ok(voronois)
 }
 
@@ -107,7 +107,7 @@ pub(crate) fn load_tile_layer<Generator: Iterator<Item=Result<NewTileSite,Comman
 pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> {
 
     // NOTE: At one point I tried an algorithm which iterated through each polygon, set a spatial index for its bounds, then
-    // found all non-disjoint polygons in that index to mark them as a neighbor. That was slow. This is hugely faster. The old way took about 
+    // found all non-disjoint polygons in that index to mark them as a neighbor. That was slow. This is hugely faster. The old way took about
     // 5 seconds for 10,000 tiles, and this one was almost instantaneous for that number. I blame my algorithm for curvifying
     // polygons for coming up with this idea.
 
@@ -132,17 +132,17 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
     } else {
         None
     };
-    
+
     let reaches_north_pole = layer_extent.reaches_north_pole();
     let reaches_south_pole = layer_extent.reaches_south_pole();
 
-    // Find all tiles which share the same vertex. 
+    // Find all tiles which share the same vertex.
     // And if we're wrapping, keep a list of those that line up along east and west lines
     let mut tile_map = layer.read_features().into_entities_index_for_each::<_,TileForCalcNeighbors,_>(|fid,tile| {
         let ring = tile.geometry().get_ring(0)?;
         let usable_points_len = ring.len() - 1;
         // rings duplicate points at either end, so I need to skip the last.
-        for point in ring.into_iter().take(usable_points_len) { 
+        for point in ring.into_iter().take(usable_points_len) {
             if let Some(list) = east_west_list.as_mut() {
                 if (point.0 - layer_extent.east()).abs() < f64::EPSILON {
                     list.push((fid.clone(),point.1,Side::East))
@@ -170,7 +170,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
 
         #[allow(clippy::iter_over_hash_type)] // TODO: Maybe go through and find where I've allowed this, and change those to Sortable HashSets and HashMaps, just to allow for better reproducibility
         for tile in &tiles {
-            
+
             // I can't calculate the angle yet, because I'm still deduplicating any intersections. I'll do that in the next loop.
             let neighbors = tiles.iter().filter(|neighbor| *neighbor != tile).cloned();
 
@@ -215,7 +215,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
                 Some(neighbors) => {
                     // key existed in the map, so turn it "off", no more neighbors will be assigned to it,
                     // so add those neighbors to the cross_neight_set
-                    tile_map.try_get_mut(&id)?.cross_neighbor_set_mut().extend(neighbors.into_iter());
+                    tile_map.try_get_mut(&id)?.cross_neighbor_set_mut().extend(neighbors);
                 },
             }
 
@@ -267,11 +267,11 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
             #[allow(clippy::iter_over_hash_type)] // TODO: Maybe go through and find where I've allowed this, and change those to Sortable HashSets and HashMaps, just to allow for better reproducibility
             for neighbor_id in tile.cross_neighbor_set() {
                 let neighbor_angle = calculate_neighbor_angle(tile, neighbor_id, &tile_map, &world_shape, true)?;
-    
+
                 neighbors.push(NeighborAndDirection(Neighbor::CrossMap(neighbor_id.clone(),edge.clone()),neighbor_angle))
-    
+
             }
-    
+
         }
 
         // recalculate edge for the purposes of creating OffMap tiles
@@ -323,7 +323,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         if let Some(edge) = edge {
 
             neighbors.push(NeighborAndDirection(Neighbor::OffMap(edge.clone()), edge.direction()))
-            
+
         }
 
         // sort the neighbors by tile_id, to help ensure random reproducibility
@@ -334,7 +334,7 @@ pub(crate) fn calculate_tile_neighbors<Progress: ProgressObserver>(target: &mut 
         layer.update_feature(feature)?;
 
     }
-    
+
     Ok(())
 
 }
@@ -350,7 +350,7 @@ fn calculate_neighbor_angle(tile: &TileForCalcNeighbors, neighbor_id: &IdRef, ti
         } else {
             neighbor.site().clone()
         };
-        
+
         tile_site.shaped_bearing(&neighbor_site,world_shape)
 
     };
@@ -406,7 +406,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
         } ).watch(progress, "Gathering tiles.", "Tiles gathered.");
 
         if let Some(tile) = iterator.next() {
-            let first_tile: MultiPolygon = tile?.geometry()?.try_into()?; 
+            let first_tile: MultiPolygon = tile?.geometry()?.try_into()?;
 
             // it's much faster to union two geometries rather than union them one at a time.
             let next_tiles = MultiPolygon::from_polygon_results(iterator.map(|f| f?.geometry()))?;
@@ -423,7 +423,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
 
     progress.start_unknown_endpoint(|| "Creating ocean polygon.");
     // Create base ocean tile before differences.
-    let ocean = tile_layer.get_extent()?.create_boundary_geometry()?; 
+    let ocean = tile_layer.get_extent()?.create_boundary_geometry()?;
     progress.finish(|| "Ocean polygon created.");
 
     let (land_polygons,ocean) = if let Some(tile_union) = tile_union {
@@ -436,7 +436,7 @@ pub(crate) fn calculate_coastline<Progress: ProgressObserver>(target: &mut World
 
                 // snip it into the edge of the extent_polygon
                 let new_polygon = new_polygon.intersection(&extent_polygon)?;
-        
+
                 // the last one returns a variant (multi?)polygon, so extend it as an iterator of polygons instead.
                 polygons.extend(new_polygon);
             }
@@ -507,13 +507,13 @@ impl Theme for CultureTheme {
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, CultureSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
-        target.edit_cultures_layer()        
+        target.edit_cultures_layer()
     }
 
     fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, CultureSchema, CultureFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
         layer.read_features()
     }
-    
+
 }
 
 
@@ -535,12 +535,12 @@ impl Theme for BiomeTheme {
     }
 
     fn get_theme_id(&self, tile: &TileForBiomeDissolve) -> Result<Option<IdRef>, CommandError> {
-        let biome = &tile.biome(); 
+        let biome = &tile.biome();
         Ok::<_,CommandError>(Some(self.biome_id_map.try_get(biome)?.fid().clone()))
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, BiomeSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
-        target.edit_biomes_layer()        
+        target.edit_biomes_layer()
     }
 
     fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, BiomeSchema, BiomeFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
@@ -548,7 +548,7 @@ impl Theme for BiomeTheme {
     }
 
 
-    
+
 }
 
 
@@ -569,7 +569,7 @@ impl Theme for NationTheme {
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, NationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
-        target.edit_nations_layer()        
+        target.edit_nations_layer()
     }
 
     fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, NationSchema, NationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
@@ -577,7 +577,7 @@ impl Theme for NationTheme {
     }
 
 
-    
+
 }
 
 
@@ -599,7 +599,7 @@ impl Theme for SubnationTheme {
     }
 
     fn edit_theme_layer<'layer,'feature>(target: &'layer mut WorldMapTransaction) -> Result<MapLayer<'layer,'feature, SubnationSchema, Self::Feature<'feature>>, CommandError> where 'layer: 'feature {
-        target.edit_subnations_layer()        
+        target.edit_subnations_layer()
     }
 
     fn read_theme_features<'layer,'feature>(layer: &'layer mut MapLayer<'layer, 'feature, SubnationSchema, SubnationFeature<'feature>>) -> TypedFeatureIterator<'feature,Self::ThemeSchema,Self::Feature<'feature>> where 'layer: 'feature {
@@ -607,11 +607,11 @@ impl Theme for SubnationTheme {
     }
 
 
-    
+
 }
 
 
-pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError> 
+pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: Theme>(target: &mut WorldMapTransaction, progress: &mut Progress) -> Result<(),CommandError>
 {
 
     let mut new_polygon_map: HashMap<IdRef, _> = HashMap::new();
@@ -646,7 +646,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                         }
                     }
                     Neighbor::CrossMap(_,_) | Neighbor::OffMap(_) => (), // don't dissolve across the latitude. They will still be mapped, but they should be in separate polygons. And if it's off the map, ignore it.
-                } 
+                }
             }
 
             if usable_neighbors.is_empty() {
@@ -682,7 +682,7 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
                 MultiPolygon::from_polygons([])?
             } else {
                 let mut geometries = geometries.into_iter();
-                let first = geometries.next().expect("Why would next fail if the len > 0?"); 
+                let first = geometries.next().expect("Why would next fail if the len > 0?");
                 let remaining = MultiPolygon::from_combined(geometries)?;
 
                 first.union(&remaining)?.try_into()?
@@ -705,14 +705,13 @@ pub(crate) fn dissolve_tiles_by_theme<Progress: ProgressObserver, ThemeType: The
 
         let mut feature: ThemeType::Feature<'_> = edit_polygon_layer.try_feature_by_id(&fid)?;
         feature.set_geometry(geometry)?;
-        edit_polygon_layer.update_feature(feature)?;    
+        edit_polygon_layer.update_feature(feature)?;
 
     }
 
     for (key,name) in empty_features {
         progress.warning(|| format!("Feature {} ({}) in {} is not used in any tiles.",name,key,ThemeType::ThemeSchema::LAYER_NAME))
     }
- 
+
     Ok(())
 }
-

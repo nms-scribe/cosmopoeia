@@ -60,7 +60,7 @@ pub(crate) fn generate_towns<Random: Rng, Progress: ProgressObserver, Culture: N
     let mut towns_layer = target.create_towns_layer(overwrite_layer)?;
 
     let mut placed_towns = HashMap::new();
-    for town in capitals.into_iter().chain(towns.into_iter()).watch(progress,"Writing towns.","Towns written.") {
+    for town in capitals.into_iter().chain(towns).watch(progress,"Writing towns.","Towns written.") {
         let (ScoredTileForTowns{tile,..},is_capital) = town;
         let culture = tile.culture();
         let namer = Culture::get_namer(culture.as_ref().map(|c| culture_lookup.try_get(c)).transpose()?, namers)?;

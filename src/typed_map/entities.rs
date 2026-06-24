@@ -120,7 +120,7 @@ impl<SchemaType: Schema, EntityType: Entity<SchemaType>> EntityIndex<SchemaType,
         self.inner.pop()
     }
 
-    pub(crate) fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<FinishMessage, Progress, SchemaType, EntityType> {
+    pub(crate) fn watch_queue<StartMessage: AsRef<str>, FinishMessage: AsRef<str>, Progress: ProgressObserver>(self, progress: &'_ mut Progress, start: StartMessage, finish: FinishMessage) -> EntityIndexQueueWatcher<'_, FinishMessage, Progress, SchemaType, EntityType> {
         progress.start(|| (start,Some(self.len())));
         EntityIndexQueueWatcher {
             finish,

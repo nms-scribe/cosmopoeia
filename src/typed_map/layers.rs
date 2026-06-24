@@ -229,7 +229,7 @@ macro_rules! layer {
 
                 $crate::hide_item!{$(hide_read $hide_read)?,
                     // FUTURE: If I can ever get around the lifetime bounds, this should be in the main MapLayer struct.
-                    pub(crate) fn read_features(&mut self) -> TypedFeatureIterator<[<$name Schema>],[<$name Feature>]> {
+                    pub(crate) fn read_features(&'_ mut self) -> TypedFeatureIterator<'_, [<$name Schema>],[<$name Feature>]<'_>> {
                         TypedFeatureIterator::from(self.layer_mut().features())
                     }
                 }
@@ -340,7 +340,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             }
         }
         feature.create(&self.layer)?;
-        Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
+        Ok(IdRef::new(feature.fid().ok_or(CommandError::MissingField("fid"))?))
     }
 
     pub(crate) fn add_feature_without_geometry(&self, field_names: &[&str], field_values: &[Option<FieldValue>]) -> Result<IdRef,CommandError> {
@@ -356,7 +356,7 @@ impl<'layer, 'feature, SchemaType: Schema, Feature: TypedFeature<'feature, Schem
             }
         }
         feature.create(&self.layer)?;
-        Ok(IdRef::new(feature.fid().ok_or_else(|| CommandError::MissingField("fid"))?))
+        Ok(IdRef::new(feature.fid().ok_or(CommandError::MissingField("fid"))?))
 
     }
 

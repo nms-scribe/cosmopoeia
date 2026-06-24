@@ -20,7 +20,7 @@ pub(crate) struct FieldTypeDocumentation {
     description: String, // More detailed description for the format
     storage_type: String, // the concrete field type in the database
     syntax: String, // syntax for the format
-    sub_types: Vec<FieldTypeDocumentation>
+    sub_types: Vec<Self>
 
 }
 
@@ -68,7 +68,7 @@ pub(crate) trait TypedField: Sized + DocumentedFieldType {
     const STORAGE_TYPE: OGRFieldType::Type;
 
     fn get_required<FieldType>(value: Option<FieldType>, field_id: &'static str) -> Result<FieldType,CommandError> {
-        value.ok_or_else(|| CommandError::MissingField(field_id))
+        value.ok_or(CommandError::MissingField(field_id))
     }
 
     fn get_field(feature: &Feature, field_name: &str, field_id: &'static str) -> Result<Self,CommandError>;

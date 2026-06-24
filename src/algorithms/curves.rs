@@ -175,7 +175,7 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                         let first = segments.remove(0);
                         let last = segments.last_mut().expect("Why wouldn't there be a last if the length is greater than 1?");
                         last.truncate(last.len() - 1);
-                        last.extend(first.into_iter());
+                        last.extend(first);
                     }
 
                 }
@@ -183,10 +183,11 @@ fn break_segments<'feature, ThemeType: Theme, Progress: ProgressObserver>(read_f
                 // now cache them and map them to ids, because I only want to curvify a line segment once.
                 let mut unique_segment_ids = Vec::new();
                 for segment in segments {
-                    let mut matched_id = None;
-                    if let Some(match_segments) = segment_cache.get(segment.last().expect("Why wouldn't this key be here if we just inserted it?")) { // look from last first, because it's the more likely we're matching the reversed order.
-                        matched_id = find_segment_match(match_segments, &segment,true);
-                    }
+                    let mut matched_id = if let Some(match_segments) = segment_cache.get(segment.last().expect("Why wouldn't this key be here if we just inserted it?")) { // look from last first, because it's the more likely we're matching the reversed order.
+                        find_segment_match(match_segments, &segment,true)
+                    } else {
+                        None
+                    };
 
                     if matched_id.is_none() {
                         // nothing was found, so look through in the ordinary order, there's a small chance it might match.

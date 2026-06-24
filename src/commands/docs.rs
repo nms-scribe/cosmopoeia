@@ -129,7 +129,7 @@ The world file output by Cosmpoeia is stored in a Geopackage (GPKG) file. This i
     }
 
     Ok(())
-    
+
 }
 
 
@@ -144,7 +144,7 @@ const fn instance_type_name(instance_type: InstanceType) -> &'static str {
         InstanceType::String => "String",
         InstanceType::Integer => "Integer",
     }
-    
+
 }
 
 fn join_iter<Str: AsRef<str>, Iter: Iterator<Item = Str>>(iter: Iter, delimiter: &str) -> String {
@@ -160,8 +160,8 @@ fn join_iter<Str: AsRef<str>, Iter: Iterator<Item = Str>>(iter: Iter, delimiter:
 // The idea behind this struct is to catch major changes to the json schema in compilation.
 // properties not listed here are not supported, and will cause an error.
 struct UsableSchema {
-    any_of: Option<Vec<UsableSchema>>,
-    one_of: Option<Vec<UsableSchema>>,
+    any_of: Option<Vec<Self>>,
+    one_of: Option<Vec<Self>>,
     format: Option<String>,
     enum_values: Option<Vec<serde_json::Value>>,
     title: Option<String>,
@@ -174,9 +174,9 @@ struct UsableSchema {
     pattern: Option<String>,
     min_items: Option<u32>,
     max_items: Option<u32>,
-    items: Option<Vec<UsableSchema>>,
+    items: Option<Vec<Self>>,
     required_props: BTreeSet<String>,
-    properties: Option<BTreeMap<String, UsableSchema>>,
+    properties: Option<BTreeMap<String, Self>>,
     additional_properties: Option<Box<UsableSchemaOrBoolean>>
 }
 
@@ -201,8 +201,8 @@ impl UsableSchema {
     fn from(schema: SchemaObject) -> Self {
 
         struct UsableObjectSchema {
-            required_props: BTreeSet<String>, 
-            properties: Option<BTreeMap<String, UsableSchema>>, 
+            required_props: BTreeSet<String>,
+            properties: Option<BTreeMap<String, UsableSchema>>,
             additional_properties: Option<Box<UsableSchemaOrBoolean>>
         }
 
@@ -239,12 +239,12 @@ impl UsableSchema {
                 (BTreeSet::default(),None,None)
             };
             UsableObjectSchema {
-                required_props, 
-                properties, 
+                required_props,
+                properties,
                 additional_properties
             }
         }
-        
+
         fn usable_array_attribs(array: Option<Box<ArrayValidation>>) -> (Option<u32>, Option<u32>, Option<Vec<UsableSchema>>) {
             let (min_items,max_items,items) = if let Some(array) = array {
                 let ArrayValidation{min_items,max_items,unique_items,items,additional_items,contains} = *array;
@@ -279,7 +279,7 @@ impl UsableSchema {
             };
             (min_items, max_items, items)
         }
-        
+
         fn usable_string_attribs(string: Option<Box<StringValidation>>) -> (Option<u32>, Option<u32>, Option<String>) {
             let (min_length,max_length,pattern) = if let Some(string) = string {
                 let StringValidation{min_length,max_length,pattern} = *string;
@@ -289,9 +289,9 @@ impl UsableSchema {
             };
             (min_length, max_length, pattern)
         }
-        
+
         fn usable_number_attribs(number: Option<Box<NumberValidation>>) -> Option<f64> {
-            
+
             if let Some(number) = number {
                 let NumberValidation{exclusive_minimum,minimum,maximum,exclusive_maximum,multiple_of} = *number;
                 if exclusive_minimum.is_some() {
@@ -311,8 +311,8 @@ impl UsableSchema {
                 None
             }
         }
-            
-            
+
+
         fn usable_subschemas(subschemas: Option<Box<SubschemaValidation>>) -> (Option<Vec<UsableSchema>>, Option<Vec<UsableSchema>>) {
             let (any_of,one_of) = if let Some(subschemas) = subschemas {
                 let SubschemaValidation{any_of,one_of,not, all_of, if_schema, then_schema, else_schema } = *subschemas;
@@ -349,8 +349,8 @@ impl UsableSchema {
             };
             (any_of, one_of)
         }
-    
-    
+
+
         let SchemaObject {
             metadata,
             instance_type,
@@ -365,11 +365,11 @@ impl UsableSchema {
             reference,
             extensions,
         } = schema;
-    
+
         if !extensions.is_empty() {
             unimplemented!("Extensions are not supported yet.")
         }
-    
+
         if const_value.is_some() {
             unimplemented!("const_value isn't supported yet.");
         }
@@ -383,7 +383,7 @@ impl UsableSchema {
         } else {
             None
         };
-    
+
         // metadata
         let (title,description,default) = if let Some(metadata) = metadata {
             let Metadata{ title, description, default, .. } = *metadata;
@@ -391,12 +391,12 @@ impl UsableSchema {
         } else {
             (None,None,None)
         };
-    
+
         // default value
         if default.is_some() {
             unimplemented!("default value isn't supported yet.");
         }
-    
+
         let instance_types = if let Some(instance_type) = &instance_type {
             match instance_type {
                 SingleOrVec::Single(instance_type) => Some(vec![**instance_type]),
@@ -405,35 +405,35 @@ impl UsableSchema {
         } else {
             None
         };
-    
+
         let minimum = usable_number_attribs(number);
-    
+
         let (min_length, max_length, pattern) = usable_string_attribs(string);
-    
+
         let (min_items, max_items, items) = usable_array_attribs(array);
-    
+
         let UsableObjectSchema{required_props, properties, additional_properties} = usable_object_attribs(object);
 
         let (any_of, one_of) = usable_subschemas(subschemas);
 
-        Self { 
-            any_of, 
-            one_of, 
-            format, 
-            enum_values, 
-            title, description, 
-            instance_types, 
-            reference, 
-            minimum, 
-            min_length, 
-            max_length, 
-            pattern, 
-            min_items, 
-            max_items, 
-            items, 
-            required_props, 
-            properties, 
-            additional_properties 
+        Self {
+            any_of,
+            one_of,
+            format,
+            enum_values,
+            title, description,
+            instance_types,
+            reference,
+            minimum,
+            min_length,
+            max_length,
+            pattern,
+            min_items,
+            max_items,
+            items,
+            required_props,
+            properties,
+            additional_properties
         }
     }
 
@@ -586,7 +586,7 @@ fn write_schema(schema: UsableSchema, name: Option<(String,bool)> /* name, code_
 
     }
 
-    
+
 
     write_description(&schema, has_term, target)?;
 
@@ -737,11 +737,11 @@ impl Task for Docs {
         write_command_help(command_help)?;
         let world_file_schema = self.docs.join("World File Schema.md");
         write_world_file_schema_docs(world_file_schema)?;
-        
+
         let terrain_task_schema = self.schemas.join("terrain_tasks.schema.json");
         let terrain_task_doc = self.docs.join("Recipe Set Schema.md");
         write_schema_docs::<HashMap<String,Vec<TerrainCommand>>>("Terrain Recipe Set",terrain_task_schema,terrain_task_doc)?;
-        
+
         let culture_set_schema = self.schemas.join("cultures.schema.json");
         let culture_set_doc = self.docs.join("Cultures Schema.md");
         write_schema_docs::<Vec<CultureSetItemSource>>("Culture Set",culture_set_schema,culture_set_doc)?;
@@ -752,7 +752,7 @@ impl Task for Docs {
         Ok(())
 
         /*
-        
+
         FUTURE: Getting markdown from the schemas, I've tried
         - https://github.com/adobe/jsonschema2md
            resulted in: TypeError [ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string. Received undefined
@@ -766,4 +766,3 @@ impl Task for Docs {
          */
     }
 }
-

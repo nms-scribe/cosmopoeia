@@ -38,15 +38,15 @@ impl BiomeMatrix {
     pub(crate) const fn ocean(&self) -> &String {
         &self.ocean
     }
-    
+
     pub(crate) const fn glacier(&self) -> &(String,f64) {
         &self.glacier
     }
-    
+
     pub(crate) const fn wetland(&self) -> &(String,f64) {
         &self.wetland
     }
-    
+
     pub(crate) const fn matrix(&self) -> &[[String; 26]; 5] {
         &self.matrix
     }
@@ -234,9 +234,9 @@ impl BiomeSchema {
 
         }
         // check for missing data
-        let wetland = wetland.ok_or_else(|| CommandError::MissingWetlandBiome)?;
-        let glacier = glacier.ok_or_else(|| CommandError::MissingGlacierBiome)?;
-        let ocean = ocean.ok_or_else(|| CommandError::MissingOceanBiome)?;
+        let wetland = wetland.ok_or(CommandError::MissingWetlandBiome)?;
+        let glacier = glacier.ok_or(CommandError::MissingGlacierBiome)?;
+        let ocean = ocean.ok_or(CommandError::MissingOceanBiome)?;
         for (moisture,moisture_dimension) in matrix.iter().enumerate() {
             for (temperature,temperature_dimension) in moisture_dimension.iter().enumerate() {
                 if temperature_dimension.is_empty() {
@@ -244,11 +244,11 @@ impl BiomeSchema {
                 }
             }
         }
-        Ok(BiomeMatrix { 
-            matrix, 
-            ocean, 
-            glacier, 
-            wetland 
+        Ok(BiomeMatrix {
+            matrix,
+            ocean,
+            glacier,
+            wetland
         })
     }
 

@@ -26,7 +26,7 @@ use crate::typed_map::entities::NamedEntity as _;
 #[derive(Clone,Serialize,Deserialize,JsonSchema)]
 pub(crate) enum TilePreference {
     // s[i] -> Habitability
-    Habitability, 
+    Habitability,
     // t[i] -> ShoreDistance
     ShoreDistance,
     // h[i] -> Elevation,
@@ -38,20 +38,20 @@ pub(crate) enum TilePreference {
     // bd(i, *\[([^\]]+)]) -> Biomes([$1],4)
     // bd(i, *\[([^\]]+)], *(\d+))) -> Biomes([$1],$2)
     // FUTURE: Unfortunately, this requires the culture sets to be associated with a specific biome set. I may want to revisit this someday.
-    Biomes(Vec<String>, f64), // list of biomes, fee for wrong biome 
+    Biomes(Vec<String>, f64), // list of biomes, fee for wrong biome
     // sf(i) => OceanCoast(4)
     // sf(i, *(\d+)) => OceanCoast($1)
     OceanCoast(f64), // fee for not being on ocean
-    Negate(Box<TilePreference>),
-    Multiply(Vec<TilePreference>),
-    Divide(Vec<TilePreference>),
-    Add(Vec<TilePreference>),
-    Pow(Box<TilePreference>,f64)
+    Negate(Box<Self>),
+    Multiply(Vec<Self>),
+    Divide(Vec<Self>),
+    Add(Vec<Self>),
+    Pow(Box<Self>,f64)
 }
 
 
 impl TilePreference {
-    
+
     pub(crate) fn get_value(&self, tile: &TileForCulturePrefSorting, max_habitability: f64) -> Result<OrderedFloat<f64>,CommandError> {
 
         // formulaes borrowed from AFMG
@@ -74,7 +74,7 @@ impl TilePreference {
             Self::Negate(pref) => -pref.get_value(tile, max_habitability)?,
             Self::Multiply(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceMultiplyMissingData)?.get_value(tile, max_habitability)?; 
+                let mut result = prefs.next().ok_or(CommandError::TilePreferenceMultiplyMissingData)?.get_value(tile, max_habitability)?;
                 for pref in prefs {
                     result *= pref.get_value(tile, max_habitability)?
                 }
@@ -82,7 +82,7 @@ impl TilePreference {
             },
             Self::Divide(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceDivideMissingData)?.get_value(tile, max_habitability)?; 
+                let mut result = prefs.next().ok_or(CommandError::TilePreferenceDivideMissingData)?.get_value(tile, max_habitability)?;
                 for pref in prefs {
                     result /= pref.get_value(tile, max_habitability)?
                 }
@@ -90,7 +90,7 @@ impl TilePreference {
             },
             Self::Add(prefs) => {
                 let mut prefs = prefs.iter();
-                let mut result = prefs.next().ok_or_else(|| CommandError::TilePreferenceAddMissingData)?.get_value(tile, max_habitability)?; 
+                let mut result = prefs.next().ok_or(CommandError::TilePreferenceAddMissingData)?.get_value(tile, max_habitability)?;
                 for pref in prefs {
                     result += pref.get_value(tile, max_habitability)?
                 }
@@ -98,7 +98,7 @@ impl TilePreference {
             },
             Self::Pow(pref, pow) => OrderedFloat::from(pref.get_value(tile, max_habitability)?.powf(*pow)),
         })
-        
+
     }
 
 }
@@ -139,7 +139,7 @@ impl CultureSetItem {
                     namers.list_names().choose(rng).clone().clone()
                 },
             };
-    
+
             let name = if let Some(name) = &value.name {
                 name.clone()
             } else {
@@ -148,12 +148,12 @@ impl CultureSetItem {
             };
 
             let probability = value.probability.unwrap_or(1.0);
-    
+
             let preferences = match &value.preferences {
                 Some(preferences) => preferences.clone(),
                 None => TilePreference::Habitability
             };
-    
+
             result.push(Self {
                 name,
                 namer,
@@ -214,13 +214,13 @@ impl CultureSet {
         let mut ser = JSONSerializer::with_formatter(&mut buf, formatter);
         self.source.serialize(&mut ser).map_err(|e| CommandError::CultureSourceWrite(format!("{e}")))?;
         String::from_utf8(buf).map_err(|e| CommandError::CultureSourceWrite(format!("{e}")))
-    
+
     }
 
     fn add_culture(&mut self, data: CultureSetItem) {
         self.source.push(data);
     }
-    
+
     pub(crate) fn extend_from_json<Reader: Read, Random: Rng>(&mut self, source: BufReader<Reader>, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
         let data = from_json_reader::<_,Vec<CultureSetItemSource>>(source).map_err(|e| CommandError::CultureSourceRead(format!("{e}")))?;
         for datum in data {
@@ -231,7 +231,7 @@ impl CultureSet {
 
         Ok(())
 
-        
+
     }
 
     pub(crate) fn extend_from_file<AsPath: AsRef<Path>, Random: Rng>(&mut self, file: AsPath, rng: &mut Random, namers: &mut NamerSet) -> Result<(),CommandError> {
@@ -261,7 +261,7 @@ impl CultureSet {
 
     pub(crate) fn select<Random: Rng>(&self, rng: &mut Random, culture_count: usize) -> Vec<CultureSetItem> {
 
-        // This algorithm taken from AFMG. 
+        // This algorithm taken from AFMG.
 
         let mut result = Vec::new();
         let mut available = self.source.clone();
@@ -272,7 +272,7 @@ impl CultureSet {
                 let choice = available.choose_index(rng);
                 if (i >= 200) || rng.gen_bool(available[choice].probability) {
                     break choice;
-                }    
+                }
             };
             result.push(available.remove(choice));
         }

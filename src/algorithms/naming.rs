@@ -47,7 +47,7 @@ impl<'data,Progress: ProgressObserver>  NamerLoadObserver<'data,Progress> {
 
     fn start_known_endpoint<Callback: FnOnce() -> usize>(&mut self, callback: Callback) {
         let count = callback();
-        self.visible = count > 10000; 
+        self.visible = count > 10000;
         if self.visible {
             self.progress.start_known_endpoint(|| (format!("Preparing names for {}",self.name),count))
         }
@@ -94,7 +94,7 @@ impl StateNameBehavior {
             // no, this doesn't keep trimming until they're gone, AFMG didn't either.
             if let Some(name) = name.strip_suffix(suffix) {
                 return name.to_owned();
-            } 
+            }
         }
         name
 
@@ -145,7 +145,7 @@ enum StateSuffixBehavior {
     Suffix(String), // use the specified suffix instead of default
     ProbableSuffix(f64,String), // if a random number is less than the specified apply the specified suffix
     ProbableSuffixIfShorter(usize,f64,String), // if the word is less than the specified length, and a random number is less than specified, apply the specified suffix
-    Choice(Vec<StateSuffixBehavior>), // each choice is tried in turn until one returns a suffix or the end is reached.
+    Choice(Vec<Self>), // each choice is tried in turn until one returns a suffix or the end is reached.
 }
 
 impl StateSuffixBehavior {
@@ -153,7 +153,7 @@ impl StateSuffixBehavior {
     // I'm using a Result here not for errors, but to indicate a third option to stop the processing and do not return a suffix at all.
     // If an Ok(None) result is returned from the algorithm, a default suffix will be applied. If Err(()) is returned, no suffix
     // will be applied at all.
-    fn apply<Random: Rng>(&self, rng: &mut Random, name: &String) -> Result<Option<String>,()> { 
+    fn apply<Random: Rng>(&self, rng: &mut Random, name: &String) -> Result<Option<String>,()> {
         match self {
             Self::NoSuffix => Err(()),
             Self::Default => Ok(None), // let the caller apply the default.
@@ -199,7 +199,7 @@ mod namer_method_source {
         Markov(MarkovSource),
         ListPicker(Vec<String>)
     }
-    
+
 }
 
 use namer_method_source::NamerMethodSource;
@@ -207,7 +207,7 @@ use std::io::Read;
 use core::mem;
 
 
-#[derive(Serialize,Deserialize,JsonSchema)] 
+#[derive(Serialize,Deserialize,JsonSchema)]
 pub(crate) struct NamerSource {
     name: String,
     #[serde(flatten)]
@@ -246,7 +246,7 @@ impl MarkovGenerator {
             let mut minimum_length = usize::MAX;
 
             progress.start_known_endpoint(|| array.len());
-    
+
             for (j,n) in array.iter().enumerate() {
                 // for standard deviation calculation
                 squared_distance += (n.len() as f64 - mean_length).powi(2);
@@ -255,41 +255,41 @@ impl MarkovGenerator {
                 let word: Vec<char> = n.trim().chars().collect();
                 let basic = word.iter().all(|c| matches!(c, '\u{0000}'..='\u{007f}')); // basic chars and English rules can be applied
 
-    
+
                 // split word into pseudo-syllables
                 let mut syllable = String::new();
-                let mut i = 0; 
+                let mut i = 0;
                 while i < word.len() {
-                    let prev_char = if i == 0 { 
-                        None 
-                    } else { 
-                        word.get(i-1).copied() 
+                    let prev_char = if i == 0 {
+                        None
+                    } else {
+                        word.get(i-1).copied()
                     }; // pre-onset letter
-                    let mut vowel_found = false; 
-    
+                    let mut vowel_found = false;
+
                     for c in i..word.len() {
                         let current_char = word[c];
                         let next_char = word.get(c + 1); // next char
                         syllable.push(current_char);
-                        if (syllable == " ") || (syllable == "-") { 
+                        if (syllable == " ") || (syllable == "-") {
                             // syllable starts with space or hyphen
-                            break 
-                        } 
+                            break
+                        }
                         let next_char = match next_char {
                             Some(' ' | '-') | None => break, // definitely the end of a syllable, no need to check.
                             Some(next_char) => *next_char
                         };
-    
+
                         if is_vowel(current_char) {
                             vowel_found = true
                         } // check if letter is vowel
-    
+
                         // do not split some digraphs // FUTURE: NMS: These rules should depend on the language, which should provide a list of diphthongs
                         let is_digraph = if current_char == 'y' && next_char == 'e' {
-                            // 'ye' 
+                            // 'ye'
                             true
                         } else if basic {
-                            // English-like 
+                            // English-like
                             if (current_char == 'o' && next_char == 'o') || // 'oo'
                                (current_char == 'e' && next_char == 'e') || // 'ee'
                                (current_char == 'a' && next_char == 'e') || // 'ae'
@@ -301,39 +301,39 @@ impl MarkovGenerator {
                         } else {
                             false
                         };
-                        
+
                         if !is_digraph {
                             if is_vowel(current_char) && next_char == current_char {
                                 // two same vowels in a row
                                 break
-                            } 
+                            }
                             if vowel_found && word.get(c + 2).map_or_else(|| false, is_ref_vowel) {
                                 // syllable has vowel and additional vowel is expected soon
                                 break
-                            } 
+                            }
                         }
-    
+
                         if syllable.len() >= 5 {
                             // syllable is long enough
                             break;
                         }
                     }
-    
-                    i += syllable.len().min(1); 
+
+                    i += syllable.len().min(1);
                     match chain.get_mut(&prev_char) {
                         None => {
                             _ = chain.insert(prev_char,vec![syllable]);
                         },
                         Some(entry) => entry.push(syllable),
                     }
-                    
+
                     syllable = String::new();
                 }
                 progress.update(|| j);
             }
 
             let standard_deviation = (squared_distance/name_count).sqrt();
-    
+
             progress.finish();
 
             let length_distribution = Normal::new(mean_length, standard_deviation).map_err(|e| CommandError::NamerDistributionError(name.to_owned(),format!("{e}")))?;
@@ -347,7 +347,7 @@ impl MarkovGenerator {
                     minimum_length
                 })
             }
-    
+
         }
 
     }
@@ -355,7 +355,7 @@ impl MarkovGenerator {
 
     fn new<Progress: ProgressObserver>(name: &str, base: MarkovSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
         let Chain{string_map: chain,length_distribution,minimum_length} = Self::calculate_chain(name,&base.seed_words,progress)?;
-        
+
 
         Ok(Self {
             chain,
@@ -375,7 +375,7 @@ impl MarkovGenerator {
         let mut cur = choices.choose(rng).clone();
         let mut word = String::new();
         for _ in 0..20 {
-       
+
             if cur.is_empty() {
                 // end of word
                 if word.len() < min_len {
@@ -414,13 +414,13 @@ impl MarkovGenerator {
             if Some(current_char) == word.get(current_index + 1) && !self.duplicatable_letters.contains(current_char) {
                 // duplication is not allowed except in language-based circumstances
                 continue;
-            } 
+            }
 
             let last = name.chars().last();
             if (matches!(last,Some('-')) && current_char == &' ') {
                 // remove space after hyphen
                 continue;
-            } 
+            }
             // NOTE: AFMG was capitalizing letters after space and hyphen, however if the seed words are curated correctly,
             // it should be following the capitalization rules already, right? If we're going to do something like this, though,
             // it would have to be customizable by language, and we'd have to be able to specify "short words" not capitalizable.
@@ -430,16 +430,16 @@ impl MarkovGenerator {
             if current_char == &'a' && matches!(word.get(current_index + 1),Some('e')) {
                 // "ae" => "e"
                 continue;
-            } 
+            }
 
-            if Some(current_char) == word.get(current_index + 1) && 
+            if Some(current_char) == word.get(current_index + 1) &&
                  Some(current_char) == word.get(current_index + 2) {
                 // remove three same letters in a row
                 continue;
-            } 
+            }
             name.push(*current_char)
         }
-        
+
         // join the word if any part has only 1 letter
         if name.split(' ').any(|part| part.len() < 2) {
             name = name
@@ -471,7 +471,7 @@ impl ListPicker {
             Ok(Self {
                 available: list,
                 picked: Vec::new()
-            })    
+            })
         }
     }
 
@@ -520,12 +520,12 @@ impl Namer {
 
     fn default_state_name_behavior() -> Vec<StateNameBehavior> {
         vec![
-            // remove -berg for any // FUTURE:  NMS: This should be language dependent 
+            // remove -berg for any // FUTURE:  NMS: This should be language dependent
             StateNameBehavior::TrimSuffixesIfLonger(vec!["berg".to_owned()], 6),
             // remove -ton for any // FUTURE:  NMS: This should be language dependent
             StateNameBehavior::TrimSuffixesIfLonger(vec!["ton".to_owned()], 5)
         ]
-     
+
     }
 
     fn new<Progress: ProgressObserver>(base: NamerSource, progress: &mut NamerLoadObserver<Progress>) -> Result<Self,CommandError> {
@@ -555,9 +555,9 @@ impl Namer {
         /*
         // NOTE: NMS: This was from the AFMG code. However, why not? There are or were places like "Saudi Arabia", "Papua New Guinea", "Saint Kitts", and all of the caribbean saints, "West Germany" -- In any case, I'm seeing a lot of such names from some languages.
         if name.contains(" ") {
-            // don't allow multiword state names 
+            // don't allow multiword state names
             name = name.replace(' ', "");
-        }; 
+        };
         */
 
         for behavior in &self.state_name {
@@ -599,7 +599,7 @@ impl Namer {
         } else {
             // no suffix, just return this
             return name;
-        }; 
+        };
 
 
         let suffix = match suffixing.apply(rng,&suffixed_name) {
@@ -608,16 +608,16 @@ impl Namer {
             Err(()) => return name, // don't apply a suffix, and return the original name.
         };
 
-        Self::validate_suffix(suffixed_name, &suffix) 
+        Self::validate_suffix(suffixed_name, &suffix)
     }
-    
+
 
     fn validate_suffix(name: String, suffix: &str) -> String {
         let mut name = name;
         if name.ends_with(&suffix) {
             // no suffix if name already ends with it
             return name
-        } 
+        }
         let s1 = suffix.chars().nth(0).expect("Whoever called this function shouldn't have passed a blank suffix."); // first letter of suffix
 
         if name.ends_with(s1) {
@@ -629,20 +629,20 @@ impl Namer {
         let (_,ending) = split_string_from_end(&name, 2);
         if ending.len() > 1 {
             let ending: Vec<char> = ending.chars().collect();
-    
+
             if is_vowel(s1) == is_vowel(ending[0]) && is_vowel(s1) == is_vowel(ending[1]) {
                  // remove name last char if 2 last chars are the same type as suffix's 1st
                  remove_n_chars_from_end(&mut name, 1);
                  //name = beginning.to_owned();
                  //name.push(ending[0]);
             }
-    
+
         }
 
         if name.ends_with(s1) {
             // remove name last letter if it's a suffix first letter (Again)
             remove_n_chars_from_end(&mut name,1); // name = split_string_from_end(&name, 1).0.to_owned();
-        } 
+        }
         name + suffix
     }
 
@@ -685,12 +685,12 @@ impl NamerSet {
             let namer = Namer::new(name_base,&mut NamerLoadObserver::new(&name,progress))?;
             _ = map.insert(name, namer);
         }
-        
+
         let default_namer = if let Some(default_namer) = args.default_namer {
             if !map.contains_key(&default_namer) {
                 return Err(CommandError::UnknownNamer(default_namer))
             }
-            default_namer    
+            default_namer
         } else {
             let keys: Vec<&String> = map.keys().collect();
             let result = keys.choose(rng).to_owned().clone();
@@ -698,7 +698,7 @@ impl NamerSet {
             result
         };
 
-        
+
         Ok(Self {
             default_namer,
             map
@@ -738,7 +738,7 @@ impl NamerSetSource {
         let data = self.source.values().collect::<Vec<_>>();
         data.serialize(&mut ser).map_err(|e| CommandError::NamerSourceWrite(format!("{e}")))?;
         String::from_utf8(buf).map_err(|e| CommandError::NamerSourceWrite(format!("{e}")))
-    
+
 
     }
 
@@ -747,7 +747,7 @@ impl NamerSetSource {
         // if the name already exists, then we're replacing the existing one.
         _ = self.source.insert(name, data);
     }
-    
+
     pub(crate) fn extend_from_json<Reader: Read>(&mut self, source: BufReader<Reader>) -> Result<(),CommandError> {
         let data = from_json_reader::<_,Vec<NamerSource>>(source).map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?;
         for datum in data {
@@ -756,21 +756,21 @@ impl NamerSetSource {
 
         Ok(())
 
-        
+
     }
 
     pub(crate) fn extend_from_text<Reader: Read>(&mut self, name: String, text_is_markov: bool, source: BufReader<Reader>) -> Result<(),CommandError> {
         let mut list = Vec::new();
         let mut duplicate_chars = HashSet::new();
         for line in source.lines() {
-            let word = line.map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?; 
+            let word = line.map_err(|e| CommandError::NamerSourceRead(format!("{e}")))?;
             for (a,b) in word.chars().zip(word.chars().skip(1)) {
                 if a == b {
                     _ = duplicate_chars.insert(a);
                 }
             }
 
-            
+
             list.push(word)
         }
 
@@ -785,7 +785,7 @@ impl NamerSetSource {
                 state_name: Vec::new(),
                 state_suffix: StateSuffixBehavior::NoSuffix,
             });
-    
+
         } else {
             self.add_namer(NamerSource {
                 name,
@@ -793,12 +793,12 @@ impl NamerSetSource {
                 state_name: Vec::new(),
                 state_suffix: StateSuffixBehavior::Default,
             });
-    
+
         }
 
         Ok(())
 
-        
+
     }
 
     pub(crate) fn extend_from_file<AsPath: AsRef<Path>>(&mut self, file: AsPath, text_is_markov: bool) -> Result<(),CommandError> {
